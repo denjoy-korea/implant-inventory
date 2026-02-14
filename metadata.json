@@ -1,0 +1,5 @@
+{
+  "name": "임플란트 재고관리 시스템 with Dentweb",
+  "description": "A streamlined web application to upload Excel files, edit data while maintaining column structures, and export selected rows back to Excel. Specifically optimized for managing manufacturing and brand data.",
+  "requestFramePermissions": []
+}
