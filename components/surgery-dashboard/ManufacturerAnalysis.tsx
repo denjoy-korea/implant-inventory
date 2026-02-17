@@ -134,9 +134,10 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
           ) : (
             <div className="space-y-3">
               {(() => {
-                const maxRate = Math.max(...manufacturerFailStats.map(f => f.failRate), 1);
                 return manufacturerFailStats.map((f, i) => {
-                  const barPct = Math.round((f.failRate / maxRate) * 100);
+                  // Use absolute percentage (0-100%) instead of relative to max
+                  // This ensures 30% looks like 30%, not 100%
+                  const barPct = Math.min(f.failRate, 100);
                   return (
                     <div key={f.name}>
                       <div className="flex items-center justify-between mb-1 gap-2">
@@ -151,7 +152,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
                           style={{
                             width: mounted ? `${barPct}%` : '0%',
                             backgroundColor: '#F43F5E',
-                            opacity: 1 - i * 0.15,
+                            opacity: 1 - i * 0.05, // Reduced opacity fade to keep bars visible
                             transitionDelay: `${i * 80}ms`,
                           }} />
                       </div>

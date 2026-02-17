@@ -1,0 +1,493 @@
+{
+  "timestamp": "2026-02-17T13:45:18.905Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-02-17T13:41:25.879Z",
+    "activeFeatures": [
+      "implant-inventory",
+      "surgery-dashboard",
+      "sizeNormalizer.ts"
+    ],
+    "primaryFeature": "implant-inventory",
+    "features": {
+      "implant-inventory": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-16T07:42:26.745Z",
+          "lastUpdated": "2026-02-17T13:41:25.878Z"
+        },
+        "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/SurgeryDashboard.tsx"
+      },
+      "surgery-dashboard": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-16T17:36:28.807Z",
+          "lastUpdated": "2026-02-17T08:30:51.163Z"
+        },
+        "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/surgery-dashboard/KPIStrip.tsx"
+      },
+      "sizeNormalizer.ts": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-17T08:26:15.810Z",
+          "lastUpdated": "2026-02-17T08:28:03.494Z"
+        },
+        "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/services/sizeNormalizer.ts"
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": [
+        "plan",
+        "design",
+        "do",
+        "check",
+        "report",
+        "archive"
+      ]
+    },
+    "session": {
+      "startedAt": "2026-02-15T02:05:59.134Z",
+      "onboardingCompleted": true,
+      "lastActivity": "2026-02-17T13:41:25.879Z"
+    },
+    "history": [
+      {
+        "action": "plan_created",
+        "feature": "임플란트-재고관리",
+        "timestamp": "2026-02-15T10:00:00.000Z"
+      },
+      {
+        "action": "design_created",
+        "feature": "임플란트-재고관리",
+        "timestamp": "2026-02-15T10:30:00.000Z"
+      },
+      {
+        "action": "check_completed",
+        "feature": "임플란트-재고관리",
+        "timestamp": "2026-02-15T11:00:00.000Z",
+        "matchRate": 91
+      },
+      {
+        "action": "report_completed",
+        "feature": "임플란트-재고관리",
+        "timestamp": "2026-02-15T11:30:00.000Z",
+        "matchRate": 91
+      },
+      {
+        "action": "archived",
+        "feature": "임플란트-재고관리",
+        "timestamp": "2026-02-15T12:00:00.000Z",
+        "archivedTo": "docs/archive/2026-02/임플란트-재고관리/"
+      },
+      {
+        "action": "plan_created",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T12:30:00.000Z"
+      },
+      {
+        "action": "design_created",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T13:00:00.000Z"
+      },
+      {
+        "action": "do_started",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T13:30:00.000Z"
+      },
+      {
+        "action": "check_started",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T15:00:00.000Z",
+        "matchRate": 86
+      },
+      {
+        "action": "iterate_completed",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T16:00:00.000Z",
+        "matchRate": 94,
+        "iteration": 1,
+        "fixes": [
+          "deleteAccount",
+          "onAuthStateChange SIGNED_IN",
+          "Realtime subscriptions",
+          "ERROR_CODES",
+          "DbToFrontend/FrontendToDb types"
+        ]
+      },
+      {
+        "action": "report_completed",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T17:00:00.000Z",
+        "matchRate": 94
+      },
+      {
+        "action": "archived",
+        "feature": "백엔드-연동",
+        "timestamp": "2026-02-15T17:30:00.000Z",
+        "archivedTo": "docs/archive/2026-02/백엔드-연동/"
+      },
+      {
+        "action": "plan_created",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T18:00:00.000Z"
+      },
+      {
+        "action": "design_created",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T19:00:00.000Z"
+      },
+      {
+        "action": "do_started",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T20:00:00.000Z"
+      },
+      {
+        "action": "check_completed",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T21:00:00.000Z",
+        "matchRate": 94
+      },
+      {
+        "action": "report_completed",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T22:00:00.000Z",
+        "matchRate": 94
+      },
+      {
+        "action": "archived",
+        "feature": "pricing-policy",
+        "timestamp": "2026-02-15T22:30:00.000Z",
+        "archivedTo": "docs/archive/2026-02/pricing-policy/"
+      },
+      {
+        "action": "plan_created",
+        "feature": "vercel-deployment",
+        "timestamp": "2026-02-16T10:00:00.000Z"
+      },
+      {
+        "action": "archived",
+        "feature": "vercel-deployment",
+        "timestamp": "2026-02-16T12:30:00.000Z",
+        "archivedTo": "docs/archive/2026-02/vercel-deployment/"
+      },
+      {
+        "timestamp": "2026-02-16T07:42:26.745Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T07:51:12.133Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:36:28.807Z",
+        "feature": "surgery-dashboard",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:42:04.088Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:42:20.595Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:42:30.269Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:42:40.016Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:51:01.723Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-16T17:51:15.383Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T07:59:30.376Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T07:59:59.871Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:00:08.357Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:00:43.323Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:01:09.699Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:01:26.892Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:03:11.875Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:03:55.690Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:10:09.008Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:10:21.247Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:13:29.408Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:15:40.010Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:15:49.331Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:15:56.428Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:16:10.630Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:16:36.049Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:17:51.594Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:19:07.719Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:26:15.810Z",
+        "feature": "sizeNormalizer.ts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:27:42.741Z",
+        "feature": "sizeNormalizer.ts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:27:52.787Z",
+        "feature": "sizeNormalizer.ts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:28:03.494Z",
+        "feature": "sizeNormalizer.ts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T08:30:51.163Z",
+        "feature": "surgery-dashboard",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:36:30.899Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:45:54.218Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:46:02.594Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:46:08.339Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:46:18.383Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:56:43.325Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T12:56:53.811Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:14:05.445Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:14:15.263Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:14:36.664Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:14:50.666Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:26:13.501Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:26:53.084Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:31:03.732Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:31:32.973Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:31:59.786Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:41:16.092Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-17T13:41:25.879Z",
+        "feature": "implant-inventory",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}

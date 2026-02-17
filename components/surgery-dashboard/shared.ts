@@ -152,3 +152,43 @@ export function useCountUp(target: number, duration = 800): number {
 
 // Chart keyboard navigation helper
 export const CHART_FOCUS_CLASS = 'w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-lg';
+
+// ============================================================
+// TOOTH UTILITIES
+// ============================================================
+export function parseTeeth(raw: string): number[] {
+  const result: number[] = [];
+  String(raw || '').split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
+    const num = parseInt(t.replace(/[^0-9]/g, ''));
+    if (!isNaN(num)) result.push(num);
+  });
+  return result;
+}
+
+export const TOOTH_REGIONS = [
+  { id: 'all', label: '전체 치아 (All)' },
+  { id: 'maxilla', label: '상악 (Maxilla, 10/20)' },
+  { id: 'mandible', label: '하악 (Mandible, 30/40)' },
+  { id: 'anterior', label: '전치부 (Anterior)' },
+  { id: 'posterior', label: '구치부 (Posterior)' },
+] as const;
+
+export function isToothInRegion(tooth: number, region: string): boolean {
+  if (region === 'all') return true;
+
+  const tens = Math.floor(tooth / 10);
+  const ones = tooth % 10;
+
+  if (region === 'maxilla') return tens === 1 || tens === 2;
+  if (region === 'mandible') return tens === 3 || tens === 4;
+  if (region === 'anterior') return ones >= 1 && ones <= 3;
+  if (region === 'posterior') return ones >= 4;
+
+  return false;
+}
+
+export function normalizeManufacturer(rawName: string): string {
+  const name = rawName.trim();
+  if (name.toUpperCase() === 'IBS') return 'IBS Implant';
+  return name;
+}

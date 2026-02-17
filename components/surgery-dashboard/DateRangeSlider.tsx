@@ -10,6 +10,7 @@ interface DateRangeSliderProps {
 export default function DateRangeSlider({ months, startIdx, endIdx, onChange }: DateRangeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'start' | 'end' | null>(null);
+  const [activeThumb, setActiveThumb] = useState<'start' | 'end'>('end');
 
   const count = months.length;
   if (count <= 1) return null;
@@ -36,6 +37,7 @@ export default function DateRangeSlider({ months, startIdx, endIdx, onChange }: 
     else which = idx < startIdx ? 'start' : 'end';
 
     setDragging(which);
+    setActiveThumb(which);
     if (which === 'start') onChange(Math.min(idx, endIdx), endIdx);
     else onChange(startIdx, Math.max(idx, startIdx));
   }, [getIdxFromX, startIdx, endIdx, onChange]);
@@ -48,6 +50,26 @@ export default function DateRangeSlider({ months, startIdx, endIdx, onChange }: 
   }, [dragging, getIdxFromX, startIdx, endIdx, onChange]);
 
   const handlePointerUp = useCallback(() => setDragging(null), []);
+
+  const moveThumbTo = useCallback((which: 'start' | 'end', nextIdx: number) => {
+    if (which === 'start') onChange(Math.min(nextIdx, endIdx), endIdx);
+    else onChange(startIdx, Math.max(nextIdx, startIdx));
+  }, [onChange, startIdx, endIdx]);
+
+  const handleThumbKeyDown = useCallback((e: React.KeyboardEvent, which: 'start' | 'end') => {
+    const current = which === 'start' ? startIdx : endIdx;
+    let next = current;
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = Math.max(0, current - 1);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = Math.min(maxIdx, current + 1);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = maxIdx;
+    else return;
+
+    e.preventDefault();
+    setActiveThumb(which);
+    moveThumbTo(which, next);
+  }, [startIdx, endIdx, maxIdx, moveThumbTo]);
 
   const startPct = (startIdx / maxIdx) * 100;
   const endPct = (endIdx / maxIdx) * 100;
@@ -103,6 +125,8 @@ export default function DateRangeSlider({ months, startIdx, endIdx, onChange }: 
         <div
           ref={trackRef}
           className="relative h-6 select-none touch-none cursor-pointer"
+          role="group"
+          aria-label="기간 범위 슬라이더"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -138,22 +162,44 @@ export default function DateRangeSlider({ months, startIdx, endIdx, onChange }: 
 
           {/* Start thumb */}
           <div
-            className={`absolute top-[4px] w-[15px] h-[15px] -ml-[7.5px] rounded-full bg-white border-2 border-indigo-500 transition-transform duration-100 z-10 ${
+            className={`absolute top-[-11px] w-11 h-11 -ml-[22px] rounded-full transition-transform duration-100 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 ${
               dragging === 'start' ? 'scale-[1.3] shadow-lg shadow-indigo-200/60' : 'shadow-sm hover:scale-110'
             }`}
             style={{ left: `${startPct}%` }}
+            tabIndex={0}
+            role="slider"
+            aria-label="시작 월"
+            aria-valuemin={0}
+            aria-valuemax={maxIdx}
+            aria-valuenow={startIdx}
+            aria-valuetext={formatMonth(months[startIdx])}
+            onFocus={() => setActiveThumb('start')}
+            onKeyDown={(e) => handleThumbKeyDown(e, 'start')}
           >
-            <div className="absolute inset-[3px] rounded-full bg-indigo-500" />
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[15px] h-[15px] rounded-full bg-white border-2 border-indigo-500 ${activeThumb === 'start' ? 'shadow-md shadow-indigo-200/70' : ''}`}>
+              <div className="absolute inset-[3px] rounded-full bg-indigo-500" />
+            </div>
           </div>
 
           {/* End thumb */}
           <div
-            className={`absolute top-[4px] w-[15px] h-[15px] -ml-[7.5px] rounded-full bg-white border-2 border-indigo-500 transition-transform duration-100 z-10 ${
+            className={`absolute top-[-11px] w-11 h-11 -ml-[22px] rounded-full transition-transform duration-100 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 ${
               dragging === 'end' ? 'scale-[1.3] shadow-lg shadow-indigo-200/60' : 'shadow-sm hover:scale-110'
             }`}
             style={{ left: `${endPct}%` }}
+            tabIndex={0}
+            role="slider"
+            aria-label="종료 월"
+            aria-valuemin={0}
+            aria-valuemax={maxIdx}
+            aria-valuenow={endIdx}
+            aria-valuetext={formatMonth(months[endIdx])}
+            onFocus={() => setActiveThumb('end')}
+            onKeyDown={(e) => handleThumbKeyDown(e, 'end')}
           >
-            <div className="absolute inset-[3px] rounded-full bg-indigo-500" />
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[15px] h-[15px] rounded-full bg-white border-2 border-indigo-500 ${activeThumb === 'end' ? 'shadow-md shadow-indigo-200/70' : ''}`}>
+              <div className="absolute inset-[3px] rounded-full bg-indigo-500" />
+            </div>
           </div>
         </div>
 

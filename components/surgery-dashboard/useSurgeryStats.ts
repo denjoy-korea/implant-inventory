@@ -12,6 +12,7 @@ import {
   DayInsight,
   TrendlineData,
   DONUT_COLORS,
+  normalizeManufacturer,
 } from './shared';
 
 interface SurgeryStats {
@@ -35,23 +36,60 @@ interface SurgeryStats {
   nextDownloadDate: string;
 }
 
+function parseLocalDate(value: string): Date | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatMonthKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
   const cleanRows = useMemo(() => {
     return rows.filter(row => !Object.values(row).some(val => String(val).includes('합계')));
   }, [rows]);
 
   const dateRange = useMemo(() => {
-    let min = '';
-    let max = '';
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
     const dateSet = new Set<string>();
+
     cleanRows.forEach(row => {
-      const d = String(row['날짜'] || '');
-      if (!d) return;
-      dateSet.add(d);
-      if (!min || d < min) min = d;
-      if (!max || d > max) max = d;
+      const rawDate = String(row['날짜'] || '');
+      const parsed = parseLocalDate(rawDate);
+      if (!parsed) return;
+
+      const dateKey = formatDateKey(parsed);
+      dateSet.add(dateKey);
+      if (!minDate || parsed < minDate) minDate = parsed;
+      if (!maxDate || parsed > maxDate) maxDate = parsed;
     });
-    return { min, max, total: cleanRows.length, uniqueDays: dateSet.size };
+
+    return {
+      min: minDate ? formatDateKey(minDate) : '',
+      max: maxDate ? formatDateKey(maxDate) : '',
+      total: cleanRows.length,
+      uniqueDays: dateSet.size,
+    };
   }, [cleanRows]);
 
   const classificationStats = useMemo(() => {
@@ -69,9 +107,11 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
   const monthlyData = useMemo(() => {
     const map: Record<string, MonthlyDatum> = {};
     cleanRows.forEach(row => {
-      const d = String(row['날짜'] || '');
-      if (!d || d.length < 7) return;
-      const month = d.substring(0, 7);
+      const rawDate = String(row['날짜'] || '');
+      const parsedDate = parseLocalDate(rawDate);
+      if (!parsedDate) return;
+
+      const month = formatMonthKey(parsedDate);
       if (!map[month]) map[month] = { month, '식립': 0, '청구': 0, '수술중 FAIL': 0 };
       const cls = String(row['구분'] || '');
       const qty = Number(row['갯수']) || 1;
@@ -85,7 +125,7 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
   const manufacturerStats = useMemo(() => {
     const stats: Record<string, number> = {};
     cleanRows.filter(r => r['구분'] === '식립').forEach(row => {
-      const m = String(row['제조사'] || '기타');
+      const m = normalizeManufacturer(String(row['제조사'] || '기타'));
       const qty = Number(row['갯수']) || 1;
       stats[m] = (stats[m] || 0) + qty;
     });
@@ -136,7 +176,7 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
     return Number(((classificationStats['수술중 FAIL'] / total) * 100).toFixed(1));
   }, [classificationStats]);
 
-  const WORK_DAYS_PER_MONTH = 25; // 월 진료일 (주6일 기준)
+  const WORK_DAYS_PER_MONTH = 25; // 평균 진료일수 고정값
 
   const dailyAvgPlacement = useMemo(() => {
     if (monthlyData.length === 0) return 0;
@@ -146,16 +186,24 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
 
   const recentDailyAvg = useMemo(() => {
     if (!dateRange.max) return 0;
-    const cutoff = new Date(dateRange.max);
-    cutoff.setMonth(cutoff.getMonth() - 1);
-    const cutoffStr = cutoff.toISOString().split('T')[0];
-    let count = 0;
+    const maxDate = parseLocalDate(dateRange.max);
+    if (!maxDate) return 0;
+
+    const windowStart = new Date(maxDate.getFullYear(), maxDate.getMonth() - 1, maxDate.getDate());
+    let placementTotal = 0;
+
     cleanRows.forEach(row => {
-      const d = String(row['날짜'] || '');
-      if (!d || d < cutoffStr) return;
-      if (String(row['구분'] || '') === '식립') count += Number(row['갯수']) || 1;
+      const rawDate = String(row['날짜'] || '');
+      const parsedDate = parseLocalDate(rawDate);
+      if (!parsedDate) return;
+      if (parsedDate < windowStart || parsedDate > maxDate) return;
+
+      if (String(row['구분'] || '') === '식립') {
+        placementTotal += Number(row['갯수']) || 1;
+      }
     });
-    return Number((count / WORK_DAYS_PER_MONTH).toFixed(1));
+
+    return Number((placementTotal / WORK_DAYS_PER_MONTH).toFixed(1));
   }, [cleanRows, dateRange.max]);
 
   const sparkline = useMemo(() => {
@@ -194,20 +242,37 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
   const manufacturerFailStats = useMemo(() => {
     const failMap: Record<string, number> = {};
     const placeMap: Record<string, number> = {};
+
     cleanRows.forEach(row => {
-      const m = String(row['제조사'] || '기타').trim();
+      const m = normalizeManufacturer(String(row['제조사'] || '기타'));
       const cls = String(row['구분'] || '');
       const qty = Number(row['갯수']) || 1;
+
       if (cls === '수술중 FAIL') failMap[m] = (failMap[m] || 0) + qty;
-      if (cls === '식립') placeMap[m] = (placeMap[m] || 0) + qty;
+      else if (cls === '식립') placeMap[m] = (placeMap[m] || 0) + qty;
     });
-    return Object.entries(failMap)
-      .map(([name, failCount]) => ({
-        name,
-        failCount,
-        placeCount: placeMap[name] || 0,
-        failRate: placeMap[name] ? Number(((failCount / placeMap[name]) * 100).toFixed(1)) : 0,
-      }))
+
+    const allNames = Array.from(new Set([...Object.keys(failMap), ...Object.keys(placeMap)]));
+
+    return allNames
+      .map(name => {
+        const failCount = failMap[name] || 0;
+        const placeCount = placeMap[name] || 0;
+        // Total attempts = Success(Place) + Fail? 
+        // Based on global logic: Total = Place + Fail
+        const total = placeCount + failCount;
+        const failRate = total > 0 ? Number(((failCount / total) * 100).toFixed(1)) : 0;
+
+        return {
+          name,
+          failCount,
+          placeCount: total, // Returning Total attempts as placeCount for display? 
+          // types.ts says placeCount. The UI usually expects "Total Cases". 
+          // Let's use total here to match "Cases" label.
+          failRate,
+        };
+      })
+      .filter(d => d.placeCount > 0) // Filter out noise
       .sort((a, b) => b.failCount - a.failCount);
   }, [cleanRows]);
 
@@ -215,12 +280,12 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     const counts = [0, 0, 0, 0, 0, 0, 0];
     cleanRows.filter(r => r['구분'] === '식립').forEach(row => {
-      const d = String(row['날짜'] || '');
+      const rawDate = String(row['날짜'] || '');
       const qty = Number(row['갯수']) || 1;
-      if (d) {
-        const date = new Date(d);
-        if (!isNaN(date.getTime())) counts[date.getDay()] += qty;
-      }
+
+      const parsedDate = parseLocalDate(rawDate);
+      if (!parsedDate) return;
+      counts[parsedDate.getDay()] += qty;
     });
     const max = Math.max(...counts, 1);
     return days.map((name, i) => ({ name, count: counts[i], percent: Math.round((counts[i] / max) * 100) }));
@@ -254,8 +319,8 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
   const toothHeatmap = useMemo(() => {
     const counts: Record<number, number> = {};
     const validFDI = new Set([
-      11,12,13,14,15,16,17, 21,22,23,24,25,26,27,
-      31,32,33,34,35,36,37, 41,42,43,44,45,46,47,
+      11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27,
+      31, 32, 33, 34, 35, 36, 37, 41, 42, 43, 44, 45, 46, 47,
     ]);
     cleanRows.filter(r => r['구분'] === '식립').forEach(row => {
       const teeth = String(row['치아번호'] || '');
@@ -299,9 +364,11 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
 
   const nextDownloadDate = useMemo(() => {
     if (!dateRange.max) return '';
-    const d = new Date(dateRange.max);
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+    const parsed = parseLocalDate(dateRange.max);
+    if (!parsed) return '';
+
+    const next = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate() + 1);
+    return formatDateKey(next);
   }, [dateRange.max]);
 
   return {
