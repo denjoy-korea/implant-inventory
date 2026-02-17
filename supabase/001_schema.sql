@@ -59,8 +59,7 @@ CREATE TABLE surgery_records (
   size TEXT,
   bone_quality TEXT,
   initial_fixation TEXT,
-  healing TEXT,
-  next_visit TEXT,
+  -- healing, next_visit: 017_drop_healing_next_visit.sql 에서 제거됨
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

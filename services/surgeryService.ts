@@ -4,12 +4,22 @@ import { DbSurgeryRecord, ExcelRow } from '../types';
 import { excelRowToDbSurgery } from './mappers';
 
 export const surgeryService = {
-  /** 수술기록 목록 조회 (병원별 RLS) */
-  async getSurgeryRecords(): Promise<DbSurgeryRecord[]> {
-    const { data, error } = await supabase
+  /** 수술기록 목록 조회 — 날짜 범위 필터 지원 (서버사이드) */
+  async getSurgeryRecords(opts?: {
+    fromDate?: string; // 'YYYY-MM-DD'
+    toDate?: string;   // 'YYYY-MM-DD'
+    limit?: number;
+  }): Promise<DbSurgeryRecord[]> {
+    let query = supabase
       .from('surgery_records')
       .select('*')
       .order('date', { ascending: false });
+
+    if (opts?.fromDate) query = query.gte('date', opts.fromDate);
+    if (opts?.toDate)   query = query.lte('date', opts.toDate);
+    if (opts?.limit)    query = query.limit(opts.limit);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[surgeryService] Fetch failed:', error);
@@ -18,21 +28,64 @@ export const surgeryService = {
     return data as DbSurgeryRecord[];
   },
 
-  /** 엑셀 파싱 후 수술기록 일괄 저장 */
+  /**
+   * 엑셀 파싱 후 수술기록 일괄 저장 — 중복 방지 포함
+   *
+   * 중복 판별 기준: hospital_id + date + classification + brand + size + tooth_number
+   * → 이미 같은 레코드가 존재하면 skip, 없는 것만 insert
+   * → 반환값: { inserted, skipped } 건수
+   */
   async bulkInsertFromExcel(
     parsedRows: ExcelRow[],
     hospitalId: string
-  ): Promise<DbSurgeryRecord[]> {
-    if (parsedRows.length === 0) return [];
+  ): Promise<{ records: DbSurgeryRecord[]; inserted: number; skipped: number }> {
+    if (parsedRows.length === 0) return { records: [], inserted: 0, skipped: 0 };
 
     const dbRows = await Promise.all(parsedRows.map(row => excelRowToDbSurgery(row, hospitalId)));
 
-    // Supabase는 한 번에 최대 1000건까지 insert 가능
+    // ── 서버에서 같은 날짜 범위 기존 레코드 조회 (중복 체크용)
+    const dates = dbRows
+      .map(r => r.date)
+      .filter((d): d is string => !!d);
+    const minDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : null;
+    const maxDate = dates.length > 0 ? dates.reduce((a, b) => a > b ? a : b) : null;
+
+    let existingKeys = new Set<string>();
+    if (minDate && maxDate) {
+      const { data: existing } = await supabase
+        .from('surgery_records')
+        .select('date, classification, brand, size, tooth_number')
+        .eq('hospital_id', hospitalId)
+        .gte('date', minDate)
+        .lte('date', maxDate);
+
+      if (existing) {
+        existingKeys = new Set(
+          (existing as Pick<DbSurgeryRecord, 'date' | 'classification' | 'brand' | 'size' | 'tooth_number'>[]).map(r =>
+            `${r.date}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`
+          )
+        );
+      }
+    }
+
+    // ── 중복 필터링
+    const newRows = dbRows.filter(r => {
+      const key = `${r.date}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+      return !existingKeys.has(key);
+    });
+
+    const skipped = dbRows.length - newRows.length;
+
+    if (newRows.length === 0) {
+      return { records: [], inserted: 0, skipped };
+    }
+
+    // ── 배치 insert (Supabase 최대 1000건)
     const BATCH_SIZE = 500;
     const results: DbSurgeryRecord[] = [];
 
-    for (let i = 0; i < dbRows.length; i += BATCH_SIZE) {
-      const batch = dbRows.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
+      const batch = newRows.slice(i, i + BATCH_SIZE);
       const { data, error } = await supabase
         .from('surgery_records')
         .insert(batch)
@@ -45,7 +98,7 @@ export const surgeryService = {
       if (data) results.push(...(data as DbSurgeryRecord[]));
     }
 
-    return results;
+    return { records: results, inserted: results.length, skipped };
   },
 
   /** 수술기록 셀 수정 */
@@ -97,7 +150,13 @@ export const surgeryService = {
     return new Date(data.created_at);
   },
 
-  /** Realtime 구독 */
+  /**
+   * Realtime 구독 — INSERT / UPDATE / DELETE 이벤트 모두 처리
+   *
+   * - INSERT: 새 수술기록 실시간 반영
+   * - UPDATE: classification 변경(FAIL 교환완료 처리 등) 실시간 반영
+   * - DELETE: 삭제된 레코드 실시간 제거
+   */
   subscribeToChanges(
     hospitalId: string,
     callback: (payload: RealtimePostgresChangesPayload<DbSurgeryRecord>) => void
@@ -106,6 +165,18 @@ export const surgeryService = {
       .channel(`surgery-changes-${hospitalId}`)
       .on('postgres_changes', {
         event: 'INSERT',
+        schema: 'public',
+        table: 'surgery_records',
+        filter: `hospital_id=eq.${hospitalId}`,
+      }, callback)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'surgery_records',
+        filter: `hospital_id=eq.${hospitalId}`,
+      }, callback)
+      .on('postgres_changes', {
+        event: 'DELETE',
         schema: 'public',
         table: 'surgery_records',
         filter: `hospital_id=eq.${hospitalId}`,

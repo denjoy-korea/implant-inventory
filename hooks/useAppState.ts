@@ -63,9 +63,15 @@ export function useAppState() {
     }
 
     try {
+      // 수술기록은 최근 2년치만 초기 로드 (성능 최적화)
+      // 더 오래된 데이터는 SurgeryDashboard 날짜 필터로 서버사이드 조회
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+      const fromDate = twoYearsAgo.toISOString().split('T')[0];
+
       const [inventoryData, surgeryData, ordersData, planState, membersData, hospitalData] = await Promise.all([
         inventoryService.getInventory(),
-        surgeryService.getSurgeryRecords(),
+        surgeryService.getSurgeryRecords({ fromDate }),
         orderService.getOrders(),
         planService.checkPlanExpiry(user.hospitalId),
         hospitalService.getMembers(user.hospitalId),
@@ -238,19 +244,55 @@ export function useAppState() {
     });
 
     const surgeryChannel = surgeryService.subscribeToChanges(hospitalId, (payload) => {
+      const sheetName = '수술기록지';
+
       if (payload.eventType === 'INSERT') {
         dbToExcelRow(payload.new)
           .then((newRow: ExcelRow) => {
             setState(prev => {
-              const sheetName = '수술기록지';
               const existing = prev.surgeryMaster[sheetName] || [];
               if (existing.some((r: ExcelRow) => r._id === newRow._id)) return prev;
               return { ...prev, surgeryMaster: { ...prev.surgeryMaster, [sheetName]: [...existing, newRow] } };
             });
           })
           .catch((error: unknown) => {
-            console.error('[useAppState] Failed to map realtime surgery row:', error);
+            console.error('[useAppState] Failed to map realtime surgery INSERT row:', error);
           });
+
+      } else if (payload.eventType === 'UPDATE') {
+        dbToExcelRow(payload.new)
+          .then((updatedRow: ExcelRow) => {
+            setState(prev => {
+              const existing = prev.surgeryMaster[sheetName] || [];
+              return {
+                ...prev,
+                surgeryMaster: {
+                  ...prev.surgeryMaster,
+                  [sheetName]: existing.map((r: ExcelRow) =>
+                    r._id === updatedRow._id ? updatedRow : r
+                  ),
+                },
+              };
+            });
+          })
+          .catch((error: unknown) => {
+            console.error('[useAppState] Failed to map realtime surgery UPDATE row:', error);
+          });
+
+      } else if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old?.id;
+        if (deletedId) {
+          setState(prev => {
+            const existing = prev.surgeryMaster[sheetName] || [];
+            return {
+              ...prev,
+              surgeryMaster: {
+                ...prev.surgeryMaster,
+                [sheetName]: existing.filter((r: ExcelRow) => r._id !== deletedId),
+              },
+            };
+          });
+        }
       }
     });
 

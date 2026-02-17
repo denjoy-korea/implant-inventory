@@ -518,16 +518,30 @@ const App: React.FC = () => {
           newSurgeryMaster[targetSheetName] = [...(newSurgeryMaster[targetSheetName] || []), ...cleanedRows];
           setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
 
-          // Supabase에 수술기록 저장
+          // Supabase에 수술기록 저장 (중복 자동 skip)
           if (state.user?.hospitalId) {
-            const savedRecords = await surgeryService.bulkInsertFromExcel(cleanedRows, state.user.hospitalId);
-            if (savedRecords.length > 0) {
+            const { records: savedRecords, inserted, skipped } = await surgeryService.bulkInsertFromExcel(cleanedRows, state.user.hospitalId);
+            if (inserted > 0) {
               const savedRows = await Promise.all(savedRecords.map(dbToExcelRow));
               setState(prev => ({
                 ...prev,
-                surgeryMaster: { ...prev.surgeryMaster, [targetSheetName]: [...(prev.surgeryMaster[targetSheetName] || []).filter(r => !r._id || !cleanedRows.some(cr => cr['날짜'] === r['날짜'] && cr['환자정보'] === r['환자정보'])), ...savedRows] }
+                surgeryMaster: {
+                  ...prev.surgeryMaster,
+                  [targetSheetName]: [
+                    ...(prev.surgeryMaster[targetSheetName] || []).filter(r => !r._id),
+                    ...savedRows,
+                  ],
+                },
               }));
-              operationLogService.logOperation('surgery_upload', `수술기록 ${savedRecords.length}건 업로드 (${file.name})`);
+              operationLogService.logOperation(
+                'surgery_upload',
+                `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
+              );
+            }
+            if (skipped > 0 && inserted === 0) {
+              alert(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`);
+              setState(prev => ({ ...prev, isLoading: false }));
+              return;
             }
           }
         } else {
