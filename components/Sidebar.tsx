@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { ExcelData, DashboardTab } from '../types';
+import { ExcelData, DashboardTab, PlanType, PlanFeature, UserRole } from '../types';
+import { planService } from '../services/planService';
 
 interface SidebarProps {
   activeTab: DashboardTab;
@@ -9,18 +10,54 @@ interface SidebarProps {
   surgeryData: ExcelData | null;
   isAdmin: boolean;
   isMaster: boolean;
+  plan?: PlanType;
+  hospitalName?: string;
+  userRole?: UserRole;
+  onReturnToAdmin?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, surgeryData, isAdmin, isMaster }) => {
+/** 탭에 매핑되는 기능 식별자 (해당 기능이 없으면 잠금 아이콘 표시) */
+const TAB_FEATURE_MAP: Partial<Record<DashboardTab, PlanFeature>> = {
+  order_management: 'one_click_order',
+  member_management: 'role_management',
+  audit_log: 'audit_log',
+};
+
+const LockMenuIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+  </svg>
+);
+
+const LOCKED_STYLE = 'text-amber-500/50 hover:text-amber-500/70 hover:bg-slate-800/50';
+
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, surgeryData, isAdmin, isMaster, plan = 'free', hospitalName, userRole, onReturnToAdmin }) => {
+  const isLocked = (tab: DashboardTab): boolean => {
+    const feature = TAB_FEATURE_MAP[tab];
+    if (!feature) return false;
+    return !planService.canAccess(plan as PlanType, feature);
+  };
+
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col sticky top-0 h-screen shrink-0 transition-all duration-300 z-[200] shadow-xl">
       <div className="p-6 pb-2">
-        <div className="flex items-center space-x-2 mb-6">
-          <img src="/logo.png" alt="DentWeb Data Processor" className="h-8 w-auto object-contain brightness-0 invert" />
-          <div className="h-6 w-px bg-slate-700 mx-2"></div>
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-[9px] text-slate-400 font-medium leading-none">Powered by</span>
-            <span className="text-lg font-bold tracking-tight text-white">DenJOY</span>
+        <div className="mb-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-900/30">
+              {userRole === 'staff' ? (
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-bold text-sm truncate leading-tight">{hospitalName || '워크스페이스'}</p>
+              {userRole === 'staff' && <p className="text-[10px] text-slate-400 font-medium">개인 워크스페이스</p>}
+            </div>
           </div>
         </div>
       </div>
@@ -40,33 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
           </nav>
         </div>
 
-        {/* 그룹 1: 픽스쳐 데이터 셋팅 (관리자 전용) */}
-        {isAdmin && (
-          <div className="space-y-4">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Fixture Setting</h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => onTabChange('fixture_upload')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'fixture_upload' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                로우데이터 업로드
-              </button>
-              <button
-                onClick={() => onTabChange('fixture_edit')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'fixture_edit' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'} ${!fixtureData ? 'opacity-50' : ''}`}
-              >
-                <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  데이터 설정/가공
-                </div>
-                {fixtureData && <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>}
-              </button>
-            </nav>
-          </div>
-        )}
-
-        {/* 그룹 2: 재고 및 수술 통계 */}
+        {/* 그룹 1: 재고 및 수술 통계 */}
         <div className="space-y-4">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Master Management</h3>
           <nav className="space-y-1">
@@ -78,20 +89,25 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
               재고 관리 마스터
             </button>
             <button
-              onClick={() => onTabChange('order_management')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => onTabChange('inventory_audit')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+              재고 실사
+            </button>
+            <button
+              onClick={() => onTabChange('order_management')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isLocked('order_management') ? LOCKED_STYLE : activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              {isLocked('order_management') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
               주문 관리 마스터
             </button>
             <button
               onClick={() => onTabChange('surgery_database')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'surgery_database' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'surgery_database' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <div className="flex items-center gap-3">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                수술 기록 데이터베이스
-              </div>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              수술 기록 데이터베이스
             </button>
             <button
               onClick={() => onTabChange('fail_management')}
@@ -114,25 +130,53 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
           </p>
         </div>
 
-        {isMaster && (
-          <div className="pt-6 border-t border-slate-800">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">ADMINISTRATION</div>
-            <nav className="space-y-1">
-              <button
-                onClick={() => onTabChange('member_management')}
-                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'member_management'
+        {/* Settings */}
+        <div className="pt-6 border-t border-slate-800">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">SETTINGS</div>
+          <nav className="space-y-1">
+            <button
+              onClick={() => onTabChange('settings')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${
+                ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'].includes(activeTab)
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              설정
+            </button>
+          </nav>
+        </div>
+
+        {/* Return to Admin Button for System Admins simulating User View */}
+        {isAdmin && onReturnToAdmin && (
+          <div className="mt-auto pt-4 border-t border-slate-800">
+            <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+              <div className="text-xs text-slate-400 mb-2 text-center">Simulating User View</div>
+              <button
+                onClick={onReturnToAdmin}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-colors shadow-lg shadow-indigo-900/20"
               >
-                <svg className={`w-5 h-5 transition-colors ${activeTab === 'member_management' ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
                 </svg>
-                <span className="font-medium">구성원 관리</span>
+                Return to Admin
               </button>
-            </nav>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* Bottom logo area */}
+      <div className="px-6 py-4 border-t border-slate-800">
+        <div className="flex items-center justify-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
+          <img src="/logo.png" alt="DentWeb" className="h-5 w-auto object-contain brightness-0 invert" />
+          <div className="h-4 w-px bg-slate-700"></div>
+          <span className="text-xs font-bold text-slate-500">DenJOY</span>
+        </div>
       </div>
 
       <style>{`

@@ -9,14 +9,16 @@ interface OrderManagerProps {
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteOrder: (orderId: string) => void;
   onQuickOrder: (item: InventoryItem) => void;
+  isReadOnly?: boolean;
 }
 
-const OrderManager: React.FC<OrderManagerProps> = ({ 
-  orders, 
+const OrderManager: React.FC<OrderManagerProps> = ({
+  orders,
   inventory,
-  onUpdateOrderStatus, 
+  onUpdateOrderStatus,
   onDeleteOrder,
-  onQuickOrder
+  onQuickOrder,
+  isReadOnly
 }) => {
   const [filterType, setFilterType] = useState<OrderType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
@@ -157,9 +159,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           {item.currentStock} <span className="text-xs text-slate-300 font-bold mx-0.5">/</span> {item.recommendedStock}
                         </p>
                       </div>
-                      <button 
-                        onClick={() => onQuickOrder(item)}
-                        className="px-5 py-2.5 bg-slate-900 text-white text-[11px] font-black rounded-2xl hover:bg-rose-600 transition-all active:scale-95 shadow-xl shadow-slate-100"
+                      <button
+                        onClick={() => !isReadOnly && onQuickOrder(item)}
+                        disabled={isReadOnly}
+                        className={`px-5 py-2.5 text-[11px] font-black rounded-2xl transition-all shadow-xl ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-rose-600 active:scale-95 shadow-slate-100'}`}
                       >
                         즉시 발주
                       </button>
@@ -237,18 +240,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <span className="text-xs font-bold text-slate-600">{order.manager}</span>
                     </td>
                     <td className="px-8 py-5 text-center">
-                      <button 
-                        onClick={() => onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
-                        className={`px-5 py-2 rounded-2xl text-[10px] font-black transition-all shadow-sm ${order.status === 'received' ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-100' : 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white shadow-rose-50'}`}
+                      <button
+                        onClick={() => !isReadOnly && onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
+                        disabled={isReadOnly}
+                        className={`px-5 py-2 rounded-2xl text-[10px] font-black transition-all shadow-sm ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : order.status === 'received' ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-100' : 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white shadow-rose-50'}`}
                       >
                         {order.status === 'received' ? '입고 완료' : '입고 확인'}
                       </button>
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => onDeleteOrder(order.id)} className="p-2.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="주문 삭제">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
+                        {!isReadOnly && (
+                          <button onClick={() => onDeleteOrder(order.id)} className="p-2.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="주문 삭제">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

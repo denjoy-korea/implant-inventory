@@ -9,9 +9,10 @@ interface FailManagerProps {
   failOrders: FailOrder[];
   onAddFailOrder: (order: FailOrder) => void;
   currentUserName: string;
+  isReadOnly?: boolean;
 }
 
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly }) => {
   // 비교를 위한 정규화 함수
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
@@ -261,50 +262,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     <p className="text-2xl font-black text-rose-600">{currentRemainingFails}</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={handleOpenOrderModal}
-                  className="px-6 py-3 bg-rose-600 text-white font-bold rounded-xl shadow-lg shadow-rose-100 hover:bg-rose-700 hover:translate-y-[-2px] transition-all flex items-center gap-2"
+                  disabled={isReadOnly}
+                  className={`px-6 py-3 font-bold rounded-xl shadow-lg shadow-rose-100 transition-all flex items-center gap-2 ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-rose-600 text-white hover:bg-rose-700 hover:translate-y-[-2px]'}`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                   반품 및 교환 주문
                 </button>
               </div>
 
-              <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-50 flex justify-between items-center">
-                  <h3 className="text-sm font-black text-slate-700">{activeM} 미처리 리스트</h3>
-                  <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded-md">Pending Returns</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-rose-50/30">
-                      <tr>
-                        <th className="px-6 py-4 text-[11px] font-bold text-rose-400">날짜</th>
-                        <th className="px-6 py-4 text-[11px] font-bold text-rose-400">환자정보</th>
-                        <th className="px-6 py-4 text-[11px] font-bold text-rose-400">치아번호</th>
-                        <th className="px-6 py-4 text-[11px] font-bold text-rose-400">브랜드</th>
-                        <th className="px-6 py-4 text-[11px] font-bold text-rose-400">규격</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {mPendingList.map((f, i) => (
-                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-3.5 text-xs font-bold text-slate-500">{f['날짜']}</td>
-                          <td className="px-6 py-3.5 text-xs font-black text-slate-800">{f['환자정보']}</td>
-                          <td className="px-6 py-3.5 text-xs font-bold text-indigo-600">{f['치아번호']}</td>
-                          <td className="px-6 py-3.5 text-xs font-bold text-slate-700">{f['브랜드']}</td>
-                          <td className="px-6 py-3.5 text-xs text-slate-500 italic">{f['규격(SIZE)']}</td>
-                        </tr>
-                      ))}
-                      {mPendingList.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-10 text-center text-slate-400 italic text-xs">처리할 수 있는 미반품 데이터가 없습니다.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
 
             <div className="space-y-4">

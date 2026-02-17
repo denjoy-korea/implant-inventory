@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Hospital } from '../types';
+import { hospitalService } from '../services/hospitalService';
 
 interface StaffWaitingRoomProps {
     currentUser: User;
@@ -12,64 +13,51 @@ const StaffWaitingRoom: React.FC<StaffWaitingRoomProps> = ({ currentUser, onUpda
     const [searchResults, setSearchResults] = useState<Hospital[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchTerm.trim()) return;
 
-        const storedHospitalsJson = localStorage.getItem('app_hospitals');
-        const hospitals: Hospital[] = storedHospitalsJson ? JSON.parse(storedHospitalsJson) : [];
-
-        // Simple case-insensitive search
-        const results = hospitals.filter(h => h.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        const results = await hospitalService.searchHospitals(searchTerm);
         setSearchResults(results);
         setHasSearched(true);
     };
 
-    const handleJoinRequest = (hospitalId: string) => {
+    const handleJoinRequest = async (hospitalId: string) => {
         if (!window.confirm('해당 병원에 가입 신청하시겠습니까?')) return;
 
-        // Update User
-        const storedUsersJson = localStorage.getItem('app_users');
-        let users: User[] = storedUsersJson ? JSON.parse(storedUsersJson) : [];
-
-        // Find and update current user in global list
-        users = users.map(u => {
-            if (u.email === currentUser.email) {
-                return { ...u, hospitalId: hospitalId, status: 'pending' };
-            }
-            return u;
-        });
-
-        localStorage.setItem('app_users', JSON.stringify(users));
-
-        // Update local state
-        onUpdateUser({ ...currentUser, hospitalId: hospitalId, status: 'pending' });
-        alert('가입 신청이 완료되었습니다. 원장님의 승인을 기다려주세요.');
+        try {
+            await hospitalService.requestJoin(hospitalId);
+            onUpdateUser({ ...currentUser, hospitalId: hospitalId, status: 'pending' });
+            alert('가입 신청이 완료되었습니다. 원장님의 승인을 기다려주세요.');
+        } catch (error) {
+            alert('가입 신청에 실패했습니다.');
+        }
     };
 
-    const handleCancelRequest = () => {
+    const [targetHospitalName, setTargetHospitalName] = useState<string>('');
+
+    // 대기 중인 경우 병원명 조회
+    useEffect(() => {
+        if (currentUser.hospitalId) {
+            hospitalService.getHospitalById(currentUser.hospitalId).then(hospital => {
+                if (hospital) setTargetHospitalName(hospital.name);
+            });
+        }
+    }, [currentUser.hospitalId]);
+
+    const handleCancelRequest = async () => {
         if (!window.confirm('가입 신청을 취소하시겠습니까?')) return;
 
-        const storedUsersJson = localStorage.getItem('app_users');
-        let users: User[] = storedUsersJson ? JSON.parse(storedUsersJson) : [];
-
-        users = users.map(u => {
-            if (u.email === currentUser.email) {
-                return { ...u, hospitalId: '' };
-            }
-            return u;
-        });
-
-        localStorage.setItem('app_users', JSON.stringify(users));
-        onUpdateUser({ ...currentUser, hospitalId: '' });
+        try {
+            await hospitalService.leaveHospital();
+            onUpdateUser({ ...currentUser, hospitalId: '' });
+        } catch (error) {
+            alert('가입 취소에 실패했습니다.');
+        }
     };
 
     // If user already requested a hospital (has hospitalId but status is pending)
     if (currentUser.hospitalId) {
-        // Find hospital name for display
-        const storedHospitalsJson = localStorage.getItem('app_hospitals');
-        const hospitals: Hospital[] = storedHospitalsJson ? JSON.parse(storedHospitalsJson) : [];
-        const targetHospital = hospitals.find(h => h.id === currentUser.hospitalId);
 
         return (
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -80,7 +68,7 @@ const StaffWaitingRoom: React.FC<StaffWaitingRoomProps> = ({ currentUser, onUpda
                     <h2 className="text-2xl font-bold text-slate-800">승인 대기중</h2>
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                         <p className="text-sm text-slate-500 mb-1">신청한 병원</p>
-                        <p className="text-lg font-bold text-indigo-600">{targetHospital?.name || 'Unknown Hospital'}</p>
+                        <p className="text-lg font-bold text-indigo-600">{targetHospitalName || '조회 중...'}</p>
                     </div>
                     <p className="text-slate-600 leading-relaxed">
                         병원 관리자(원장님)의 승인을 기다리고 있습니다.<br />
@@ -135,7 +123,7 @@ const StaffWaitingRoom: React.FC<StaffWaitingRoomProps> = ({ currentUser, onUpda
                                 <div key={hospital.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group">
                                     <div>
                                         <h4 className="font-bold text-slate-800">{hospital.name}</h4>
-                                        <p className="text-xs text-slate-400 mt-1">관리자: {hospital.masterAdminId}</p>
+                                        <p className="text-xs text-slate-400 mt-1">병원 코드: {hospital.id.slice(0, 8)}</p>
                                     </div>
                                     <button
                                         onClick={() => handleJoinRequest(hospital.id)}

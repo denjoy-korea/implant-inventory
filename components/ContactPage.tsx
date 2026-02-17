@@ -26,16 +26,12 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
               </p>
 
               {/* Trust Badges */}
-              <p className="text-sm text-slate-400 font-medium mb-4">
-                이미 많은 치과에서 사용하고 있습니다
+              <p className="text-sm text-slate-400 font-medium mb-3">
+                덴트웹 기본셋팅 전 제조사 데이터 적용
               </p>
-              <div className="flex items-center gap-6 mb-12">
-                {['S치과', 'H치과의원', 'M네트워크', 'Y덴탈'].map((name, i) => (
-                  <div key={i} className="text-slate-300 font-black text-lg tracking-tight">
-                    {name}
-                  </div>
-                ))}
-              </div>
+              <p className="text-slate-300 font-black text-lg tracking-tight mb-12">
+                OSSTEM · Dentium · Megagen · Neobiotech · DIO · Warantec · Dentis · Straumann · Magicore · 신흥 · 탑플란 · 포인트임플란트 등
+              </p>
 
               {/* Testimonial Card */}
               <div className="bg-slate-50 rounded-2xl p-8 border border-slate-100">
@@ -53,7 +49,7 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
                   <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">김</div>
                   <div>
                     <p className="text-sm font-bold text-slate-800">김OO 원장</p>
-                    <p className="text-xs text-slate-400">서울 강남 S치과</p>
+                    <p className="text-xs text-slate-400">서울 · 치과의원 (베타 테스터)</p>
                   </div>
                 </div>
               </div>
@@ -141,9 +137,9 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { name: '박OO 실장', clinic: '부산 H치과의원', text: '"수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요."' },
-              { name: '이OO 매니저', clinic: '대구 M치과 네트워크', text: '"3개 지점 재고를 한 곳에서 관리할 수 있게 됐습니다. 지점별 소모 패턴이 달라서 정말 유용해요."' },
-              { name: '최OO 원장', clinic: '인천 Y덴탈', text: '"엑셀로 하루 종일 걸리던 작업이 3초면 끝납니다. 직원들 업무 부담이 크게 줄었어요."' },
+              { name: '박OO 실장', clinic: '경기 · 치과의원', text: '"수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요."' },
+              { name: '이OO 매니저', clinic: '부산 · 치과의원', text: '"여러 브랜드 재고를 한 곳에서 관리할 수 있게 됐습니다. 브랜드별 소모 패턴이 달라서 정말 유용해요."' },
+              { name: '최OO 원장', clinic: '인천 · 치과의원', text: '"엑셀로 하루 종일 걸리던 작업이 3초면 끝납니다. 직원들 업무 부담이 크게 줄었어요."' },
             ].map((t, i) => (
               <div key={i} className="bg-white rounded-2xl p-8 border border-slate-100">
                 <p className="text-slate-600 leading-relaxed mb-6">{t.text}</p>
@@ -162,13 +158,16 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-12 bg-white border-t border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
-          <p className="text-slate-400 text-sm">&copy; 2024 Implant Inventory Pro. All rights reserved.</p>
-          <div className="flex gap-6">
-            <a href="#" className="text-slate-400 hover:text-slate-600 text-sm transition-colors">Privacy Policy</a>
-            <a href="#" className="text-slate-400 hover:text-slate-600 text-sm transition-colors">Terms of Service</a>
+      {/* Footer - 기업정보 */}
+      <footer className="border-t border-slate-200 bg-slate-50 py-8 px-6">
+        <div className="max-w-4xl mx-auto text-xs text-slate-400 leading-relaxed">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
+              <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
+              <p>이메일: admin@denjoy.info</p>
+            </div>
+            <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
           </div>
         </div>
       </footer>

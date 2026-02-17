@@ -14,18 +14,18 @@ interface ExcelTableProps {
   isLengthExtracted?: boolean;
   onExtractLengths?: () => void;
   onResetLengths?: () => void;
-  onBulkToggleManufacturer?: (manufacturer: string, targetUnused: boolean) => void;
   onBulkToggleByLength?: (threshold: number) => void;
   hideStatusFilters?: boolean;
+  onExpandFailClaim?: () => void;
 }
 
 type FilterType = 'all' | 'active' | 'unused';
 
-const ExcelTable: React.FC<ExcelTableProps> = ({ 
-  data, 
-  selectedIndices, 
-  onToggleSelect, 
-  onToggleAll, 
+const ExcelTable: React.FC<ExcelTableProps> = ({
+  data,
+  selectedIndices,
+  onToggleSelect,
+  onToggleAll,
   onUpdateCell,
   onSheetChange,
   onCreateFailList,
@@ -33,18 +33,18 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
   isLengthExtracted,
   onExtractLengths,
   onResetLengths,
-  onBulkToggleManufacturer,
-  onBulkToggleByLength,
-  hideStatusFilters = false
+
+  hideStatusFilters = false,
+  onExpandFailClaim
 }) => {
   const [filter, setFilter] = useState<FilterType>(hideStatusFilters ? 'all' : 'active');
-  const [mFilter, setMFilter] = useState<FilterType>('active');
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [showFailClaimModal, setShowFailClaimModal] = useState(false);
   const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false);
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  
+
   const activeSheet = data.sheets[data.activeSheetName];
 
   // 초기 열 설정 및 순서 초기화
@@ -64,36 +64,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
     };
   }, [activeSheet]);
 
-  const manufacturerStats = useMemo(() => {
-    const stats: Record<string, { active: number; total: number }> = {};
-    if (!activeSheet) return stats;
-    activeSheet.rows.forEach(r => {
-      const m = String(r['제조사'] || '기타');
-      if (!stats[m]) stats[m] = { active: 0, total: 0 };
-      stats[m].total++;
-      if (r['사용안함'] !== true) stats[m].active++;
-    });
-    return stats;
-  }, [activeSheet]);
 
-  const filteredManufacturers = useMemo(() => {
-    const list = Object.keys(manufacturerStats).sort();
-    return list.filter(m => {
-      const stats = manufacturerStats[m] as { active: number; total: number };
-      if (mFilter === 'active') return stats.active > 0;
-      if (mFilter === 'unused') return stats.active === 0;
-      return true;
-    });
-  }, [manufacturerStats, mFilter]);
-
-  const mCounts = useMemo(() => {
-    const values = Object.values(manufacturerStats) as { active: number; total: number }[];
-    return {
-      all: values.length,
-      active: values.filter(v => v.active > 0).length,
-      unused: values.filter(v => v.active === 0).length
-    };
-  }, [manufacturerStats]);
 
   const visibleRows = useMemo(() => {
     if (!activeSheet) return [];
@@ -161,51 +132,17 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
           <button
             key={name}
             onClick={() => onSheetChange(name)}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 whitespace-nowrap ${
-              data.activeSheetName === name 
-                ? 'bg-white border-indigo-600 text-indigo-600 shadow-sm' 
-                : 'bg-slate-100 border-transparent text-slate-400 hover:bg-slate-200'
-            }`}
+            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 whitespace-nowrap ${data.activeSheetName === name
+              ? 'bg-white border-indigo-600 text-indigo-600 shadow-sm'
+              : 'bg-slate-100 border-transparent text-slate-400 hover:bg-slate-200'
+              }`}
           >
             {name}
           </button>
         ))}
       </div>
 
-      {/* Manufacturer Quick Toggles */}
-      {!hideStatusFilters && onBulkToggleManufacturer && Object.keys(manufacturerStats).length > 0 && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-50 pb-3 gap-3">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011-1v5m-4 0h4" /></svg>
-                제조사별 일괄 처리
-              </h3>
-              <div className="inline-flex p-1 bg-slate-100 rounded-lg w-fit">
-                <button onClick={() => setMFilter('active')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${mFilter === 'active' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>사용 {mCounts.active}</button>
-                <button onClick={() => setMFilter('unused')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${mFilter === 'unused' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>미사용 {mCounts.unused}</button>
-                <button onClick={() => setMFilter('all')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${mFilter === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>전체 {mCounts.all}</button>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {filteredManufacturers.map(m => {
-              const stats = manufacturerStats[m] as { active: number; total: number };
-              const isActive = stats?.active > 0;
-              return (
-                <div key={m} className="flex items-center justify-between bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all p-3 px-4 min-h-[64px]">
-                  <span className="text-xs font-bold text-slate-800 truncate pr-2">{m}</span>
-                  <div className="flex items-center gap-3 border-l border-slate-50 pl-3">
-                    <div onClick={() => onBulkToggleManufacturer(m, isActive)} className={`relative w-11 h-6 rounded-full cursor-pointer transition-all duration-300 flex-shrink-0 ${isActive ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm ${isActive ? 'left-6' : 'left-1'}`}></div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+
 
       <div className="flex justify-between items-center pt-2">
         <div className="flex items-center gap-3">
@@ -221,61 +158,71 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
             </div>
           )}
 
-          {/* 열 관리 토글 */}
-          <div className="relative">
-            <button 
-              onClick={() => setIsColumnSelectorOpen(!isColumnSelectorOpen)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-all shadow-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
-              열 관리 {visibleColumns.size}/{activeSheet.columns.length}
-            </button>
-            
-            {isColumnSelectorOpen && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 z-[200] animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
-                  <span className="text-xs font-black text-slate-800">보일 열 선택</span>
-                  <div className="flex gap-2">
-                    <button onClick={() => toggleAllColumns(true)} className="text-[10px] font-bold text-indigo-600">전체선택</button>
-                    <button onClick={() => toggleAllColumns(false)} className="text-[10px] font-bold text-rose-500">전체해제</button>
+        </div>
+        {!hideStatusFilters && onExpandFailClaim && (
+          <button
+            onClick={() => setShowFailClaimModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 hover:border-rose-300 transition-all"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            FAIL/청구 확장
+          </button>
+        )}
+      </div>
+
+      {showFailClaimModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden">
+            <div className="p-8 flex flex-col items-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-5">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">FAIL/청구 항목 확장</h3>
+              <p className="text-sm text-slate-500 mb-5 leading-relaxed">
+                현재 <span className="font-bold text-indigo-600">사용 중인 항목({counts.active}개)</span>을 기반으로<br />
+                다음 항목이 자동 생성됩니다.
+              </p>
+              <div className="w-full bg-slate-50 rounded-2xl p-5 space-y-3 mb-6 text-left">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-rose-100 text-rose-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-black">F</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">수술중FAIL 항목</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">각 항목의 제조사 앞에 "수술중FAIL_"을 붙인 복제본 <span className="font-bold text-slate-600">+{counts.active}개</span></p>
                   </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                  {columnOrder.map(col => (
-                    <div 
-                      key={col} 
-                      draggable 
-                      onDragStart={() => handleDragStart(col)}
-                      onDragOver={(e) => handleDragOver(e, col)}
-                      onDrop={(e) => handleDrop(e, col)}
-                      className={`flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-move transition-all ${draggedColumn === col ? 'opacity-30 bg-indigo-50' : ''} ${dragOverColumn === col ? 'border-t-2 border-indigo-400' : ''}`}
-                    >
-                      <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M8 9h8v2H8zm0 4h8v2H8z"/></svg>
-                      <label className="flex items-center gap-3 cursor-pointer flex-1">
-                        <input 
-                          type="checkbox" 
-                          checked={visibleColumns.has(col)} 
-                          onChange={() => toggleColumn(col)}
-                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
-                        />
-                        <span className={`text-xs font-bold transition-colors ${visibleColumns.has(col) ? 'text-slate-800' : 'text-slate-400'}`}>
-                          {col}
-                        </span>
-                      </label>
-                    </div>
-                  ))}
+                <div className="border-t border-slate-200 pt-3 flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-black">B</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">보험청구 항목</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">제조사/브랜드 "보험청구", 규격 "2단계 청구" <span className="font-bold text-slate-600">+1개</span></p>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => setIsColumnSelectorOpen(false)}
-                  className="w-full mt-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-md hover:bg-indigo-700 transition-all"
-                >
-                  적용하기
-                </button>
+                <div className="border-t border-slate-200 pt-3">
+                  <p className="text-xs font-bold text-slate-500">총 예상 결과: <span className="text-indigo-600">{counts.active * 2 + 1}개</span> (기존 {counts.active} + FAIL {counts.active} + 보험청구 1)</p>
+                </div>
               </div>
-            )}
+            </div>
+            <div className="px-8 pb-8 flex gap-3">
+              <button
+                onClick={() => setShowFailClaimModal(false)}
+                className="flex-1 py-3 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => { setShowFailClaimModal(false); onExpandFailClaim?.(); }}
+                className="flex-1 py-3 bg-indigo-600 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
+              >
+                확장 실행
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="w-full overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
@@ -283,8 +230,8 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
             <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
               <tr>
                 {currentVisibleCols.map((col) => (
-                  <th 
-                    key={col} 
+                  <th
+                    key={col}
                     draggable
                     onDragStart={() => handleDragStart(col)}
                     onDragOver={(e) => handleDragOver(e, col)}
@@ -292,7 +239,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                     className={`px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap border-r border-slate-100 last:border-0 cursor-move transition-all ${draggedColumn === col ? 'bg-indigo-50 opacity-50' : ''} ${dragOverColumn === col ? 'border-l-4 border-indigo-500' : ''}`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <svg className="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8 9h8v2H8zm0 4h8v2H8z"/></svg>
+                      <svg className="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8 9h8v2H8zm0 4h8v2H8z" /></svg>
                       {col}
                     </div>
                   </th>
@@ -307,21 +254,22 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                     const isCheck = col === '사용안함';
                     const isLongText = col === '수술기록' || col === '수술내용';
                     const isToothNo = col === '치아번호';
-                    
+                    const isPatientInfo = col === '환자정보';
+
                     return (
                       <td key={`${originalIndex}-${col}`} className={`px-2 py-1.5 border-r border-slate-50 last:border-0 ${draggedColumn === col ? 'bg-indigo-50/10' : ''}`}>
                         {isCheck ? (
                           <div className="flex justify-center min-w-[60px]"><input type="checkbox" checked={!!val} onChange={(e) => onUpdateCell(originalIndex, col, e.target.checked)} className="w-4 h-4 text-red-500 rounded border-slate-300 focus:ring-red-500" /></div>
                         ) : (
-                          <div className="flex items-center min-w-max">
-                            <input 
-                              type="text" 
-                              value={val || ''} 
-                              onChange={(e) => onUpdateCell(originalIndex, col, e.target.value)} 
+                          <div className={`flex items-center min-w-max ${isPatientInfo ? 'patient-info-cell' : ''}`}>
+                            <input
+                              type="text"
+                              value={val || ''}
+                              onChange={(e) => onUpdateCell(originalIndex, col, e.target.value)}
                               style={{ minWidth: isLongText ? '280px' : isToothNo ? '80px' : '60px' }}
-                              className={`w-full px-2 py-1 text-xs border-transparent hover:border-slate-200 focus:border-indigo-400 rounded outline-none bg-transparent whitespace-nowrap overflow-hidden text-ellipsis transition-all ${isLongText ? 'font-medium' : ''}`} 
-                              readOnly={hideStatusFilters} 
-                              title={val || ''}
+                              className={`w-full px-2 py-1 text-xs border-transparent hover:border-slate-200 focus:border-indigo-400 rounded outline-none bg-transparent whitespace-nowrap overflow-hidden text-ellipsis transition-all ${isLongText ? 'font-medium' : ''} ${isPatientInfo ? 'patient-info-blur' : ''}`}
+                              readOnly={hideStatusFilters}
+                              title={isPatientInfo ? '환자 정보 보호' : (val || '')}
                             />
                           </div>
                         )}
@@ -339,11 +287,22 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f8fafc; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
+
         /* 횡스크롤 시 가독성을 위한 열 최소 너비 및 텍스트 유지 */
         table { border-spacing: 0; border-collapse: separate; }
         td input { text-overflow: ellipsis; }
         td:hover input { border-color: #e2e8f0; background: white; }
+
+        /* 환자정보 블러 처리 */
+        .patient-info-blur {
+          filter: blur(5px);
+          transition: filter 0.2s ease;
+          user-select: none;
+        }
+        .patient-info-cell:hover .patient-info-blur {
+          filter: blur(0);
+          user-select: auto;
+        }
       `}</style>
     </div>
   );

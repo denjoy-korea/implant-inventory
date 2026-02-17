@@ -35,6 +35,14 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, onToggleBrand }) => {
     return data.rows.filter(row => row['사용안함'] !== true).length;
   }, [data.rows]);
 
+  const billableActiveCount = useMemo(() => {
+    return data.rows.filter(row => {
+      if (row['사용안함'] === true) return false;
+      const m = String(row['제조사'] || '');
+      return !m.startsWith('수술중FAIL_') && m !== '보험청구';
+    }).length;
+  }, [data.rows]);
+
   const filteredBrands = useMemo(() => {
     const entries = Object.entries(brandStats) as [string, { total: number; active: number; manufacturer: string; brandName: string }][];
     
@@ -99,9 +107,15 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, onToggleBrand }) => {
             </button>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-black text-indigo-600 leading-none">{totalActiveGlobal}</div>
-          <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">사용 중인 총 품목</div>
+        <div className="text-right flex items-end gap-4">
+          <div>
+            <div className="text-2xl font-black text-emerald-600 leading-none">{billableActiveCount}</div>
+            <div className="text-[10px] text-slate-400 font-bold tracking-widest mt-1">등록 품목</div>
+          </div>
+          <div>
+            <div className="text-2xl font-black text-indigo-600 leading-none">{totalActiveGlobal}</div>
+            <div className="text-[10px] text-slate-400 font-bold tracking-widest mt-1">사용 중인 총 품목</div>
+          </div>
         </div>
       </div>
       

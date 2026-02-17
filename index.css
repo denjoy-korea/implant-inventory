@@ -1,23 +1,23 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-  
-  .animation-delay-200 {
-    animation-delay: 200ms;
-  }
-  
-  .animation-delay-400 {
-    animation-delay: 400ms;
-  }
-  
-  .perspective-1000 {
-    perspective: 1000px;
-  }
+body {
+  font-family: 'Inter', 'Noto Sans KR', sans-serif;
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+@utility animation-delay-400 {
+  animation-delay: 400ms;
+}
+
+@utility perspective-1000 {
+  perspective: 1000px;
 }
 
 @keyframes fade-in-up {
@@ -66,6 +66,80 @@
   }
 }
 
+/* Focus-visible global styles */
+:focus-visible {
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  ring: 2px;
+  border-color: rgb(99 102 241);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Chart animations */
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes donut-draw {
+  from { stroke-dashoffset: 264; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes line-appear {
+  from { stroke-dashoffset: 2000; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes area-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chart-dot-grid {
+  background-image: radial-gradient(circle, #e2e8f0 0.5px, transparent 0.5px);
+  background-size: 16px 16px;
+}
+
+.animate-bar-grow {
+  animation: bar-grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom;
+}
+
+.animate-line-appear {
+  animation: line-appear 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-area-fade {
+  animation: area-fade 1s ease-out 0.8s forwards;
+  opacity: 0;
+}
+
+.animate-donut-draw {
+  animation: donut-draw 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -96,3 +170,20 @@
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* Table rendering optimization */
+table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+
+/* Notice rich text content styles */
+.notice-content h2 { font-size: 1.25rem; font-weight: 700; margin: 12px 0 4px; color: #1e293b; }
+.notice-content h3 { font-size: 1.1rem; font-weight: 700; margin: 10px 0 4px; color: #334155; }
+.notice-content p { margin: 2px 0; }
+.notice-content blockquote { border-left: 3px solid #e2e8f0; padding-left: 12px; color: #64748b; margin: 8px 0; }
+.notice-content ul { list-style: disc; padding-left: 20px; margin: 4px 0; }
+.notice-content ol { list-style: decimal; padding-left: 20px; margin: 4px 0; }
+.notice-content hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+.notice-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.notice-content .notice-callout { background: #f1f1ef; border-radius: 8px; padding: 10px 14px; margin: 8px 0; display: flex; gap: 8px; }
