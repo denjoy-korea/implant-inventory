@@ -1,7 +1,14 @@
-
 import { ExcelData, ExcelSheet, ExcelRow } from '../types';
 
-declare const XLSX: any;
+type XlsxModule = typeof import('xlsx');
+let xlsxModulePromise: Promise<XlsxModule> | null = null;
+
+async function loadXlsx(): Promise<XlsxModule> {
+  if (!xlsxModulePromise) {
+    xlsxModulePromise = import('xlsx');
+  }
+  return xlsxModulePromise;
+}
 
 export const extractLengthFromSize = (size: any): string => {
   if (size === undefined || size === null) return "";
@@ -27,26 +34,32 @@ export const extractLengthFromSize = (size: any): string => {
 };
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
+  const XLSX = await loadXlsx();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        if (!(data instanceof ArrayBuffer)) {
+          reject(new Error('파일을 읽을 수 없습니다.'));
+          return;
+        }
+
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheets: Record<string, ExcelSheet> = {};
         workbook.SheetNames.forEach((sheetName: string) => {
           const worksheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, { defval: "" });
           const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
           const columns: string[] = [];
           if (range) {
             for (let C = range.s.c; C <= range.e.c; ++C) {
               const address = XLSX.utils.encode_col(C) + "1";
               const cell = worksheet[address];
-              if (cell && cell.v) columns.push(cell.v);
+              if (cell && cell.v !== undefined && cell.v !== null) columns.push(String(cell.v));
             }
           }
-          const cleanedRows = rows.map((row: any) => {
+          const cleanedRows = rows.map((row) => {
             if (row['사용안함'] !== undefined) {
               const val = row['사용안함'];
               row['사용안함'] = (val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v');
@@ -59,13 +72,14 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
       } catch (error) { reject(error); }
     };
     reader.onerror = (error) => reject(error);
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   });
 };
 
-export const downloadExcelFile = (data: ExcelData, selectedIndices: Set<number>, fileName: string) => {
+export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {
   const activeSheet = data.sheets[data.activeSheetName];
   if (!activeSheet) return;
+  const XLSX = await loadXlsx();
 
   // 사용안함이 체크되지 않은 항목만 필터링하여 다운로드
   const processedRows = activeSheet.rows.filter((row, index) => {
