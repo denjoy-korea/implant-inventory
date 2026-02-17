@@ -70,7 +70,7 @@ function parsePhiFormat(raw: string): ParsedSize | null {
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}`
+    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
   };
 }
 
@@ -106,7 +106,7 @@ function parseCuffPhiFormat(raw: string): ParsedSize | null {
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}`
+    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
   };
 }
 
@@ -143,7 +143,7 @@ function parseDLCuffFormat(raw: string): ParsedSize | null {
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}`
+    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
   };
 }
 

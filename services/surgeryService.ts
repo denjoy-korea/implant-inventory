@@ -1,3 +1,4 @@
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbSurgeryRecord, ExcelRow } from '../types';
 import { excelRowToDbSurgery } from './mappers';
@@ -99,10 +100,10 @@ export const surgeryService = {
   /** Realtime 구독 */
   subscribeToChanges(
     hospitalId: string,
-    callback: (payload: any) => void
+    callback: (payload: RealtimePostgresChangesPayload<DbSurgeryRecord>) => void
   ) {
     return supabase
-      .channel('surgery-changes')
+      .channel(`surgery-changes-${hospitalId}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',

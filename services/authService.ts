@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbProfile, UserRole } from '../types';
 
@@ -283,18 +282,6 @@ export const authService = {
       console.error('[authService] deleteAccount failed:', error);
       return { success: false, error: '회원 탈퇴에 실패했습니다.' };
     }
-  },
-
-  /** 비밀번호 검증 (현재 세션에 영향 없음) */
-  async verifyPassword(email: string, password: string): Promise<boolean> {
-    const tempClient = createClient(
-      import.meta.env.VITE_SUPABASE_URL || '',
-      import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-      { auth: { persistSession: false } }
-    );
-
-    const { error } = await tempClient.auth.signInWithPassword({ email, password });
-    return !error;
   },
 
   /** Auth 상태 변경 리스너 */

@@ -1,3 +1,4 @@
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbInventoryItem } from '../types';
 
@@ -103,10 +104,10 @@ export const inventoryService = {
   /** Realtime 구독 (재고 변경 시 콜백) */
   subscribeToChanges(
     hospitalId: string,
-    callback: (payload: any) => void
+    callback: (payload: RealtimePostgresChangesPayload<DbInventoryItem>) => void
   ) {
     return supabase
-      .channel('inventory-changes')
+      .channel(`inventory-changes-${hospitalId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',

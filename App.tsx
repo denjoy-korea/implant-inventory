@@ -1,5 +1,6 @@
 
-import React, { useState, useCallback, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
+import { useAppState } from './hooks/useAppState';
 /* ── Static imports (always needed) ── */
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -48,7 +49,8 @@ import { orderService } from './services/orderService';
 import { hospitalService } from './services/hospitalService';
 import { planService } from './services/planService';
 import { makePaymentService } from './services/makePaymentService';
-import { dbToInventoryItem, dbToExcelRow, dbToOrder, dbToUser } from './services/mappers';
+import { securityMaintenanceService } from './services/securityMaintenanceService';
+import { dbToExcelRow } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { resetService } from './services/resetService';
@@ -198,38 +200,37 @@ const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
 
-  const [state, setState] = useState<AppState>({
-    fixtureData: null,
-    surgeryData: null,
-    fixtureFileName: null,
-    surgeryFileName: null,
-    inventory: [],
-    orders: [],
-    surgeryMaster: {},
-    activeSurgerySheetName: '수술기록지',
-    selectedFixtureIndices: {},
-    selectedSurgeryIndices: {},
-    isLoading: true,
-    user: null,
-    currentView: 'landing',
-    dashboardTab: 'overview',
-    isFixtureLengthExtracted: false,
-    fixtureBackup: null,
-    showProfile: false,
-    adminViewMode: 'admin',
-    planState: null,
-    memberCount: 0,
-    hospitalName: '',
-  });
+  const {
+    state,
+    setState,
+    loadHospitalData,
+    handleLoginSuccess,
+    handleLeaveHospital: _handleLeaveHospital,
+    handleDeleteAccount,
+  } = useAppState();
 
-  const [planLimitModal, setPlanLimitModal] = useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
-  const [showAuditHistory, setShowAuditHistory] = useState(false);
+  // UserProfile expects () => void; hook expects (user: User) so wrap with current user
+  const handleLeaveHospital = useCallback(() => {
+    if (state.user) _handleLeaveHospital(state.user);
+  }, [_handleLeaveHospital, state.user]);
+
+  const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
+  const [showAuditHistory, setShowAuditHistory] = React.useState(false);
 
   const isSystemAdmin = state.user?.role === 'admin';
   const isHospitalAdmin = state.user?.role === 'master' || isSystemAdmin;
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
+
+  // Dev convenience: expose maintenance helpers for one-off operations.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (globalThis as any).__securityMaintenanceService = securityMaintenanceService;
+    return () => {
+      delete (globalThis as any).__securityMaintenanceService;
+    };
+  }, []);
 
   useEffect(() => {
     if (state.currentView === 'admin_panel' && !isSystemAdmin) {
@@ -246,122 +247,7 @@ const App: React.FC = () => {
 
   const billableItemCount = useMemo(() => countBillableItems(state.inventory), [state.inventory, countBillableItems]);
 
-  // Supabase 세션 확인 및 데이터 로드
-  useEffect(() => {
-    const initSession = async () => {
-      try {
-        const session = await authService.getSession();
-        if (session?.user) {
-          const profile = await authService.getProfileById();
-          if (profile) {
-            const user = dbToUser(profile);
-            await loadHospitalData(user);
-            return;
-          }
-        }
-      } catch (error: any) {
-        console.error('[App] Session check failed:', error);
-        // 만료/손상된 토큰 자동 정리
-        if (error?.message?.includes('Refresh Token') || error?.message?.includes('Invalid')) {
-          await authService.signOut();
-        }
-      }
-      setState(prev => ({ ...prev, isLoading: false }));
-    };
-    initSession();
-
-    const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        // AuthForm에서 직접 처리하므로 여기서는 무시
-        // (멀티탭 시나리오는 initSession에서 처리)
-      } else if (event === 'SIGNED_OUT') {
-        setState(prev => ({
-          ...prev,
-          user: null,
-          currentView: 'landing',
-          inventory: [],
-          orders: [],
-          surgeryMaster: {},
-          fixtureData: null,
-          isLoading: false,
-        }));
-      }
-      // TOKEN_REFRESHED: 토큰 자동 갱신 완료 (별도 처리 불필요)
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Realtime 구독: 병원 데이터 변경 시 로컬 상태 자동 업데이트
-  useEffect(() => {
-    if (!state.user?.hospitalId || (state.user?.status !== 'active' && state.user?.status !== 'readonly')) return;
-
-    const hospitalId = state.user.hospitalId;
-
-    const inventoryChannel = inventoryService.subscribeToChanges(hospitalId, (payload: any) => {
-      if (payload.eventType === 'INSERT') {
-        const newItem = dbToInventoryItem(payload.new);
-        setState(prev => {
-          if (prev.inventory.some(i => i.id === newItem.id)) return prev;
-          return { ...prev, inventory: [...prev.inventory, newItem] };
-        });
-      } else if (payload.eventType === 'UPDATE') {
-        const updated = dbToInventoryItem(payload.new);
-        setState(prev => ({
-          ...prev,
-          inventory: prev.inventory.map(i => i.id === updated.id ? { ...i, initialStock: updated.initialStock, manufacturer: updated.manufacturer, brand: updated.brand, size: updated.size } : i),
-        }));
-      } else if (payload.eventType === 'DELETE') {
-        const deletedId = payload.old?.id;
-        if (deletedId) {
-          setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => i.id !== deletedId) }));
-        }
-      }
-    });
-
-    const surgeryChannel = surgeryService.subscribeToChanges(hospitalId, (payload: any) => {
-      if (payload.eventType === 'INSERT') {
-        dbToExcelRow(payload.new)
-          .then(newRow => {
-            setState(prev => {
-              const sheetName = '수술기록지';
-              const existing = prev.surgeryMaster[sheetName] || [];
-              if (existing.some(r => r._id === newRow._id)) return prev;
-              return { ...prev, surgeryMaster: { ...prev.surgeryMaster, [sheetName]: [...existing, newRow] } };
-            });
-          })
-          .catch(error => {
-            console.error('[App] Failed to map realtime surgery row:', error);
-          });
-      }
-    });
-
-    const ordersChannel = orderService.subscribeToChanges(hospitalId, (payload: any) => {
-      if (payload.eventType === 'INSERT') {
-        // 주문 INSERT는 order_items가 JOIN되지 않으므로 전체 리로드
-        orderService.getOrders().then(ordersData => {
-          setState(prev => ({ ...prev, orders: ordersData.map(dbToOrder) }));
-        });
-      } else if (payload.eventType === 'UPDATE') {
-        const updated = payload.new;
-        setState(prev => ({
-          ...prev,
-          orders: prev.orders.map(o => o.id === updated.id ? { ...o, status: updated.status, receivedDate: updated.received_date || undefined } : o),
-        }));
-      } else if (payload.eventType === 'DELETE') {
-        const deletedId = payload.old?.id;
-        if (deletedId) {
-          setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== deletedId) }));
-        }
-      }
-    });
-
-    return () => {
-      supabase.removeChannel(inventoryChannel);
-      supabase.removeChannel(surgeryChannel);
-      supabase.removeChannel(ordersChannel);
-    };
-  }, [state.user?.hospitalId, state.user?.status]);
+  // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
   /* ── Hash Routing: State → URL ── */
   const skipHashSync = useRef(false);
@@ -409,124 +295,6 @@ const App: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isLoading]);
-
-  /** Supabase에서 병원 데이터 로드 */
-  const loadHospitalData = async (user: User) => {
-    if (!user.hospitalId || (user.status !== 'active' && user.status !== 'readonly')) {
-      setState(prev => ({
-        ...prev,
-        user,
-        currentView: 'dashboard',
-        dashboardTab: 'overview',
-        isLoading: false,
-      }));
-      return;
-    }
-
-    try {
-      const [inventoryData, surgeryData, ordersData, planState, membersData, hospitalData] = await Promise.all([
-        inventoryService.getInventory(),
-        surgeryService.getSurgeryRecords(),
-        orderService.getOrders(),
-        planService.checkPlanExpiry(user.hospitalId),
-        hospitalService.getMembers(user.hospitalId),
-        hospitalService.getHospitalById(user.hospitalId),
-      ]);
-
-      console.log('[App] loadHospitalData results:', {
-        inventoryCount: inventoryData.length,
-        surgeryCount: surgeryData.length,
-        ordersCount: ordersData.length,
-        hospitalName: hospitalData?.name,
-        hospitalId: user.hospitalId,
-      });
-
-      const inventory = inventoryData.map(dbToInventoryItem);
-      const surgeryRows = await Promise.all(surgeryData.map(dbToExcelRow));
-      const orders = ordersData.map(dbToOrder);
-
-      // 예약된 초기화 체크 (scheduled_at 경과 시 자동 실행)
-      const wasReset = await resetService.checkScheduledReset(user.hospitalId);
-
-      setState(prev => ({
-        ...prev,
-        user,
-        currentView: 'dashboard',
-        dashboardTab: 'overview',
-        inventory: wasReset ? [] : inventory,
-        surgeryMaster: wasReset ? {} : { '수술기록지': surgeryRows },
-        orders: wasReset ? [] : orders,
-        planState,
-        memberCount: membersData.length,
-        hospitalName: hospitalData?.name || '',
-        isLoading: false,
-      }));
-
-      if (wasReset) {
-        alert('예약된 데이터 초기화가 완료되었습니다. 재고, 수술 기록, 주문 데이터가 모두 삭제되었습니다.');
-      }
-    } catch (error) {
-      console.error('[App] Data loading failed:', error);
-      setState(prev => ({
-        ...prev,
-        user,
-        currentView: 'dashboard',
-        isLoading: false,
-      }));
-    }
-  };
-
-  /** 로그인 성공 → Supabase에서 데이터 로드 */
-  const handleLoginSuccess = async (user: User) => {
-    setState(prev => ({ ...prev, isLoading: true }));
-    await loadHospitalData(user);
-  };
-
-  const handleLeaveHospital = async () => {
-    if (!state.user) return;
-
-    try {
-      await hospitalService.leaveHospital();
-      const updatedUser = { ...state.user, hospitalId: '', status: 'pending' as const };
-      setState(prev => ({
-        ...prev,
-        user: updatedUser,
-        inventory: [],
-        surgeryMaster: {},
-        orders: [],
-        fixtureData: null,
-        showProfile: false,
-      }));
-      alert('초기화되었습니다. 새로운 병원을 찾아주세요.');
-    } catch (error) {
-      alert('병원 탈퇴에 실패했습니다.');
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!state.user) return;
-
-    try {
-      const result = await authService.deleteAccount();
-      if (result.success) {
-        setState(prev => ({
-          ...prev,
-          user: null,
-          currentView: 'landing',
-          inventory: [],
-          surgeryMaster: {},
-          orders: [],
-          fixtureData: null,
-          showProfile: false,
-        }));
-        alert('회원 탈퇴가 완료되었습니다.');
-      } else {
-        alert(result.error || '회원 탈퇴에 실패했습니다.');
-      }
-    } catch (error) {
-      alert('회원 탈퇴에 실패했습니다.');
-    }
-  };
 
   // 문자열 정규화 (공백 제거, 대소문자 통일, 특수기호 및 접두어 치환)
   const normalize = useCallback((str: string) => {
@@ -582,8 +350,12 @@ const App: React.FC = () => {
           if (isTotalRow) return;
 
           // 실제 임플란트를 사용한 건만 카운트 (식립 + 수술중 FAIL)
+          // 청구·골이식만·기타는 재고 소모가 없으므로 제외
           const cls = String(row['구분'] || '');
           if (cls !== '식립' && cls !== '수술중 FAIL') return;
+          // 수술기록에 [GBR Only]가 포함된 건은 골이식만이므로 제외
+          const record = String(row['수술기록'] || '');
+          if (record.includes('[GBR Only]')) return;
 
           const rowM = normalize(row['제조사']);
           const rowB = normalize(row['브랜드']);
@@ -663,7 +435,7 @@ const App: React.FC = () => {
 
         if (parsed.sheets[targetSheetName]) {
           const originalSheet = parsed.sheets[targetSheetName];
-          const cleanedRows = originalSheet.rows.filter(row => {
+          const cleanedRows: ExcelRow[] = originalSheet.rows.filter(row => {
             const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
             const contentCount = Object.values(row).filter(val => val !== null && val !== undefined && String(val).trim() !== "").length;
             return !isTotalRow && contentCount > 1;
@@ -777,13 +549,20 @@ const App: React.FC = () => {
   };
 
   const handleUpdateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
+    const prevOrders = state.orders;
     setState(prev => ({
       ...prev,
       orders: prev.orders.map(o => o.id === orderId ? { ...o, status, receivedDate: status === 'received' ? new Date().toISOString() : undefined } : o)
     }));
-    await orderService.updateStatus(orderId, status);
-    operationLogService.logOperation('order_status_update', `주문 상태 변경: ${status}`, { orderId, status });
-  }, []);
+    try {
+      await orderService.updateStatus(orderId, status);
+      operationLogService.logOperation('order_status_update', `주문 상태 변경: ${status}`, { orderId, status });
+    } catch (error) {
+      console.error('[App] 주문 상태 변경 실패, 롤백:', error);
+      setState(prev => ({ ...prev, orders: prevOrders }));
+      alert('주문 상태 변경에 실패했습니다.');
+    }
+  }, [state.orders]);
 
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update
@@ -1088,9 +867,12 @@ const App: React.FC = () => {
                         brand: String(row['브랜드'] || row['Brand'] || '기타'),
                         size: String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
                         initialStock: 0,
+                        stockAdjustment: 0,
                         usageCount: 0,
                         currentStock: 0,
-                        recommendedStock: 5
+                        recommendedStock: 5,
+                        monthlyAvgUsage: 0,
+                        dailyMaxUsage: 0,
                       })).filter(ni => !state.inventory.some(inv => normalize(inv.manufacturer) === normalize(ni.manufacturer) && normalize(inv.brand) === normalize(ni.brand) && getSizeMatchKey(inv.size, inv.manufacturer) === getSizeMatchKey(ni.size, ni.manufacturer)));
                       // 플랜 품목 수 제한 적용 (수술중FAIL_ / 보험청구 제외)
                       const planMaxItems = PLAN_LIMITS[effectivePlan].maxItems;
@@ -1105,11 +887,9 @@ const App: React.FC = () => {
                         setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsToAdd], dashboardTab: 'inventory_master' }));
                         // Supabase에 일괄 저장
                         if (state.user?.hospitalId) {
-                          const dbItems = itemsToAdd.map(ni => ({ hospital_id: state.user!.hospitalId, manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size, initial_stock: ni.initialStock }));
-                          console.log('[App] bulkInsert 시도:', { hospitalId: state.user!.hospitalId, itemCount: dbItems.length, sample: dbItems[0] });
+                          const dbItems = itemsToAdd.map(ni => ({ hospital_id: state.user!.hospitalId, manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size, initial_stock: ni.initialStock, stock_adjustment: 0 }));
                           const saved = await inventoryService.bulkInsert(dbItems);
                           if (saved.length > 0) {
-                            console.log('[App] bulkInsert 성공:', saved.length, '개 저장됨');
                             setState(prev => ({ ...prev, inventory: prev.inventory.map((item, idx) => { const match = saved.find(s => s.manufacturer === item.manufacturer && s.brand === item.brand && s.size === item.size); return match ? { ...item, id: match.id } : item; }) }));
                             operationLogService.logOperation('data_processing', `재고 마스터 반영 ${saved.length}건`, { count: saved.length });
                           } else {
@@ -1352,17 +1132,32 @@ const App: React.FC = () => {
                           inventory={state.inventory}
                           isReadOnly={isReadOnly}
                           userId={state.user?.email}
+                          hospitalId={state.user?.hospitalId}
                           plan={effectivePlan}
                           onUpdateStock={async (id, val) => {
+                            const prevInventory = state.inventory;
                             setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === id ? { ...i, initialStock: val, currentStock: val - i.usageCount } : i) }));
-                            await inventoryService.updateItem(id, { initial_stock: val });
-                            operationLogService.logOperation('base_stock_edit', `기초재고 수정 (${val}개)`, { inventoryId: id, value: val });
+                            try {
+                              await inventoryService.updateItem(id, { initial_stock: val });
+                              operationLogService.logOperation('base_stock_edit', `기초재고 수정 (${val}개)`, { inventoryId: id, value: val });
+                            } catch (error) {
+                              console.error('[App] 기초재고 수정 실패, 롤백:', error);
+                              setState(prev => ({ ...prev, inventory: prevInventory }));
+                              alert('기초재고 수정에 실패했습니다.');
+                            }
                           }}
                           onDeleteInventoryItem={async (id) => {
                             const delItem = state.inventory.find(i => i.id === id);
+                            const prevInventory = state.inventory;
                             setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => i.id !== id) }));
-                            await inventoryService.deleteItem(id);
-                            operationLogService.logOperation('item_delete', `품목 삭제: ${delItem?.brand || ''} ${delItem?.size || ''}`, { inventoryId: id });
+                            try {
+                              await inventoryService.deleteItem(id);
+                              operationLogService.logOperation('item_delete', `품목 삭제: ${delItem?.brand || ''} ${delItem?.size || ''}`, { inventoryId: id });
+                            } catch (error) {
+                              console.error('[App] 품목 삭제 실패, 롤백:', error);
+                              setState(prev => ({ ...prev, inventory: prevInventory }));
+                              alert('품목 삭제에 실패했습니다.');
+                            }
                           }}
                           onAddInventoryItem={async (ni) => {
                             const isBillable = !ni.manufacturer.startsWith('수술중FAIL_') && ni.manufacturer !== '보험청구';
@@ -1418,7 +1213,17 @@ const App: React.FC = () => {
                             orders={state.orders}
                             inventory={state.inventory}
                             onUpdateOrderStatus={handleUpdateOrderStatus}
-                            onDeleteOrder={async (id) => { setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id) })); await orderService.deleteOrder(id); }}
+                            onDeleteOrder={async (id) => {
+                              const prevOrders = state.orders;
+                              setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id) }));
+                              try {
+                                await orderService.deleteOrder(id);
+                              } catch (error) {
+                                console.error('[App] 주문 삭제 실패, 롤백:', error);
+                                setState(prev => ({ ...prev, orders: prevOrders }));
+                                alert('주문 삭제에 실패했습니다.');
+                              }
+                            }}
                             onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
                             isReadOnly={isReadOnly}
                           />
@@ -1459,7 +1264,7 @@ const App: React.FC = () => {
               onProfileClick={() => setState(prev => ({ ...prev, showProfile: true }))}
               user={state.user}
               currentView={state.currentView}
-              showLogo={state.currentView !== 'dashboard'}
+              showLogo={true}
             />
             <main className="flex-1 overflow-x-hidden">
               <ErrorBoundary>

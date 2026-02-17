@@ -89,6 +89,27 @@ export const planService = {
     return { allowed: true, nextAvailableDate: null };
   },
 
+  /** 기초재고 수정 횟수 서버 조회 */
+  async getBaseStockEditCount(hospitalId: string): Promise<number> {
+    const { data, error } = await supabase.rpc('get_base_stock_edit_count', {
+      p_hospital_id: hospitalId,
+    });
+    if (error || data === null || data === undefined) return 0;
+    return data as number;
+  },
+
+  /** 기초재고 수정 횟수 서버 증가 (저장 시 호출) */
+  async incrementBaseStockEditCount(hospitalId: string): Promise<number> {
+    const { data, error } = await supabase.rpc('increment_base_stock_edit_count', {
+      p_hospital_id: hospitalId,
+    });
+    if (error || data === null || data === undefined) {
+      console.error('[planService] incrementBaseStockEditCount failed:', error);
+      return 0;
+    }
+    return data as number;
+  },
+
   /** 특정 기능에 필요한 최소 플랜 반환 */
   getRequiredPlan(feature: PlanFeature): PlanType {
     const plans: PlanType[] = ['free', 'basic', 'plus', 'business'];

@@ -8,9 +8,21 @@ const LEGACY_SALT = 'dentweb-patient-info-2026';
 const ENC_V2_PREFIX = 'ENCv2:';
 const ENC_V1_PREFIX = 'ENC:';
 
+if (!import.meta.env.VITE_PATIENT_DATA_KEY) {
+  if (import.meta.env.PROD) {
+    // 프로덕션에서 키 미설정 = 환자 데이터가 공개 문자열로 암호화됨 (사실상 평문)
+    throw new Error(
+      '[cryptoUtils] VITE_PATIENT_DATA_KEY가 설정되지 않았습니다. ' +
+      '프로덕션 환경에서는 반드시 환경변수를 설정해야 합니다.'
+    );
+  }
+  console.warn(
+    '[cryptoUtils] VITE_PATIENT_DATA_KEY 미설정 — 개발 환경에서 기본 키를 사용합니다.'
+  );
+}
+
 const ENCRYPTION_SECRET = (
   import.meta.env.VITE_PATIENT_DATA_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
   LEGACY_SALT
 ).trim();
 
