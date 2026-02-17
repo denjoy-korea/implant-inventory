@@ -113,11 +113,26 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const kpiData = useMemo(() => {
     const totalUsage = filteredInventory.reduce((s, i) => s + i.usageCount, 0);
     const totalStock = filteredInventory.reduce((s, i) => s + i.currentStock, 0);
+    const totalItems = filteredInventory.length;
     const shortageCount = filteredInventory.filter(i => i.currentStock < Math.ceil(i.recommendedStock * monthFactor)).length;
-    const avgMonthlyUsage = filteredInventory.length > 0
-      ? filteredInventory.reduce((s, i) => s + (i.monthlyAvgUsage ?? 0), 0) / filteredInventory.length
+    const shortageRate = totalItems > 0 ? Math.round((shortageCount / totalItems) * 100) : 0;
+
+    // 월평균: 실제 사용 있는 품목만의 평균 (전체 나누기보다 의미 있음)
+    const usedItems = filteredInventory.filter(i => (i.monthlyAvgUsage ?? 0) > 0);
+    const avgMonthlyUsage = usedItems.length > 0
+      ? usedItems.reduce((s, i) => s + (i.monthlyAvgUsage ?? 0), 0) / usedItems.length
       : 0;
-    return { totalUsage, totalStock, shortageCount, avgMonthlyUsage };
+    const usedItemRatio = totalItems > 0 ? Math.round((usedItems.length / totalItems) * 100) : 0;
+
+    // 현재재고 충분도: 전체 재고 ÷ 월평균 총사용량 (몇 달치인지)
+    const totalMonthlyDemand = filteredInventory.reduce((s, i) => s + (i.monthlyAvgUsage ?? 0), 0);
+    const stockMonths = totalMonthlyDemand > 0 ? totalStock / totalMonthlyDemand : null;
+
+    // 총사용량 vs 권장재고 비율 (사용률)
+    const totalRecommended = filteredInventory.reduce((s, i) => s + Math.ceil(i.recommendedStock * monthFactor), 0);
+    const usageVsRecommended = totalRecommended > 0 ? Math.round((totalUsage / totalRecommended) * 100) : null;
+
+    return { totalUsage, totalStock, totalItems, shortageCount, shortageRate, avgMonthlyUsage, usedItemRatio, stockMonths, usageVsRecommended };
   }, [filteredInventory, monthFactor]);
 
   // 식립 / 수술중 FAIL 건수 분리
@@ -286,12 +301,20 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               <p className="text-3xl font-bold text-slate-800 tabular-nums tracking-tight">{kpiData.totalUsage.toLocaleString()}</p>
               <span className="text-xs font-semibold text-slate-400">개</span>
             </div>
-            {(surgeryBreakdown.placement > 0 || surgeryBreakdown.fail > 0) && (
-              <div className="flex items-center gap-2 mt-2">
+            {(surgeryBreakdown.placement > 0 || surgeryBreakdown.fail > 0) ? (
+              <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-[10px] font-bold text-indigo-600">식립 {surgeryBreakdown.placement}</span>
                 {surgeryBreakdown.fail > 0 && <span className="text-[10px] font-bold text-rose-500">FAIL {surgeryBreakdown.fail}</span>}
               </div>
-            )}
+            ) : kpiData.usageVsRecommended !== null ? (
+              <p className="text-[10px] font-bold text-slate-400 mt-1.5">
+                권장량의{' '}
+                <span className={`${kpiData.usageVsRecommended >= 80 ? 'text-indigo-600' : kpiData.usageVsRecommended >= 50 ? 'text-amber-500' : 'text-slate-500'}`}>
+                  {kpiData.usageVsRecommended}%
+                </span>{' '}
+                소진
+              </p>
+            ) : null}
           </div>
           <div className={`px-6 py-5 transition-colors relative overflow-hidden ${kpiData.totalStock < 0 ? 'bg-rose-50/60 hover:bg-rose-50' : 'hover:bg-slate-50/50'}`}>
             {kpiData.totalStock < 0 && (
@@ -305,27 +328,52 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               </p>
               <span className="text-xs font-semibold text-slate-400">개</span>
             </div>
-            {kpiData.totalStock < 0 && (
-              <p className="text-[10px] font-bold text-rose-500 mt-1 flex items-center gap-1">
+            {kpiData.totalStock < 0 ? (
+              <p className="text-[10px] font-bold text-rose-500 mt-1.5 flex items-center gap-1">
                 <span>⚠</span> 기초재고 입력 필요
               </p>
-            )}
+            ) : kpiData.stockMonths !== null ? (
+              <p className="text-[10px] font-bold text-slate-400 mt-1.5">
+                약{' '}
+                <span className={`${kpiData.stockMonths >= 2 ? 'text-emerald-600' : kpiData.stockMonths >= 1 ? 'text-amber-500' : 'text-rose-500'}`}>
+                  {kpiData.stockMonths.toFixed(1)}개월
+                </span>{' '}
+                분량
+              </p>
+            ) : null}
           </div>
           <div className="px-6 py-5 hover:bg-slate-50/50 transition-colors">
             <h4 className="text-sm font-semibold text-slate-800">부족 품목</h4>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">Shortage Items</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">
+              {monthFactor === 1 ? '1개월 기준' : `${monthFactor}개월 기준`}
+            </p>
             <div className="flex items-baseline gap-1.5">
               <p className={`text-3xl font-bold tabular-nums tracking-tight ${kpiData.shortageCount > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{kpiData.shortageCount}</p>
               <span className="text-xs font-semibold text-slate-400">건</span>
             </div>
+            {kpiData.totalItems > 0 && (
+              <p className="text-[10px] font-bold text-slate-400 mt-1.5">
+                전체의{' '}
+                <span className={`${kpiData.shortageRate >= 30 ? 'text-rose-500' : kpiData.shortageRate >= 15 ? 'text-amber-500' : 'text-emerald-600'}`}>
+                  {kpiData.shortageRate}%
+                </span>
+              </p>
+            )}
           </div>
           <div className="px-6 py-5 hover:bg-slate-50/50 transition-colors">
             <h4 className="text-sm font-semibold text-slate-800">월평균 사용</h4>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">Monthly Avg Usage</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">품목당 평균</p>
             <div className="flex items-baseline gap-1.5">
               <p className="text-3xl font-bold text-slate-800 tabular-nums tracking-tight">{kpiData.avgMonthlyUsage.toFixed(1)}</p>
               <span className="text-xs font-semibold text-slate-400">개/월</span>
             </div>
+            {kpiData.usedItemRatio < 100 && (
+              <p className="text-[10px] font-bold text-slate-400 mt-1.5">
+                사용 품목{' '}
+                <span className="text-indigo-500">{kpiData.usedItemRatio}%</span>{' '}
+                기준
+              </p>
+            )}
           </div>
           {/* 품목 일관성 KPI */}
           <div className={`px-6 py-5 hover:bg-slate-50/50 transition-colors ${!consistencyData.isConsistent ? 'bg-amber-50/40' : ''}`}>
