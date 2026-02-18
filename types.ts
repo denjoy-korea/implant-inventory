@@ -62,6 +62,7 @@ export interface Hospital {
 }
 
 export interface User {
+  id: string;
   email: string;
   name: string;
   phone?: string | null;
@@ -154,6 +155,8 @@ export interface AppState {
   planState: HospitalPlanState | null;
   memberCount: number;
   hospitalName: string;
+  /** 병원 master_admin_id — staff 워크스페이스에서도 본인이 master인지 판별용 */
+  hospitalMasterAdminId: string;
   /** 병원별 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
   hospitalWorkDays: number[];
 }

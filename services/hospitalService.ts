@@ -45,7 +45,7 @@ export const hospitalService = {
   async getHospitalById(hospitalId: string): Promise<Hospital | null> {
     const { data, error } = await supabase
       .from('hospitals')
-      .select('id, name, master_admin_id, created_at')
+      .select('id, name, master_admin_id, created_at, work_days')
       .eq('id', hospitalId)
       .single();
 

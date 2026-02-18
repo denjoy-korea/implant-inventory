@@ -218,7 +218,10 @@ const App: React.FC = () => {
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
 
   const isSystemAdmin = state.user?.role === 'admin';
-  const isHospitalAdmin = state.user?.role === 'master' || isSystemAdmin;
+  // role='master' 또는 본인이 해당 병원의 master_admin_id인 경우(staff 워크스페이스 포함)
+  const isHospitalMaster = state.user?.role === 'master'
+    || (!!state.user?.id && state.user.id === state.hospitalMasterAdminId);
+  const isHospitalAdmin = isHospitalMaster || isSystemAdmin;
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
@@ -761,7 +764,7 @@ const App: React.FC = () => {
           fixtureData={state.fixtureData}
           surgeryData={state.surgeryData}
           isAdmin={isHospitalAdmin}
-          isMaster={state.user?.role === 'master' || isSystemAdmin}
+          isMaster={isHospitalMaster || isSystemAdmin}
           plan={effectivePlan}
           hospitalName={state.hospitalName}
           userRole={state.user?.role}
@@ -1078,7 +1081,7 @@ const App: React.FC = () => {
                           onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
                           isAdmin={isHospitalAdmin}
                           planState={state.planState}
-                          isMaster={state.user?.role === 'master'}
+                          isMaster={isHospitalMaster || isSystemAdmin}
                           onStartTrial={async () => {
                             if (state.user?.hospitalId) {
                               const ok = await planService.startTrial(state.user.hospitalId);
@@ -1253,7 +1256,7 @@ const App: React.FC = () => {
                       {state.dashboardTab === 'settings' && (
                         <SettingsHub
                           onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
-                          isMaster={state.user?.role === 'master' || isSystemAdmin}
+                          isMaster={isHospitalMaster || isSystemAdmin}
                           isStaff={state.user?.role === 'staff'}
                           plan={effectivePlan}
                           hospitalId={state.user?.hospitalId}

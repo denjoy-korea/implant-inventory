@@ -44,6 +44,7 @@ const INITIAL_STATE: AppState = {
   planState: null,
   memberCount: 0,
   hospitalName: '',
+  hospitalMasterAdminId: '',
   hospitalWorkDays: DEFAULT_WORK_DAYS,
 };
 
@@ -107,6 +108,7 @@ export function useAppState() {
         planState,
         memberCount: membersData.length,
         hospitalName: hospitalData?.name || '',
+        hospitalMasterAdminId: hospitalData?.masterAdminId || '',
         hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
         isLoading: false,
       }));

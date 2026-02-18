@@ -86,6 +86,7 @@ export function dbToHospital(db: DbHospital): Hospital {
 /** DbProfile → User */
 export function dbToUser(db: DbProfile): User {
   return {
+    id: db.id,
     email: db.email,
     name: db.name,
     phone: db.phone,

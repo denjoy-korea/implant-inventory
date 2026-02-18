@@ -38,9 +38,9 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             hospitalService.getMyHospital(),
         ]);
 
-        setMembers(activeData.map(p => ({ _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
-        setPendingMembers(pendingData.map(p => ({ _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
-        setReadonlyMembers(readonlyData.map(p => ({ _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
+        setMembers(activeData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
+        setPendingMembers(pendingData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
+        setReadonlyMembers(readonlyData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
         if (hospital) setCurrentHospital(dbToHospital(hospital));
     };
 
