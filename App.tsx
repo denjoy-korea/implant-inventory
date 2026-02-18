@@ -515,34 +515,40 @@ const App: React.FC = () => {
             };
           });
 
-          newSurgeryMaster[targetSheetName] = [...(newSurgeryMaster[targetSheetName] || []), ...cleanedRows];
-          setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
-
-          // Supabase에 수술기록 저장 (중복 자동 skip)
+          // Supabase에 수술기록 저장 (중복 자동 skip) — DB 결과 기반으로 UI 상태 업데이트
           if (state.user?.hospitalId) {
             const { records: savedRecords, inserted, skipped } = await surgeryService.bulkInsertFromExcel(cleanedRows, state.user.hospitalId);
+
+            if (skipped > 0 && inserted === 0) {
+              // 전부 중복 → UI에 아무것도 추가하지 않고 알림만
+              alert(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`);
+              setState(prev => ({ ...prev, isLoading: false }));
+              return;
+            }
+
             if (inserted > 0) {
+              // DB에 실제 저장된 레코드만 UI에 반영
               const savedRows = await Promise.all(savedRecords.map(dbToExcelRow));
+              newSurgeryMaster[targetSheetName] = [
+                ...(newSurgeryMaster[targetSheetName] || []),
+                ...savedRows,
+              ];
               setState(prev => ({
                 ...prev,
-                surgeryMaster: {
-                  ...prev.surgeryMaster,
-                  [targetSheetName]: [
-                    ...(prev.surgeryMaster[targetSheetName] || []).filter(r => !r._id),
-                    ...savedRows,
-                  ],
-                },
+                isLoading: false,
+                surgeryFileName: file.name,
+                surgeryMaster: newSurgeryMaster,
+                dashboardTab: 'surgery_database',
               }));
               operationLogService.logOperation(
                 'surgery_upload',
                 `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
               );
             }
-            if (skipped > 0 && inserted === 0) {
-              alert(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`);
-              setState(prev => ({ ...prev, isLoading: false }));
-              return;
-            }
+          } else {
+            // 비로그인 상태: DB 저장 없이 로컬 상태만 (레거시 동작)
+            newSurgeryMaster[targetSheetName] = [...(newSurgeryMaster[targetSheetName] || []), ...cleanedRows];
+            setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
           }
         } else {
           alert("'수술기록지' 시트를 찾을 수 없습니다.");
