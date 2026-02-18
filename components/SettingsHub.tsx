@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest } from '../types';
+import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS } from '../types';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
+import { hospitalService } from '../services/hospitalService';
+import { WorkDaySelector } from './WorkDaySelector';
 
 interface SettingsHubProps {
   onNavigate: (tab: DashboardTab) => void;
@@ -9,6 +11,10 @@ interface SettingsHubProps {
   isStaff?: boolean;
   plan: PlanType;
   hospitalId?: string;
+  /** 현재 병원 진료 요일 설정 */
+  hospitalWorkDays?: number[];
+  /** 진료 요일 변경 후 상태 업데이트 콜백 */
+  onWorkDaysChange?: (workDays: number[]) => void;
 }
 
 interface SettingsCard {
@@ -29,12 +35,39 @@ function getMinPlanForFeature(feature: PlanFeature): PlanType {
   return 'business';
 }
 
-const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId }) => {
+const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId, hospitalWorkDays, onWorkDaysChange }) => {
   const [resetRequest, setResetRequest] = useState<DbResetRequest | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetReason, setResetReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resetLoaded, setResetLoaded] = useState(false);
+
+  // 진료 요일 설정 상태
+  const [localWorkDays, setLocalWorkDays] = useState<number[]>(hospitalWorkDays ?? DEFAULT_WORK_DAYS);
+  const [isSavingWorkDays, setIsSavingWorkDays] = useState(false);
+  const [workDaysSaved, setWorkDaysSaved] = useState(false);
+
+  // hospitalWorkDays prop 변경 시 로컬 상태 동기화
+  useEffect(() => {
+    if (hospitalWorkDays) setLocalWorkDays(hospitalWorkDays);
+  }, [hospitalWorkDays]);
+
+  const handleSaveWorkDays = async () => {
+    if (!hospitalId) return;
+    setIsSavingWorkDays(true);
+    try {
+      await hospitalService.updateWorkDays(hospitalId, localWorkDays);
+      onWorkDaysChange?.(localWorkDays);
+      setWorkDaysSaved(true);
+      setTimeout(() => setWorkDaysSaved(false), 3000);
+    } catch (err) {
+      alert('진료 요일 저장에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSavingWorkDays(false);
+    }
+  };
+
+  const workDaysChanged = JSON.stringify([...(hospitalWorkDays ?? DEFAULT_WORK_DAYS)].sort()) !== JSON.stringify([...localWorkDays].sort());
 
   // 현재 활성 초기화 요청 조회
   useEffect(() => {
@@ -194,6 +227,61 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
           );
         })}
       </div>
+
+      {/* 진료 요일 설정 섹션 (Master 전용) */}
+      {isMaster && hospitalId && (
+        <>
+          <div className="flex items-center gap-4 pt-2">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Clinic Settings</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">진료 요일 설정</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  병원의 정기 진료 요일을 설정합니다. 공휴일 API와 함께 수술 통계의 일 평균 진료일수 산출에 사용됩니다.
+                </p>
+              </div>
+            </div>
+
+            <WorkDaySelector
+              value={localWorkDays}
+              onChange={setLocalWorkDays}
+              disabled={isSavingWorkDays}
+            />
+
+            <div className="flex items-center justify-between mt-5">
+              {workDaysSaved ? (
+                <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  저장되었습니다
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400">
+                  {workDaysChanged ? '변경사항이 있습니다' : '현재 저장된 설정입니다'}
+                </span>
+              )}
+              <button
+                onClick={handleSaveWorkDays}
+                disabled={isSavingWorkDays || !workDaysChanged}
+                className="px-5 py-2 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-indigo-200"
+              >
+                {isSavingWorkDays ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 데이터 초기화 섹션 (개인 담당자 전용) */}
       {isStaff && hospitalId && (

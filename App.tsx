@@ -1215,6 +1215,7 @@ const App: React.FC = () => {
                           rows={state.surgeryMaster['수술기록지'] || []}
                           onUpload={() => surgeryFileRef.current?.click()}
                           isLoading={state.isLoading}
+                          hospitalWorkDays={state.hospitalWorkDays}
                         />
                       )}
                       {state.dashboardTab === 'fail_management' && (
@@ -1256,6 +1257,8 @@ const App: React.FC = () => {
                           isStaff={state.user?.role === 'staff'}
                           plan={effectivePlan}
                           hospitalId={state.user?.hospitalId}
+                          hospitalWorkDays={state.hospitalWorkDays}
+                          onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
                         />
                       )}
                       {state.dashboardTab === 'audit_log' && state.user?.hospitalId && (

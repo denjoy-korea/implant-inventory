@@ -12,6 +12,7 @@ import {
   User,
   OrderType,
   OrderStatus,
+  DEFAULT_WORK_DAYS,
 } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 
@@ -78,6 +79,7 @@ export function dbToHospital(db: DbHospital): Hospital {
     name: db.name,
     masterAdminId: db.master_admin_id || '',
     createdAt: db.created_at,
+    workDays: db.work_days ?? DEFAULT_WORK_DAYS,
   };
 }
 

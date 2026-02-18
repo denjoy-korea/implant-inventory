@@ -58,6 +58,7 @@ export interface Hospital {
   name: string;
   masterAdminId: string; // email of the master admin
   createdAt: string;
+  workDays: number[];    // 진료 요일 배열 (기본: 월~금 [1,2,3,4,5])
 }
 
 export interface User {
@@ -153,6 +154,8 @@ export interface AppState {
   planState: HospitalPlanState | null;
   memberCount: number;
   hospitalName: string;
+  /** 병원별 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
+  hospitalWorkDays: number[];
 }
 
 // ============================================
@@ -296,6 +299,9 @@ export const TRIAL_DAYS = 14;
 // Supabase Database Types
 // ============================================
 
+/** 기본 진료 요일: 월~금 */
+export const DEFAULT_WORK_DAYS: number[] = [1, 2, 3, 4, 5];
+
 /** Supabase hospitals 테이블 Row */
 export interface DbHospital {
   id: string;
@@ -310,6 +316,8 @@ export interface DbHospital {
   trial_used: boolean;
   created_at: string;
   updated_at: string;
+  /** 진료 요일 배열: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토 (기본: [1,2,3,4,5]) */
+  work_days: number[];
 }
 
 /** Supabase profiles 테이블 Row */

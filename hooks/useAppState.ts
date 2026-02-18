@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  AppState, User, ExcelRow,
+  AppState, User, ExcelRow, DEFAULT_WORK_DAYS,
 } from '../types';
 import { authService } from '../services/authService';
 import { inventoryService } from '../services/inventoryService';
@@ -44,6 +44,7 @@ const INITIAL_STATE: AppState = {
   planState: null,
   memberCount: 0,
   hospitalName: '',
+  hospitalWorkDays: DEFAULT_WORK_DAYS,
 };
 
 export function useAppState() {
@@ -106,6 +107,7 @@ export function useAppState() {
         planState,
         memberCount: membersData.length,
         hospitalName: hospitalData?.name || '',
+        hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
         isLoading: false,
       }));
 

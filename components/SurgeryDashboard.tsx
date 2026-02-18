@@ -13,14 +13,18 @@ import ManufacturerAnalysis from './surgery-dashboard/ManufacturerAnalysis';
 import ToothAnalysis from './surgery-dashboard/ToothAnalysis';
 import { useClinicalStats } from './surgery-dashboard/useClinicalStats';
 import ClinicalAnalysisSection from './surgery-dashboard/ClinicalAnalysisSection';
+import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
+import { DEFAULT_WORK_DAYS } from '../types';
 
 interface SurgeryDashboardProps {
   rows: ExcelRow[];
   onUpload: () => void;
   isLoading: boolean;
+  /** 병원 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
+  hospitalWorkDays?: number[];
 }
 
-const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isLoading }) => {
+const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isLoading, hospitalWorkDays = DEFAULT_WORK_DAYS }) => {
   const [mounted, setMounted] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
   useEffect(() => {
@@ -28,10 +32,17 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
     return () => clearTimeout(timer);
   }, []);
 
-  const stats = useSurgeryStats(rows);
+  // workDaysMap 없이 먼저 월 목록 추출을 위해 stats를 한 번 계산 (workDaysMap 미전달 → 25일 폴백)
+  const rawStats = useSurgeryStats(rows);
 
   // Date range filter state
-  const months = useMemo(() => stats.monthlyData.map(d => d.month), [stats.monthlyData]);
+  const months = useMemo(() => rawStats.monthlyData.map(d => d.month), [rawStats.monthlyData]);
+
+  // 공휴일 API 기반 월별 실제 진료일수 맵 (비동기)
+  const workDaysMap = useWorkDaysMap(months, hospitalWorkDays);
+
+  // workDaysMap 확정 후 최종 stats 계산
+  const stats = useSurgeryStats(rows, workDaysMap);
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(999);
 
@@ -63,9 +74,17 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
     });
   }, [rows, stats.monthlyData, effectiveStart, effectiveEnd]);
 
-  const filteredStats = useSurgeryStats(filteredRows);
+  const filteredStats = useSurgeryStats(filteredRows, workDaysMap);
   const clinicalStats = useClinicalStats(filteredRows);
   const isRangeFiltered = stats.monthlyData.length > 1 && !(effectiveStart === 0 && effectiveEnd >= stats.monthlyData.length - 1);
+
+  // KPIStrip 표시용 월 평균 진료일수 (공휴일 반영 후)
+  const avgWorkDaysPerMonth = useMemo(() => {
+    if (!workDaysMap) return 25;
+    const vals = Object.values(workDaysMap);
+    if (vals.length === 0) return 25;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  }, [workDaysMap]);
   const kpiStats = isRangeFiltered ? filteredStats : stats;
 
   // Animated KPI values
@@ -159,6 +178,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
           animDailyAvg={animDailyAvg}
           animRecentDailyAvg={animRecentDailyAvg}
           sparkline={kpiStats.sparkline}
+          avgWorkDaysPerMonth={avgWorkDaysPerMonth}
         />
 
         {/* C. Date Range Slider */}

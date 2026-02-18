@@ -63,7 +63,13 @@ function formatMonthKey(date: Date): string {
   return `${y}-${m}`;
 }
 
-export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
+/** 기본 진료일수 — workDaysMap 미전달/로딩 중 폴백값 */
+const DEFAULT_WORK_DAYS_PER_MONTH = 25;
+
+export function useSurgeryStats(
+  rows: ExcelRow[],
+  workDaysMap?: Record<string, number>   // 'YYYY-MM' → 실제 진료일수 (미전달 시 25일 고정)
+): SurgeryStats {
   const cleanRows = useMemo(() => {
     return rows.filter(row => !Object.values(row).some(val => String(val).includes('합계')));
   }, [rows]);
@@ -176,18 +182,24 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
     return Number(((classificationStats['수술중 FAIL'] / total) * 100).toFixed(1));
   }, [classificationStats]);
 
-  const WORK_DAYS_PER_MONTH = 25; // 평균 진료일수 고정값
-
   const dailyAvgPlacement = useMemo(() => {
     if (monthlyData.length === 0) return 0;
-    const totalWorkDays = monthlyData.length * WORK_DAYS_PER_MONTH;
+    // workDaysMap이 있으면 월별 실제 진료일수 합산, 없으면 25일 × 월수 폴백
+    const totalWorkDays = workDaysMap
+      ? monthlyData.reduce((sum, d) => sum + (workDaysMap[d.month] ?? DEFAULT_WORK_DAYS_PER_MONTH), 0)
+      : monthlyData.length * DEFAULT_WORK_DAYS_PER_MONTH;
+    if (totalWorkDays === 0) return 0;
     return Number((classificationStats['식립'] / totalWorkDays).toFixed(1));
-  }, [classificationStats, monthlyData.length]);
+  }, [classificationStats, monthlyData, workDaysMap]);
 
   const recentDailyAvg = useMemo(() => {
     if (!dateRange.max) return 0;
     const maxDate = parseLocalDate(dateRange.max);
     if (!maxDate) return 0;
+
+    // 최근 1개월 진료일수: workDaysMap에서 해당 월 값 사용, 없으면 25 폴백
+    const currentMonthKey = formatMonthKey(maxDate);
+    const workDaysThisMonth = workDaysMap?.[currentMonthKey] ?? DEFAULT_WORK_DAYS_PER_MONTH;
 
     const windowStart = new Date(maxDate.getFullYear(), maxDate.getMonth() - 1, maxDate.getDate());
     let placementTotal = 0;
@@ -203,8 +215,9 @@ export function useSurgeryStats(rows: ExcelRow[]): SurgeryStats {
       }
     });
 
-    return Number((placementTotal / WORK_DAYS_PER_MONTH).toFixed(1));
-  }, [cleanRows, dateRange.max]);
+    if (workDaysThisMonth === 0) return 0;
+    return Number((placementTotal / workDaysThisMonth).toFixed(1));
+  }, [cleanRows, dateRange.max, workDaysMap]);
 
   const sparkline = useMemo(() => {
     const months = monthlyData;

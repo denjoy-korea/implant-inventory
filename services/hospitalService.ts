@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { DbHospital, DbProfile, Hospital } from '../types';
+import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS } from '../types';
 import { dbToHospital } from './mappers';
 
 export const hospitalService = {
@@ -37,6 +37,7 @@ export const hospitalService = {
       name: h.name,
       masterAdminId: '',
       createdAt: h.created_at,
+      workDays: DEFAULT_WORK_DAYS,
     }));
   },
 
@@ -172,5 +173,29 @@ export const hospitalService = {
       .eq('id', user.id);
 
     if (error) throw new Error('병원 탈퇴에 실패했습니다.');
+  },
+
+  /**
+   * 병원 진료 요일 업데이트 (master만 가능 — RLS: master_update_own_hospital)
+   * @param hospitalId 병원 ID
+   * @param workDays   진료 요일 배열 [0=일, 1=월, ..., 6=토], 최소 1개
+   */
+  async updateWorkDays(hospitalId: string, workDays: number[]): Promise<void> {
+    if (
+      workDays.length === 0 ||
+      workDays.some(d => d < 0 || d > 6 || !Number.isInteger(d))
+    ) {
+      throw new Error('유효하지 않은 진료 요일입니다. (0=일 ~ 6=토, 최소 1개)');
+    }
+
+    const { error } = await supabase
+      .from('hospitals')
+      .update({ work_days: workDays })
+      .eq('id', hospitalId);
+
+    if (error) {
+      console.error('[hospitalService] updateWorkDays failed:', error);
+      throw new Error('진료 요일 저장에 실패했습니다.');
+    }
   },
 };

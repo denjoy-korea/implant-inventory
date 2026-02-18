@@ -55,14 +55,17 @@ interface KPIStripProps {
   animDailyAvg: number;
   animRecentDailyAvg: number;
   sparkline: SparklineData;
+  /** 월 평균 진료일수 (공휴일 반영 후). 미전달 시 25일 표시 */
+  avgWorkDaysPerMonth?: number;
 }
 
-export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline }: KPIStripProps) {
+export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline, avgWorkDaysPerMonth }: KPIStripProps) {
   // 최근 1개월 vs 전체 일평균 차이 (소수점 1자리 기준)
   const recentRaw = animRecentDailyAvg / 10;
   const dailyRaw = animDailyAvg / 10;
   const dailyDelta = Math.round((recentRaw - dailyRaw) * 10); // x10 정수
-  const dailyBasisLabel = '월 25일 기준';
+  const displayWorkDays = avgWorkDaysPerMonth ?? 25;
+  const dailyBasisLabel = `월 ${displayWorkDays}일 기준`;
 
   const metrics = [
     { ko: '총 식립', en: 'Total Placement', value: animPlacement.toLocaleString(), unit: '개', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'placement', delta: 0, prevValue: 0, badgeLabel: '전월대비', badgeSuffix: '개' },
