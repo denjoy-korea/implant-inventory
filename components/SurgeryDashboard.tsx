@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ExcelRow } from '../types';
+import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS } from '../types';
 import { useCountUp } from './surgery-dashboard/shared';
 import { useSurgeryStats } from './surgery-dashboard/useSurgeryStats';
 import KPIStrip from './surgery-dashboard/KPIStrip';
@@ -14,7 +14,6 @@ import ToothAnalysis from './surgery-dashboard/ToothAnalysis';
 import { useClinicalStats } from './surgery-dashboard/useClinicalStats';
 import ClinicalAnalysisSection from './surgery-dashboard/ClinicalAnalysisSection';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
-import { DEFAULT_WORK_DAYS } from '../types';
 
 interface SurgeryDashboardProps {
   rows: ExcelRow[];
@@ -22,9 +21,11 @@ interface SurgeryDashboardProps {
   isLoading: boolean;
   /** 병원 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
   hospitalWorkDays?: number[];
+  /** 플랜 상태 — 날짜 범위 슬라이더 잠금 기준 */
+  planState?: HospitalPlanState | null;
 }
 
-const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isLoading, hospitalWorkDays = DEFAULT_WORK_DAYS }) => {
+const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isLoading, hospitalWorkDays = DEFAULT_WORK_DAYS, planState }) => {
   const [mounted, setMounted] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
   useEffect(() => {
@@ -43,15 +44,28 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
 
   // workDaysMap 확정 후 최종 stats 계산
   const stats = useSurgeryStats(rows, workDaysMap);
+
+  // 플랜별 보관 기간(retentionMonths) 기반 슬라이더 최솟값 계산
+  // - DB에는 최대 24개월만 존재하므로 실제 months 배열 기준으로 잠금 인덱스 결정
+  const minStartIdx = useMemo(() => {
+    if (!planState) return 0;
+    const retentionMonths = PLAN_LIMITS[planState.plan]?.retentionMonths ?? 24;
+    if (retentionMonths >= 24) return 0; // business/ultimate — 전체 조회 가능
+    const total = stats.monthlyData.length;
+    if (total <= retentionMonths) return 0; // 데이터 자체가 제한 이내
+    return total - retentionMonths;
+  }, [planState, stats.monthlyData.length]);
+
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(999);
 
   useEffect(() => {
-    setRangeStart(0);
+    // 데이터 변경 또는 플랜 변경 시 시작점을 minStartIdx로 초기화
+    setRangeStart(minStartIdx);
     setRangeEnd(999);
-  }, [stats.monthlyData.length]);
+  }, [stats.monthlyData.length, minStartIdx]);
 
-  const effectiveStart = Math.max(0, Math.min(rangeStart, stats.monthlyData.length - 1));
+  const effectiveStart = Math.max(minStartIdx, Math.min(rangeStart, stats.monthlyData.length - 1));
   const effectiveEnd = Math.max(effectiveStart, Math.min(rangeEnd, stats.monthlyData.length - 1));
 
   const handleRangeChange = useCallback((s: number, e: number) => {
@@ -188,6 +202,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
             startIdx={effectiveStart}
             endIdx={effectiveEnd}
             onChange={handleRangeChange}
+            minStartIdx={minStartIdx}
           />
         )}
       </div>{/* end sticky wrapper */}

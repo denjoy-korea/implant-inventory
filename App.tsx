@@ -1219,6 +1219,7 @@ const App: React.FC = () => {
                           onUpload={() => surgeryFileRef.current?.click()}
                           isLoading={state.isLoading}
                           hospitalWorkDays={state.hospitalWorkDays}
+                          planState={state.planState}
                         />
                       )}
                       {state.dashboardTab === 'fail_management' && (

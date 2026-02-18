@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  AppState, User, ExcelRow, DEFAULT_WORK_DAYS,
+  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS,
 } from '../types';
 import { authService } from '../services/authService';
 import { inventoryService } from '../services/inventoryService';
@@ -65,20 +65,29 @@ export function useAppState() {
     }
 
     try {
-      // 수술기록은 최근 2년치만 초기 로드 (성능 최적화)
-      // 더 오래된 데이터는 SurgeryDashboard 날짜 필터로 서버사이드 조회
-      const twoYearsAgo = new Date();
-      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-      const fromDate = twoYearsAgo.toISOString().split('T')[0];
+      // 수술기록 초기 로드 범위:
+      // - DB에는 최대 24개월치 보관 (자동삭제 스케줄로 관리)
+      // - 프론트엔드 로드는 플랜별 retentionMonths 기준으로 제한
+      //   (Free=3, Basic=6, Plus=12, Business=24, Ultimate=999)
+      // - planState 조회 전이므로 일단 planService.checkPlanExpiry를 통해 플랜 확인
+      //   → 실용적 방법: 플랜을 먼저 확인한 후 fromDate 결정
+      const planStateForDate = await planService.checkPlanExpiry(user.hospitalId);
+      const retentionMonths = PLAN_LIMITS[planStateForDate.plan]?.retentionMonths ?? 24;
+      // 보관 기간이 24개월을 넘어도 DB에는 최대 24개월치만 존재하므로 max 24
+      const effectiveMonths = Math.min(retentionMonths, 24);
+      const fromDateObj = new Date();
+      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
+      const fromDate = fromDateObj.toISOString().split('T')[0];
 
-      const [inventoryData, surgeryData, ordersData, planState, membersData, hospitalData] = await Promise.all([
+      const [inventoryData, surgeryData, ordersData, membersData, hospitalData] = await Promise.all([
         inventoryService.getInventory(),
         surgeryService.getSurgeryRecords({ fromDate }),
         orderService.getOrders(),
-        planService.checkPlanExpiry(user.hospitalId),
         hospitalService.getMembers(user.hospitalId),
         hospitalService.getHospitalById(user.hospitalId),
       ]);
+      // 위에서 이미 조회한 planState 재사용 (중복 API 호출 방지)
+      const planState = planStateForDate;
 
       console.log('[useAppState] loadHospitalData:', {
         inventoryCount: inventoryData.length,
