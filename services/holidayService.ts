@@ -151,38 +151,57 @@ export const holidayService = {
     }
   },
 
+  /**
+   * 특정 연도의 공휴일을 월별로 12회 병렬 요청해서 합산
+   * - API 스펙: solYear(필수), solMonth(옵션)
+   *   → solMonth 없이 solYear만 보내면 전월 반환이 보장되지 않음
+   *   → 월별 12번 요청 후 dedup 병합이 가장 안전
+   * - 파라미터명: ServiceKey (대문자 S — 공식문서 기준)
+   */
   async _fetchFromApi(year: number): Promise<string[]> {
     const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY as string | undefined;
     if (!apiKey) throw new Error('VITE_HOLIDAY_API_KEY not configured');
 
-    const url = new URL(
-      'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo'
+    const BASE = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo';
+
+    const fetchMonth = async (month: number): Promise<string[]> => {
+      // URLSearchParams 대신 수동 조립 — ServiceKey에 특수문자(+, =) 포함 시 이중 인코딩 방지
+      const params = [
+        `ServiceKey=${apiKey}`,
+        `solYear=${year}`,
+        `solMonth=${String(month).padStart(2, '0')}`,
+        `numOfRows=50`,
+        `_type=json`,
+      ].join('&');
+
+      const res = await fetch(`${BASE}?${params}`);
+      if (!res.ok) throw new Error(`Holiday API HTTP ${res.status} (${year}-${month})`);
+
+      const json = await res.json();
+      const resultCode = json?.response?.header?.resultCode;
+      if (resultCode && resultCode !== '00') {
+        throw new Error(`Holiday API resultCode ${resultCode} (${year}-${month})`);
+      }
+
+      const items = json?.response?.body?.items?.item;
+      if (!items) return [];
+
+      const list = Array.isArray(items) ? items : [items];
+      return list
+        .filter((item: { isHoliday: string }) => item.isHoliday === 'Y')
+        .map((item: { locdate: number }) => {
+          const d = String(item.locdate);
+          return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+        });
+    };
+
+    // 12개월 병렬 요청
+    const monthResults = await Promise.all(
+      Array.from({ length: 12 }, (_, i) => fetchMonth(i + 1))
     );
-    url.searchParams.set('serviceKey', apiKey);
-    url.searchParams.set('solYear', String(year));
-    url.searchParams.set('numOfRows', '100');
-    url.searchParams.set('_type', 'json');
 
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`Holiday API HTTP error: ${res.status}`);
-
-    const json = await res.json();
-    // API 응답 코드 확인
-    const resultCode = json?.response?.header?.resultCode;
-    if (resultCode && resultCode !== '00') {
-      throw new Error(`Holiday API error: ${resultCode}`);
-    }
-
-    const items = json?.response?.body?.items?.item;
-    if (!items) return [];
-
-    const list = Array.isArray(items) ? items : [items];
-    return list
-      .filter((item: { isHoliday: string }) => item.isHoliday === 'Y')
-      .map((item: { locdate: number }) => {
-        const d = String(item.locdate);
-        return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
-      });
+    // 중복 제거 후 정렬
+    return [...new Set(monthResults.flat())].sort();
   },
 
   _getFixedHolidays(year: number): string[] {
