@@ -4,11 +4,18 @@
  * 데이터 소스: 공공데이터포털 한국천문연구원 특일 정보 API
  * - API 키: VITE_HOLIDAY_API_KEY 환경변수
  * - 캐싱: localStorage (당해 연도 30일 TTL, 과거 연도 영구)
- * - 폴백: API 실패 시 고정 공휴일 상수로 대체
+ * - 브라우저 직접 호출 → CORS 차단 시 Edge Function 프록시로 자동 재시도
+ * - 최종 폴백: API 실패 시 고정 공휴일 상수로 대체
  */
 
 const CACHE_PREFIX = 'holiday_kr_';
 const CACHE_VERSION = 'v1';
+
+/**
+ * Edge Function 프록시 URL
+ * CORS 차단 시 서버사이드 프록시로 폴백 (verify_jwt: false 배포)
+ */
+const EDGE_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/holiday-proxy`;
 
 /** 고정 공휴일 (음력 기반 명절 제외) — API 장애 시 폴백용 */
 const FIXED_HOLIDAYS_MMDD: Record<string, string> = {
@@ -157,6 +164,7 @@ export const holidayService = {
    *   → solMonth 없이 solYear만 보내면 전월 반환이 보장되지 않음
    *   → 월별 12번 요청 후 dedup 병합이 가장 안전
    * - 파라미터명: ServiceKey (대문자 S — 공식문서 기준)
+   * - CORS 차단 시 Edge Function 프록시로 자동 재시도
    */
   async _fetchFromApi(year: number): Promise<string[]> {
     const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY as string | undefined;
@@ -164,7 +172,7 @@ export const holidayService = {
 
     const BASE = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo';
 
-    const fetchMonth = async (month: number): Promise<string[]> => {
+    const fetchMonthDirect = async (month: number): Promise<string[]> => {
       // URLSearchParams 대신 수동 조립 — ServiceKey에 특수문자(+, =) 포함 시 이중 인코딩 방지
       const params = [
         `ServiceKey=${apiKey}`,
@@ -195,13 +203,32 @@ export const holidayService = {
         });
     };
 
-    // 12개월 병렬 요청
-    const monthResults = await Promise.all(
-      Array.from({ length: 12 }, (_, i) => fetchMonth(i + 1))
-    );
+    // ① 브라우저 직접 요청 시도 (12개월 병렬)
+    try {
+      const monthResults = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => fetchMonthDirect(i + 1))
+      );
+      return [...new Set(monthResults.flat())].sort();
+    } catch (directErr) {
+      console.warn(`[holidayService] 직접 API 호출 실패 (${year}년), Edge Function 프록시로 재시도:`, directErr);
+    }
 
-    // 중복 제거 후 정렬
-    return [...new Set(monthResults.flat())].sort();
+    // ② CORS 차단 등 직접 호출 실패 시 → Edge Function 프록시로 재시도
+    try {
+      const res = await fetch(`${EDGE_PROXY_URL}?year=${year}`);
+      if (!res.ok) throw new Error(`Edge proxy HTTP ${res.status}`);
+      const json = await res.json();
+      if (json?.error) throw new Error(`Edge proxy error: ${json.error}`);
+      if (Array.isArray(json?.dates)) {
+        console.info(`[holidayService] Edge proxy 성공 (${year}년, ${json.dates.length}건)`);
+        return json.dates as string[];
+      }
+      throw new Error('Edge proxy returned unexpected shape');
+    } catch (proxyErr) {
+      console.warn(`[holidayService] Edge proxy 호출 실패 (${year}년):`, proxyErr);
+      // ③ 최종 폴백은 getHolidays()에서 고정 공휴일로 처리
+      throw proxyErr;
+    }
   },
 
   _getFixedHolidays(year: number): string[] {

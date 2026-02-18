@@ -72,7 +72,7 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
     { ko: '월 평균', en: 'Avg Monthly', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: sparkline.placementDelta, prevValue: sparkline.placementPrev, badgeLabel: '전월대비', badgeSuffix: '개' },
     { ko: 'FAIL률', en: 'Failure Rate', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: sparkline.failDelta, prevValue: sparkline.failPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
     { ko: '보험청구', en: 'Insurance Claim', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: sparkline.claimDelta, prevValue: sparkline.claimPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
-    { ko: '일 평균', en: 'Avg Daily (25d/mo)', value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
+    { ko: '일 평균', en: `Avg Daily (${displayWorkDays}d/mo)`, value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
   ];
 
   return (
