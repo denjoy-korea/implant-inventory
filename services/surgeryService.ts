@@ -32,7 +32,8 @@ export const surgeryService = {
   /**
    * 엑셀 파싱 후 수술기록 일괄 저장 — 중복 방지 포함
    *
-   * 중복 판별 기준: hospital_id + date + classification + brand + size + tooth_number
+   * 중복 판별 기준: date | patient_info_hash | classification | brand | size | tooth_number
+   * - patient_info_hash가 없는 레코드(028 마이그레이션 전)는 patient_info를 즉석 복호화 후 해시 생성
    * → 이미 같은 레코드가 존재하면 skip, 없는 것만 insert
    * → 반환값: { inserted, skipped } 건수
    */
@@ -53,19 +54,33 @@ export const surgeryService = {
 
     let existingKeys = new Set<string>();
     if (minDate && maxDate) {
+      // patient_info_hash가 null인 레코드(백필 전)를 위해 patient_info도 함께 조회
       const { data: existing } = await supabase
         .from('surgery_records')
-        .select('date, patient_info_hash, classification, brand, size, tooth_number')
+        .select('date, patient_info, patient_info_hash, classification, brand, size, tooth_number')
         .eq('hospital_id', hospitalId)
         .gte('date', minDate)
         .lte('date', maxDate);
 
       if (existing) {
-        existingKeys = new Set(
-          (existing as Pick<DbSurgeryRecord, 'date' | 'patient_info_hash' | 'classification' | 'brand' | 'size' | 'tooth_number'>[]).map(r =>
-            `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`
-          )
+        // hash가 없는 레코드는 patient_info를 복호화 후 즉석 해시 생성
+        const keys = await Promise.all(
+          (existing as Pick<DbSurgeryRecord, 'date' | 'patient_info' | 'patient_info_hash' | 'classification' | 'brand' | 'size' | 'tooth_number'>[])
+            .map(async r => {
+              let hash = r.patient_info_hash ?? '';
+              if (!hash && r.patient_info) {
+                // 백필 전 레코드: 복호화 후 해시 생성 (중복 체크용, DB에 저장하지 않음)
+                try {
+                  const plain = await decryptPatientInfo(r.patient_info);
+                  hash = await hashPatientInfo(plain);
+                } catch {
+                  hash = '';
+                }
+              }
+              return `${r.date}|${hash}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+            })
         );
+        existingKeys = new Set(keys);
       }
     }
 
