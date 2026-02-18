@@ -46,11 +46,16 @@ export const surgeryService = {
     const dbRows = await Promise.all(parsedRows.map(row => excelRowToDbSurgery(row, hospitalId)));
 
     // ── 서버에서 같은 날짜 범위 기존 레코드 조회 (중복 체크용)
+    // date=null 레코드는 dedup 비교 불가 → 유효 날짜만 범위 산출
     const dates = dbRows
       .map(r => r.date)
       .filter((d): d is string => !!d);
     const minDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : null;
     const maxDate = dates.length > 0 ? dates.reduce((a, b) => a > b ? a : b) : null;
+
+    // date=null 레코드: 비교 key를 만들 수 없으므로 항상 insert 대상으로 처리
+    // (날짜 없는 레코드는 원본 데이터 이상 → 중복 방지보다 누락 방지 우선)
+    const nullDateRows = dbRows.filter(r => !r.date);
 
     let existingKeys = new Set<string>();
     if (minDate && maxDate) {
@@ -85,12 +90,18 @@ export const surgeryService = {
     }
 
     // ── 중복 필터링 (환자정보 해시 포함)
-    const newRows = dbRows.filter(r => {
-      const key = `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
-      return !existingKeys.has(key);
-    });
+    // date=null 레코드는 dedup key 생성 불가 → 중복 체크 없이 항상 insert
+    const datedNewRows = dbRows
+      .filter(r => !!r.date)
+      .filter(r => {
+        const key = `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+        return !existingKeys.has(key);
+      });
+    const newRows = [...datedNewRows, ...nullDateRows];
 
-    const skipped = dbRows.length - newRows.length;
+    // skipped = 날짜 있는 레코드 중 중복으로 걸러진 것만 카운트
+    // (date=null 레코드는 dedup 대상 아님 → skipped에서 제외)
+    const skipped = dbRows.filter(r => !!r.date).length - datedNewRows.length;
 
     if (newRows.length === 0) {
       return { records: [], inserted: 0, skipped };
