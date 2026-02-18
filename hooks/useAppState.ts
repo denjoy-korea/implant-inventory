@@ -90,6 +90,9 @@ export function useAppState() {
       const surgeryRows = await Promise.all(surgeryData.map(dbToExcelRow));
       const orders = ordersData.map(dbToOrder);
 
+      // 기존 레코드 중 patient_info_hash 없는 것 백필 (028 마이그레이션 이후 1회성)
+      surgeryService.backfillPatientInfoHash(user.hospitalId).catch(() => {});
+
       const wasReset = await resetService.checkScheduledReset(user.hospitalId);
 
       setState(prev => ({

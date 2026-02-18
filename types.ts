@@ -357,6 +357,7 @@ export interface DbSurgeryRecord {
   hospital_id: string;
   date: string | null;
   patient_info: string | null;
+  patient_info_hash: string | null;
   tooth_number: string | null;
   quantity: number;
   surgery_record: string | null;

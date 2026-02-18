@@ -2,6 +2,7 @@ import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbSurgeryRecord, ExcelRow } from '../types';
 import { excelRowToDbSurgery } from './mappers';
+import { hashPatientInfo, decryptPatientInfo } from './cryptoUtils';
 
 export const surgeryService = {
   /** 수술기록 목록 조회 — 날짜 범위 필터 지원 (서버사이드) */
@@ -54,23 +55,23 @@ export const surgeryService = {
     if (minDate && maxDate) {
       const { data: existing } = await supabase
         .from('surgery_records')
-        .select('date, classification, brand, size, tooth_number')
+        .select('date, patient_info_hash, classification, brand, size, tooth_number')
         .eq('hospital_id', hospitalId)
         .gte('date', minDate)
         .lte('date', maxDate);
 
       if (existing) {
         existingKeys = new Set(
-          (existing as Pick<DbSurgeryRecord, 'date' | 'classification' | 'brand' | 'size' | 'tooth_number'>[]).map(r =>
-            `${r.date}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`
+          (existing as Pick<DbSurgeryRecord, 'date' | 'patient_info_hash' | 'classification' | 'brand' | 'size' | 'tooth_number'>[]).map(r =>
+            `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`
           )
         );
       }
     }
 
-    // ── 중복 필터링
+    // ── 중복 필터링 (환자정보 해시 포함)
     const newRows = dbRows.filter(r => {
-      const key = `${r.date}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+      const key = `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
       return !existingKeys.has(key);
     });
 
@@ -182,5 +183,41 @@ export const surgeryService = {
         filter: `hospital_id=eq.${hospitalId}`,
       }, callback)
       .subscribe();
+  },
+
+  /**
+   * 기존 레코드 중 patient_info_hash가 null인 것들을 백필
+   * (028 마이그레이션 이전에 저장된 데이터 대상)
+   * 한 번만 실행되면 이후 신규 데이터는 insert 시 hash가 포함됨
+   */
+  async backfillPatientInfoHash(hospitalId: string): Promise<number> {
+    // hash가 없는 레코드만 조회
+    const { data, error } = await supabase
+      .from('surgery_records')
+      .select('id, patient_info')
+      .eq('hospital_id', hospitalId)
+      .is('patient_info_hash', null)
+      .not('patient_info', 'is', null)
+      .limit(500);
+
+    if (error || !data || data.length === 0) return 0;
+
+    let patched = 0;
+    for (const row of data) {
+      try {
+        const plainText = await decryptPatientInfo(row.patient_info!);
+        const hash = await hashPatientInfo(plainText);
+        const { error: updateError } = await supabase
+          .from('surgery_records')
+          .update({ patient_info_hash: hash })
+          .eq('id', row.id);
+        if (!updateError) patched++;
+      } catch {
+        console.warn(`[backfill] Failed to hash record ${row.id}`);
+      }
+    }
+
+    console.log(`[backfill] patient_info_hash: ${patched}/${data.length} records patched`);
+    return patched;
   },
 };

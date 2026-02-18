@@ -89,6 +89,20 @@ async function getAesKey(): Promise<CryptoKey> {
   return cachedAesKeyPromise;
 }
 
+/**
+ * 환자정보 SHA-256 해시 — 중복 판별 전용
+ * 결정적(같은 입력 → 항상 같은 출력)이므로 비교 가능
+ * 해시만으로 원본 복원 불가 → 보안 유지
+ */
+export async function hashPatientInfo(text: string): Promise<string> {
+  if (!text) return '';
+  // hospital 단위 salt를 섞어서 rainbow table 방어
+  const salted = `${ENCRYPTION_SECRET}:${text.trim()}`;
+  const encoded = new TextEncoder().encode(salted);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', encoded);
+  return bytesToBase64(new Uint8Array(digest));
+}
+
 export async function encryptPatientInfo(text: string): Promise<string> {
   if (!text) return '';
   try {

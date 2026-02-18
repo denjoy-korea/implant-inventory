@@ -13,7 +13,7 @@ import {
   OrderType,
   OrderStatus,
 } from '../types';
-import { encryptPatientInfo, decryptPatientInfo } from './cryptoUtils';
+import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 
 // ============================================
 // DB → Frontend 변환
@@ -117,10 +117,12 @@ export async function excelRowToDbSurgery(
   row: ExcelRow,
   hospitalId: string
 ): Promise<Omit<DbSurgeryRecord, 'id' | 'created_at'>> {
+  const patientRaw = row['환자정보'] ? String(row['환자정보']) : '';
   return {
     hospital_id: hospitalId,
     date: row['날짜'] || null,
-    patient_info: row['환자정보'] ? await encryptPatientInfo(String(row['환자정보'])) : null,
+    patient_info: patientRaw ? await encryptPatientInfo(patientRaw) : null,
+    patient_info_hash: patientRaw ? await hashPatientInfo(patientRaw) : null,
     tooth_number: row['치아번호'] || null,
     quantity: Number(row['갯수']) || 1,
     surgery_record: row['수술기록'] || null,
