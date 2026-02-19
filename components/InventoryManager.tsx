@@ -1606,7 +1606,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 const isEven = idx % 2 === 1;
 
                 return (
-                  <tr key={item.id} className={`group transition-colors hover:bg-indigo-50/30 ${isEven ? 'bg-slate-50/60' : 'bg-white'}`}>
+                  <tr key={item.id} className={`group transition-colors hover:bg-indigo-50/40 ${isEven ? 'bg-slate-100/70' : 'bg-white'}`}>
                     <td className="px-6 py-2.5 text-[10px] font-bold text-slate-400">{item.manufacturer}</td>
                     <td className="px-6 py-2.5 text-sm font-black text-slate-800 tracking-tight">{item.brand}</td>
                     <td className="px-6 py-2.5 text-sm font-semibold text-slate-600">{item.size}</td>
