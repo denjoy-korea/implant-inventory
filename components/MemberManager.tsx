@@ -4,6 +4,8 @@ import { hospitalService } from '../services/hospitalService';
 import { dbToHospital } from '../services/mappers';
 import { planService } from '../services/planService';
 import { operationLogService } from '../services/operationLogService';
+import { useToast } from '../hooks/useToast';
+import ConfirmModal from './ConfirmModal';
 
 interface MemberManagerProps {
     currentUser: User;
@@ -13,16 +15,21 @@ interface MemberManagerProps {
 }
 
 type MemberWithId = User & { _id: string };
+type InvitedMember = { id: string; email: string; name: string; created_at: string; expires_at: string };
 
 const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, planState, onGoToPricing }) => {
     const [members, setMembers] = useState<MemberWithId[]>([]);
     const [pendingMembers, setPendingMembers] = useState<MemberWithId[]>([]);
     const [readonlyMembers, setReadonlyMembers] = useState<MemberWithId[]>([]);
+    const [invitedMembers, setInvitedMembers] = useState<InvitedMember[]>([]);
     const [isAdding, setIsAdding] = useState(false);
     const [inviteName, setInviteName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
     const [isInviting, setIsInviting] = useState(false);
     const [currentHospital, setCurrentHospital] = useState<Hospital | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'indigo'; confirmLabel?: string; onConfirm: () => void } | null>(null);
+    const [inviteUrlModal, setInviteUrlModal] = useState<{ url: string; name: string; email: string } | null>(null);
+    const { toast, showToast } = useToast();
 
     useEffect(() => {
         loadData();
@@ -31,16 +38,18 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
     const loadData = async () => {
         if (!currentUser.hospitalId) return;
 
-        const [activeData, pendingData, readonlyData, hospital] = await Promise.all([
+        const [activeData, pendingData, readonlyData, invitedData, hospital] = await Promise.all([
             hospitalService.getMembers(currentUser.hospitalId),
             hospitalService.getPendingMembers(currentUser.hospitalId),
             hospitalService.getReadonlyMembers(currentUser.hospitalId),
+            hospitalService.getInvitedMembers(currentUser.hospitalId),
             hospitalService.getMyHospital(),
         ]);
 
         setMembers(activeData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
         setPendingMembers(pendingData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
         setReadonlyMembers(readonlyData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
+        setInvitedMembers(invitedData);
         if (hospital) setCurrentHospital(dbToHospital(hospital));
     };
 
@@ -50,38 +59,52 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
         if (!planService.canAddUser(currentPlan, activeCount)) {
             const maxUsers = PLAN_LIMITS[currentPlan].maxUsers;
             const required = maxUsers === 1 ? 'Plus' : 'Business';
-            alert(`현재 플랜(${PLAN_NAMES[currentPlan]})에서는 최대 ${maxUsers}명까지 사용 가능합니다. ${required} 이상으로 업그레이드해 주세요.`);
+            showToast(`현재 플랜(${PLAN_NAMES[currentPlan]})에서는 최대 ${maxUsers}명까지 사용 가능합니다. ${required} 이상으로 업그레이드해 주세요.`, 'error');
             if (onGoToPricing) onGoToPricing();
             return false;
         }
         return true;
     };
 
-    const handleApprove = async (userId: string) => {
+    const handleApprove = (userId: string) => {
         if (!checkUserLimit()) return;
-        if (!window.confirm('가입을 승인하시겠습니까?')) return;
-
-        try {
-            await hospitalService.approveMember(userId);
-            operationLogService.logOperation('member_approve', `구성원 승인`, { userId });
-            await loadData();
-            alert('승인되었습니다.');
-        } catch (error) {
-            alert('승인에 실패했습니다.');
-        }
+        setConfirmModal({
+            title: '가입 승인',
+            message: '가입을 승인하시겠습니까?',
+            confirmColor: 'indigo',
+            confirmLabel: '승인',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.approveMember(userId);
+                    operationLogService.logOperation('member_approve', `구성원 승인`, { userId });
+                    await loadData();
+                    showToast('승인되었습니다.', 'success');
+                } catch (error) {
+                    showToast('승인에 실패했습니다.', 'error');
+                }
+            },
+        });
     };
 
-    const handleReject = async (userId: string) => {
-        if (!window.confirm('가입 요청을 거절하시겠습니까?')) return;
-
-        try {
-            await hospitalService.rejectMember(userId);
-            operationLogService.logOperation('member_reject', `가입 요청 거절`, { userId });
-            await loadData();
-            alert('거절되었습니다.');
-        } catch (error) {
-            alert('거절에 실패했습니다.');
-        }
+    const handleReject = (userId: string) => {
+        setConfirmModal({
+            title: '가입 거절',
+            message: '가입 요청을 거절하시겠습니까?',
+            confirmColor: 'rose',
+            confirmLabel: '거절',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.rejectMember(userId);
+                    operationLogService.logOperation('member_reject', `가입 요청 거절`, { userId });
+                    await loadData();
+                    showToast('거절되었습니다.', 'info');
+                } catch (error) {
+                    showToast('거절에 실패했습니다.', 'error');
+                }
+            },
+        });
     };
 
     const handleInvite = async (e: React.FormEvent) => {
@@ -90,45 +113,102 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
 
         setIsInviting(true);
         try {
-            await hospitalService.inviteMember(inviteEmail, inviteName, currentUser.hospitalId);
+            const { inviteUrl } = await hospitalService.inviteMember(inviteEmail, inviteName, currentUser.hospitalId);
             operationLogService.logOperation('member_invite', `구성원 초대: ${inviteName} (${inviteEmail})`, { email: inviteEmail, name: inviteName });
-            alert(`${inviteName}님(${inviteEmail})에게 초대 이메일을 발송했습니다.`);
             setInviteName('');
             setInviteEmail('');
             setIsAdding(false);
+            await loadData();
+            // 초대 URL 복사 모달 표시
+            setInviteUrlModal({ url: inviteUrl, name: inviteName, email: inviteEmail });
         } catch (error: any) {
-            alert(error.message || '초대에 실패했습니다.');
+            showToast(error.message || '초대에 실패했습니다.', 'error');
         } finally {
             setIsInviting(false);
         }
     };
 
-    const handleDeleteMember = async (userId: string) => {
-        if (!window.confirm('정말 삭제하시겠습니까?')) return;
-
-        try {
-            await hospitalService.rejectMember(userId);
-            operationLogService.logOperation('member_kick', `구성원 방출`, { userId });
-            await loadData();
-        } catch (error) {
-            alert('구성원 방출에 실패했습니다.');
-        }
+    const handleResendInvitation = (inv: InvitedMember) => {
+        setConfirmModal({
+            title: '초대 재발송',
+            message: `${inv.name}님(${inv.email})에게 초대 이메일을 다시 발송하시겠습니까?`,
+            confirmColor: 'indigo',
+            confirmLabel: '재발송',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.cancelInvitation(inv.id);
+                    const { inviteUrl } = await hospitalService.inviteMember(inv.email, inv.name, currentUser.hospitalId!);
+                    operationLogService.logOperation('member_invite', `초대 재발송: ${inv.name} (${inv.email})`, { email: inv.email });
+                    await loadData();
+                    setInviteUrlModal({ url: inviteUrl, name: inv.name, email: inv.email });
+                } catch (error: any) {
+                    showToast(error.message || '재발송에 실패했습니다.', 'error');
+                }
+            },
+        });
     };
 
-    const handleReactivateMember = async (userId: string) => {
-        if (!checkUserLimit()) return;
-        if (!window.confirm('이 멤버를 다시 활성화하시겠습니까?')) return;
+    const handleDeleteInvitation = (invitationId: string, name: string) => {
+        setConfirmModal({
+            title: '초대 삭제',
+            message: `${name}님에 대한 초대를 삭제하시겠습니까?\n초대 링크가 즉시 무효화됩니다.`,
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.cancelInvitation(invitationId);
+                    await loadData();
+                    showToast('초대가 삭제되었습니다.', 'info');
+                } catch (error) {
+                    showToast('초대 삭제에 실패했습니다.', 'error');
+                }
+            },
+        });
+    };
 
-        try {
-            await hospitalService.reactivateMember(userId);
-            await loadData();
-            alert('활성화되었습니다.');
-        } catch (error) {
-            alert('활성화에 실패했습니다.');
-        }
+    const handleDeleteMember = (userId: string) => {
+        setConfirmModal({
+            title: '구성원 방출',
+            message: '정말 삭제하시겠습니까?',
+            confirmColor: 'rose',
+            confirmLabel: '방출',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.rejectMember(userId);
+                    operationLogService.logOperation('member_kick', `구성원 방출`, { userId });
+                    await loadData();
+                } catch (error) {
+                    showToast('구성원 방출에 실패했습니다.', 'error');
+                }
+            },
+        });
+    };
+
+    const handleReactivateMember = (userId: string) => {
+        if (!checkUserLimit()) return;
+        setConfirmModal({
+            title: '멤버 활성화',
+            message: '이 멤버를 다시 활성화하시겠습니까?',
+            confirmColor: 'indigo',
+            confirmLabel: '활성화',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    await hospitalService.reactivateMember(userId);
+                    await loadData();
+                    showToast('활성화되었습니다.', 'success');
+                } catch (error) {
+                    showToast('활성화에 실패했습니다.', 'error');
+                }
+            },
+        });
     };
 
     return (
+        <>
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
                 {/* Header */}
@@ -171,6 +251,70 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                         업그레이드
                                     </button>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Invited Members (이메일 초대 대기 중) */}
+                    {invitedMembers.length > 0 && (
+                        <div className="mb-10 animate-in fade-in slide-in-from-top-4">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                                초대 이메일 발송 완료 <span className="text-indigo-500">{invitedMembers.length}</span>
+                                <span className="text-xs font-normal text-slate-400 ml-1">— 아직 가입 대기 중</span>
+                            </h3>
+                            <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl overflow-hidden">
+                                <table className="w-full">
+                                    <tbody className="divide-y divide-indigo-100/50">
+                                        {invitedMembers.map(inv => (
+                                            <tr key={inv.id} className="hover:bg-indigo-100/20">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-xs flex-shrink-0">
+                                                            {inv.name.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-700 text-sm">{inv.name}</div>
+                                                            <div className="text-xs text-slate-400">{inv.email}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 hidden sm:table-cell">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-600">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                        </svg>
+                                                        초대 발송됨
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {/* 재발송 */}
+                                                        <button
+                                                            onClick={() => handleResendInvitation(inv)}
+                                                            title="재발송"
+                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                            </svg>
+                                                        </button>
+                                                        {/* 삭제 */}
+                                                        <button
+                                                            onClick={() => handleDeleteInvitation(inv.id, inv.name)}
+                                                            title="초대 삭제"
+                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     )}
@@ -374,6 +518,55 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                 </div>
             </div>
         </div>
+        {confirmModal && (
+            <ConfirmModal
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmColor={confirmModal.confirmColor ?? 'indigo'}
+                confirmLabel={confirmModal.confirmLabel ?? '확인'}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(null)}
+            />
+        )}
+        {inviteUrlModal && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">초대 이메일 발송 완료</h3>
+                            <p className="text-sm text-slate-500">{inviteUrlModal.name}님 ({inviteUrlModal.email})</p>
+                        </div>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-4">초대 이메일이 발송되었습니다. 아래 링크를 직접 공유할 수도 있습니다.</p>
+                    <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2 mb-5">
+                        <p className="flex-1 text-xs text-slate-500 truncate">{inviteUrlModal.url}</p>
+                        <button
+                            onClick={() => { navigator.clipboard.writeText(inviteUrlModal.url); showToast('링크가 복사되었습니다.', 'success'); }}
+                            className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                            복사
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => setInviteUrlModal(null)}
+                        className="w-full h-11 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors"
+                    >
+                        확인
+                    </button>
+                </div>
+            </div>
+        )}
+        {toast && (
+            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[130] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white'}`}>
+                {toast.message}
+            </div>
+        )}
+        </>
     );
 };
 
