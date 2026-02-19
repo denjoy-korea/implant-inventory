@@ -385,34 +385,19 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     if (!sheet) return series;
 
     const rows = sheet.rows || [];
-    const rowMonthKeys = rows
-      .map(row => toMonthKey(row['날짜'] ?? row['수술일']))
-      .filter((month): month is string => !!month);
-    const anchorMonth = rowMonthKeys.sort().pop() ?? toMonthKey(new Date()) ?? '';
-    if (!anchorMonth) return series;
-
-    const [anchorYearStr, anchorMonthStr] = anchorMonth.split('-');
-    const anchorDate = new Date(Number(anchorYearStr), Number(anchorMonthStr) - 1, 1);
-
-    const monthKeys: string[] = [];
-    for (let i = sparklineMonths - 1; i >= 0; i -= 1) {
-      const d = new Date(anchorDate);
-      d.setMonth(d.getMonth() - i);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      monthKeys.push(`${y}-${m}`);
-    }
-    const monthIndex = new Map<string, number>();
-    monthKeys.forEach((key, index) => monthIndex.set(key, index));
 
     const itemKeyToIds = new Map<string, string[]>();
+    const monthlyUsageByItemId = new Map<string, Map<string, number>>();
     chartData.forEach(item => {
       const fixed = fixIbsImplant(item.manufacturer, item.brand);
       const key = `${normalizeSurgery(fixed.manufacturer)}|${normalizeSurgery(fixed.brand)}|${getSizeMatchKey(item.size, fixed.manufacturer)}`;
       const list = itemKeyToIds.get(key) ?? [];
       if (!list.includes(item.id)) list.push(item.id);
       itemKeyToIds.set(key, list);
-      if (!series.has(item.id)) series.set(item.id, new Array(sparklineMonths).fill(0));
+      if (!series.has(item.id)) series.set(item.id, []);
+      if (!monthlyUsageByItemId.has(item.id)) {
+        monthlyUsageByItemId.set(item.id, new Map<string, number>());
+      }
     });
 
     rows.forEach(row => {
@@ -425,8 +410,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
       const month = toMonthKey(row['날짜'] ?? row['수술일']);
       if (!month) return;
-      const idx = monthIndex.get(month);
-      if (idx === undefined) return;
 
       const fixed = fixIbsImplant(
         String(row['제조사'] || '').trim(),
@@ -441,36 +424,50 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       if (qty <= 0) return;
 
       targetIds.forEach(id => {
-        const arr = series.get(id);
-        if (!arr) return;
-        arr[idx] += qty;
+        const monthMap = monthlyUsageByItemId.get(id);
+        if (!monthMap) return;
+        monthMap.set(month, (monthMap.get(month) ?? 0) + qty);
       });
     });
 
-    // 각 품목별로 "첫 값이 있는 달 ~ 마지막 값이 있는 달" 구간만 남김
-    // (월 단위 집계이므로 시작월 1일 ~ 종료월 말일까지의 완성 월 구간과 동일)
-    series.forEach((values, id) => {
-      let first = -1;
-      let last = -1;
-      for (let i = 0; i < values.length; i += 1) {
-        if (values[i] > 0) {
-          first = i;
-          break;
-        }
-      }
-      for (let i = values.length - 1; i >= 0; i -= 1) {
-        if (values[i] > 0) {
-          last = i;
-          break;
-        }
+    // 각 품목별로 "값이 있는 첫 달 1일 ~ 마지막 값 달 말일" 구간을 생성
+    // (플랜 조회기간 상한: sparklineMonths)
+    monthlyUsageByItemId.forEach((monthMap, id) => {
+      if (monthMap.size === 0) {
+        series.set(id, []);
+        return;
       }
 
-      if (first >= 0 && last >= first) {
-        series.set(id, values.slice(first, last + 1));
-      } else {
-        // 값이 아예 없으면 기존 길이 유지 (데이터 없음 표시용)
-        series.set(id, values);
+      const sortedMonths = Array.from(monthMap.keys()).sort((a, b) => a.localeCompare(b));
+      const rawLastMonth = sortedMonths[sortedMonths.length - 1];
+      const [lastYearStr, lastMonthStr] = rawLastMonth.split('-');
+      const lastMonthDate = new Date(Number(lastYearStr), Number(lastMonthStr) - 1, 1);
+      const earliestAllowed = new Date(lastMonthDate);
+      earliestAllowed.setMonth(earliestAllowed.getMonth() - (sparklineMonths - 1));
+      const earliestAllowedKey = `${earliestAllowed.getFullYear()}-${String(earliestAllowed.getMonth() + 1).padStart(2, '0')}`;
+
+      const scopedMonths = sortedMonths.filter(month => month >= earliestAllowedKey);
+      if (scopedMonths.length === 0) {
+        series.set(id, []);
+        return;
       }
+
+      const rangeStart = scopedMonths[0];
+      const rangeEnd = scopedMonths[scopedMonths.length - 1];
+      const [startYearStr, startMonthStr] = rangeStart.split('-');
+      const [endYearStr, endMonthStr] = rangeEnd.split('-');
+
+      const cursor = new Date(Number(startYearStr), Number(startMonthStr) - 1, 1);
+      const end = new Date(Number(endYearStr), Number(endMonthStr) - 1, 1);
+      const values: number[] = [];
+
+      while (cursor <= end) {
+        const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+        values.push(monthMap.get(key) ?? 0);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+
+      series.set(id, values);
     });
 
     return series;
@@ -1344,7 +1341,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 </div>
                 <div className="w-[176px] shrink-0 text-center">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">사용 추이</p>
-                  <p className="text-[9px] font-semibold text-indigo-400 mt-0.5">최근 {sparklineMonths}개월</p>
+                  <p className="text-[9px] font-semibold text-indigo-400 mt-0.5">값 시작월~종료월</p>
                 </div>
                 <span className="w-2 shrink-0" />
               </div>
@@ -1562,7 +1559,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="sticky top-[44px] z-10 bg-slate-50 border-b border-slate-200 shadow-sm">
               <tr>
                 <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <div className="h-4 mb-1" />
