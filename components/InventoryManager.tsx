@@ -447,6 +447,32 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       });
     });
 
+    // 각 품목별로 "첫 값이 있는 달 ~ 마지막 값이 있는 달" 구간만 남김
+    // (월 단위 집계이므로 시작월 1일 ~ 종료월 말일까지의 완성 월 구간과 동일)
+    series.forEach((values, id) => {
+      let first = -1;
+      let last = -1;
+      for (let i = 0; i < values.length; i += 1) {
+        if (values[i] > 0) {
+          first = i;
+          break;
+        }
+      }
+      for (let i = values.length - 1; i >= 0; i -= 1) {
+        if (values[i] > 0) {
+          last = i;
+          break;
+        }
+      }
+
+      if (first >= 0 && last >= first) {
+        series.set(id, values.slice(first, last + 1));
+      } else {
+        // 값이 아예 없으면 기존 길이 유지 (데이터 없음 표시용)
+        series.set(id, values);
+      }
+    });
+
     return series;
   }, [chartData, sparklineMonths, surgeryData]);
 
@@ -1577,25 +1603,26 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredInventory.map((item) => {
+              {filteredInventory.map((item, idx) => {
                 const recommended = Math.ceil(item.recommendedStock * monthFactor);
                 const isLowStock = item.currentStock < recommended;
+                const isEven = idx % 2 === 1;
 
                 return (
-                  <tr key={item.id} className="group transition-colors hover:bg-slate-50/40">
-                    <td className="px-6 py-4 text-[10px] font-bold text-slate-400">{item.manufacturer}</td>
-                    <td className="px-6 py-4 text-sm font-black text-slate-800 tracking-tight">{item.brand}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-600">{item.size}</td>
-                    <td className="px-6 py-4 text-center text-sm font-black text-slate-700 tabular-nums">
+                  <tr key={item.id} className={`group transition-colors hover:bg-indigo-50/30 ${isEven ? 'bg-slate-50/60' : 'bg-white'}`}>
+                    <td className="px-6 py-2.5 text-[10px] font-bold text-slate-400">{item.manufacturer}</td>
+                    <td className="px-6 py-2.5 text-sm font-black text-slate-800 tracking-tight">{item.brand}</td>
+                    <td className="px-6 py-2.5 text-sm font-semibold text-slate-600">{item.size}</td>
+                    <td className="px-6 py-2.5 text-center text-sm font-black text-slate-700 tabular-nums">
                       {item.initialStock}
                     </td>
-                    <td className="px-6 py-4 text-center text-sm font-black text-rose-500 tabular-nums">{item.usageCount > 0 ? `-${item.usageCount}` : '0'}</td>
-                    <td className="px-6 py-4 text-center text-sm font-black text-indigo-600 tabular-nums">{item.monthlyAvgUsage ?? 0}</td>
-                    <td className="px-6 py-4 text-center text-sm font-black text-indigo-600 tabular-nums">{item.dailyMaxUsage ?? 0}</td>
-                    <td className={`px-6 py-4 text-center text-sm font-black tabular-nums transition-colors ${isLowStock ? 'text-rose-600 bg-rose-50/50' : 'text-slate-900'}`}>
+                    <td className="px-6 py-2.5 text-center text-sm font-black text-rose-500 tabular-nums">{item.usageCount > 0 ? `-${item.usageCount}` : '0'}</td>
+                    <td className="px-6 py-2.5 text-center text-sm font-black text-indigo-600 tabular-nums">{item.monthlyAvgUsage ?? 0}</td>
+                    <td className="px-6 py-2.5 text-center text-sm font-black text-indigo-600 tabular-nums">{item.dailyMaxUsage ?? 0}</td>
+                    <td className={`px-6 py-2.5 text-center text-sm font-black tabular-nums transition-colors ${isLowStock ? 'text-rose-600 bg-rose-50/60' : 'text-slate-900'}`}>
                       {item.currentStock}
                     </td>
-                    <td className="px-6 py-4 text-center text-sm font-black text-indigo-600 tabular-nums">{recommended}</td>
+                    <td className="px-6 py-2.5 text-center text-sm font-black text-indigo-600 tabular-nums">{recommended}</td>
                   </tr>
                 );
               })}
