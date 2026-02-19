@@ -1182,8 +1182,9 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 <span className="w-5 shrink-0" />
                 <div className="w-[100px] shrink-0" />
                 <div className="flex-1 max-w-[280px]" />
-                <div className="w-[210px] shrink-0 grid grid-cols-3 gap-0">
+                <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0">
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">월평균</p>
+                  <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">지난달</p>
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">현재재고</p>
                   <p className="text-[9px] font-bold text-rose-400 text-center uppercase tracking-wide">부족분</p>
                 </div>
@@ -1218,11 +1219,19 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     />
                   </div>
                   {/* 수치 그리드 */}
-                  <div className="w-[210px] shrink-0 grid grid-cols-3 gap-0 items-center">
+                  <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
                     {/* 월평균 */}
                     <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
                       {avg.toFixed(1)}
                     </p>
+                    {/* 지난달 */}
+                    <div className="flex items-center justify-center gap-0.5">
+                      <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+                        {last}
+                      </p>
+                      {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
+                      {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
+                    </div>
                     {/* 현재재고 */}
                     <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
                       {item.currentStock}
