@@ -206,6 +206,22 @@ export const hospitalService = {
     return profile.email;
   },
 
+  /** 구성원 방출 + 계정 삭제 (Edge Function 호출) */
+  async kickMember(targetUserId: string): Promise<void> {
+    const { error } = await supabase.functions.invoke('kick-member', {
+      body: { targetUserId },
+    });
+    if (error) {
+      try {
+        const errBody = await (error as any).context?.json?.();
+        throw new Error(errBody?.error || '방출에 실패했습니다.');
+      } catch (e) {
+        if (e instanceof Error) throw e;
+      }
+      throw new Error('방출에 실패했습니다.');
+    }
+  },
+
   /** 병원 탈퇴 */
   async leaveHospital(): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();

@@ -178,17 +178,18 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
     const handleDeleteMember = (userId: string) => {
         setConfirmModal({
             title: '구성원 방출',
-            message: '정말 삭제하시겠습니까?',
+            message: '방출 시 해당 계정이 완전히 삭제됩니다.\n다시 합류하려면 새로 초대해야 합니다.',
             confirmColor: 'rose',
-            confirmLabel: '방출',
+            confirmLabel: '방출 및 삭제',
             onConfirm: async () => {
                 setConfirmModal(null);
                 try {
-                    await hospitalService.rejectMember(userId);
-                    operationLogService.logOperation('member_kick', `구성원 방출`, { userId });
+                    await hospitalService.kickMember(userId);
+                    operationLogService.logOperation('member_kick', `구성원 방출 및 계정 삭제`, { userId });
                     await loadData();
-                } catch (error) {
-                    showToast('구성원 방출에 실패했습니다.', 'error');
+                    showToast('구성원이 방출되었습니다.', 'info');
+                } catch (error: any) {
+                    showToast(error.message || '방출에 실패했습니다.', 'error');
                 }
             },
         });
