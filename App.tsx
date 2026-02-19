@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { useAppState } from './hooks/useAppState';
 /* ── Static imports (always needed) ── */
 import Header from './components/Header';
@@ -14,6 +14,8 @@ import PlanBadge from './components/PlanBadge';
 import ReadOnlyBanner from './components/ReadOnlyBanner';
 import FeatureGate from './components/FeatureGate';
 import NewDataModal from './components/NewDataModal';
+import ConfirmModal from './components/ConfirmModal';
+import InventoryCompareModal, { CompareItem } from './components/InventoryCompareModal';
 import ErrorBoundary from './components/ErrorBoundary';
 
 /* ── Lazy imports (route-level code splitting) ── */
@@ -38,10 +40,10 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const StaffWaitingRoom = lazy(() => import('./components/StaffWaitingRoom'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
-import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS } from './types';
+import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, canAccessTab } from './types';
 import { parseExcelFile, downloadExcelFile, extractLengthFromSize } from './services/excelService';
 import { normalizeLength } from './components/LengthFilter';
-import { getSizeMatchKey } from './services/sizeNormalizer';
+import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
 import { authService } from './services/authService';
 import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
@@ -50,14 +52,17 @@ import { hospitalService } from './services/hospitalService';
 import { planService } from './services/planService';
 import { makePaymentService } from './services/makePaymentService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
-import { dbToExcelRow } from './services/mappers';
+import { dbToExcelRow, dbToOrder, fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { resetService } from './services/resetService';
+import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
+import { useToast } from './hooks/useToast';
+import { UNLIMITED_DAYS, DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 
 /* ── Hash Routing Helpers ── */
 const VIEW_HASH: Record<View, string> = {
-  landing: '', login: 'login', signup: 'signup', dashboard: 'dashboard',
+  landing: '', login: 'login', signup: 'signup', invite: 'invite', dashboard: 'dashboard',
   admin_panel: 'admin', pricing: 'pricing', contact: 'contact',
   value: 'value', analyze: 'analyze', notices: 'notices',
 };
@@ -92,6 +97,19 @@ function parseHash(hash: string): { view: View; tab?: DashboardTab } {
     return { view: 'dashboard', tab: second ? (HASH_TO_TAB[second] || 'overview') : 'overview' };
   }
   return { view: HASH_TO_VIEW[first] || 'landing' };
+}
+
+function manufacturerAliasKey(raw: string): string {
+  return normalizeSurgery(raw).replace(/implant/g, '');
+}
+
+function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>): string {
+  const fixed = fixIbsImplant(String(item.manufacturer || ''), String(item.brand || ''));
+  const canonicalSize = toCanonicalSize(String(item.size || ''), fixed.manufacturer);
+  const manufacturerKey = manufacturerAliasKey(fixed.manufacturer);
+  const brandKey = normalizeInventory(fixed.brand);
+  const sizeKey = getSizeMatchKey(canonicalSize, fixed.manufacturer);
+  return `${manufacturerKey}|${brandKey}|${sizeKey}`;
 }
 
 /* ── 일시정지 상태 화면 ── */
@@ -200,6 +218,8 @@ const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
 
+  const { toast: alertToast, showToast: showAlertToast } = useToast(3500);
+
   const {
     state,
     setState,
@@ -207,7 +227,7 @@ const App: React.FC = () => {
     handleLoginSuccess,
     handleLeaveHospital: _handleLeaveHospital,
     handleDeleteAccount,
-  } = useAppState();
+  } = useAppState(showAlertToast);
 
   // UserProfile expects () => void; hook expects (user: User) so wrap with current user
   const handleLeaveHospital = useCallback(() => {
@@ -216,6 +236,40 @@ const App: React.FC = () => {
 
   const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
+
+  // 초대 토큰 상태
+  const [inviteInfo, setInviteInfo] = React.useState<{
+    token: string; email: string; name: string; hospitalName: string;
+  } | null>(null);
+
+  // URL ?invite=TOKEN 감지 → 초대 수락 뷰로 전환
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (!token || state.user) return;
+
+    supabase
+      .from('member_invitations')
+      .select('email, name, hospitals(name)')
+      .eq('token', token)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) {
+          setState(prev => ({ ...prev, currentView: 'login' }));
+          return;
+        }
+        const hospitalName = (data.hospitals as any)?.name ?? '치과';
+        setInviteInfo({ token, email: data.email, name: data.name, hospitalName });
+        setState(prev => ({ ...prev, currentView: 'invite' }));
+        // URL에서 토큰 파라미터 제거 (보안)
+        const url = new URL(window.location.href);
+        url.searchParams.delete('invite');
+        window.history.replaceState(null, '', url.toString());
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isSystemAdmin = state.user?.role === 'admin';
   // role='master' 또는 본인이 해당 병원의 master_admin_id인 경우(staff 워크스페이스 포함)
@@ -270,11 +324,13 @@ const App: React.FC = () => {
       const { view, tab } = parseHash(window.location.hash);
       if (view === 'dashboard' && !state.user) return;
       if (view === 'admin_panel' && state.user?.role !== 'admin') return;
+      const guardedTab = (tab !== undefined && !canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff'))
+        ? 'overview' : tab;
       skipHashSync.current = true;
       setState(prev => ({
         ...prev,
         currentView: view,
-        ...(tab !== undefined ? { dashboardTab: tab } : {}),
+        ...(guardedTab !== undefined ? { dashboardTab: guardedTab } : {}),
       }));
     };
     window.addEventListener('popstate', onPopState);
@@ -289,9 +345,12 @@ const App: React.FC = () => {
       const { view, tab } = parseHash(hash);
       if (view === 'dashboard' && !state.user) return;
       if (view === 'admin_panel' && state.user?.role !== 'admin') return;
-      if (view !== state.currentView || (tab && tab !== state.dashboardTab)) {
+      // 권한 없는 탭으로 URL 직접 접근 시 overview로 fallback
+      const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff'))
+        ? 'overview' : tab;
+      if (view !== state.currentView || (resolvedTab && resolvedTab !== state.dashboardTab)) {
         skipHashSync.current = true;
-        setState(prev => ({ ...prev, currentView: view, ...(tab ? { dashboardTab: tab } : {}) }));
+        setState(prev => ({ ...prev, currentView: view, ...(resolvedTab ? { dashboardTab: resolvedTab } : {}) }));
       }
     } else {
       window.history.replaceState(null, '', buildHash(state.currentView, state.dashboardTab));
@@ -299,25 +358,22 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isLoading]);
 
-  // 문자열 정규화 (공백 제거, 대소문자 통일, 특수기호 및 접두어 치환)
-  const normalize = useCallback((str: string) => {
-    return String(str || "")
-      .trim()
-      .toLowerCase()
-      .replace(/보험임플란트/g, '')
-      .replace(/수술중fail/g, '')
-      .replace(/[\s\-\_\.\(\)]/g, '')
-      .replace(/[Φφ]/g, 'd');
-  }, []);
+  // 문자열 정규화: 수술기록 매칭용 (normalizeSurgery), 재고 비교용 (normalizeInventory)
+  // → services/normalizationService.ts 에서 import
+  const normalize = normalizeSurgery;
 
   const syncInventoryWithUsageAndOrders = useCallback(() => {
     setState(prev => {
       const records = prev.surgeryMaster['수술기록지'] || [];
       if (records.length === 0 && prev.inventory.length === 0) return prev;
 
-      // Calculate global period for monthly average
+      // ── 1회 순회: 기간 계산 + 수술기록 집계 (O(records)) ──────────────────
       let minTime = Infinity;
       let maxTime = -Infinity;
+
+      // key: `${normM}|${normB}|${normS}` → { totalQty, dailyQty, normM }
+      type SurgeryEntry = { totalQty: number; dailyQty: Record<string, number>; normM: string };
+      const surgeryMap = new Map<string, SurgeryEntry>();
 
       records.forEach(row => {
         const dateStr = row['날짜'];
@@ -328,71 +384,84 @@ const App: React.FC = () => {
             if (t > maxTime) maxTime = t;
           }
         }
+
+        const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
+        if (isTotalRow) return;
+
+        const cls = String(row['구분'] || '');
+        if (cls !== '식립' && cls !== '수술중 FAIL') return;
+        const record = String(row['수술기록'] || '');
+        if (record.includes('[GBR Only]')) return;
+
+        const rowM = normalize(String(row['제조사'] || ''));
+        const rowB = normalize(String(row['브랜드'] || ''));
+        const rowS = getSizeMatchKey(String(row['규격(SIZE)'] || ''), String(row['제조사'] || ''));
+        const key = `${rowM}|${rowB}|${rowS}`;
+
+        const qtyValue = row['갯수'] !== undefined ? Number(row['갯수']) : 0;
+        const validQty = isNaN(qtyValue) ? 0 : qtyValue;
+        const dateKey = String(dateStr || 'unknown');
+
+        const existing = surgeryMap.get(key);
+        if (existing) {
+          existing.totalQty += validQty;
+          existing.dailyQty[dateKey] = (existing.dailyQty[dateKey] || 0) + validQty;
+        } else {
+          surgeryMap.set(key, { totalQty: validQty, dailyQty: { [dateKey]: validQty }, normM: rowM });
+        }
       });
 
       const periodInMonths = (minTime === Infinity || maxTime === -Infinity || minTime === maxTime)
         ? 1
-        : Math.max(1, (maxTime - minTime) / (1000 * 60 * 60 * 24 * 30.44));
+        : Math.max(1, (maxTime - minTime) / (1000 * 60 * 60 * 24 * DAYS_PER_MONTH));
 
+      // ── 1회 순회: 입고완료 주문 집계 (O(orders × items)) ──────────────────
+      // key: `${normM}|${normB}|${normS}` → totalReceived
+      const receivedMap = new Map<string, number>();
+      prev.orders.filter(o => o.status === 'received').forEach(order => {
+        const normOM = normalize(order.manufacturer);
+        order.items.forEach(orderItem => {
+          const normOB = normalize(orderItem.brand);
+          const normOS = getSizeMatchKey(orderItem.size, order.manufacturer);
+          const key = `${normOM}|${normOB}|${normOS}`;
+          receivedMap.set(key, (receivedMap.get(key) ?? 0) + Number(orderItem.quantity || 0));
+        });
+      });
+
+      // ── inventory 매핑: lookup O(inventory × surgeryMap keys) → 실질 O(n) ──
       const updatedInventory = prev.inventory.map(item => {
-        // 수술중FAIL_ / 보험청구 접두어 아이템은 카테고리 마커이므로 사용량 계산 건너뜀
         const isCategory = item.manufacturer.startsWith('수술중FAIL_') || item.manufacturer === '보험청구';
         if (isCategory) {
           return { ...item, usageCount: 0, currentStock: item.initialStock + (item.stockAdjustment ?? 0), recommendedStock: 0, monthlyAvgUsage: 0, dailyMaxUsage: 0 };
         }
 
-        let totalUsage = 0;
-        const dailyUsage: Record<string, number> = {};
-
         const targetM = normalize(item.manufacturer);
         const targetB = normalize(item.brand);
         const targetS = getSizeMatchKey(item.size, item.manufacturer);
 
-        records.forEach(row => {
-          const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
-          if (isTotalRow) return;
+        let totalUsage = 0;
+        const mergedDailyQty: Record<string, number> = {};
 
-          // 실제 임플란트를 사용한 건만 카운트 (식립 + 수술중 FAIL)
-          // 청구·골이식만·기타는 재고 소모가 없으므로 제외
-          const cls = String(row['구분'] || '');
-          if (cls !== '식립' && cls !== '수술중 FAIL') return;
-          // 수술기록에 [GBR Only]가 포함된 건은 골이식만이므로 제외
-          const record = String(row['수술기록'] || '');
-          if (record.includes('[GBR Only]')) return;
-
-          const rowM = normalize(row['제조사']);
-          const rowB = normalize(row['브랜드']);
-          const rowS = getSizeMatchKey(String(row['규격(SIZE)'] || ''), String(row['제조사'] || ''));
-
-          // 제조사 포함관계 및 브랜드/규격 정확 매칭 (사이즈는 직경+길이 키로 비교)
-          const isMatch = (rowM.includes(targetM) || targetM.includes(rowM) || rowM === targetM) &&
+        // 제조사 포함관계 매칭 유지 (rowM.includes(targetM) || targetM.includes(rowM))
+        surgeryMap.forEach((entry, key) => {
+          const [rowM, rowB, rowS] = key.split('|');
+          if (
+            (rowM.includes(targetM) || targetM.includes(rowM) || rowM === targetM) &&
             rowB === targetB &&
-            rowS === targetS;
-
-          if (isMatch) {
-            const qtyValue = row['갯수'] !== undefined ? Number(row['갯수']) : 0;
-            const validQty = isNaN(qtyValue) ? 0 : qtyValue;
-            totalUsage += validQty;
-
-            const dateKey = String(row['날짜'] || 'unknown');
-            dailyUsage[dateKey] = (dailyUsage[dateKey] || 0) + validQty;
+            rowS === targetS
+          ) {
+            totalUsage += entry.totalQty;
+            for (const [day, qty] of Object.entries(entry.dailyQty)) {
+              mergedDailyQty[day] = (mergedDailyQty[day] || 0) + qty;
+            }
           }
         });
 
-        const dailyMax = Object.values(dailyUsage).length > 0 ? Math.max(...Object.values(dailyUsage)) : 0;
+        const dailyMax = Object.values(mergedDailyQty).length > 0 ? Math.max(...Object.values(mergedDailyQty)) : 0;
         const monthlyAvg = Number((totalUsage / periodInMonths).toFixed(1));
 
-        // 입고 완료된 주문 수량 합산
-        let totalReceived = 0;
-        prev.orders.filter(o => o.status === 'received').forEach(order => {
-          if (normalize(order.manufacturer) === targetM) {
-            order.items.forEach(orderItem => {
-              if (normalize(orderItem.brand) === targetB && getSizeMatchKey(orderItem.size, order.manufacturer) === targetS) {
-                totalReceived += Number(orderItem.quantity || 0);
-              }
-            });
-          }
-        });
+        const exactKey = `${targetM}|${targetB}|${targetS}`;
+        const totalReceived = receivedMap.get(exactKey) ?? 0;
 
         const currentStock = item.initialStock + (item.stockAdjustment ?? 0) + totalReceived - totalUsage;
         const recommended = Math.max(dailyMax * 2, Math.ceil(monthlyAvg));
@@ -400,10 +469,10 @@ const App: React.FC = () => {
         return {
           ...item,
           usageCount: totalUsage,
-          currentStock: currentStock,
+          currentStock,
           recommendedStock: recommended,
           monthlyAvgUsage: monthlyAvg,
-          dailyMaxUsage: dailyMax
+          dailyMaxUsage: dailyMax,
         };
       });
       return { ...prev, inventory: updatedInventory };
@@ -425,7 +494,7 @@ const App: React.FC = () => {
           const nextDate = uploadCheck.nextAvailableDate;
           const formatted = `${nextDate.getFullYear()}년 ${nextDate.getMonth() + 1}월 ${nextDate.getDate()}일`;
           const planLabel = effectivePlan === 'free' ? '무료 플랜은 월 1회' : '베이직 플랜은 주 1회';
-          alert(`${planLabel} 수술기록 업로드가 가능합니다.\n다음 업로드 가능일: ${formatted}\n\n더 자주 업로드하려면 플랜을 업그레이드해 주세요.`);
+          showAlertToast(`${planLabel} 수술기록 업로드가 가능합니다. 다음 업로드 가능일: ${formatted}`, 'error');
           setState(prev => ({ ...prev, isLoading: false }));
           return;
         }
@@ -506,13 +575,14 @@ const App: React.FC = () => {
               manufacturer = desc.replace('보험임플란트', '').replace('수술중FAIL_', '').trim();
             }
 
+            const fixedMfr = fixIbsImplant(manufacturer, brand);
             return {
               ...row,
               '구분': classification,
               '갯수': quantity,
-              '제조사': manufacturer,
-              '브랜드': brand,
-              '규격(SIZE)': size,
+              '제조사': fixedMfr.manufacturer,
+              '브랜드': fixedMfr.brand,
+              '규격(SIZE)': toCanonicalSize(size, fixedMfr.manufacturer),
               '골질': row['골질'] || boneQuality,
               '초기고정': row['초기고정'] || initialFixation,
             };
@@ -524,7 +594,7 @@ const App: React.FC = () => {
 
             if (skipped > 0 && inserted === 0) {
               // 전부 중복 → UI에 아무것도 추가하지 않고 알림만
-              alert(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`);
+              showAlertToast(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`, 'info');
               setState(prev => ({ ...prev, isLoading: false }));
               return;
             }
@@ -554,19 +624,48 @@ const App: React.FC = () => {
             setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
           }
         } else {
-          alert("'수술기록지' 시트를 찾을 수 없습니다.");
+          showAlertToast("'수술기록지' 시트를 찾을 수 없습니다.", 'error');
           setState(prev => ({ ...prev, isLoading: false }));
         }
       } else {
-        const initialIndices: Record<string, Set<number>> = {};
-        Object.keys(parsed.sheets).forEach(name => {
-          initialIndices[name] = new Set(parsed.sheets[name].rows.map((_, i) => i));
+        // 픽스쳐 데이터: IBS Implant 제조사/브랜드 교정 후 저장
+        const fixedSheets = { ...parsed.sheets };
+        Object.keys(fixedSheets).forEach(name => {
+          fixedSheets[name] = {
+            ...fixedSheets[name],
+            rows: fixedSheets[name].rows.map(row => {
+              const fixed = fixIbsImplant(
+                String(row['제조사'] || row['Manufacturer'] || ''),
+                String(row['브랜드'] || row['Brand'] || '')
+              );
+              const rawSize = String(
+                row['규격(SIZE)'] ||
+                row['규격'] ||
+                row['사이즈'] ||
+                row['Size'] ||
+                row['size'] ||
+                ''
+              );
+              return {
+                ...row,
+                '제조사': fixed.manufacturer,
+                '브랜드': fixed.brand,
+                '규격(SIZE)': toCanonicalSize(rawSize, fixed.manufacturer),
+                '사용안함': true
+              };
+            }),
+          };
         });
-        setState(prev => ({ ...prev, isLoading: false, fixtureData: parsed, fixtureFileName: file.name, selectedFixtureIndices: initialIndices, dashboardTab: 'fixture_edit' }));
+        const fixedParsed = { ...parsed, sheets: fixedSheets };
+        const initialIndices: Record<string, Set<number>> = {};
+        Object.keys(fixedParsed.sheets).forEach(name => {
+          initialIndices[name] = new Set(fixedParsed.sheets[name].rows.map((_, i) => i));
+        });
+        setState(prev => ({ ...prev, isLoading: false, fixtureData: fixedParsed, fixtureFileName: file.name, selectedFixtureIndices: initialIndices, dashboardTab: 'fixture_edit' }));
         operationLogService.logOperation('raw_data_upload', `픽스쳐 데이터 업로드 (${file.name})`);
       }
     } catch (error) {
-      alert("엑셀 파일 처리에 실패했습니다.");
+      showAlertToast('엑셀 파일 처리에 실패했습니다.', 'error');
       setState(prev => ({ ...prev, isLoading: false }));
     }
   };
@@ -583,7 +682,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[App] 주문 상태 변경 실패, 롤백:', error);
       setState(prev => ({ ...prev, orders: prevOrders }));
-      alert('주문 상태 변경에 실패했습니다.');
+      showAlertToast('주문 상태 변경에 실패했습니다.', 'error');
     }
   }, [state.orders]);
 
@@ -602,47 +701,88 @@ const App: React.FC = () => {
         .map(r => r._id as string);
     }
 
-    // Update local state
-    setState(prev => {
-      let nextSurgeryMaster = { ...prev.surgeryMaster };
-      if (order.type === 'fail_exchange') {
-        const sheetName = '수술기록지';
-        const rows = [...(nextSurgeryMaster[sheetName] || [])];
-        const totalToProcess = order.items.reduce((sum, item) => sum + item.quantity, 0);
-        const targetM = normalize(order.manufacturer);
-        const failIndices = rows
-          .map((row, idx) => ({ row, idx }))
-          .filter(({ row }) => row['구분'] === '수술중 FAIL' && normalize(row['제조사']) === targetM)
-          .sort((a, b) => String(a.row['날짜'] || '').localeCompare(String(b.row['날짜'] || '')))
-          .map(item => item.idx);
-        const indicesToUpdate = failIndices.slice(0, totalToProcess);
-        indicesToUpdate.forEach(idx => {
-          rows[idx] = { ...rows[idx], '구분': 'FAIL 교환완료' };
-        });
-        nextSurgeryMaster[sheetName] = rows;
-      }
-      return {
-        ...prev,
-        orders: [order, ...prev.orders],
-        surgeryMaster: nextSurgeryMaster,
-        dashboardTab: 'order_management'
-      };
-    });
+    const applyOrderToState = (nextOrder: Order, markFailAsExchanged: boolean) => {
+      setState(prev => {
+        let nextSurgeryMaster = { ...prev.surgeryMaster };
+        if (nextOrder.type === 'fail_exchange' && markFailAsExchanged) {
+          const sheetName = '수술기록지';
+          const rows = [...(nextSurgeryMaster[sheetName] || [])];
+          const totalToProcess = nextOrder.items.reduce((sum, item) => sum + item.quantity, 0);
+          const targetM = normalize(nextOrder.manufacturer);
+          const failIndices = rows
+            .map((row, idx) => ({ row, idx }))
+            .filter(({ row }) => row['구분'] === '수술중 FAIL' && normalize(row['제조사']) === targetM)
+            .sort((a, b) => String(a.row['날짜'] || '').localeCompare(String(b.row['날짜'] || '')))
+            .map(item => item.idx);
+          const indicesToUpdate = failIndices.slice(0, totalToProcess);
+          indicesToUpdate.forEach(idx => {
+            rows[idx] = { ...rows[idx], '구분': 'FAIL 교환완료' };
+          });
+          nextSurgeryMaster[sheetName] = rows;
+        }
+        return {
+          ...prev,
+          orders: [nextOrder, ...prev.orders],
+          surgeryMaster: nextSurgeryMaster,
+          dashboardTab: 'order_management'
+        };
+      });
+    };
 
-    // Supabase에 주문 저장
-    if (state.user?.hospitalId) {
-      await orderService.createOrder(
-        { hospital_id: state.user.hospitalId, type: order.type, manufacturer: order.manufacturer, date: order.date, manager: order.manager, status: order.status, received_date: order.receivedDate || null },
+    // 비로그인/로컬 모드: 기존 동작 유지
+    if (!state.user?.hospitalId) {
+      applyOrderToState(order, order.type === 'fail_exchange');
+      return;
+    }
+
+    // 서버 모드: 저장 성공 이후에만 상태 반영 (일관성 우선)
+    try {
+      const created = await orderService.createOrder(
+        {
+          hospital_id: state.user.hospitalId,
+          type: order.type,
+          manufacturer: order.manufacturer,
+          date: order.date,
+          manager: order.manager,
+          status: order.status,
+          received_date: order.receivedDate || null
+        },
         order.items.map(i => ({ brand: i.brand, size: i.size, quantity: i.quantity }))
       );
-      operationLogService.logOperation('order_create', `${order.type === 'fail_exchange' ? 'FAIL 교환' : '보충'} 주문 생성 (${order.manufacturer}, ${order.items.length}건)`, { type: order.type, manufacturer: order.manufacturer });
-      if (failRecordIds.length > 0) {
-        await surgeryService.markFailExchanged(failRecordIds);
-      }
-    }
-  }, [normalize, state.user?.hospitalId, state.surgeryMaster]);
 
-  const handleUpdateCell = useCallback((index: number, column: string, value: any, type: 'fixture' | 'surgery', sheetName?: string) => {
+      if (!created) {
+        showAlertToast('주문 저장에 실패했습니다. 다시 시도해주세요.', 'error');
+        return;
+      }
+
+      let failUpdateSucceeded = true;
+      if (order.type === 'fail_exchange' && failRecordIds.length > 0) {
+        failUpdateSucceeded = await surgeryService.markFailExchanged(failRecordIds);
+      }
+
+      const savedOrder = dbToOrder(created);
+      applyOrderToState(savedOrder, order.type === 'fail_exchange' && failUpdateSucceeded);
+
+      operationLogService.logOperation(
+        'order_create',
+        `${order.type === 'fail_exchange' ? 'FAIL 교환' : '보충'} 주문 생성 (${order.manufacturer}, ${order.items.length}건)`,
+        { type: order.type, manufacturer: order.manufacturer }
+      );
+
+      if (order.type === 'fail_exchange' && failRecordIds.length > 0 && !failUpdateSucceeded) {
+        showAlertToast('주문은 저장되었지만 FAIL 교환 상태 반영에 실패했습니다. 잠시 후 다시 확인해주세요.', 'error');
+      }
+    } catch (error) {
+      console.error('[App] 주문 생성 실패:', error);
+      showAlertToast('주문 생성 중 오류가 발생했습니다.', 'error');
+    }
+  }, [state.user?.hospitalId, state.surgeryMaster, showAlertToast]);
+
+  const handleUpdateCell = useCallback((index: number, column: string, value: boolean | string | number, type: 'fixture' | 'surgery', sheetName?: string) => {
+    // 사용안함 체크박스 변경이면 dirty 표시
+    if (type === 'fixture' && column === '사용안함') {
+      setIsDirtyAfterSave(true);
+    }
     setState(prev => {
       if (type === 'surgery' && sheetName) {
         const newMasterRows = [...(prev.surgeryMaster[sheetName] || [])];
@@ -659,7 +799,73 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // 설정 저장/복구 상태 분리
+  const [saveToast, setSaveToast] = useState<'idle' | 'saved'>('idle');
+  const [restoreToast, setRestoreToast] = useState<'idle' | 'restored'>('idle');
+  const saveToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 마지막 저장 시각 (화면 표시용)
+  const [savedAt, setSavedAt] = useState<string | null>(() => {
+    try {
+      const raw = localStorage.getItem('fixture_settings_v1');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return p.savedAt ?? null;
+    } catch { return null; }
+  });
+  // 저장 후 변경 여부 (dirty flag)
+  const [isDirtyAfterSave, setIsDirtyAfterSave] = useState(false);
+  // 저장 후 복구지점 패널로 스크롤 이동용 ref
+  const restorePanelRef = React.useRef<HTMLDivElement>(null);
+
+  // 재고 비교 모달 상태
+  const [inventoryCompare, setInventoryCompare] = useState<{
+    duplicates: CompareItem[];
+    newItems: CompareItem[];
+    fullNewItems: InventoryItem[];
+  } | null>(null);
+
+  // 확인 모달 상태
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    tip?: string;
+    confirmLabel?: string;
+    confirmColor?: 'indigo' | 'rose' | 'amber' | 'emerald';
+    icon?: React.ReactNode;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // ManufacturerToggle에서 활성화된 제조사 목록 (BrandChart 탭 기준)
+  // BrandChart에서 브랜드를 전체 해제해도 이 목록은 유지됨
+  // ManufacturerToggle에서 직접 해제해야만 이 목록에서 제거됨
+  const [enabledManufacturers, setEnabledManufacturers] = useState<string[]>([]);
+
+  // fixtureData 변경 시 enabledManufacturers 초기화 (데이터 로드/변경 시)
+  const fixtureSheet = state.fixtureData?.sheets?.[state.fixtureData?.activeSheetName ?? ''];
+  useEffect(() => {
+    if (!fixtureSheet) { setEnabledManufacturers([]); return; }
+    const mfSet = new Set<string>();
+    fixtureSheet.rows.forEach(r => {
+      const m = String(r['제조사'] || '기타');
+      if (r['사용안함'] !== true && !m.startsWith('수술중FAIL_') && m !== '보험청구') {
+        mfSet.add(m);
+      }
+    });
+    const nextEnabled = Array.from(mfSet).sort();
+    setEnabledManufacturers(prev => {
+      if (prev.length === 0) return nextEnabled;
+      const prevSet = new Set(prev);
+      nextEnabled.forEach(m => prevSet.add(m));
+      const merged = Array.from(prevSet).sort();
+      if (merged.length === prev.length && merged.every((m, i) => m === prev[i])) return prev;
+      return merged;
+    });
+  }, [fixtureSheet]);
+
   const handleBulkToggle = useCallback((filters: Record<string, string>, targetUnused: boolean) => {
+    setSaveToast('idle');
+    setIsDirtyAfterSave(true);
     setState(prev => {
       const currentData = prev.fixtureData;
       if (!currentData) return prev;
@@ -671,13 +877,145 @@ const App: React.FC = () => {
       const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
       return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
     });
-  }, []);
+  }, [setSaveToast]);
+
+  // ManufacturerToggle 전용 핸들러: enabledManufacturers도 함께 업데이트
+  const handleManufacturerToggle = useCallback((manufacturer: string, isActive: boolean) => {
+    // 데이터 토글
+    handleBulkToggle({ '제조사': manufacturer }, isActive);
+    // enabledManufacturers 업데이트
+    setEnabledManufacturers(prev => {
+      if (isActive) {
+        // 비활성화: 목록에서 제거
+        return prev.filter(m => m !== manufacturer);
+      } else {
+        // 활성화: 목록에 추가
+        return prev.includes(manufacturer) ? prev : [...prev, manufacturer].sort();
+      }
+    });
+  }, [handleBulkToggle]);
+
+  const FIXTURE_SETTINGS_KEY = 'fixture_settings_v1';
+
+  // 저장된 복구 지점이 있는지 여부
+  const [hasSavedPoint, setHasSavedPoint] = useState<boolean>(() => {
+    try { return !!localStorage.getItem(FIXTURE_SETTINGS_KEY); } catch { return false; }
+  });
+
+  // 현재 사용안함 상태를 localStorage에 저장
+  // 각 행을 제조사+브랜드+사이즈 key로 식별 (인덱스는 순서 변경에 취약)
+  const handleSaveSettings = useCallback(() => {
+    const currentData = state.fixtureData;
+    if (!currentData) return;
+    const activeSheet = currentData.sheets[currentData.activeSheetName];
+    // 사용안함=true인 행들의 식별 키 Set 저장
+    const unusedKeys: string[] = activeSheet.rows
+      .filter(row => row['사용안함'] === true)
+      .map(row => [
+        String(row['제조사'] || ''),
+        String(row['브랜드'] || ''),
+        String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
+      ].join('\x00'));
+    const payload = {
+      sheetName: currentData.activeSheetName,
+      unusedKeys,
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      const serialized = JSON.stringify(payload);
+      if (serialized.length > 5 * 1024 * 1024) {
+        console.warn('[App] 설정 데이터가 5MB를 초과합니다. 저장하지 않습니다.');
+        showAlertToast('설정 데이터가 너무 큽니다. 저장에 실패했습니다.', 'error');
+        return;
+      }
+      localStorage.setItem(FIXTURE_SETTINGS_KEY, serialized);
+      setHasSavedPoint(true);
+      setSavedAt(payload.savedAt);
+      setIsDirtyAfterSave(false);
+    } catch {
+      showAlertToast('설정 저장에 실패했습니다. 저장 공간이 부족할 수 있습니다.', 'error');
+    }
+    setSaveToast('saved');
+    if (saveToastTimerRef.current) clearTimeout(saveToastTimerRef.current);
+    saveToastTimerRef.current = setTimeout(() => setSaveToast('idle'), 2500);
+    // 저장 후 복구지점 패널이 화면 상단에 오도록 스크롤
+    requestAnimationFrame(() => {
+      restorePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [state.fixtureData, showAlertToast]);
+
+  // 저장된 지점으로 사용안함 상태 복구
+  const handleRestoreToSavedPoint = useCallback(() => {
+    const currentData = state.fixtureData;
+    if (!currentData) return;
+    let payload: { sheetName: string; unusedKeys: string[] } | null = null;
+    try {
+      const raw = localStorage.getItem(FIXTURE_SETTINGS_KEY);
+      if (!raw) return;
+      // 크기 검증: 5MB 초과 시 파싱 건너뜀 (브라우저 메모리 보호)
+      if (raw.length > 5 * 1024 * 1024) {
+        console.warn('[App] localStorage 설정 데이터가 5MB를 초과합니다.');
+        return;
+      }
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!payload || !Array.isArray(payload.unusedKeys)) return;
+    const unusedKeySet = new Set(payload.unusedKeys);
+    setState(prev => {
+      const data = prev.fixtureData;
+      if (!data) return prev;
+      const activeSheet = data.sheets[data.activeSheetName];
+      const newRows = activeSheet.rows.map(row => {
+        const key = [
+          String(row['제조사'] || ''),
+          String(row['브랜드'] || ''),
+          String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
+        ].join('\x00');
+        return { ...row, '사용안함': unusedKeySet.has(key) };
+      });
+      const newSheets = { ...data.sheets, [data.activeSheetName]: { ...activeSheet, rows: newRows } };
+      return { ...prev, fixtureData: { ...data, sheets: newSheets } };
+    });
+    setIsDirtyAfterSave(false);
+    // 복구 후 enabledManufacturers도 재계산
+    setEnabledManufacturers(() => {
+      const data = state.fixtureData;
+      if (!data) return [];
+      const activeSheet = data.sheets[data.activeSheetName];
+      const mfSet = new Set<string>();
+      activeSheet.rows.forEach(row => {
+        const key = [
+          String(row['제조사'] || ''),
+          String(row['브랜드'] || ''),
+          String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
+        ].join('\x00');
+        const m = String(row['제조사'] || '기타');
+        // 복구 후 상태: unusedKeySet에 없는 것이 활성
+        if (!unusedKeySet.has(key) && !m.startsWith('수술중FAIL_') && m !== '보험청구') {
+          mfSet.add(m);
+        }
+      });
+      return Array.from(mfSet).sort();
+    });
+    setRestoreToast('restored');
+    if (restoreToastTimerRef.current) clearTimeout(restoreToastTimerRef.current);
+    restoreToastTimerRef.current = setTimeout(() => setRestoreToast('idle'), 2500);
+  }, [state.fixtureData]);
 
   const handleExpandFailClaim = useCallback(() => {
     setState(prev => {
       const currentData = prev.fixtureData;
       if (!currentData) return prev;
       const activeSheet = currentData.sheets[currentData.activeSheetName];
+
+      // 이미 FAIL 확장이 실행된 경우 중복 방지
+      const alreadyExpanded = activeSheet.rows.some(row =>
+        String(row['제조사'] || '').startsWith('수술중FAIL_')
+      );
+      if (alreadyExpanded) return prev;
+
       const activeRows = activeSheet.rows.filter(row => row['사용안함'] !== true);
       if (activeRows.length === 0) return prev;
 
@@ -687,22 +1025,28 @@ const App: React.FC = () => {
         '제조사': `수술중FAIL_${row['제조사'] || ''}`,
       }));
 
-      // 보험청구 행 1개
-      const insuranceRow: Record<string, any> = {};
-      activeSheet.columns.forEach(col => { insuranceRow[col] = ''; });
-      insuranceRow['제조사'] = '보험청구';
-      insuranceRow['브랜드'] = '보험청구';
-      const sizeCol = activeSheet.columns.find(c => /규격|사이즈|SIZE|size/i.test(c));
-      if (sizeCol) insuranceRow[sizeCol] = '2단계 청구';
-      insuranceRow['사용안함'] = false;
+      // 보험청구 행 1개 (아직 없을 때만)
+      const hasInsurance = activeSheet.rows.some(row => String(row['제조사'] || '') === '보험청구');
+      const insuranceRows: Record<string, any>[] = [];
+      if (!hasInsurance) {
+        const insuranceRow: Record<string, any> = {};
+        activeSheet.columns.forEach(col => { insuranceRow[col] = ''; });
+        insuranceRow['제조사'] = '보험청구';
+        insuranceRow['브랜드'] = '보험청구';
+        const sizeCol = activeSheet.columns.find(c => /규격|사이즈|SIZE|size/i.test(c));
+        if (sizeCol) insuranceRow[sizeCol] = '2단계 청구';
+        insuranceRow['사용안함'] = false;
+        insuranceRows.push(insuranceRow);
+      }
 
-      const newRows = [...activeSheet.rows, ...failRows, insuranceRow];
+      const newRows = [...activeSheet.rows, ...failRows, ...insuranceRows];
       const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
       return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
     });
   }, []);
 
   const handleLengthToggle = useCallback((normalizedTarget: string, setUnused: boolean) => {
+    setSaveToast('idle');
     setState(prev => {
       const currentData = prev.fixtureData;
       if (!currentData) return prev;
@@ -727,7 +1071,116 @@ const App: React.FC = () => {
       const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
       return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
     });
-  }, []);
+  }, [setSaveToast]);
+
+  // STEP 6: 재고 마스터 반영 핸들러 (인라인에서 추출)
+  // STEP 7: 재고 마스터 반영 — 비교 모달 표시
+  const handleApplyToInventory = useCallback(() => {
+    if (!state.fixtureData) return;
+    const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
+    if (!activeSheet || activeSheet.rows.length === 0) {
+      showAlertToast('워크시트에 데이터가 없습니다.', 'error');
+      return;
+    }
+    const allCandidates = activeSheet.rows
+      .filter(row => row['사용안함'] !== true)
+      .map((row, idx) => {
+        const fixed = fixIbsImplant(
+          String(row['제조사'] || row['Manufacturer'] || '기타'),
+          String(row['브랜드'] || row['Brand'] || '기타')
+        );
+        const rawSize = String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || '');
+        return {
+          id: `sync_${Date.now()}_${idx}`,
+          manufacturer: fixed.manufacturer,
+          brand: fixed.brand,
+          size: toCanonicalSize(rawSize, fixed.manufacturer),
+          initialStock: 0,
+          stockAdjustment: 0,
+          usageCount: 0,
+          currentStock: 0,
+          recommendedStock: 5,
+          monthlyAvgUsage: 0,
+          dailyMaxUsage: 0,
+        };
+      });
+
+    const duplicates: CompareItem[] = [];
+    const newItems: typeof allCandidates = [];
+    const existingKeys = new Set(state.inventory.map(inv => buildInventoryDuplicateKey(inv)));
+    const pendingKeys = new Set<string>();
+
+    allCandidates.forEach(ni => {
+      const key = buildInventoryDuplicateKey(ni);
+      const isDup = existingKeys.has(key) || pendingKeys.has(key);
+      if (isDup) {
+        duplicates.push({ manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size });
+      } else {
+        newItems.push(ni);
+        pendingKeys.add(key);
+      }
+    });
+
+    // 플랜 품목 수 제한 체크 (수술중FAIL_ / 보험청구 제외)
+    const planMaxItems = PLAN_LIMITS[effectivePlan].maxItems;
+    const billableNew = newItems.filter(i => !i.manufacturer.startsWith('수술중FAIL_') && i.manufacturer !== '보험청구').length;
+    const totalAfterAdd = billableItemCount + billableNew;
+    if (planMaxItems !== Infinity && totalAfterAdd > planMaxItems) {
+      setPlanLimitModal({ currentCount: billableItemCount, newCount: billableNew, maxItems: planMaxItems });
+      return;
+    }
+
+    // 비교 모달 표시
+    setInventoryCompare({
+      duplicates,
+      newItems: newItems.map(ni => ({ manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size })),
+      fullNewItems: newItems,
+    });
+  }, [state.fixtureData, state.inventory, effectivePlan, billableItemCount, showAlertToast]);
+
+  // 비교 모달에서 확인 시 실제 저장
+  const handleConfirmApplyToInventory = useCallback(async () => {
+    if (!inventoryCompare) return;
+    const newItems: InventoryItem[] = inventoryCompare.fullNewItems;
+    setInventoryCompare(null);
+
+    if (newItems.length === 0) return;
+
+    // DB 저장이 필요한 경우: DB 성공 후 상태 반영 (롤백 불필요)
+    if (state.user?.hospitalId) {
+      try {
+        const dbItems = newItems.map((ni) => ({
+          hospital_id: state.user!.hospitalId,
+          manufacturer: ni.manufacturer,
+          brand: ni.brand,
+          size: ni.size,
+          initial_stock: ni.initialStock,
+          stock_adjustment: 0,
+        }));
+        const saved = await inventoryService.bulkInsert(dbItems);
+        if (saved.length > 0) {
+          // DB 성공 → 서버 ID가 반영된 상태로 로컬 업데이트
+          const itemsWithDbId = newItems.map(item => {
+            const match = saved.find(s => s.manufacturer === item.manufacturer && s.brand === item.brand && s.size === item.size);
+            return match ? { ...item, id: match.id } : item;
+          });
+          setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsWithDbId], dashboardTab: 'inventory_master' }));
+          showAlertToast(`${saved.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
+          operationLogService.logOperation('data_processing', `재고 마스터 반영 ${saved.length}건`, { count: saved.length });
+        } else {
+          console.error('[App] bulkInsert 실패: 0개 저장됨. hospitalId:', state.user!.hospitalId);
+          showAlertToast('서버 저장 실패 — 다시 시도해주세요.', 'error');
+        }
+      } catch (err) {
+        console.error('[App] bulkInsert 예외:', err);
+        showAlertToast('서버 저장 중 오류가 발생했습니다. 네트워크를 확인해주세요.', 'error');
+      }
+    } else {
+      // 로그인 전(로컬 전용): 바로 상태에 반영
+      setState(prev => ({ ...prev, inventory: [...prev.inventory, ...newItems], dashboardTab: 'inventory_master' }));
+      showAlertToast(`${newItems.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
+    }
+  }, [inventoryCompare, state.user, showAlertToast]);
 
   const virtualSurgeryData = useMemo(() => {
     const masterRows = state.surgeryMaster['수술기록지'];
@@ -735,6 +1188,78 @@ const App: React.FC = () => {
     const sortedColumns = ['날짜', '환자정보', '치아번호', '갯수', '수술기록', '구분', '제조사', '브랜드', '규격(SIZE)', '골질', '초기고정'];
     return { sheets: { '수술기록지': { name: '수술기록지', columns: sortedColumns, rows: masterRows } }, activeSheetName: '수술기록지' } as ExcelData;
   }, [state.surgeryMaster]);
+
+  const surgeryUnregisteredItems = useMemo<SurgeryUnregisteredItem[]>(() => {
+    const rows = state.surgeryMaster['수술기록지'] || [];
+    if (rows.length === 0) return [];
+
+    const inventoryManufacturersByBrandSize = new Map<string, string[]>();
+    state.inventory
+      .filter(item =>
+        !item.manufacturer.startsWith('수술중FAIL_') &&
+        item.manufacturer !== '보험청구' &&
+        item.brand !== '보험임플란트'
+      )
+      .forEach(item => {
+        const normM = normalizeSurgery(item.manufacturer);
+        const normB = normalizeSurgery(item.brand);
+        const normS = getSizeMatchKey(item.size, item.manufacturer);
+        const bsKey = `${normB}|${normS}`;
+        const list = inventoryManufacturersByBrandSize.get(bsKey) || [];
+        if (!list.includes(normM)) list.push(normM);
+        inventoryManufacturersByBrandSize.set(bsKey, list);
+      });
+
+    const missingMap = new Map<string, SurgeryUnregisteredItem>();
+
+    rows.forEach((row) => {
+      const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
+      if (isTotalRow) return;
+
+      const cls = String(row['구분'] || '').trim();
+      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+
+      const surgeryRecord = String(row['수술기록'] || '');
+      if (surgeryRecord.includes('[GBR Only]')) return;
+
+      const manufacturer = String(row['제조사'] || '').trim();
+      const brand = String(row['브랜드'] || '').trim();
+      const size = String(row['규격(SIZE)'] || '').trim();
+
+      if (!manufacturer && !brand && !size) return;
+      if (manufacturer.startsWith('수술중FAIL_')) return;
+      if (manufacturer === '보험청구' || brand === '보험임플란트') return;
+
+      const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;
+      const qty = Number.isFinite(qtyRaw) ? qtyRaw : 1;
+
+      const normM = normalizeSurgery(manufacturer);
+      const normB = normalizeSurgery(brand);
+      const normS = getSizeMatchKey(size, manufacturer);
+      const bsKey = `${normB}|${normS}`;
+
+      const candidateManufacturers = inventoryManufacturersByBrandSize.get(bsKey) || [];
+      const isRegistered = candidateManufacturers.some(invM =>
+        invM === normM || invM.includes(normM) || normM.includes(invM)
+      );
+      if (isRegistered) return;
+
+      const itemKey = `${normM}|${normB}|${normS}`;
+      const existing = missingMap.get(itemKey);
+      if (existing) {
+        existing.usageCount += qty;
+      } else {
+        missingMap.set(itemKey, {
+          manufacturer: manufacturer || '-',
+          brand: brand || '-',
+          size: size || '-',
+          usageCount: qty,
+        });
+      }
+    });
+
+    return Array.from(missingMap.values()).sort((a, b) => b.usageCount - a.usageCount);
+  }, [state.surgeryMaster, state.inventory]);
 
   // 초기 세션 확인 중 로딩 화면
   if (state.isLoading && !state.user) {
@@ -760,14 +1285,20 @@ const App: React.FC = () => {
       {state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user') && (
         <Sidebar
           activeTab={state.dashboardTab}
-          onTabChange={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
+          onTabChange={(tab) => {
+            // 권한 없는 탭은 전환 차단
+            if (!canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff')) return;
+            setState(prev => ({ ...prev, dashboardTab: tab }));
+          }}
           fixtureData={state.fixtureData}
           surgeryData={state.surgeryData}
+          surgeryUnregisteredCount={surgeryUnregisteredItems.length}
           isAdmin={isHospitalAdmin}
           isMaster={isHospitalMaster || isSystemAdmin}
           plan={effectivePlan}
           hospitalName={state.hospitalName}
           userRole={state.user?.role}
+          userPermissions={state.user?.permissions}
           onReturnToAdmin={isSystemAdmin ? () => setState(prev => ({ ...prev, adminViewMode: 'admin' })) : undefined}
         />
       )}
@@ -850,82 +1381,27 @@ const App: React.FC = () => {
                 {state.dashboardTab === 'fixture_edit' && state.fixtureData && (
                   <div className="flex items-center gap-2 absolute left-1/2 transform -translate-x-1/2">
                     <button onClick={() => {
-                      if (window.confirm('현재 작업 중인 데이터가 모두 초기화됩니다. 계속하시겠습니까?')) {
-                        setState(prev => ({
-                          ...prev,
-                          fixtureData: null,
-                          fixtureFileName: null,
-                          isFixtureLengthExtracted: false,
-                          fixtureBackup: null,
-                          selectedFixtureIndices: {},
-                          dashboardTab: 'fixture_upload'
-                        }));
-                      }
+                      setConfirmModal({
+                        title: '데이터 초기화',
+                        message: '현재 작업 중인 데이터가 모두 초기화됩니다. 계속하시겠습니까?',
+                        confirmLabel: '초기화',
+                        confirmColor: 'rose',
+                        onConfirm: () => {
+                          setState(prev => ({
+                            ...prev,
+                            fixtureData: null,
+                            fixtureFileName: null,
+                            isFixtureLengthExtracted: false,
+                            fixtureBackup: null,
+                            selectedFixtureIndices: {},
+                            dashboardTab: 'fixture_upload'
+                          }));
+                          setConfirmModal(null);
+                        },
+                      });
                     }} className="px-3 py-1.5 text-slate-400 hover:text-rose-500 font-medium rounded-lg text-xs transition-colors flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       초기화
-                    </button>
-                    <div className="h-4 w-px bg-slate-200 mx-2"></div>
-                    <button onClick={async () => {
-                      try {
-                        await downloadExcelFile(
-                          state.fixtureData!,
-                          state.selectedFixtureIndices[state.fixtureData!.activeSheetName] || new Set(),
-                          state.fixtureFileName!
-                        );
-                      } catch (error) {
-                        console.error('[App] Excel download failed:', error);
-                        alert('엑셀 다운로드 중 오류가 발생했습니다.');
-                      }
-                    }} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-1.5 shadow-sm">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      엑셀 다운로드
-                    </button>
-                    <button onClick={async () => {
-                      if (!state.fixtureData) return;
-                      const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
-                      const newItems = activeSheet.rows.filter(row => row['사용안함'] !== true).map((row, idx) => ({
-                        id: `sync_${Date.now()}_${idx}`,
-                        manufacturer: String(row['제조사'] || row['Manufacturer'] || '기타'),
-                        brand: String(row['브랜드'] || row['Brand'] || '기타'),
-                        size: String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
-                        initialStock: 0,
-                        stockAdjustment: 0,
-                        usageCount: 0,
-                        currentStock: 0,
-                        recommendedStock: 5,
-                        monthlyAvgUsage: 0,
-                        dailyMaxUsage: 0,
-                      })).filter(ni => !state.inventory.some(inv => normalize(inv.manufacturer) === normalize(ni.manufacturer) && normalize(inv.brand) === normalize(ni.brand) && getSizeMatchKey(inv.size, inv.manufacturer) === getSizeMatchKey(ni.size, ni.manufacturer)));
-                      // 플랜 품목 수 제한 적용 (수술중FAIL_ / 보험청구 제외)
-                      const planMaxItems = PLAN_LIMITS[effectivePlan].maxItems;
-                      const billableNew = newItems.filter(i => !i.manufacturer.startsWith('수술중FAIL_') && i.manufacturer !== '보험청구').length;
-                      const totalAfterAdd = billableItemCount + billableNew;
-                      if (planMaxItems !== Infinity && totalAfterAdd > planMaxItems) {
-                        setPlanLimitModal({ currentCount: billableItemCount, newCount: billableNew, maxItems: planMaxItems });
-                        return;
-                      }
-                      const itemsToAdd = newItems;
-                      if (itemsToAdd.length > 0) {
-                        setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsToAdd], dashboardTab: 'inventory_master' }));
-                        // Supabase에 일괄 저장
-                        if (state.user?.hospitalId) {
-                          const dbItems = itemsToAdd.map(ni => ({ hospital_id: state.user!.hospitalId, manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size, initial_stock: ni.initialStock, stock_adjustment: 0 }));
-                          const saved = await inventoryService.bulkInsert(dbItems);
-                          if (saved.length > 0) {
-                            setState(prev => ({ ...prev, inventory: prev.inventory.map((item, idx) => { const match = saved.find(s => s.manufacturer === item.manufacturer && s.brand === item.brand && s.size === item.size); return match ? { ...item, id: match.id } : item; }) }));
-                            operationLogService.logOperation('data_processing', `재고 마스터 반영 ${saved.length}건`, { count: saved.length });
-                          } else {
-                            console.error('[App] bulkInsert 실패: 0개 저장됨. hospitalId:', state.user!.hospitalId);
-                            alert('⚠️ 재고 데이터를 서버에 저장하지 못했습니다.\n새로고침 시 데이터가 사라질 수 있습니다.\n\n콘솔(F12)에서 에러 상세를 확인해주세요.');
-                          }
-                        }
-                      } else {
-                        alert("새로 추가할 품목이 없거나 이미 마스터에 존재합니다.");
-                      }
-                    }} className="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md shadow-indigo-200 hover:bg-indigo-700 hover:translate-y-[-1px] transition-all flex items-center gap-1.5">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      재고 마스터 반영
                     </button>
                   </div>
                 )}
@@ -934,7 +1410,7 @@ const App: React.FC = () => {
                   {state.user && (
                     <div className="flex items-center gap-2.5">
                       {(() => {
-                        const remaining = state.planState?.daysUntilExpiry ?? 9999;
+                        const remaining = state.planState?.daysUntilExpiry ?? UNLIMITED_DAYS;
                         return isUltimatePlan ? (
                           <span className="text-[11px] text-violet-500 font-medium flex items-center gap-1">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -950,7 +1426,7 @@ const App: React.FC = () => {
                         ) : (
                           <span className={`text-[11px] font-medium flex items-center gap-1 ${remaining <= 30 ? 'text-rose-500' : 'text-slate-400'}`}>
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            {remaining >= 9999 ? '무기한' : `${remaining}일 남음`}
+                            {remaining >= UNLIMITED_DAYS ? '무기한' : `${remaining}일 남음`}
                           </span>
                         );
                       })()}
@@ -1114,13 +1590,238 @@ const App: React.FC = () => {
                       {state.dashboardTab === 'fixture_edit' && (
                         (state.fixtureData && state.fixtureData.sheets && state.fixtureData.activeSheetName && state.fixtureData.sheets[state.fixtureData.activeSheetName]) ? (
                           <div className="space-y-6">
-                            <FixtureWorkflowGuide />
-                            <ManufacturerToggle sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggle={(m, u) => handleBulkToggle({ '제조사': m }, u)} />
+                            {/* ── 워크플로우 가이드 ── */}
+                            <FixtureWorkflowGuide completedSteps={(() => {
+                              const sheet = state.fixtureData!.sheets[state.fixtureData!.activeSheetName];
+                              const rows = sheet.rows;
+                              const steps: number[] = [];
+                              // STEP 1: 제조사 선택 — 사용안함 처리된 제조사가 1개 이상
+                              const mfrs = new Set(rows.map(r => String(r['제조사'] || '')));
+                              const disabledMfrs = new Set(rows.filter(r => r['사용안함'] === true).map(r => String(r['제조사'] || '')));
+                              if (disabledMfrs.size > 0 || enabledManufacturers.length < mfrs.size) steps.push(1);
+                              // STEP 2: 브랜드 필터링 — 사용안함 처리된 브랜드가 존재
+                              const unusedBrands = rows.some(r => r['사용안함'] === true);
+                              if (unusedBrands) steps.push(2);
+                              // STEP 3: 길이 필터링 — (STEP2와 동일 조건, 길이 기반 사용안함 존재 시)
+                              if (unusedBrands) steps.push(3);
+                              // STEP 5: FAIL/청구 확장
+                              const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중FAIL_'));
+                              if (hasFailRows) steps.push(5);
+                              // STEP 7: 재고 마스터 반영 — inventory에 fixture 데이터 존재
+                              const hasInvFromFixture = state.inventory.length > 0;
+                              if (hasInvFromFixture) steps.push(7);
+                              return steps;
+                            })()} />
+
+                            {/* ── 제조사별 일괄 처리 ── */}
+                            <ManufacturerToggle sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggle={handleManufacturerToggle} />
+
+                            {/* ── 브랜드별 사용 설정 ── */}
                             <FeatureGate feature="brand_analytics" plan={effectivePlan}>
-                              <BrandChart data={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggleBrand={(m, b, u) => handleBulkToggle({ '제조사': m, '브랜드': b }, u)} />
+                              <BrandChart data={state.fixtureData.sheets[state.fixtureData.activeSheetName]} enabledManufacturers={enabledManufacturers} onToggleBrand={(m, b, u) => handleBulkToggle({ '제조사': m, '브랜드': b }, u)} onToggleAllBrands={(m, u) => handleBulkToggle({ '제조사': m }, u)} />
                             </FeatureGate>
+
+                            {/* ── 길이별 필터 ── */}
                             <LengthFilter sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggleLength={handleLengthToggle} />
-                            <ExcelTable data={state.fixtureData} selectedIndices={state.selectedFixtureIndices[state.fixtureData.activeSheetName] || new Set()} onToggleSelect={() => { }} onToggleAll={() => { }} onUpdateCell={(idx, col, val) => handleUpdateCell(idx, col, val, 'fixture')} onSheetChange={(name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } }))} onExpandFailClaim={handleExpandFailClaim} />
+
+                            {/* ── 설정 저장 / 복구 패널 ── */}
+                            <div ref={restorePanelRef}>
+                            {(() => {
+                              // 저장 지점과 현재 상태의 사용안함 차이 개수
+                              const diffCount = (() => {
+                                if (!hasSavedPoint || !state.fixtureData) return 0;
+                                try {
+                                  const raw = localStorage.getItem(FIXTURE_SETTINGS_KEY);
+                                  if (!raw) return 0;
+                                  const savedPayload = JSON.parse(raw) as { unusedKeys: string[] };
+                                  const savedSet = new Set(savedPayload.unusedKeys);
+                                  const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
+                                  let diff = 0;
+                                  activeSheet.rows.forEach(row => {
+                                    const key = [
+                                      String(row['제조사'] || ''),
+                                      String(row['브랜드'] || ''),
+                                      String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
+                                    ].join('\x00');
+                                    const savedUnused = savedSet.has(key);
+                                    const currentUnused = row['사용안함'] === true;
+                                    if (savedUnused !== currentUnused) diff++;
+                                  });
+                                  return diff;
+                                } catch { return 0; }
+                              })();
+
+                              const formattedSavedAt = savedAt
+                                ? (() => {
+                                    try {
+                                      const d = new Date(savedAt);
+                                      const pad = (n: number) => String(n).padStart(2, '0');
+                                      return `${d.getMonth() + 1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                                    } catch { return null; }
+                                  })()
+                                : null;
+
+                              return (
+                                <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                                  {/* 상태 표시 헤더 */}
+                                  <div className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 ${isDirtyAfterSave && hasSavedPoint ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                                    <div className="flex items-center gap-2">
+                                      <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                      </svg>
+                                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">복구 지점</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {formattedSavedAt && (
+                                        <span className="text-[11px] text-slate-400 font-medium">
+                                          {formattedSavedAt} 저장
+                                        </span>
+                                      )}
+                                      {isDirtyAfterSave && hasSavedPoint && diffCount > 0 && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                          {diffCount}개 변경됨
+                                        </span>
+                                      )}
+                                      {!isDirtyAfterSave && hasSavedPoint && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold">
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                          저장 상태와 동일
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* 버튼 영역 */}
+                                  <div className="flex gap-3 p-4">
+                                    {/* 복구 버튼 */}
+                                    {hasSavedPoint && (
+                                      <button
+                                        type="button"
+                                        onClick={handleRestoreToSavedPoint}
+                                        disabled={!isDirtyAfterSave || diffCount === 0}
+                                        title={!isDirtyAfterSave || diffCount === 0 ? '저장 지점과 동일한 상태입니다' : `${diffCount}개 항목을 저장 지점으로 복구합니다`}
+                                        className={`flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 whitespace-nowrap ${
+                                          restoreToast === 'restored'
+                                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
+                                            : isDirtyAfterSave && diffCount > 0
+                                            ? 'border-slate-300 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 active:scale-[0.99] shadow-sm cursor-pointer'
+                                            : 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                        }`}
+                                      >
+                                        {restoreToast === 'restored' ? (
+                                          <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            복구 완료
+                                          </>
+                                        ) : (
+                                          <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            {diffCount > 0 ? `저장 지점으로 복구 (${diffCount}개)` : '복구'}
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+
+                                    {/* 저장 버튼 */}
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveSettings}
+                                      className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 ${
+                                        saveToast === 'saved'
+                                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
+                                          : isDirtyAfterSave || !hasSavedPoint
+                                          ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700 hover:border-indigo-700 active:scale-[0.99] shadow-md shadow-indigo-100'
+                                          : 'bg-slate-100 border-slate-100 text-slate-400 hover:bg-slate-200 hover:border-slate-200 active:scale-[0.99]'
+                                      }`}
+                                    >
+                                      {saveToast === 'saved' ? (
+                                        <>
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                          저장 완료
+                                        </>
+                                      ) : (
+                                        <>
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                          </svg>
+                                          {isDirtyAfterSave || !hasSavedPoint ? '지금 상태로 저장' : '저장됨'}
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            </div>
+
+                            <ExcelTable data={state.fixtureData} selectedIndices={state.selectedFixtureIndices[state.fixtureData.activeSheetName] || new Set()} onToggleSelect={() => { }} onToggleAll={() => { }} onUpdateCell={(idx, col, val) => handleUpdateCell(idx, col, val, 'fixture')} onSheetChange={(name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } }))} onExpandFailClaim={handleExpandFailClaim} activeManufacturers={Array.from(new Set(state.fixtureData.sheets[state.fixtureData.activeSheetName].rows.filter(r => r['사용안함'] !== true).map(r => String(r['제조사'] || '')).filter(m => m && !m.startsWith('수술중FAIL_') && m !== '보험청구'))).sort()} />
+
+                            {/* 하단 액션바 — STEP 6/7 (워크플로우 마지막 단계, 스크롤 후 자연스럽게 진입) */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">다음 단계</p>
+                              <div className="flex flex-col sm:flex-row gap-3">
+                                {/* STEP 6: 엑셀 다운로드 (먼저 — 재고 마스터 반영 후에는 페이지 이동되므로) */}
+                                <button
+                                  onClick={() => {
+                                    setConfirmModal({
+                                      title: '엑셀 다운로드',
+                                      message: '현재 설정 상태로 엑셀 파일을 다운로드합니다.',
+                                      tip: '다운로드한 파일은 덴트웹 → 환경설정 → 임플란트 픽스처 설정에서 등록하세요.',
+                                      confirmLabel: '다운로드',
+                                      confirmColor: 'amber',
+                                      icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+                                      onConfirm: async () => {
+                                        setConfirmModal(null);
+                                        try {
+                                          const now = new Date();
+                                          const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+                                          await downloadExcelFile(
+                                            state.fixtureData!,
+                                            state.selectedFixtureIndices[state.fixtureData!.activeSheetName] || new Set(),
+                                            `픽스쳐_${yyyymmdd}.xlsx`
+                                          );
+                                        } catch (error) {
+                                          console.error('[App] Excel download failed:', error);
+                                          showAlertToast('엑셀 다운로드 중 오류가 발생했습니다.', 'error');
+                                        }
+                                      },
+                                    });
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] transition-all"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                  STEP 6 — 엑셀 다운로드 (덴트웹용)
+                                </button>
+                                {/* STEP 7: 재고 마스터 반영 (나중 — 클릭 시 페이지 이동됨) */}
+                                <button
+                                  onClick={() => {
+                                    setConfirmModal({
+                                      title: '재고 마스터 반영',
+                                      message: '현재 설정 상태를 재고 마스터에 반영합니다.\n반영 후 재고 현황 페이지로 이동합니다.',
+                                      tip: '엑셀 다운로드를 아직 하지 않으셨다면 먼저 다운로드해주세요.',
+                                      confirmLabel: '반영하기',
+                                      confirmColor: 'indigo',
+                                      icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+                                      onConfirm: () => {
+                                        setConfirmModal(null);
+                                        handleApplyToInventory();
+                                      },
+                                    });
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.99] transition-all"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                  STEP 7 — 재고 마스터 반영
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-fade-in-up">
@@ -1166,7 +1867,7 @@ const App: React.FC = () => {
                             } catch (error) {
                               console.error('[App] 기초재고 수정 실패, 롤백:', error);
                               setState(prev => ({ ...prev, inventory: prevInventory }));
-                              alert('기초재고 수정에 실패했습니다.');
+                              showAlertToast('기초재고 수정에 실패했습니다.', 'error');
                             }
                           }}
                           onDeleteInventoryItem={async (id) => {
@@ -1179,28 +1880,88 @@ const App: React.FC = () => {
                             } catch (error) {
                               console.error('[App] 품목 삭제 실패, 롤백:', error);
                               setState(prev => ({ ...prev, inventory: prevInventory }));
-                              alert('품목 삭제에 실패했습니다.');
+                              showAlertToast('품목 삭제에 실패했습니다.', 'error');
                             }
                           }}
                           onAddInventoryItem={async (ni) => {
-                            const isBillable = !ni.manufacturer.startsWith('수술중FAIL_') && ni.manufacturer !== '보험청구';
-                            if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
-                              const req = planService.getRequiredPlanForItems(billableItemCount + 1);
-                              alert(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`);
+                            const fixed = fixIbsImplant(ni.manufacturer, ni.brand);
+                            const normalizedItem = {
+                              ...ni,
+                              manufacturer: fixed.manufacturer,
+                              brand: fixed.brand,
+                              size: toCanonicalSize(ni.size, fixed.manufacturer),
+                            };
+                            const incomingKey = buildInventoryDuplicateKey(normalizedItem);
+                            const alreadyExists = state.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                            if (alreadyExists) {
+                              showAlertToast('이미 등록된 제조사/브랜드/규격입니다. 중복 등록되지 않았습니다.', 'info');
                               return;
                             }
-                            setState(prev => ({ ...prev, inventory: [...prev.inventory, ni] }));
-                            if (state.user?.hospitalId) {
-                              const result = await inventoryService.addItem({ hospital_id: state.user.hospitalId, manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size, initial_stock: ni.initialStock, stock_adjustment: 0 });
-                              if (result) setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === ni.id ? { ...i, id: result.id } : i) }));
+
+                            const isBillable = !normalizedItem.manufacturer.startsWith('수술중FAIL_') && normalizedItem.manufacturer !== '보험청구';
+                            if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
+                              const req = planService.getRequiredPlanForItems(billableItemCount + 1);
+                              showAlertToast(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`, 'error');
+                              return;
                             }
-                            operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${ni.brand} ${ni.size}`, { manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size });
+
+                            if (state.user?.hospitalId) {
+                              const result = await inventoryService.addItem({
+                                hospital_id: state.user.hospitalId,
+                                manufacturer: normalizedItem.manufacturer,
+                                brand: normalizedItem.brand,
+                                size: normalizedItem.size,
+                                initial_stock: normalizedItem.initialStock,
+                                stock_adjustment: ni.stockAdjustment ?? 0
+                              });
+
+                              if (!result) {
+                                showAlertToast('품목 추가에 실패했습니다. (중복 또는 네트워크 오류)', 'error');
+                                return;
+                              }
+
+                              const savedItem: InventoryItem = {
+                                id: result.id,
+                                manufacturer: result.manufacturer,
+                                brand: result.brand,
+                                size: toCanonicalSize(result.size, result.manufacturer),
+                                initialStock: result.initial_stock,
+                                stockAdjustment: result.stock_adjustment ?? 0,
+                                usageCount: 0,
+                                currentStock: result.initial_stock + (result.stock_adjustment ?? 0),
+                                recommendedStock: 5,
+                                monthlyAvgUsage: 0,
+                                dailyMaxUsage: 0,
+                              };
+
+                              setState(prev => {
+                                const dupAfterSave = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                                if (dupAfterSave) return prev;
+                                return { ...prev, inventory: [...prev.inventory, savedItem] };
+                              });
+                            } else {
+                              setState(prev => {
+                                const dupInLocal = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                                if (dupInLocal) return prev;
+                                return { ...prev, inventory: [...prev.inventory, normalizedItem] };
+                              });
+                            }
+
+                            operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${normalizedItem.brand} ${normalizedItem.size}`, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size });
                           }}
                           onUpdateInventoryItem={async (ui) => {
-                            setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === ui.id ? ui : i) }));
-                            await inventoryService.updateItem(ui.id, { manufacturer: ui.manufacturer, brand: ui.brand, size: ui.size, initial_stock: ui.initialStock });
+                            const fixed = fixIbsImplant(ui.manufacturer, ui.brand);
+                            const normalizedItem = {
+                              ...ui,
+                              manufacturer: fixed.manufacturer,
+                              brand: fixed.brand,
+                              size: toCanonicalSize(ui.size, fixed.manufacturer),
+                            };
+                            setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === normalizedItem.id ? normalizedItem : i) }));
+                            await inventoryService.updateItem(normalizedItem.id, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size, initial_stock: normalizedItem.initialStock });
                           }}
                           surgeryData={virtualSurgeryData}
+                          unregisteredFromSurgery={surgeryUnregisteredItems}
                           onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
                         />
                       )}
@@ -1218,6 +1979,8 @@ const App: React.FC = () => {
                           rows={state.surgeryMaster['수술기록지'] || []}
                           onUpload={() => surgeryFileRef.current?.click()}
                           isLoading={state.isLoading}
+                          unregisteredFromSurgery={surgeryUnregisteredItems}
+                          onGoInventoryMaster={() => setState(prev => ({ ...prev, dashboardTab: 'inventory_master' }))}
                           hospitalWorkDays={state.hospitalWorkDays}
                           planState={state.planState}
                         />
@@ -1246,7 +2009,7 @@ const App: React.FC = () => {
                               } catch (error) {
                                 console.error('[App] 주문 삭제 실패, 롤백:', error);
                                 setState(prev => ({ ...prev, orders: prevOrders }));
-                                alert('주문 삭제에 실패했습니다.');
+                                showAlertToast('주문 삭제에 실패했습니다.', 'error');
                               }
                             }}
                             onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
@@ -1299,10 +2062,18 @@ const App: React.FC = () => {
               {state.currentView === 'landing' && <LandingPage onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))} onAnalyze={() => setState(p => ({ ...p, currentView: 'analyze' }))} />}
               {state.currentView === 'login' && <AuthForm type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} />}
               {state.currentView === 'signup' && <AuthForm type="signup" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} />}
+              {state.currentView === 'invite' && inviteInfo && (
+                <AuthForm
+                  type="invite"
+                  inviteInfo={inviteInfo}
+                  onSuccess={handleLoginSuccess}
+                  onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))}
+                />
+              )}
               {state.currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
               {state.currentView === 'pricing' && (
                 <PricingPage
-                  onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'login' : 'signup' }))}
+                  onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup' }))}
                   currentPlan={state.planState?.plan}
                   isLoggedIn={!!state.user}
                   userName={state.user?.name}
@@ -1314,13 +2085,13 @@ const App: React.FC = () => {
                       if (ok) {
                         const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
                         setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
-                        alert(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.`);
+                        showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.`, 'success');
                       } else {
-                        alert('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.');
+                        showAlertToast('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.', 'error');
                       }
                     } catch (err) {
                       console.error('[App] Plan change error:', err);
-                      alert('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.');
+                      showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
                     }
                   } : undefined}
                   onRequestPayment={state.user?.hospitalId ? async (plan, billing, contactName, contactPhone, paymentMethod, receiptType) => {
@@ -1337,17 +2108,17 @@ const App: React.FC = () => {
                         receiptType,
                       });
                       if (result.success) {
-                        alert('결제 요청이 완료되었습니다. 입력하신 연락처로 결제 안내 문자가 발송됩니다.');
+                        showAlertToast('결제 요청이 완료되었습니다. 입력하신 연락처로 결제 안내 문자가 발송됩니다.', 'success');
                         const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
                         setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
                         return true;
                       } else {
-                        alert(result.error || '결제 요청에 실패했습니다. 다시 시도해주세요.');
+                        showAlertToast(result.error || '결제 요청에 실패했습니다. 다시 시도해주세요.', 'error');
                         return false;
                       }
                     } catch (err) {
                       console.error('[App] Payment request error:', err);
-                      alert('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.');
+                      showAlertToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
                       return false;
                     }
                   } : undefined}
@@ -1442,6 +2213,43 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 확인 모달 */}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          tip={confirmModal.tip}
+          confirmLabel={confirmModal.confirmLabel}
+          confirmColor={confirmModal.confirmColor}
+          icon={confirmModal.icon}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+
+      {inventoryCompare && (
+        <InventoryCompareModal
+          duplicates={inventoryCompare.duplicates}
+          newItems={inventoryCompare.newItems}
+          onConfirm={handleConfirmApplyToInventory}
+          onCancel={() => setInventoryCompare(null)}
+        />
+      )}
+
+      {/* Alert Toast */}
+      {alertToast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${
+          alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+        }`}>
+          {alertToast.type === 'success' ? (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {alertToast.message}
         </div>
       )}
     </div >
