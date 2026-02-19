@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { DbProfile, UserRole, PlanType, BillingCycle, PLAN_NAMES, DbResetRequest } from '../types';
+import { DbProfile, UserRole, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, DbResetRequest } from '../types';
 import { resetService } from '../services/resetService';
 import NoticeEditor from './NoticeEditor';
 import { sanitizeRichHtml } from '../services/htmlSanitizer';
+import ConfirmModal from './ConfirmModal';
+import { useToast } from '../hooks/useToast';
 
 interface SystemAdminDashboardProps {
     onLogout: () => void;
@@ -21,6 +23,7 @@ interface DbHospitalRow {
     plan_changed_at: string | null;
     billing_cycle: string | null;
     created_at: string;
+    base_stock_edit_count: number;
 }
 
 const ROLE_MAP: Record<string, string> = {
@@ -33,10 +36,13 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [profiles, setProfiles] = useState<DbProfile[]>([]);
     const [resetRequests, setResetRequests] = useState<DbResetRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [editingPlan, setEditingPlan] = useState<string | null>(null);
+    const [planModal, setPlanModal] = useState<{ hospitalId: string; hospitalName: string } | null>(null);
     const [planForm, setPlanForm] = useState<{ plan: PlanType; cycle: BillingCycle }>({ plan: 'free', cycle: 'monthly' });
     const [planSaving, setPlanSaving] = useState(false);
     const [resetActionLoading, setResetActionLoading] = useState<string | null>(null);
+    const [editCountResetting, setEditCountResetting] = useState<string | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'amber' | 'indigo'; confirmLabel?: string; onConfirm: () => void } | null>(null);
+    const { toast, showToast } = useToast();
 
     // 매뉴얼 관련 state
     interface ManualEntry { id: string; title: string; content: string; category: string; updated_at: string; created_at: string; }
@@ -77,11 +83,19 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         setManualSaving(false);
     };
 
-    const deleteManual = async (id: string) => {
-        if (!window.confirm('이 매뉴얼을 삭제하시겠습니까?')) return;
-        await supabase.from('admin_manuals').delete().eq('id', id);
-        if (manualSelectedId === id) setManualSelectedId(null);
-        await loadManuals();
+    const deleteManual = (id: string) => {
+        setConfirmModal({
+            title: '매뉴얼 삭제',
+            message: '이 매뉴얼을 삭제하시겠습니까?',
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                await supabase.from('admin_manuals').delete().eq('id', id);
+                if (manualSelectedId === id) setManualSelectedId(null);
+                await loadManuals();
+            },
+        });
     };
 
     const loadData = async () => {
@@ -126,17 +140,33 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         return hospitals.find(h => h.id === hospitalId) || null;
     };
 
-    const handleAssignPlan = async (hospitalId: string) => {
+    const handleResetEditCount = async (hospitalId: string) => {
+        setEditCountResetting(hospitalId);
+        const { error } = await supabase
+            .from('hospitals')
+            .update({ base_stock_edit_count: 0 })
+            .eq('id', hospitalId);
+        if (error) {
+            showToast('초기화 실패: ' + error.message, 'error');
+        } else {
+            setHospitals(prev => prev.map(h => h.id === hospitalId ? { ...h, base_stock_edit_count: 0 } : h));
+            showToast('사용이력이 초기화됐습니다.', 'success');
+        }
+        setEditCountResetting(null);
+    };
+
+    const handleAssignPlan = async () => {
+        if (!planModal) return;
         setPlanSaving(true);
-        const { data, error } = await supabase.rpc('admin_assign_plan', {
-            p_hospital_id: hospitalId,
+        const { error } = await supabase.rpc('admin_assign_plan', {
+            p_hospital_id: planModal.hospitalId,
             p_plan: planForm.plan,
             p_billing_cycle: planForm.plan === 'free' || planForm.plan === 'ultimate' ? null : planForm.cycle,
         });
         if (error) {
-            alert('플랜 배정 실패: ' + error.message);
+            showToast('플랜 배정 실패: ' + error.message, 'error');
         } else {
-            setEditingPlan(null);
+            setPlanModal(null);
             await loadData();
         }
         setPlanSaving(false);
@@ -178,6 +208,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     };
 
     return (
+        <>
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
             {/* 사이드바 */}
             <aside className="w-64 bg-slate-900 flex flex-col flex-shrink-0 shadow-2xl relative z-20">
@@ -320,95 +351,87 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                     <table className="w-full">
                                         <thead className="bg-slate-50 border-b border-slate-100">
                                             <tr>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">병원명</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">원장 (관리자)</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">구성원</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">플랜</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">변경일</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">만료일</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">관리</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">병원명</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">원장 (관리자)</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">구성원</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">플랜</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">변경일</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">만료일</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">기초재고 편집</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {hospitals.map(h => (
                                                 <tr key={h.id} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                                                             </div>
-                                                            <span className="font-bold text-slate-800">{h.name}</span>
+                                                            <span className="text-xs font-bold text-slate-800">{h.name}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-slate-600 font-medium">{getMasterName(h.master_admin_id)}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full text-xs font-bold border border-indigo-100">
-                                                            {getHospitalMemberCount(h.id)}명
-                                                        </span>
+                                                    <td className="px-4 py-3 text-xs text-slate-600 font-medium">{getMasterName(h.master_admin_id)}</td>
+                                                    <td className="px-4 py-3">
+                                                        {(() => {
+                                                            const current = getHospitalMemberCount(h.id);
+                                                            const max = PLAN_LIMITS[h.plan as PlanType]?.maxUsers ?? 1;
+                                                            const maxLabel = max === Infinity ? '∞' : String(max);
+                                                            const isFull = max !== Infinity && current >= max;
+                                                            return (
+                                                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${isFull ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
+                                                                    {current}<span className="font-normal opacity-60">/{maxLabel}명</span>
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${h.plan === 'free' ? 'bg-slate-50 text-slate-600 border-slate-200' : h.plan === 'ultimate' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
+                                                    <td className="px-4 py-3">
+                                                        <button
+                                                            onClick={() => {
+                                                                setPlanModal({ hospitalId: h.id, hospitalName: h.name });
+                                                                setPlanForm({ plan: h.plan as PlanType, cycle: (h.billing_cycle as BillingCycle) || 'monthly' });
+                                                            }}
+                                                            className={`px-2 py-0.5 rounded-full text-xs font-bold border cursor-pointer hover:opacity-75 transition-opacity ${h.plan === 'free' ? 'bg-slate-50 text-slate-600 border-slate-200' : h.plan === 'ultimate' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}
+                                                        >
                                                             {PLAN_NAMES[h.plan as PlanType] || h.plan}
-                                                        </span>
+                                                        </button>
                                                         {h.billing_cycle && (
                                                             <span className="ml-1 text-[10px] text-slate-400">{h.billing_cycle === 'yearly' ? '연간' : '월간'}</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs text-slate-400">
+                                                    <td className="px-4 py-3 text-xs text-slate-400">
                                                         {h.plan_changed_at ? new Date(h.plan_changed_at).toLocaleDateString('ko-KR') : '-'}
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs text-slate-400">
+                                                    <td className="px-4 py-3 text-xs text-slate-400">
                                                         {h.plan_expires_at ? new Date(h.plan_expires_at).toLocaleDateString('ko-KR') : '-'}
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        {editingPlan === h.id ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <select
-                                                                    value={planForm.plan}
-                                                                    onChange={e => setPlanForm(f => ({ ...f, plan: e.target.value as PlanType }))}
-                                                                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none"
-                                                                >
-                                                                    <option value="free">Free</option>
-                                                                    <option value="basic">Basic</option>
-                                                                    <option value="plus">Plus</option>
-                                                                    <option value="business">Business</option>
-                                                                    <option value="ultimate">Ultimate</option>
-                                                                </select>
-                                                                {planForm.plan !== 'free' && planForm.plan !== 'ultimate' && (
-                                                                    <select
-                                                                        value={planForm.cycle}
-                                                                        onChange={e => setPlanForm(f => ({ ...f, cycle: e.target.value as BillingCycle }))}
-                                                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                    <td className="px-4 py-3">
+                                                        {(() => {
+                                                            const used = h.base_stock_edit_count ?? 0;
+                                                            const max = PLAN_LIMITS[h.plan as PlanType]?.maxBaseStockEdits ?? 0;
+                                                            const maxLabel = max === Infinity ? '∞' : String(max);
+                                                            const isExhausted = max !== Infinity && used >= max;
+                                                            return (
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={`text-xs font-bold tabular-nums ${isExhausted ? 'text-rose-600' : 'text-slate-700'}`}>
+                                                                        {used}<span className="text-slate-400 font-normal">/{maxLabel}</span>
+                                                                    </span>
+                                                                    <button
+                                                                        onClick={() => setConfirmModal({
+                                                                            title: '사용이력 초기화',
+                                                                            message: `${h.name}의 기초재고 편집 사용이력을 0으로 초기화하시겠습니까?`,
+                                                                            confirmColor: 'amber',
+                                                                            confirmLabel: '초기화',
+                                                                            onConfirm: async () => { setConfirmModal(null); await handleResetEditCount(h.id); },
+                                                                        })}
+                                                                        disabled={editCountResetting === h.id || used === 0}
+                                                                        className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                                                                     >
-                                                                        <option value="monthly">월간</option>
-                                                                        <option value="yearly">연간</option>
-                                                                    </select>
-                                                                )}
-                                                                <button
-                                                                    onClick={() => handleAssignPlan(h.id)}
-                                                                    disabled={planSaving}
-                                                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-bold"
-                                                                >
-                                                                    {planSaving ? '...' : '적용'}
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setEditingPlan(null)}
-                                                                    className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
-                                                                >
-                                                                    취소
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingPlan(h.id);
-                                                                    setPlanForm({ plan: h.plan as PlanType, cycle: (h.billing_cycle as BillingCycle) || 'monthly' });
-                                                                }}
-                                                                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-colors"
-                                                            >
-                                                                플랜 변경
-                                                            </button>
-                                                        )}
+                                                                        {editCountResetting === h.id ? '...' : '초기화'}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -467,13 +490,21 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                     {isActionable && (
                                                         <div className="flex items-center gap-2 flex-shrink-0">
                                                             <button
-                                                                onClick={async () => {
-                                                                    if (!window.confirm(`${hospital?.name || ''}의 모든 데이터를 즉시 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-                                                                    setResetActionLoading(req.id);
-                                                                    const ok = await resetService.approveImmediate(req.id, req.hospital_id);
-                                                                    if (ok) await loadData();
-                                                                    else alert('초기화에 실패했습니다.');
-                                                                    setResetActionLoading(null);
+                                                                onClick={() => {
+                                                                    setConfirmModal({
+                                                                        title: '즉시 초기화',
+                                                                        message: `${hospital?.name || ''}의 모든 데이터를 즉시 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+                                                                        confirmColor: 'rose',
+                                                                        confirmLabel: '즉시 초기화',
+                                                                        onConfirm: async () => {
+                                                                            setConfirmModal(null);
+                                                                            setResetActionLoading(req.id);
+                                                                            const ok = await resetService.approveImmediate(req.id, req.hospital_id);
+                                                                            if (ok) await loadData();
+                                                                            else showToast('초기화에 실패했습니다.', 'error');
+                                                                            setResetActionLoading(null);
+                                                                        },
+                                                                    });
                                                                 }}
                                                                 disabled={resetActionLoading === req.id}
                                                                 className="px-3 py-2 text-xs font-bold text-white bg-rose-600 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
@@ -481,13 +512,21 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                                 {resetActionLoading === req.id ? '...' : '즉시 초기화'}
                                                             </button>
                                                             <button
-                                                                onClick={async () => {
-                                                                    if (!window.confirm(`${hospital?.name || ''}의 데이터를 7일 후 초기화 예약하시겠습니까?\n신청자가 기간 내 취소할 수 있습니다.`)) return;
-                                                                    setResetActionLoading(req.id);
-                                                                    const ok = await resetService.approveScheduled(req.id);
-                                                                    if (ok) await loadData();
-                                                                    else alert('예약에 실패했습니다.');
-                                                                    setResetActionLoading(null);
+                                                                onClick={() => {
+                                                                    setConfirmModal({
+                                                                        title: '7일 후 초기화 예약',
+                                                                        message: `${hospital?.name || ''}의 데이터를 7일 후 초기화 예약하시겠습니까?\n신청자가 기간 내 취소할 수 있습니다.`,
+                                                                        confirmColor: 'amber',
+                                                                        confirmLabel: '예약',
+                                                                        onConfirm: async () => {
+                                                                            setConfirmModal(null);
+                                                                            setResetActionLoading(req.id);
+                                                                            const ok = await resetService.approveScheduled(req.id);
+                                                                            if (ok) await loadData();
+                                                                            else showToast('예약에 실패했습니다.', 'error');
+                                                                            setResetActionLoading(null);
+                                                                        },
+                                                                    });
                                                                 }}
                                                                 disabled={resetActionLoading === req.id}
                                                                 className="px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
@@ -495,12 +534,20 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                                 7일 후 초기화
                                                             </button>
                                                             <button
-                                                                onClick={async () => {
-                                                                    if (!window.confirm('이 요청을 거절하시겠습니까?')) return;
-                                                                    setResetActionLoading(req.id);
-                                                                    await resetService.rejectRequest(req.id);
-                                                                    await loadData();
-                                                                    setResetActionLoading(null);
+                                                                onClick={() => {
+                                                                    setConfirmModal({
+                                                                        title: '요청 거절',
+                                                                        message: '이 요청을 거절하시겠습니까?',
+                                                                        confirmColor: 'rose',
+                                                                        confirmLabel: '거절',
+                                                                        onConfirm: async () => {
+                                                                            setConfirmModal(null);
+                                                                            setResetActionLoading(req.id);
+                                                                            await resetService.rejectRequest(req.id);
+                                                                            await loadData();
+                                                                            setResetActionLoading(null);
+                                                                        },
+                                                                    });
                                                                 }}
                                                                 disabled={resetActionLoading === req.id}
                                                                 className="px-3 py-2 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
@@ -752,6 +799,75 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                 </main>
             </div>
         </div>
+        {planModal && (
+            <div className="fixed inset-0 bg-black/50 z-[150] flex items-center justify-center p-4" onClick={() => !planSaving && setPlanModal(null)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+                    <h2 className="text-base font-bold text-slate-800 mb-1">플랜 변경</h2>
+                    <p className="text-xs text-slate-500 mb-5">{planModal.hospitalName}</p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1.5">플랜</label>
+                            <select
+                                value={planForm.plan}
+                                onChange={e => setPlanForm(f => ({ ...f, plan: e.target.value as PlanType }))}
+                                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                                <option value="free">Free</option>
+                                <option value="basic">Basic</option>
+                                <option value="plus">Plus</option>
+                                <option value="business">Business</option>
+                                <option value="ultimate">Ultimate</option>
+                            </select>
+                        </div>
+                        {planForm.plan !== 'free' && planForm.plan !== 'ultimate' && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">결제 주기</label>
+                                <select
+                                    value={planForm.cycle}
+                                    onChange={e => setPlanForm(f => ({ ...f, cycle: e.target.value as BillingCycle }))}
+                                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="monthly">월간</option>
+                                    <option value="yearly">연간</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex gap-2 justify-end mt-6">
+                        <button
+                            onClick={() => setPlanModal(null)}
+                            disabled={planSaving}
+                            className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                            취소
+                        </button>
+                        <button
+                            onClick={handleAssignPlan}
+                            disabled={planSaving}
+                            className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                        >
+                            {planSaving ? '적용 중...' : '적용'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        {confirmModal && (
+            <ConfirmModal
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmColor={confirmModal.confirmColor ?? 'rose'}
+                confirmLabel={confirmModal.confirmLabel ?? '확인'}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(null)}
+            />
+        )}
+        {toast && (
+            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                {toast.message}
+            </div>
+        )}
+        </>
     );
 };
 
