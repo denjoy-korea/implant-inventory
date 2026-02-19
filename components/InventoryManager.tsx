@@ -151,6 +151,43 @@ function buildInventoryDuplicateKeyLocal(
   return `${manufacturerKey}|${brandKey}|${sizeKey}`;
 }
 
+function toMonthKey(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+
+  let date: Date | null = null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    date = value;
+  } else if (typeof value === 'number' && Number.isFinite(value)) {
+    // Excel serial date -> JS Date
+    const excelEpochMs = Date.UTC(1899, 11, 30);
+    date = new Date(excelEpochMs + value * 24 * 60 * 60 * 1000);
+  } else {
+    const parsed = new Date(String(value));
+    if (!Number.isNaN(parsed.getTime())) date = parsed;
+  }
+
+  if (!date) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+function buildSparklinePath(values: number[], width: number, height: number): string {
+  if (values.length === 0) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
+
+  return values
+    .map((value, index) => {
+      const x = index * stepX;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+}
+
 interface UnregisteredReviewItem extends SurgeryUnregisteredItem {
   rowKey: string;
   canonicalManufacturer: string;
@@ -335,23 +372,83 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     return Math.max(...chartData.map(d => d.usageCount), 1);
   }, [chartData]);
 
-  // 긴급도 계산: 현재재고 ÷ 일최대사용 → 소진 예상일
-  const urgencyData = useMemo(() => {
-    const items = filteredInventory
-      .filter(i => i.usageCount > 0 && (i.dailyMaxUsage ?? 0) > 0)
-      .map(i => {
-        const daily = i.dailyMaxUsage ?? 0;
-        const daysLeft = daily > 0 ? Math.floor(i.currentStock / daily) : Infinity;
-        const level: 'critical' | 'warning' | 'ok' =
-          daysLeft <= 3 ? 'critical' : daysLeft <= 7 ? 'warning' : 'ok';
-        return { ...i, daysLeft, level };
-      })
-      .sort((a, b) => a.daysLeft - b.daysLeft);
-    const critical = items.filter(i => i.level === 'critical');
-    const warning  = items.filter(i => i.level === 'warning');
-    const mostUrgent = items[0] ?? null;
-    return { critical, warning, mostUrgent };
-  }, [filteredInventory]);
+  const sparklineMonths = useMemo(() => {
+    const retentionMonths = PLAN_LIMITS[plan]?.retentionMonths ?? 3;
+    return Math.min(Math.max(retentionMonths, 3), 24);
+  }, [plan]);
+
+  const sparklineSeriesByItemId = useMemo(() => {
+    const series = new Map<string, number[]>();
+    if (!surgeryData || chartData.length === 0) return series;
+
+    const sheet = surgeryData.sheets[surgeryData.activeSheetName];
+    if (!sheet) return series;
+
+    const rows = sheet.rows || [];
+    const rowMonthKeys = rows
+      .map(row => toMonthKey(row['날짜'] ?? row['수술일']))
+      .filter((month): month is string => !!month);
+    const anchorMonth = rowMonthKeys.sort().pop() ?? toMonthKey(new Date()) ?? '';
+    if (!anchorMonth) return series;
+
+    const [anchorYearStr, anchorMonthStr] = anchorMonth.split('-');
+    const anchorDate = new Date(Number(anchorYearStr), Number(anchorMonthStr) - 1, 1);
+
+    const monthKeys: string[] = [];
+    for (let i = sparklineMonths - 1; i >= 0; i -= 1) {
+      const d = new Date(anchorDate);
+      d.setMonth(d.getMonth() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      monthKeys.push(`${y}-${m}`);
+    }
+    const monthIndex = new Map<string, number>();
+    monthKeys.forEach((key, index) => monthIndex.set(key, index));
+
+    const itemKeyToIds = new Map<string, string[]>();
+    chartData.forEach(item => {
+      const fixed = fixIbsImplant(item.manufacturer, item.brand);
+      const key = `${normalizeSurgery(fixed.manufacturer)}|${normalizeSurgery(fixed.brand)}|${getSizeMatchKey(item.size, fixed.manufacturer)}`;
+      const list = itemKeyToIds.get(key) ?? [];
+      if (!list.includes(item.id)) list.push(item.id);
+      itemKeyToIds.set(key, list);
+      if (!series.has(item.id)) series.set(item.id, new Array(sparklineMonths).fill(0));
+    });
+
+    rows.forEach(row => {
+      const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
+      if (isTotalRow) return;
+      const cls = String(row['구분'] || '');
+      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      const record = String(row['수술기록'] || '');
+      if (record.includes('[GBR Only]')) return;
+
+      const month = toMonthKey(row['날짜'] ?? row['수술일']);
+      if (!month) return;
+      const idx = monthIndex.get(month);
+      if (idx === undefined) return;
+
+      const fixed = fixIbsImplant(
+        String(row['제조사'] || '').trim(),
+        String(row['브랜드'] || '').trim()
+      );
+      const key = `${normalizeSurgery(fixed.manufacturer)}|${normalizeSurgery(fixed.brand)}|${getSizeMatchKey(String(row['규격(SIZE)'] || '').trim(), fixed.manufacturer)}`;
+      const targetIds = itemKeyToIds.get(key);
+      if (!targetIds || targetIds.length === 0) return;
+
+      const qtyValue = row['갯수'] !== undefined ? Number(row['갯수']) : 0;
+      const qty = Number.isFinite(qtyValue) ? qtyValue : 0;
+      if (qty <= 0) return;
+
+      targetIds.forEach(id => {
+        const arr = series.get(id);
+        if (!arr) return;
+        arr[idx] += qty;
+      });
+    });
+
+    return series;
+  }, [chartData, sparklineMonths, surgeryData]);
 
   // KPI 집계
   const kpiData = useMemo(() => {
@@ -372,6 +469,29 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     const usageVsRecommended = totalRecommended > 0 ? Math.round((totalUsage / totalRecommended) * 100) : null;
 
     return { totalUsage, totalStock, totalItems, shortageCount, shortageRate, shortageDeficit, stockMonths, usageVsRecommended };
+  }, [filteredInventory, monthFactor]);
+
+  const supplyCoverageData = useMemo(() => {
+    const rows = filteredInventory.map(item => {
+      const recommended = Math.max(1, Math.ceil((item.recommendedStock ?? 0) * monthFactor));
+      const shortage = Math.max(0, recommended - item.currentStock);
+      return { item, recommended, shortage };
+    });
+
+    const needsReplenishment = rows.filter(row => row.shortage > 0);
+    const immediateReplenishment = needsReplenishment.filter(row => row.item.currentStock <= 0);
+    const partialReplenishment = needsReplenishment.filter(row => row.item.currentStock > 0);
+    const secured = rows.filter(row => row.shortage === 0);
+    const topNeed = [...needsReplenishment].sort((a, b) => b.shortage - a.shortage)[0] ?? null;
+
+    return {
+      needsReplenishmentCount: needsReplenishment.length,
+      immediateReplenishmentCount: immediateReplenishment.length,
+      partialReplenishmentCount: partialReplenishment.length,
+      securedCount: secured.length,
+      totalShortage: needsReplenishment.reduce((sum, row) => sum + row.shortage, 0),
+      topNeed,
+    };
   }, [filteredInventory, monthFactor]);
 
   // 미사용 / 장기 미사용 품목 분류 (최적화 대상)
@@ -957,15 +1077,23 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 {kpiData.totalStock < 0 ? (
                   <p className="text-[10px] font-bold text-rose-500 mt-0.5">⚠ 입력 필요</p>
                 ) : (() => {
-                  // 1일 최대사용량 기준 건강 분류
-                  const itemsWithUsage = visibleInventory.filter(i => (i.dailyMaxUsage ?? 0) > 0);
-                  const healthy = itemsWithUsage.filter(i => i.currentStock > (i.dailyMaxUsage ?? 0)).length;
-                  const normal = itemsWithUsage.filter(i => i.currentStock === (i.dailyMaxUsage ?? 0)).length;
-                  const caution = itemsWithUsage.filter(i => i.currentStock < (i.dailyMaxUsage ?? 0)).length;
-                  if (itemsWithUsage.length === 0) return null;
+                  // 권장량 기준 건강 분류 (예측 소진일 제거)
+                  const itemsWithDemand = visibleInventory.filter(i => (i.usageCount ?? 0) > 0 || (i.monthlyAvgUsage ?? 0) > 0 || (i.dailyMaxUsage ?? 0) > 0);
+                  const healthy = itemsWithDemand.filter(i => i.currentStock >= Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor))).length;
+                  const normal = itemsWithDemand.filter(i => {
+                    const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
+                    const threshold = Math.ceil(recommended * 0.7);
+                    return i.currentStock < recommended && i.currentStock >= threshold;
+                  }).length;
+                  const caution = itemsWithDemand.filter(i => {
+                    const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
+                    const threshold = Math.ceil(recommended * 0.7);
+                    return i.currentStock < threshold;
+                  }).length;
+                  if (itemsWithDemand.length === 0) return null;
                   return (
                     <div className="mt-0.5 space-y-0.5">
-                      <p className="text-[9px] text-slate-400 font-medium">1일 최대사용량 기준</p>
+                      <p className="text-[9px] text-slate-400 font-medium">권장량 기준</p>
                       <div className="flex items-center gap-1.5">
                         {healthy > 0 && <span className="text-[9px] font-bold text-emerald-600">건강 {healthy}</span>}
                         {normal > 0 && <span className="text-[9px] font-bold text-amber-500">보통 {normal}</span>}
@@ -1188,6 +1316,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">현재재고</p>
                   <p className="text-[9px] font-bold text-rose-400 text-center uppercase tracking-wide">부족분</p>
                 </div>
+                <div className="w-[176px] shrink-0 text-center">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">사용 추이</p>
+                  <p className="text-[9px] font-semibold text-indigo-400 mt-0.5">최근 {sparklineMonths}개월</p>
+                </div>
                 <span className="w-2 shrink-0" />
               </div>
             )}
@@ -1245,6 +1377,33 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                         : <p className="text-xs font-bold tabular-nums text-center text-emerald-500">충분</p>;
                     })()}
                   </div>
+                  {/* 스파크라인 */}
+                  <div className="w-[176px] shrink-0 px-2">
+                    {(() => {
+                      const series = sparklineSeriesByItemId.get(item.id) ?? [];
+                      if (!series.some(v => v > 0)) {
+                        return (
+                          <div className="h-8 rounded-lg border border-slate-100 bg-slate-50/60 flex items-center justify-center">
+                            <span className="text-[9px] font-semibold text-slate-300">데이터 없음</span>
+                          </div>
+                        );
+                      }
+
+                      const width = 152;
+                      const height = 28;
+                      const path = buildSparklinePath(series, width, height);
+                      const maxVal = Math.max(...series, 0);
+                      const lastVal = series[series.length - 1] ?? 0;
+                      return (
+                        <div className="h-8 rounded-lg border border-indigo-100 bg-indigo-50/40 px-2 py-1">
+                          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none" aria-label="품목 사용 추이">
+                            <path d={path} fill="none" stroke={isTop ? '#4f46e5' : '#94a3ff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx={((series.length - 1) / Math.max(1, series.length - 1)) * width} cy={height - ((lastVal - Math.min(...series)) / Math.max(1, maxVal - Math.min(...series))) * height} r="1.8" fill={isTop ? '#4f46e5' : '#6366f1'} />
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   {/* 재고 부족 닷 */}
                   <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
                 </div>
@@ -1262,68 +1421,78 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             </div>
           </div>
 
-          {/* ── 우측: 긴급도 패널 ── */}
+          {/* ── 우측: 재고 확보 패널 ── */}
           <div className="lg:border-l border-t lg:border-t-0 border-slate-100 px-5 py-5 flex flex-row lg:flex-col justify-between gap-4 min-w-[180px]">
 
-            {/* 가장 긴급한 품목 */}
+            {/* 우선 확보 품목 */}
             <div className="flex-1">
-              <p className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">최우선 발주</p>
-              {urgencyData.mostUrgent ? (
-                <div className={`rounded-xl px-3 py-2.5 ${urgencyData.mostUrgent.level === 'critical' ? 'bg-rose-50 border border-rose-100' : 'bg-amber-50 border border-amber-100'}`}>
-                  <p className={`text-[10px] font-black leading-none ${urgencyData.mostUrgent.level === 'critical' ? 'text-rose-600' : 'text-amber-600'}`}>
-                    {urgencyData.mostUrgent.brand}
+              <p className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">우선 확보 품목</p>
+              {supplyCoverageData.topNeed ? (
+                <div className="rounded-xl px-3 py-2.5 bg-amber-50 border border-amber-100">
+                  <p className="text-[10px] font-black leading-none text-amber-700">
+                    {supplyCoverageData.topNeed.item.brand}
                   </p>
-                  <p className={`text-[11px] font-bold mt-0.5 ${urgencyData.mostUrgent.level === 'critical' ? 'text-rose-500' : 'text-amber-500'}`}>
-                    {urgencyData.mostUrgent.size}
+                  <p className="text-[11px] font-bold mt-0.5 text-amber-600">
+                    {supplyCoverageData.topNeed.item.size}
                   </p>
                   <div className="flex items-baseline gap-1 mt-1.5">
-                    <span className={`text-xl font-black tabular-nums leading-none ${urgencyData.mostUrgent.level === 'critical' ? 'text-rose-600' : 'text-amber-600'}`}>
-                      {urgencyData.mostUrgent.daysLeft <= 0 ? '0' : urgencyData.mostUrgent.daysLeft}
+                    <span className="text-xl font-black tabular-nums leading-none text-amber-700">
+                      {supplyCoverageData.topNeed.shortage}
                     </span>
-                    <span className={`text-[10px] font-bold ${urgencyData.mostUrgent.level === 'critical' ? 'text-rose-400' : 'text-amber-400'}`}>
-                      일 후 소진
+                    <span className="text-[10px] font-bold text-amber-500">
+                      개 보충 필요
                     </span>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-xl px-3 py-2.5 bg-emerald-50 border border-emerald-100">
-                  <p className="text-[11px] font-black text-emerald-600">전 품목 안전</p>
-                  <p className="text-[10px] text-emerald-400 mt-0.5">긴급 품목 없음</p>
+                  <p className="text-[11px] font-black text-emerald-600">전 품목 권장량 충족</p>
+                  <p className="text-[10px] text-emerald-400 mt-0.5">추가 보충 필요 없음</p>
                 </div>
               )}
             </div>
 
             <div className="h-px w-full bg-slate-50 hidden lg:block" />
 
-            {/* 긴급도 요약 */}
+            {/* 확보 현황 */}
             <div className="flex-1">
-              <p className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">긴급도 현황</p>
+              <p className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-2">재고 확보 현황</p>
+              <p className="text-[9px] text-slate-300 font-semibold mb-2">권장량 기준</p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                    <span className="text-[10px] font-bold text-slate-500">3일 이내</span>
+                    <span className="text-[10px] font-bold text-slate-500">보충 필요</span>
                   </div>
-                  <span className={`text-[12px] font-black tabular-nums ${urgencyData.critical.length > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
-                    {urgencyData.critical.length}건
+                  <span className={`text-[12px] font-black tabular-nums ${supplyCoverageData.needsReplenishmentCount > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
+                    {supplyCoverageData.needsReplenishmentCount}종
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                    <span className="text-[10px] font-bold text-slate-500">7일 이내</span>
+                    <span className="text-[10px] font-bold text-slate-500">총 부족 수량</span>
                   </div>
-                  <span className={`text-[12px] font-black tabular-nums ${urgencyData.warning.length > 0 ? 'text-amber-600' : 'text-slate-300'}`}>
-                    {urgencyData.warning.length}건
+                  <span className={`text-[12px] font-black tabular-nums ${supplyCoverageData.totalShortage > 0 ? 'text-amber-600' : 'text-slate-300'}`}>
+                    {supplyCoverageData.totalShortage}개
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                    <span className="text-[10px] font-bold text-slate-500">안전</span>
+                    <span className="text-[10px] font-bold text-slate-500">권장량 충족</span>
                   </div>
                   <span className="text-[12px] font-black tabular-nums text-emerald-600">
-                    {filteredInventory.filter(i => i.usageCount > 0 && (i.dailyMaxUsage ?? 0) > 0 && Math.floor(i.currentStock / (i.dailyMaxUsage ?? 1)) > 7).length}건
+                    {supplyCoverageData.securedCount}종
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                    <span className="text-[10px] font-bold text-slate-500">즉시 보충</span>
+                  </div>
+                  <span className="text-[12px] font-black tabular-nums text-slate-600">
+                    {supplyCoverageData.immediateReplenishmentCount}종
                   </span>
                 </div>
               </div>
@@ -1345,7 +1514,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             <div className="w-1.5 h-1.5 rounded-full bg-rose-400" />
             <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-widest">재고 부족</span>
           </div>
-          <div className="ml-auto text-[9px] text-slate-300 font-medium">수술기록 연동 기준</div>
+          <div className="ml-auto text-[9px] text-slate-300 font-medium">수술 사용패턴 기반 권장량 기준</div>
         </div>
       </div>
 
@@ -1369,21 +1538,42 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">제조사</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">브랜드</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">규격</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 text-center">기초 재고</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 text-center">
-                  <div>사용량</div>
-                  <div className="text-sm font-black text-rose-500 mt-1 tabular-nums">{filteredInventory.reduce((s, i) => s + i.usageCount, 0)}</div>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="h-4 mb-1" />
+                  제조사
                 </th>
-                <th className="px-6 py-3 text-[11px] font-bold text-indigo-400 text-center">월평균사용</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-indigo-400 text-center">일최대사용</th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 text-center">
-                  <div>현재 재고</div>
-                  <div className="text-sm font-black text-slate-800 mt-1 tabular-nums">{filteredInventory.reduce((s, i) => s + i.currentStock, 0)}</div>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="h-4 mb-1" />
+                  브랜드
                 </th>
-                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 text-center text-indigo-600">권장량</th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="h-4 mb-1" />
+                  규격
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <div className="h-4 mb-1" />
+                  기초 재고
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <div className="text-sm font-black text-rose-500 tabular-nums h-4 mb-1 flex items-center justify-center">{filteredInventory.reduce((s, i) => s + i.usageCount, 0)}</div>
+                  사용량
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-400 text-center">
+                  <div className="h-4 mb-1" />
+                  월평균사용
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-400 text-center">
+                  <div className="h-4 mb-1" />
+                  일최대사용
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <div className="text-sm font-black text-slate-800 tabular-nums h-4 mb-1 flex items-center justify-center">{filteredInventory.reduce((s, i) => s + i.currentStock, 0)}</div>
+                  현재 재고
+                </th>
+                <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-600 text-center">
+                  <div className="h-4 mb-1" />
+                  권장량
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
