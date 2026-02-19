@@ -1,12 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Hospital } from '../types';
 import { authService } from '../services/authService';
+import { supabase } from '../services/supabaseClient';
 import { dbToUser } from '../services/mappers';
+import { useToast } from '../hooks/useToast';
+
+interface InviteInfo {
+  token: string;
+  email: string;
+  name: string;
+  hospitalName: string;
+}
 
 interface AuthFormProps {
-  type: 'login' | 'signup';
+  type: 'login' | 'signup' | 'invite';
   onSuccess: (user: User) => void;
   onSwitch: () => void;
+  /** invite 모드에서 사전 로드된 초대 정보 */
+  inviteInfo?: InviteInfo;
 }
 
 type SignupStep = 'role_selection' | 'form_input';
@@ -24,7 +35,7 @@ const formatPhone = (value: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 };
 
-const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
+const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, inviteInfo }) => {
   const [step, setStep] = useState<SignupStep>('role_selection');
   const [userType, setUserType] = useState<UserType | null>(null);
 
@@ -41,8 +52,17 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
   const [findPhone, setFindPhone] = useState('');
   const [foundEmail, setFoundEmail] = useState<string | null>(null);
 
+  // invite 모드: 초대 정보 사전 입력
+  useEffect(() => {
+    if (type === 'invite' && inviteInfo) {
+      setEmail(inviteInfo.email);
+      setName(inviteInfo.name);
+    }
+  }, [type, inviteInfo]);
+
   // Reset state when switching between login/signup
   useEffect(() => {
+    if (type === 'invite') return;
     setErrorStatus(null);
     setStep('role_selection');
     setUserType(null);
@@ -55,12 +75,87 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
     setPasswordConfirm('');
   }, [type]);
 
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteInfo) return;
+    setErrorStatus(null);
+
+    const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+    if (!pwRegex.test(password)) {
+      setErrorStatus({ message: '비밀번호는 8자 이상, 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.' });
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setErrorStatus({ message: '비밀번호가 일치하지 않습니다.' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Supabase Auth 계정 생성 (dental_staff 역할)
+      let userId: string;
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: inviteInfo.email,
+        password,
+        options: {
+          data: { name: inviteInfo.name, role: 'dental_staff' },
+        },
+      });
+
+      if (authError) {
+        if (authError.message === 'User already registered') {
+          // 계정은 있지만 병원 미연결 상태 (이전 초대 수락 중 오류로 재시도) → 로그인으로 대체
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: inviteInfo.email,
+            password,
+          });
+          if (signInError || !signInData.user) {
+            setErrorStatus({ message: '이미 등록된 이메일입니다. 비밀번호를 다시 확인해주세요.' });
+            setIsSubmitting(false);
+            return;
+          }
+          userId = signInData.user.id;
+        } else {
+          setErrorStatus({ message: authError.message });
+          setIsSubmitting(false);
+          return;
+        }
+      } else if (!authData.user) {
+        setErrorStatus({ message: '계정 생성에 실패했습니다.' });
+        setIsSubmitting(false);
+        return;
+      } else {
+        userId = authData.user.id;
+      }
+
+      // 2. Edge Function으로 초대 수락 처리 (hospital_id 연결 + invitation 상태 업데이트)
+      const { data: acceptData, error: acceptError } = await supabase.functions.invoke('accept-invite', {
+        body: { token: inviteInfo.token, userId },
+      });
+
+      if (acceptError || acceptData?.error) {
+        setErrorStatus({ message: acceptData?.error || '초대 수락 처리에 실패했습니다.' });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 3. 자동 로그인
+      await authService.signIn(inviteInfo.email, password);
+      window.location.reload();
+    } catch (err: any) {
+      setErrorStatus({ message: err.message || '오류가 발생했습니다.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleRoleSelect = (selectedType: UserType) => {
     setUserType(selectedType);
     setStep('form_input');
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast, showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +163,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
 
     if (type === 'signup') {
       if (!name || !email || !password) {
-        alert("모든 필드를 입력해주세요.");
+        showToast('모든 필드를 입력해주세요.', 'error');
         return;
       }
 
@@ -83,9 +178,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
         return;
       }
 
-      if (userType === 'dentist' && !hospitalName) { alert("병원명을 입력해주세요."); return; }
-      if (userType === 'dentist' && !phone) { alert("연락처를 입력해주세요."); return; }
-      if (userType === 'dentist' && !bizFile) { alert("사업자등록증을 첨부해주세요."); return; }
+      if (userType === 'dentist' && !hospitalName) { showToast('병원명을 입력해주세요.', 'error'); return; }
+      if (userType === 'dentist' && !phone) { showToast('연락처를 입력해주세요.', 'error'); return; }
+      if (userType === 'dentist' && !bizFile) { showToast('사업자등록증을 첨부해주세요.', 'error'); return; }
 
       setIsSubmitting(true);
       const result = await authService.signUp({
@@ -112,7 +207,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
         if (loginResult.success && loginResult.profile) {
           onSuccess(dbToUser(loginResult.profile));
         } else {
-          alert("회원가입 완료! 로그인해주세요.");
+          showToast('회원가입 완료! 로그인해주세요.', 'success');
           onSwitch();
         }
       }
@@ -120,7 +215,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
     } else {
       // Login
       if (!email || !password) {
-        alert("아이디와 비밀번호를 입력해주세요.");
+        showToast('아이디와 비밀번호를 입력해주세요.', 'error');
         return;
       }
 
@@ -141,6 +236,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
   // Render Role Selection Screen
   if (type === 'signup' && step === 'role_selection') {
     return (
+      <>
       <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
         <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
           {/* Left Panel - Branding */}
@@ -236,6 +332,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
@@ -270,9 +367,158 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
   // ── Shared input style ──
   const inputClass = "w-full h-12 px-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 outline-none transition-all text-sm placeholder:text-slate-300";
 
+  // ── Invite Accept Form ──
+  if (type === 'invite' && inviteInfo) {
+    return (
+      <>
+      <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
+        <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
+          {/* Left Panel */}
+          <div className="md:col-span-2 bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 p-8 flex flex-col justify-between text-white relative overflow-hidden">
+            <div className="absolute top-[-40px] right-[-40px] w-48 h-48 bg-white/10 rounded-full" />
+            <div className="absolute bottom-[-60px] left-[-20px] w-64 h-64 bg-white/5 rounded-full" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-2.5 mb-10">
+                <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  </svg>
+                </div>
+                <span className="text-lg font-bold tracking-tight">DenJOY</span>
+              </div>
+
+              <div className="mb-6">
+                <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-3 py-1.5 mb-4">
+                  <svg className="w-3.5 h-3.5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-xs text-indigo-200 font-semibold">구성원 초대</span>
+                </div>
+                <h2 className="text-[22px] font-bold leading-snug mb-3">
+                  {inviteInfo.hospitalName}에<br />초대되었습니다.
+                </h2>
+                <p className="text-indigo-200 text-sm leading-relaxed">
+                  비밀번호를 설정하면<br />즉시 팀에 합류할 수 있습니다.
+                </p>
+              </div>
+
+              <div className="bg-white/10 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-indigo-300 uppercase tracking-wider font-semibold">치과</p>
+                    <p className="text-sm font-bold text-white">{inviteInfo.hospitalName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-indigo-300 uppercase tracking-wider font-semibold">수신자</p>
+                    <p className="text-sm font-bold text-white">{inviteInfo.name}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative z-10 mt-8 pt-6 border-t border-white/20">
+              <p className="text-xs text-indigo-300">본인이 아닐 경우 이 페이지를 닫아주세요.</p>
+            </div>
+          </div>
+
+          {/* Right Panel - Form */}
+          <div className="md:col-span-3 p-8 lg:p-10 flex flex-col justify-center">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900">계정 설정</h2>
+              <p className="text-sm text-slate-400 mt-1.5">비밀번호를 설정하면 팀에 합류됩니다.</p>
+            </div>
+
+            {errorStatus && (
+              <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+                {errorStatus.message}
+              </div>
+            )}
+
+            <form onSubmit={handleInviteSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">이름</label>
+                <input type="text" value={inviteInfo.name} disabled className={`${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed`} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">아이디 (이메일)</label>
+                <input type="email" value={inviteInfo.email} disabled className={`${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed`} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">비밀번호 <span className="text-rose-400">*</span></label>
+                  <input
+                    type="password"
+                    name="new-password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputClass}
+                    placeholder="••••••••"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">비밀번호 확인 <span className="text-rose-400">*</span></label>
+                  <input
+                    type="password"
+                    name="confirm-password"
+                    autoComplete="new-password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    className={`${inputClass} ${passwordConfirm && password !== passwordConfirm ? 'border-rose-300' : ''}`}
+                    placeholder="비밀번호 재입력"
+                    required
+                  />
+                  {passwordConfirm && password !== passwordConfirm && (
+                    <p className="text-xs text-rose-500 mt-1">비밀번호가 일치하지 않습니다.</p>
+                  )}
+                </div>
+              </div>
+              {renderPwHints()}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full h-12 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              >
+                {isSubmitting ? '처리 중...' : '초대 수락 및 계정 설정 완료'}
+              </button>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+              <button onClick={onSwitch} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                이미 계정이 있으신가요? 로그인
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
+        </div>
+      )}
+      </>
+    );
+  }
+
   // ── Login Form (2-column) ──
   if (type === 'login') {
     return (
+      <>
       <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
         <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
           {/* Left Panel - Branding */}
@@ -355,13 +601,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
               <button
                 type="button"
                 onClick={async () => {
-                  if (!email) { alert('이메일을 먼저 입력해주세요.'); return; }
+                  if (!email) { showToast('이메일을 먼저 입력해주세요.', 'error'); return; }
                   const result = await authService.resetPassword(email);
                   if (result.success) {
                     setResetEmailSent(true);
                     setErrorStatus({ message: `비밀번호 재설정 이메일을 ${email}로 발송했습니다.` });
                   } else {
-                    alert(result.error || '이메일 발송에 실패했습니다.');
+                    showToast(result.error || '이메일 발송에 실패했습니다.', 'error');
                   }
                 }}
                 className="hover:text-indigo-600 transition-colors"
@@ -392,7 +638,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
                         setFoundEmail(result.email);
                       } else {
                         setFoundEmail(null);
-                        alert(result.error || '계정을 찾을 수 없습니다.');
+                        showToast(result.error || '계정을 찾을 수 없습니다.', 'error');
                       }
                     }}
                     className="px-4 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-800 transition-colors"
@@ -418,12 +664,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
           </div>
         </div>
       </div>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
+        </div>
+      )}
+      </>
     );
   }
 
   // ── Staff Signup (2-column) ──
   if (type === 'signup' && userType === 'staff') {
     return (
+      <>
       <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
         <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
           {/* Left Panel - Branding */}
@@ -522,11 +775,18 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
           </div>
         </div>
       </div>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
+        </div>
+      )}
+      </>
     );
   }
 
   // ── Dentist Signup (2-column layout) ──
   return (
+    <>
     <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
       <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
         {/* Left Panel - Branding */}
@@ -644,6 +904,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch }) => {
         </div>
       </div>
     </div>
+    {toast && (
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        {toast.message}
+      </div>
+    )}
+    </>
   );
 };
 
