@@ -111,13 +111,57 @@ export const hospitalService = {
   },
 
   /** 이메일로 구성원 초대 (Supabase Edge Function 호출) */
-  async inviteMember(email: string, name: string, hospitalId: string): Promise<void> {
+  async inviteMember(email: string, name: string, hospitalId: string): Promise<{ inviteUrl: string; token: string }> {
     const { data, error } = await supabase.functions.invoke('invite-member', {
-      body: { email, name, hospitalId },
+      body: { email, name, hospitalId, siteUrl: window.location.origin },
     });
 
-    if (error) throw new Error('초대 이메일 발송에 실패했습니다.');
+    if (error) {
+      // FunctionsHttpError에서 실제 에러 메시지 추출
+      try {
+        const errBody = await (error as any).context?.json?.();
+        throw new Error(errBody?.error || '초대 링크 생성에 실패했습니다.');
+      } catch (e) {
+        if (e instanceof Error) throw e;
+      }
+      throw new Error('초대 링크 생성에 실패했습니다.');
+    }
     if (data?.error) throw new Error(data.error);
+    return { inviteUrl: data.inviteUrl, token: data.token };
+  },
+
+  /** 초대 대기 중인 초대 목록 조회 */
+  async getInvitedMembers(hospitalId: string): Promise<{ id: string; email: string; name: string; created_at: string; expires_at: string }[]> {
+    const { data, error } = await supabase
+      .from('member_invitations')
+      .select('id, email, name, created_at, expires_at')
+      .eq('hospital_id', hospitalId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return data ?? [];
+  },
+
+  /** 초대 취소 (status → expired) */
+  async cancelInvitation(invitationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('member_invitations')
+      .update({ status: 'expired' })
+      .eq('id', invitationId);
+
+    if (error) throw new Error('초대 취소에 실패했습니다.');
+  },
+
+  /** 초대 삭제 (DB에서 행 완전 삭제) */
+  async deleteInvitation(invitationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('member_invitations')
+      .delete()
+      .eq('id', invitationId);
+
+    if (error) throw new Error('초대 삭제에 실패했습니다.');
   },
 
   /** readonly 상태 멤버 조회 */

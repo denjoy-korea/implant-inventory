@@ -158,7 +158,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             onConfirm: async () => {
                 setConfirmModal(null);
                 try {
-                    await hospitalService.cancelInvitation(invitationId);
+                    await hospitalService.deleteInvitation(invitationId);
                     await loadData();
                     showToast('초대가 삭제되었습니다.', 'info');
                 } catch (error) {
