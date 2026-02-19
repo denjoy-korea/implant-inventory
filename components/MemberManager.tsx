@@ -35,6 +35,13 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
         loadData();
     }, [currentUser.hospitalId]);
 
+    // 다른 탭에서 초대 수락 후 돌아왔을 때 자동 새로고침
+    useEffect(() => {
+        const handleFocus = () => loadData();
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, []);
+
     const loadData = async () => {
         if (!currentUser.hospitalId) return;
 
