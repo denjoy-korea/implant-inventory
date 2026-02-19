@@ -991,17 +991,9 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               <div className="h-16 w-px bg-slate-100 mt-0.5" />
               {/* 재고 건강도 */}
               {(() => {
-                const activeItems = visibleInventory.filter(i => i.usageCount > 0);
-                const totalStock = Math.max(kpiData.totalStock, 1);
-                const activeStockRaw = activeItems.reduce((s, i) => s + Math.max(0, i.currentStock), 0);
-                // 감점: 월평균 20배 초과 + 일최대 > 현재재고 (과잉재고이나 피크 미달)
-                const penaltyItems = activeItems.filter(i =>
-                  i.currentStock > (i.monthlyAvgUsage ?? 0) * 20 &&
-                  (i.dailyMaxUsage ?? 0) > i.currentStock
-                );
-                const penaltyStock = penaltyItems.reduce((s, i) => s + i.currentStock, 0);
-                const adjustedActive = activeStockRaw - penaltyStock;
-                const rate = Math.round(Math.max(0, adjustedActive) / totalStock * 100);
+                const totalItems = Math.max(kpiData.totalItems, 1);
+                const healthyCount = kpiData.totalItems - kpiData.shortageCount;
+                const rate = Math.round(Math.max(0, healthyCount) / totalItems * 100);
                 const isHealthy = rate >= 90;
                 const isMid = rate >= 75;
                 const color = isHealthy ? 'text-emerald-600' : isMid ? 'text-amber-500' : 'text-rose-500';
@@ -1016,11 +1008,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       <span className={`text-xs font-semibold ${color}`}>%</span>
                       <span className={`ml-1 text-[9px] font-black px-1 py-0.5 rounded ${bgColor}`}>{label}</span>
                     </div>
-                    {penaltyItems.length > 0 ? (
-                      <p className="text-[9px] text-rose-400 font-bold mt-0.5">감점 {penaltyItems.length}건</p>
-                    ) : (
-                      <p className="text-[9px] text-slate-400 mt-0.5">감점 없음</p>
-                    )}
+                    <p className="text-[9px] text-slate-400 mt-0.5">부족 {kpiData.shortageCount}개 제외</p>
                   </div>
                 );
               })()}
@@ -1185,11 +1173,30 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px]">
           {/* ── 좌측: 수평 바 차트 ── */}
-          <div className="px-6 py-5 space-y-2.5">
+          <div className="px-6 py-4">
+            {/* 컬럼 헤더 */}
+            {chartData.length > 0 && (
+              <div className="flex items-center gap-3 mb-2 pb-2 border-b border-slate-50">
+                <span className="w-5 shrink-0" />
+                <div className="w-[100px] shrink-0" />
+                <div className="flex-1 max-w-[280px]" />
+                <div className="w-[200px] shrink-0 grid grid-cols-3 gap-0">
+                  <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">월평균</p>
+                  <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">지난달</p>
+                  <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">누적</p>
+                </div>
+                <span className="w-2 shrink-0" />
+              </div>
+            )}
+            <div className="space-y-2">
             {chartData.length > 0 ? chartData.map((item, idx) => {
               const pct = Math.round((item.usageCount / maxUsage) * 100);
               const isTop = idx === 0;
               const isLow = item.currentStock < Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+              const avg = item.monthlyAvgUsage ?? 0;
+              const last = item.lastMonthUsage ?? 0;
+              const isSurge = avg > 0 && last > avg * 1.5 && last - avg >= 2;
+              const isDrop = avg >= 2 && last < avg * 0.5 && avg - last >= 2;
               return (
                 <div key={item.id} className="group flex items-center gap-3">
                   {/* 순위 */}
@@ -1197,41 +1204,38 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     {idx + 1}
                   </span>
                   {/* 라벨 */}
-                  <div className="w-[110px] shrink-0">
+                  <div className="w-[100px] shrink-0">
                     <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter leading-none">{item.brand}</p>
                     <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
                   </div>
-                  {/* 바 */}
-                  <div className="flex-1 h-2 bg-slate-50 rounded-full overflow-hidden">
+                  {/* 바 (최대 너비 제한) */}
+                  <div className="flex-1 max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  {/* 수치 */}
-                  <div className="w-[140px] shrink-0 text-right flex items-center justify-end gap-3">
-                    <div className="text-right">
-                      <p className="text-[9px] text-slate-400 font-medium leading-none">월평균</p>
-                      <p className={`text-[11px] font-bold tabular-nums ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
-                        {item.monthlyAvgUsage?.toFixed(1) ?? '-'}
+                  {/* 수치 그리드 */}
+                  <div className="w-[200px] shrink-0 grid grid-cols-3 gap-0 items-center">
+                    {/* 월평균 */}
+                    <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
+                      {avg.toFixed(1)}
+                    </p>
+                    {/* 지난달 */}
+                    <div className="flex items-center justify-center gap-0.5">
+                      <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+                        {last}
                       </p>
+                      {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
+                      {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
                     </div>
-                    <div className="text-right">
-                      <p className="text-[9px] text-slate-400 font-medium leading-none">지난달</p>
-                      <p className={`text-[11px] font-bold tabular-nums ${(item.lastMonthUsage ?? 0) > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-                        {item.lastMonthUsage ?? 0}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] text-slate-400 font-medium leading-none">누적</p>
-                      <p className={`text-[11px] font-black tabular-nums ${isTop ? 'text-indigo-600' : 'text-slate-600'}`}>
-                        {item.usageCount}
-                      </p>
-                    </div>
-                    {isLow && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" title="재고 부족" />
-                    )}
+                    {/* 누적 */}
+                    <p className={`text-xs font-bold tabular-nums text-center ${isTop ? 'text-indigo-600' : 'text-slate-600'}`}>
+                      {item.usageCount}
+                    </p>
                   </div>
+                  {/* 재고 부족 닷 */}
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
                 </div>
               );
             }) : (
