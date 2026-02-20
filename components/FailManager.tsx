@@ -3,7 +3,29 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { useToast } from '../hooks/useToast';
+import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 
+// ============================================================
+// UTILITY: Sparkline SVG path builder (same as InventoryManager)
+// ============================================================
+function buildSparklinePath(values: number[], width: number, height: number): string {
+  if (values.length === 0) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
+  return values
+    .map((value, index) => {
+      const x = index * stepX;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+}
+
+// ============================================================
+// TYPES
+// ============================================================
 interface FailManagerProps {
   surgeryMaster: Record<string, ExcelRow[]>;
   inventory: InventoryItem[];
@@ -13,9 +35,11 @@ interface FailManagerProps {
   isReadOnly?: boolean;
 }
 
+// ============================================================
+// COMPONENT
+// ============================================================
 const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly }) => {
   const { toast, showToast } = useToast();
-  // 비교를 위한 정규화 함수
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
   // 1. FAIL 히스토리 전체 추출
@@ -38,7 +62,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
   const [activeM, setActiveM] = useState<string>(manufacturers[0] || '');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<{brand: string, size: string, quantity: number}[]>([]);
+  const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
 
   // 제조사별 통계
   const mStats = useMemo(() => {
@@ -58,49 +82,114 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
   const mPendingList = pendingFailList.filter(f => String(f['제조사'] || '기타') === activeM);
 
-  // 팝업 상단: 교환 권장 품목 추출 (FAIL 발생했으나 아직 주문안된 품목)
+  // ============================================================
+  // 월별 FAIL 추세 데이터
+  // ============================================================
+  const monthlyFailData = useMemo(() => {
+    const monthMap: Record<string, Record<string, number>> = {};
+    historyFailList.forEach(f => {
+      const dateStr = String(f['날짜'] || '');
+      if (!dateStr || dateStr.length < 7) return;
+      const month = dateStr.substring(0, 7);
+      const m = String(f['제조사'] || '기타');
+      if (!monthMap[month]) monthMap[month] = {};
+      monthMap[month][m] = (monthMap[month][m] || 0) + 1;
+    });
+    return Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, byMfr]) => ({ month, ...byMfr, total: Object.values(byMfr).reduce((s, v) => s + v, 0) }));
+  }, [historyFailList]);
+
+  // KPI용 sparkline 데이터 (월별 총 FAIL)
+  const failSparkline = useMemo(() => monthlyFailData.map(d => d.total), [monthlyFailData]);
+  const exchangeSparkline = useMemo(() => {
+    const monthMap: Record<string, number> = {};
+    historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').forEach(f => {
+      const d = String(f['날짜'] || '');
+      if (!d || d.length < 7) return;
+      const month = d.substring(0, 7);
+      monthMap[month] = (monthMap[month] || 0) + 1;
+    });
+    return Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
+  }, [historyFailList]);
+
+  // 전체 수술 건수 (FAIL률 계산용)
+  const totalPlacements = useMemo(() => {
+    const allRows = surgeryMaster['수술기록지'] || [];
+    return allRows.filter(row => row['구분'] === '식립').length;
+  }, [surgeryMaster]);
+
+  const failRate = totalPlacements > 0 ? (historyFailList.filter(f => f['구분'] === '수술중 FAIL').length / totalPlacements * 100) : 0;
+  const monthlyAvgFail = monthlyFailData.length > 0 ? (historyFailList.length / monthlyFailData.length) : 0;
+
+  // ============================================================
+  // 제조사별 FAIL 분포 (도넛 차트용)
+  // ============================================================
+  const manufacturerDonut = useMemo(() => {
+    const total = historyFailList.length;
+    if (total === 0) return [];
+    return manufacturers.map((m, i) => {
+      const count = mStats[m]?.total || 0;
+      const percent = Math.round((count / total) * 100);
+      return { name: m, count, percent, color: DONUT_COLORS[i % DONUT_COLORS.length] };
+    }).sort((a, b) => b.count - a.count);
+  }, [manufacturers, mStats, historyFailList.length]);
+
+  // ============================================================
+  // 브랜드/규격별 TOP FAIL 랭킹
+  // ============================================================
+  const topFailSizes = useMemo(() => {
+    const counts: Record<string, { brand: string; size: string; count: number }> = {};
+    historyFailList.forEach(f => {
+      const b = String(f['브랜드'] || 'Unknown');
+      const s = String(f['규격(SIZE)'] || 'Unknown');
+      const key = `${b}|${s}`;
+      if (!counts[key]) counts[key] = { brand: b, size: s, count: 0 };
+      counts[key].count++;
+    });
+    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
+  }, [historyFailList]);
+
+  // ============================================================
+  // Animated KPI values
+  // ============================================================
+  const animTotal = useCountUp(historyFailList.length);
+  const animProcessed = useCountUp(historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length);
+  const animPending = useCountUp(pendingFailList.length);
+  const animFailRate = useCountUp(Math.round(failRate * 10));
+  const animMonthlyAvg = useCountUp(Math.round(monthlyAvgFail * 10));
+
+  // 팝업 상단: 교환 권장 품목 추출
   const recommendedExchangeItems = useMemo(() => {
     if (!activeM || !isModalOpen) return [];
-    
-    // 1. 현재 제조사의 FAIL 항목들을 브랜드/규격별로 집계
     const failCounts: Record<string, { brand: string, size: string, count: number }> = {};
     mPendingList.forEach(f => {
       const b = String(f['브랜드'] || 'Unknown');
       const s = String(f['규격(SIZE)'] || 'Unknown');
       const key = `${simpleNormalize(b)}|${getSizeMatchKey(s, activeM)}`;
-      if (!failCounts[key]) {
-        failCounts[key] = { brand: b, size: s, count: 0 };
-      }
+      if (!failCounts[key]) failCounts[key] = { brand: b, size: s, count: 0 };
       failCounts[key].count++;
     });
-
-    // 2. 이미 DB에 있는 '입고 대기' 중인 주문 수량 + 현재 작성 중인 폼의 수량 합산하여 차감
     const result = Object.values(failCounts).map(item => {
       let alreadyOrderedQty = 0;
-      
-      // DB 내 기존 주문 확인
       failOrders
         .filter(o => o.status === 'ordered' && simpleNormalize(o.manufacturer) === simpleNormalize(activeM))
         .forEach(order => {
           order.items.forEach(oi => {
             if (simpleNormalize(oi.brand) === simpleNormalize(item.brand) &&
-                getSizeMatchKey(oi.size, activeM) === getSizeMatchKey(item.size, activeM)) {
+              getSizeMatchKey(oi.size, activeM) === getSizeMatchKey(item.size, activeM)) {
               alreadyOrderedQty += oi.quantity;
             }
           });
         });
-      
-      // 현재 작성 중인 폼(Modal 내) 내 수량 확인
       selectedItems.forEach(si => {
         if (simpleNormalize(si.brand) === simpleNormalize(item.brand) &&
-            getSizeMatchKey(si.size, activeM) === getSizeMatchKey(item.size, activeM)) {
+          getSizeMatchKey(si.size, activeM) === getSizeMatchKey(item.size, activeM)) {
           alreadyOrderedQty += Number(si.quantity || 0);
         }
       });
-      
       return { ...item, remainingToOrder: item.count - alreadyOrderedQty };
     }).filter(item => item.remainingToOrder > 0);
-
     return result;
   }, [activeM, mPendingList, failOrders, selectedItems, isModalOpen]);
 
@@ -136,15 +225,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     const otherItemsTotal = selectedItems
       .filter(si => simpleNormalize(si.brand) !== simpleNormalize(item.brand) || getSizeMatchKey(si.size, activeM) !== getSizeMatchKey(item.size, activeM))
       .reduce((sum, si) => sum + (Number(si.brand && si.size ? si.quantity : 0)), 0);
-    
     const globalLimitRoom = Math.max(0, currentRemainingFails - otherItemsTotal);
     const maxPossibleQty = Math.min(item.remainingToOrder, globalLimitRoom);
-
     if (maxPossibleQty <= 0) {
       showToast('제조사 전체 반품 가능 수량을 초과할 수 없습니다.', 'error');
       return;
     }
-
     const existingIdx = selectedItems.findIndex(si => simpleNormalize(si.brand) === simpleNormalize(item.brand) && getSizeMatchKey(si.size, activeM) === getSizeMatchKey(item.size, activeM));
     if (existingIdx >= 0) {
       const next = [...selectedItems];
@@ -163,136 +249,468 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   };
 
   const handleOrderSubmit = () => {
-    const validItems = selectedItems.filter(i => i.brand && i.size).map(i => ({...i, quantity: Number(i.quantity)}));
+    const validItems = selectedItems.filter(i => i.brand && i.size).map(i => ({ ...i, quantity: Number(i.quantity) }));
     if (validItems.length === 0) {
       showToast('유효한 품목을 하나 이상 선택해주세요.', 'error');
       return;
     }
-
     const totalOrderQty = validItems.reduce((sum, item) => sum + item.quantity, 0);
     if (totalOrderQty > currentRemainingFails) {
       showToast(`주문 수량(${totalOrderQty})이 잔여 FAIL 건수(${currentRemainingFails})를 초과할 수 없습니다.`, 'error');
       return;
     }
-
-    // 각 품목을 개별 주문 데이터로 등록
     validItems.forEach((item, index) => {
       const newOrder: FailOrder = {
         id: `order_${Date.now()}_${index}`,
         type: 'fail_exchange',
         manufacturer: activeM,
         date: new Date().toISOString().split('T')[0],
-        items: [item], // 개별 품목으로 분리
+        items: [item],
         manager: currentUserName,
         status: 'ordered'
       };
       onAddFailOrder(newOrder);
     });
-
     setIsModalOpen(false);
   };
 
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            </div>
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight">식립 FAIL 관리 마스터</h2>
-          </div>
-          <p className="text-sm text-slate-500 font-medium italic">수술 중 발생한 FAIL 데이터를 추적하고 교환 상태를 자동 동기화합니다.</p>
-        </div>
-        
-        <div className="flex bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-w-[320px]">
-          <div className="px-6 py-4 flex flex-col justify-center border-r border-slate-100 bg-rose-50/30">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">총 FAIL 발생</p>
-            <p className="text-3xl font-black text-rose-600 tabular-nums">
-              {historyFailList.length}<span className="text-sm ml-1 font-bold">건</span>
-            </p>
-          </div>
-          <div className="flex-1 px-6 py-4 grid grid-cols-2 gap-4 items-center">
-             <div className="text-center">
-                <p className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">교환완료</p>
-                <p className="text-base font-black text-indigo-600">{historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length}</p>
-             </div>
-             <div className="text-center border-l border-slate-50">
-                <p className="text-[9px] font-bold text-rose-400 uppercase mb-0.5">미처리 잔여</p>
-                <p className="text-base font-black text-rose-500">{pendingFailList.length}</p>
-             </div>
-          </div>
-        </div>
-      </div>
+  // ============================================================
+  // 도넛 차트 SVG 경로 생성
+  // ============================================================
+  const donutPaths = useMemo(() => {
+    const total = manufacturerDonut.reduce((s, d) => s + d.count, 0);
+    if (total === 0) return [];
+    const r = 50;
+    const cx = 60;
+    const cy = 60;
+    let cumulativeAngle = -90;
+    return manufacturerDonut.map(seg => {
+      const angle = (seg.count / total) * 360;
+      const startAngle = cumulativeAngle;
+      const endAngle = cumulativeAngle + angle;
+      cumulativeAngle = endAngle;
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+      const x1 = cx + r * Math.cos(startRad);
+      const y1 = cy + r * Math.sin(startRad);
+      const x2 = cx + r * Math.cos(endRad);
+      const y2 = cy + r * Math.sin(endRad);
+      const largeArc = angle > 180 ? 1 : 0;
+      const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+      return { ...seg, path };
+    });
+  }, [manufacturerDonut]);
 
-      <div className="flex flex-wrap gap-1.5 border-b border-slate-200">
-        {manufacturers.map(m => {
-          const stats = mStats[m];
-          return (
-            <button
-              key={m}
-              onClick={() => setActiveM(m)}
-              className={`px-6 py-3 text-sm font-bold rounded-t-xl transition-all border-x border-t relative -mb-px ${activeM === m ? 'bg-white border-slate-200 text-rose-600 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] z-10' : 'bg-slate-50 border-transparent text-slate-400 hover:text-slate-600'}`}
-            >
-              {m}
-              {stats.pending > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 bg-rose-500 text-white text-[9px] rounded-full">{stats.pending}</span>
+  // ============================================================
+  // RENDER
+  // ============================================================
+  // 월별 차트 상수 (grouped bar용)
+  const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
+  const CHART_AREA_H = 160;
+  const maxBarVal = Math.max(
+    ...monthlyFailData.flatMap(d => manufacturers.map(m => (d as any)[m] as number || 0)),
+    1
+  );
+  const chartTickStep = Math.ceil(maxBarVal / 4) || 1;
+  const chartTicks = Array.from({ length: 5 }, (_, i) => i * chartTickStep);
+  const chartYMax = chartTicks[chartTicks.length - 1];
+
+  const activeOrders = failOrders.filter(o => o.manufacturer === activeM);
+
+  return (
+    <div className="space-y-6" style={{ animationDuration: '0s' }}>
+
+      {/* ========================================= */}
+      {/* STICKY HEADER + KPI + FILTER              */}
+      {/* ========================================= */}
+      <div className="sticky top-[44px] z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}>
+
+        {/* A. Header Strip */}
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-6">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">데이터 기간</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Data Period</p>
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">
+                  {monthlyFailData.length > 0
+                    ? `${monthlyFailData[0].month} ~ ${monthlyFailData[monthlyFailData.length - 1].month}`
+                    : '-'
+                  }
+                </p>
+              </div>
+              <div className="h-10 w-px bg-slate-100" />
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">총 FAIL 레코드</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Fail Records</p>
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{historyFailList.length}<span className="text-xs font-semibold text-slate-400 ml-1">건</span></p>
+              </div>
+              <div className="h-10 w-px bg-slate-100" />
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">총 식립 대비</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">vs Total Placement</p>
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{totalPlacements}<span className="text-xs font-semibold text-slate-400 ml-1">cases</span></p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenOrderModal}
+                disabled={isReadOnly}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                반품 및 교환 주문
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* B. KPI Metrics Strip */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <div className="grid grid-cols-5 divide-x divide-slate-100">
+            {/* 총 FAIL 발생 */}
+            <div className="p-4 relative overflow-hidden">
+              <h4 className="text-sm font-semibold text-slate-800">총 FAIL 발생</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Failures</p>
+              <p className="text-2xl font-bold text-slate-800 tabular-nums tracking-tight mt-2">{animTotal}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
+              {failSparkline.length > 1 && (
+                <svg className="absolute bottom-0 right-2 opacity-30" width="80" height="28">
+                  <path d={buildSparklinePath(failSparkline, 76, 24)} fill="none" stroke="#4F46E5" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
               )}
-            </button>
-          );
-        })}
-      </div>
+            </div>
+            {/* 교환 처리 완료 */}
+            <div className="p-4 relative overflow-hidden">
+              <h4 className="text-sm font-semibold text-slate-800">교환 처리 완료</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Exchanged</p>
+              <p className="text-2xl font-bold text-emerald-600 tabular-nums tracking-tight mt-2">{animProcessed}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
+              {exchangeSparkline.length > 1 && (
+                <svg className="absolute bottom-0 right-2 opacity-30" width="80" height="28">
+                  <path d={buildSparklinePath(exchangeSparkline, 76, 24)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              )}
+            </div>
+            {/* 미처리 잔여 */}
+            <div className="p-4">
+              <h4 className="text-sm font-semibold text-slate-800">미처리 잔여</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Pending</p>
+              <p className={`text-2xl font-bold tabular-nums tracking-tight mt-2 ${animPending > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{animPending}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
+              {animPending > 0 && <p className="text-[10px] font-bold text-rose-400 mt-1">⚠ 전량 미처리</p>}
+            </div>
+            {/* FAIL률 */}
+            <div className="p-4 relative overflow-hidden">
+              <h4 className="text-sm font-semibold text-slate-800">FAIL률</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Failure Rate</p>
+              <p className={`text-2xl font-bold tabular-nums tracking-tight mt-2 ${failRate > 20 ? 'text-rose-500' : failRate > 10 ? 'text-amber-500' : 'text-slate-800'}`}>
+                {(animFailRate / 10).toFixed(1)}<span className="text-sm font-semibold text-slate-400 ml-0.5">%</span>
+              </p>
+              {failSparkline.length > 1 && (
+                <svg className="absolute bottom-0 right-2 opacity-20" width="80" height="28">
+                  <path d={buildSparklinePath(failSparkline, 76, 24)} fill="none" stroke="#F43F5E" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              )}
+            </div>
+            {/* 월 평균 FAIL */}
+            <div className="p-4">
+              <h4 className="text-sm font-semibold text-slate-800">월 평균</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Avg Monthly</p>
+              <p className="text-2xl font-bold text-slate-800 tabular-nums tracking-tight mt-2">
+                {(animMonthlyAvg / 10).toFixed(1)}<span className="text-sm font-semibold text-slate-400 ml-1">건/월</span>
+              </p>
+              {monthlyFailData.length > 0 && (
+                <p className="text-[10px] text-slate-400 mt-1">{monthlyFailData.length}개월 기준</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* C. Manufacturer Filter Strip (Pill style) */}
+        <div className="bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
+          <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
+            {manufacturers.map(m => {
+              const stats = mStats[m];
+              return (
+                <button
+                  key={m}
+                  onClick={() => setActiveM(m)}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {m}
+                  {stats.pending > 0 && (
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === m ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{stats.pending}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>{/* end sticky wrapper */}
 
       {activeM ? (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="flex justify-between items-center bg-white p-6 rounded-[24px] border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-10">
-                  <div className="text-center sm:text-left">
-                    <p className="text-[11px] font-bold text-slate-400 mb-1">총 발생</p>
-                    <p className="text-2xl font-black text-slate-800">{currentStats.total}</p>
+        <div className="space-y-6">
+          {/* ========================================= */}
+          {/* ROW 1: 제조사별 현황 + 브랜드/규격 분포      */}
+          {/* ========================================= */}
+          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+            {/* LEFT: 선택된 제조사 현황 카드 */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM} FAIL 현황</h3>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Status</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleOpenOrderModal}
+                    disabled={isReadOnly || currentRemainingFails <= 0}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || currentRemainingFails <= 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                    반품/교환 주문
+                  </button>
+                </div>
+              </div>
+              {/* 3-column stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-slate-50 rounded-xl p-4 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">총 발생</p>
+                  <p className="text-2xl font-black text-slate-800 tabular-nums">{currentStats.total}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">교환 완료</p>
+                  <p className="text-2xl font-black text-emerald-600 tabular-nums">{currentStats.processed}</p>
+                </div>
+                <div className={`rounded-xl p-4 text-center ${currentRemainingFails > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${currentRemainingFails > 0 ? 'text-rose-400' : 'text-slate-400'}`}>미처리 잔여</p>
+                  <p className={`text-2xl font-black tabular-nums ${currentRemainingFails > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{currentRemainingFails}</p>
+                </div>
+              </div>
+              {/* FAIL 진행률 바 */}
+              {currentStats.total > 0 && (
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">교환 처리율</span>
+                    <span className="text-[10px] font-black text-indigo-600">{Math.round((currentStats.processed / currentStats.total) * 100)}%</span>
                   </div>
-                  <div className="w-px h-10 bg-slate-100 hidden sm:block"></div>
-                  <div className="text-center sm:text-left">
-                    <p className="text-[11px] font-bold text-slate-400 mb-1">교환 처리됨</p>
-                    <p className="text-2xl font-black text-indigo-600">{currentStats.processed}</p>
-                  </div>
-                  <div className="w-px h-10 bg-slate-100 hidden sm:block"></div>
-                  <div className="text-center sm:text-left">
-                    <p className="text-[11px] font-bold text-rose-400 mb-1 italic">반품 가능 잔여</p>
-                    <p className="text-2xl font-black text-rose-600">{currentRemainingFails}</p>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-violet-400 rounded-full transition-all duration-700"
+                      style={{ width: `${(currentStats.processed / currentStats.total) * 100}%` }}
+                    />
                   </div>
                 </div>
-                <button
-                  onClick={handleOpenOrderModal}
-                  disabled={isReadOnly}
-                  className={`px-6 py-3 font-bold rounded-xl shadow-lg shadow-rose-100 transition-all flex items-center gap-2 ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-rose-600 text-white hover:bg-rose-700 hover:translate-y-[-2px]'}`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                  반품 및 교환 주문
-                </button>
-              </div>
-
+              )}
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
-                최근 교환 주문 이력
-              </h3>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {failOrders.filter(o => o.manufacturer === activeM).map(order => (
-                  <div key={order.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 border-l-4 border-l-indigo-500">
+            {/* RIGHT: 제조사별 FAIL 분포 (도넛 차트) */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <h3 className="text-sm font-black text-slate-800 tracking-tight">제조사 분석</h3>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Analysis</p>
+              <div className="flex items-center gap-4 mt-4">
+                {/* Donut */}
+                <svg viewBox="0 0 120 120" className="w-28 h-28 shrink-0">
+                  {donutPaths.map((seg, i) => (
+                    <path key={i} d={seg.path} fill={seg.color} stroke="white" strokeWidth="2" className="transition-opacity hover:opacity-80" />
+                  ))}
+                  <circle cx="60" cy="60" r="30" fill="white" />
+                  <text x="60" y="57" textAnchor="middle" fontSize="16" fontWeight="800" fill="#1e293b">{historyFailList.length}</text>
+                  <text x="60" y="72" textAnchor="middle" fontSize="7" fontWeight="600" fill="#94a3b8" letterSpacing="0.1em">TOTAL FAIL</text>
+                </svg>
+                {/* Legend */}
+                <div className="flex-1 space-y-2">
+                  {manufacturerDonut.map((seg, i) => (
+                    <div key={seg.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
+                        <span className="text-xs font-bold text-slate-600">{seg.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800 tabular-nums">{seg.count}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{seg.percent}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================= */}
+          {/* ROW 2: 월별 FAIL 추세 + TOP FAIL 규격       */}
+          {/* ========================================= */}
+          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+            {/* LEFT: 월별 추세 차트 */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">월별 FAIL 추세</h3>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Monthly Trend</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {manufacturers.map((m, i) => (
+                    <div key={m} className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                      <span className="text-[10px] font-bold text-slate-400">{m}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {monthlyFailData.length > 0 ? (() => {
+                const nMfr = manufacturers.length || 1;
+                const MONTH_W = Math.max(48, Math.min(68, Math.floor(680 / monthlyFailData.length)));
+                const GROUP_W = MONTH_W - 10;
+                const BAR_GAP = 2;
+                const BAR_W = Math.max(6, Math.floor((GROUP_W - BAR_GAP * (nMfr - 1)) / nMfr));
+                const SVG_W = CHART_PAD.l + monthlyFailData.length * MONTH_W + CHART_PAD.r;
+                const SVG_H = CHART_PAD.t + CHART_AREA_H + CHART_PAD.b;
+                return (
+                  <div className="overflow-x-auto">
+                    <svg
+                      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+                      className="w-full"
+                      style={{ minWidth: Math.max(400, SVG_W) }}
+                      preserveAspectRatio="xMinYMid meet"
+                    >
+                      {/* Horizontal grid lines + Y labels */}
+                      {chartTicks.map(tick => {
+                        const y = CHART_PAD.t + CHART_AREA_H - (tick / chartYMax) * CHART_AREA_H;
+                        return (
+                          <g key={tick}>
+                            <line x1={CHART_PAD.l} y1={y} x2={SVG_W - CHART_PAD.r} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+                            <text x={CHART_PAD.l - 4} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="600">{tick}</text>
+                          </g>
+                        );
+                      })}
+                      {/* Baseline */}
+                      <line x1={CHART_PAD.l} y1={CHART_PAD.t + CHART_AREA_H} x2={SVG_W - CHART_PAD.r} y2={CHART_PAD.t + CHART_AREA_H} stroke="#e2e8f0" strokeWidth="1.5" />
+                      {/* Grouped bars */}
+                      {monthlyFailData.map((d, i) => {
+                        const barGroupW = BAR_W * nMfr + BAR_GAP * (nMfr - 1);
+                        const groupX = CHART_PAD.l + i * MONTH_W + (MONTH_W - barGroupW) / 2;
+                        return (
+                          <g key={d.month}>
+                            {manufacturers.map((m, mi) => {
+                              const val = (d as any)[m] as number || 0;
+                              const barH = chartYMax > 0 ? (val / chartYMax) * CHART_AREA_H : 0;
+                              const bx = groupX + mi * (BAR_W + BAR_GAP);
+                              const by = CHART_PAD.t + CHART_AREA_H - barH;
+                              return (
+                                <rect
+                                  key={m}
+                                  x={bx} y={by}
+                                  width={BAR_W} height={Math.max(0, barH)}
+                                  rx="3"
+                                  fill={DONUT_COLORS[mi % DONUT_COLORS.length]}
+                                  opacity="0.85"
+                                  className="hover:opacity-100 transition-opacity"
+                                />
+                              );
+                            })}
+                            <text
+                              x={CHART_PAD.l + i * MONTH_W + MONTH_W / 2}
+                              y={CHART_PAD.t + CHART_AREA_H + 14}
+                              textAnchor="middle"
+                              fontSize="8"
+                              fill="#94a3b8"
+                              fontWeight="600"
+                            >
+                              {d.month.slice(2)}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })() : (
+                <div className="py-16 text-center">
+                  <p className="text-sm text-slate-400 font-medium">차트 데이터 없음</p>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: TOP FAIL 규격 랭킹 */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <h3 className="text-sm font-black text-slate-800 tracking-tight">FAIL 다빈도 규격</h3>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5 mb-4">Top 5 / Size Ranking</p>
+              {topFailSizes.length > 0 ? (
+                <div className="space-y-3">
+                  {topFailSizes.map((item, idx) => (
+                    <div key={`${item.brand}-${item.size}`} className="flex items-center gap-3">
+                      <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${idx === 0 ? 'bg-rose-500 text-white' : idx === 1 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-700 truncate">{item.brand}</p>
+                        <p className="text-[10px] font-semibold text-slate-400">{item.size}</p>
+                      </div>
+                      <span className="text-sm font-black text-slate-800 tabular-nums">{item.count}<span className="text-[10px] font-semibold text-slate-400 ml-0.5">건</span></span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-8">데이터 없음</p>
+              )}
+
+              {/* FAIL률 by manufacturer */}
+              {manufacturers.length > 0 && (
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  <h4 className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-3">FAIL률 / Failure Rate</h4>
+                  <div className="space-y-2.5">
+                    {manufacturers.map((m, i) => {
+                      const failCount = mStats[m]?.total || 0;
+                      const allRows = surgeryMaster['수술기록지'] || [];
+                      const normalizedM = simpleNormalize(m);
+                      const mPlacement = allRows.filter(r => {
+                        const rowM = simpleNormalize(String(r['제조사'] || ''));
+                        return (rowM.includes(normalizedM) || normalizedM.includes(rowM)) && r['구분'] === '식립';
+                      }).length;
+                      const rate = mPlacement > 0 ? (failCount / mPlacement * 100) : 0;
+                      return (
+                        <div key={m} className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-600">{m}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-500 tabular-nums">{failCount}건 / {mPlacement}건</span>
+                            <span className={`text-xs font-black tabular-nums ${rate > 30 ? 'text-rose-500' : rate > 20 ? 'text-amber-500' : 'text-slate-700'}`}>{rate.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ========================================= */}
+          {/* ROW 3: 교환 주문 이력                       */}
+          {/* ========================================= */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  교환 주문 이력
+                </h3>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Exchange Order History · {activeM}</p>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">{activeOrders.length}건</span>
+            </div>
+            {activeOrders.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                {activeOrders.map(order => (
+                  <div key={order.id} className="p-4 rounded-xl border border-slate-100 shadow-sm space-y-3 hover:border-indigo-100 transition-all">
                     <div className="flex justify-between items-start">
                       <p className="text-xs font-black text-slate-800">{order.date} 주문</p>
-                      <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">Ordered</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter ${order.status === 'ordered' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {order.status === 'ordered' ? 'Ordered' : 'Completed'}
+                      </span>
                     </div>
                     <div className="space-y-1">
                       {order.items.map((item, idx) => (
                         <div key={idx} className="flex justify-between text-[11px] font-bold">
                           <span className="text-slate-500">{item.brand} {item.size}</span>
-                          <span className="text-slate-800">{item.quantity}개</span>
+                          <span className="text-slate-800 tabular-nums">{item.quantity}개</span>
                         </div>
                       ))}
                     </div>
@@ -302,7 +720,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   </div>
                 ))}
               </div>
-            </div>
+            ) : (
+              <div className="py-12 text-center">
+                <svg className="w-12 h-12 text-slate-100 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                <p className="text-sm text-slate-400 font-medium">아직 교환 주문 이력이 없습니다.</p>
+                <p className="text-[11px] text-slate-300 mt-1">반품/교환 주문 버튼으로 첫 주문을 등록하세요.</p>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -312,10 +736,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         </div>
       )}
 
+      {/* ========================================= */}
+      {/* ORDER MODAL                               */}
+      {/* ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="p-8 bg-rose-600 text-white flex justify-between items-center">
+            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="text-2xl font-black tracking-tight">대체 주문 및 반품 처리</h3>
                 <p className="text-xs opacity-80 mt-1 font-bold uppercase tracking-wider">{activeM} / 반품 가능 잔량: {currentRemainingFails}건</p>
@@ -324,21 +751,21 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
               {recommendedExchangeItems.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                       교환 권장 품목
                     </h4>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recommended for Exchange</span>
                   </div>
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                     {recommendedExchangeItems.map((item, idx) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={idx}
                         onClick={() => quickAddRecommended(item)}
                         className="flex-shrink-0 bg-rose-50 border border-rose-100 p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[160px]"
                       >
@@ -372,54 +799,49 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <h4 className="text-sm font-black text-slate-800">교환 요청 품목</h4>
                   <p className="text-[10px] text-slate-400 italic">* 제조사 FAIL 합계를 초과하여 주문할 수 없습니다.</p>
                 </div>
-                
+
                 {selectedItems.map((item, idx) => {
                   const brandOptions = Array.from(new Set(availableInventoryForM.map(i => i.brand))).sort();
                   const sizeOptions = availableInventoryForM
                     .filter(i => i.brand === item.brand)
                     .map(i => i.size)
                     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
                   return (
                     <div key={idx} className="flex gap-3 items-end p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
                       <div className="flex-[2]">
                         <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">브랜드 선택</label>
-                        <select 
-                          value={item.brand} 
+                        <select
+                          value={item.brand}
                           onChange={(e) => updateOrderItem(idx, 'brand', e.target.value)}
                           className="w-full p-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer"
                         >
                           <option value="">브랜드 선택</option>
-                          {brandOptions.map(b => (
-                            <option key={b} value={b}>{b}</option>
-                          ))}
+                          {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                       </div>
                       <div className="flex-[2]">
                         <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">규격 선택</label>
-                        <select 
-                          value={item.size} 
+                        <select
+                          value={item.size}
                           onChange={(e) => updateOrderItem(idx, 'size', e.target.value)}
                           disabled={!item.brand}
                           className="w-full p-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer disabled:bg-slate-100 disabled:opacity-50"
                         >
                           <option value="">규격 선택</option>
-                          {sizeOptions.map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
+                          {sizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
                       <div className="w-24">
                         <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">수량</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           min="1"
-                          value={item.quantity} 
+                          value={item.quantity}
                           onChange={(e) => updateOrderItem(idx, 'quantity', e.target.value)}
-                          className="w-full p-2.5 text-xs border border-rose-200 rounded-lg outline-none font-black text-center text-rose-600 bg-rose-50/30"
+                          className="w-full p-2.5 text-xs border border-indigo-200 rounded-lg outline-none font-black text-center text-indigo-600 bg-indigo-50/30"
                         />
                       </div>
-                      <button 
+                      <button
                         onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))}
                         disabled={selectedItems.length === 1}
                         className="p-2.5 text-slate-300 hover:text-rose-500 transition-all"
@@ -430,7 +852,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   );
                 })}
 
-                <button 
+                <button
                   onClick={() => setSelectedItems([...selectedItems, { brand: '', size: '', quantity: 1 }])}
                   className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
                 >
@@ -445,9 +867,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button onClick={() => setIsModalOpen(false)} className="flex-1 sm:flex-none px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">취소</button>
-                <button 
-                  onClick={handleOrderSubmit} 
-                  className="flex-1 sm:flex-none px-10 py-3 bg-rose-600 text-white font-black rounded-2xl shadow-xl shadow-rose-100 hover:bg-rose-700 active:scale-95 transition-all"
+                <button
+                  onClick={handleOrderSubmit}
+                  className="flex-1 sm:flex-none px-10 py-3 bg-slate-900 text-white font-black rounded-2xl shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all"
                 >
                   주문 확인 및 완료
                 </button>
@@ -456,6 +878,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           </div>
         </div>
       )}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
