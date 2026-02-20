@@ -1,0 +1,4 @@
+=== 2MB validation ===
+4: const MAX_FILE_SIZE = 2 * 1024 * 1024;
+7: if (file.size > MAX_FILE_SIZE) {
+8: throw new Error('파일 크기가 2MB를 초과합니다.');
