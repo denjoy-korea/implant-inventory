@@ -41,7 +41,8 @@ const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboar
 const StaffWaitingRoom = lazy(() => import('./components/StaffWaitingRoom'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
 import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, canAccessTab } from './types';
-import { parseExcelFile, downloadExcelFile, extractLengthFromSize } from './services/excelService';
+import { parseExcelFile, downloadExcelFile } from './services/excelService';
+import { extractLengthFromSize } from './services/sizeUtils';
 import { normalizeLength } from './components/LengthFilter';
 import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
 import { authService } from './services/authService';
@@ -2554,6 +2555,7 @@ const App: React.FC = () => {
                         <InventoryAudit
                           inventory={state.inventory}
                           hospitalId={state.user?.hospitalId || ''}
+                          userName={state.user?.name}
                           onApplied={() => { if (state.user) loadHospitalData(state.user); }}
                           showHistory={showAuditHistory}
                           onCloseHistory={() => setShowAuditHistory(false)}

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ExcelData, ExcelRow, ExcelSheet } from '../types';
-import { extractLengthFromSize } from '../services/excelService';
+import { extractLengthFromSize } from '../services/sizeUtils';
 import { normalizeLength } from './LengthFilter';
 import { MIN_FIXTURE_LENGTH } from '../constants';
 
