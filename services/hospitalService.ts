@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole } from '../types';
 import { dbToHospital } from './mappers';
 
@@ -119,7 +120,7 @@ export const hospitalService = {
     if (error) {
       // FunctionsHttpError에서 실제 에러 메시지 추출
       try {
-        const errBody = await (error as any).context?.json?.();
+        const errBody = error instanceof FunctionsError ? await error.context?.json?.() : null;
         throw new Error(errBody?.error || '초대 링크 생성에 실패했습니다.');
       } catch (e) {
         if (e instanceof Error) throw e;
@@ -213,7 +214,7 @@ export const hospitalService = {
     });
     if (error) {
       try {
-        const errBody = await (error as any).context?.json?.();
+        const errBody = error instanceof FunctionsError ? await error.context?.json?.() : null;
         throw new Error(errBody?.error || '방출에 실패했습니다.');
       } catch (e) {
         if (e instanceof Error) throw e;

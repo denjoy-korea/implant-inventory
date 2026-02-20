@@ -64,7 +64,10 @@ import { useToast } from './hooks/useToast';
 import { UNLIMITED_DAYS, DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 import { buildHash, parseHash, VIEW_HASH, TAB_HASH, HASH_TO_VIEW, HASH_TO_TAB } from './appRouting';
 
-
+declare global {
+  // eslint-disable-next-line no-var
+  var __securityMaintenanceService: typeof securityMaintenanceService | undefined;
+}
 
 function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>): string {
   const fixed = fixIbsImplant(String(item.manufacturer || ''), String(item.brand || ''));
@@ -259,7 +262,7 @@ const App: React.FC = () => {
           setState(prev => ({ ...prev, currentView: 'login' }));
           return;
         }
-        const hospitalName = (data.hospitals as any)?.name ?? '치과';
+        const hospitalName = (data.hospitals as { name: string }[] | null)?.[0]?.name ?? '치과';
         setInviteInfo({ token, email: data.email, name: data.name, hospitalName });
         setState(prev => ({ ...prev, currentView: 'invite' }));
         // URL에서 토큰 파라미터 제거 (보안)
@@ -285,9 +288,9 @@ const App: React.FC = () => {
   // Dev convenience: expose maintenance helpers for one-off operations.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    (globalThis as any).__securityMaintenanceService = securityMaintenanceService;
+    globalThis.__securityMaintenanceService = securityMaintenanceService;
     return () => {
-      delete (globalThis as any).__securityMaintenanceService;
+      delete globalThis.__securityMaintenanceService;
     };
   }, []);
 

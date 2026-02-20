@@ -129,3 +129,63 @@
 ### Result
 - `components/InventoryManager.tsx`: 2851줄 -> 1274줄
 - `npm run lint && npm run build` 통과
+
+## Task 9: InventoryManager Sub-component Extraction (2026-02-20)
+
+### Approach
+- Extracted 5 modal components from InventoryManager.tsx (2851 → 1274 lines)
+- Created `components/inventory/` directory with:
+  - `inventoryTypes.ts` - shared types (SizePattern, UnregisteredReviewItem, ManualFixCheckResult, ManualFixDraft)
+  - `DentwebGuideModal.tsx` - self-contained with internal stepIndex state
+  - `EditNoticeModal.tsx` - simple props-only modal
+  - `OptimizeModal.tsx` - internal state for filter/selection/deleting
+  - `BaseStockModal.tsx` - own state management (inputs, filters, save logic)
+  - `UnregisteredDetailModal.tsx` - complex modal with own state (search, viewMode, registration logic)
+
+### Key Patterns
+- Components that only need `onClose` + data props can manage their own state internally
+- Use `{show && <Modal .../>}` pattern for automatic state reset on mount
+- Move shared types to `inventoryTypes.ts` to avoid circular imports
+- Large modals (UnregisteredDetailModal: 1051 lines) can own their full logic including API calls
+
+### Constraints Respected
+- App.tsx, InventoryAudit.tsx NOT modified
+- No new libraries added
+- Functional behavior unchanged
+- State management structure preserved (lifted state stays in parent where needed)
+
+### Result
+- InventoryManager.tsx: 1274 lines (55% reduction from 2851)
+- lint: PASSED, build: PASSED
+
+## [2026-02-20] Task 10: Remove all `as any` casts
+
+### Locations fixed (5 total in source, 2 more in worktree excluded)
+1. `services/hospitalService.ts:122,216` — `(error as any).context?.json?.()`
+   - Import `FunctionsError` from `@supabase/supabase-js`
+   - Replace with `error instanceof FunctionsError ? await error.context?.json?.() : null`
+   - `FunctionsError.context` is typed `any`, so `error.context?.json?.()` works directly after instanceof check
+
+2. `App.tsx:262` — `(data.hospitals as any)?.name`
+   - Supabase join returns array: `{ name: string }[] | null`
+   - Fix: `(data.hospitals as { name: string }[] | null)?.[0]?.name ?? '치과'`
+
+3. `App.tsx:288,290` — `(globalThis as any).__securityMaintenanceService`
+   - Add `declare global { var __securityMaintenanceService: typeof securityMaintenanceService | undefined; }`
+   - Use `globalThis.__securityMaintenanceService` directly
+
+4. `services/excelService.ts:50` — `} as any)` (responseType: 'arraybuffer')
+   - `responseType` is NOT in `FunctionInvokeOptions` type and is NOT used by the client
+   - FunctionsClient auto-detects response type from Content-Type header
+   - Remove option entirely, remove `as any` cast
+
+### Key Findings
+- `FunctionInvokeOptions` has NO `responseType` field — client auto-detects from Content-Type
+- `FunctionsError.context: any` (base class typed as any)
+- Supabase foreign key joins return arrays even for single rows
+- `declare global { var X: T }` pattern for globalThis extensions
+
+### Result
+- `as any` count: 0 (verified by grep)
+- `npm run lint && npm run build`: PASSED
+- Evidence: `.sisyphus/evidence/task-10-no-as-any.txt`

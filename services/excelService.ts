@@ -46,8 +46,7 @@ export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<nu
       selectedIndices: Array.from(selectedIndices),
       fileName: fileName || 'export.xlsx',
     },
-    responseType: 'arraybuffer',
-  } as any);
+  });
 
   if (error) {
     throw new Error(`엑셀 생성 실패: ${error.message}`);
