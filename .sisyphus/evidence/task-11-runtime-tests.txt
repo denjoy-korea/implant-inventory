@@ -1,0 +1,37 @@
+✔ crypto utils use AES-GCM with legacy compatibility (1.446667ms)
+✔ crypto utils do not fall back to supabase anon key for encryption (0.296041ms)
+✔ order service uses transactional RPC with compatibility fallback (0.473708ms)
+✔ rich HTML sinks are sanitized (1.06825ms)
+✔ phase2 SQL migration keeps critical permission guards (0.524833ms)
+✔ create_order_with_items ambiguity hotfix exists (0.4115ms)
+✔ create_order_with_items hotfix verification query exists (0.32975ms)
+✔ patient info encryption report query exists (0.397834ms)
+✔ maintenance service is wired for dev operations (0.804834ms)
+✔ free plan max item limit is 100 (0.483166ms)
+✔ crypto utils throw in production when encryption key is missing (0.125834ms)
+✔ gemini api key is not injected into client bundle via vite define (0.256917ms)
+✔ payment request uses edge proxy instead of client webhook url (0.396125ms)
+✔ payment proxy validates auth scope before forwarding webhook (0.308375ms)
+✔ payment callback function validates token and updates billing via rpc (0.371958ms)
+✔ notice board uses Supabase-backed notices instead of localStorage cache (0.449375ms)
+✔ extractLengthFromSize: "4.5x13" returns the number after x ("13") (0.543709ms)
+✔ extractLengthFromSize: "L10" returns "10" via L-prefix match (0.150292ms)
+✔ extractLengthFromSize: "l10" (lowercase l) returns "10" (0.079541ms)
+✔ extractLengthFromSize: "410016" returns last-2-digits of 6-digit code ("16") (0.194375ms)
+✔ extractLengthFromSize: null returns empty string (0.079458ms)
+✔ extractLengthFromSize: undefined returns empty string (0.062917ms)
+✔ extractLengthFromSize: "" (empty string) returns empty string (0.054792ms)
+✔ extractLengthFromSize: "13" (2-digit, no prefix) returns empty string (0.119459ms)
+✔ extractLengthFromSize: numeric 42 returns empty string (0.089833ms)
+✔ extractLengthFromSize: "3x4x13" returns middle dimension "4" via double-x match (0.091167ms)
+✔ extractLengthFromSize: "X8.5" returns "8.5" (decimal after x) (0.059459ms)
+✔ extractLengthFromSize: 4-digit code "1234" returns last 2 chars "34" (0.046041ms)
+✔ extractLengthFromSize: whitespace-only string returns empty string (0.045833ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62.07725
