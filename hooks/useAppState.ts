@@ -48,8 +48,11 @@ const INITIAL_STATE: AppState = {
   hospitalWorkDays: DEFAULT_WORK_DAYS,
 };
 
-export function useAppState() {
+type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
+
+export function useAppState(onNotify?: NotifyFn) {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
+  const notify = onNotify ?? ((msg: string, _type?: string) => console.warn('[useAppState] notify fallback:', msg));
 
   /** 병원 데이터 로드 (로그인 후 / 세션 복원 시) */
   const loadHospitalData = async (user: User) => {
@@ -123,7 +126,7 @@ export function useAppState() {
       }));
 
       if (wasReset) {
-        alert('예약된 데이터 초기화가 완료되었습니다. 재고, 수술 기록, 주문 데이터가 모두 삭제되었습니다.');
+        notify('예약된 데이터 초기화가 완료되었습니다. 재고, 수술 기록, 주문 데이터가 모두 삭제되었습니다.', 'info');
       }
     } catch (error) {
       console.error('[useAppState] Data loading failed:', error);
@@ -156,9 +159,9 @@ export function useAppState() {
         fixtureData: null,
         showProfile: false,
       }));
-      alert('초기화되었습니다. 새로운 병원을 찾아주세요.');
+      notify('초기화되었습니다. 새로운 병원을 찾아주세요.', 'info');
     } catch {
-      alert('병원 탈퇴에 실패했습니다.');
+      notify('병원 탈퇴에 실패했습니다.', 'error');
     }
   };
 
@@ -177,12 +180,12 @@ export function useAppState() {
           fixtureData: null,
           showProfile: false,
         }));
-        alert('회원 탈퇴가 완료되었습니다.');
+        notify('회원 탈퇴가 완료되었습니다.', 'success');
       } else {
-        alert(result.error || '회원 탈퇴에 실패했습니다.');
+        notify(result.error || '회원 탈퇴에 실패했습니다.', 'error');
       }
     } catch {
-      alert('회원 탈퇴에 실패했습니다.');
+      notify('회원 탈퇴에 실패했습니다.', 'error');
     }
   };
 
@@ -247,7 +250,20 @@ export function useAppState() {
           ...prev,
           inventory: prev.inventory.map(i =>
             i.id === updated.id
-              ? { ...i, initialStock: updated.initialStock, manufacturer: updated.manufacturer, brand: updated.brand, size: updated.size }
+              ? (() => {
+                // Preserve usage-derived metrics while applying stock deltas from realtime updates.
+                const deltaInitial = updated.initialStock - i.initialStock;
+                const deltaAdjustment = updated.stockAdjustment - (i.stockAdjustment ?? 0);
+                return {
+                  ...i,
+                  initialStock: updated.initialStock,
+                  stockAdjustment: updated.stockAdjustment,
+                  currentStock: i.currentStock + deltaInitial + deltaAdjustment,
+                  manufacturer: updated.manufacturer,
+                  brand: updated.brand,
+                  size: updated.size,
+                };
+              })()
               : i
           ),
         }));

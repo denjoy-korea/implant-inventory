@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
+import { useToast } from '../hooks/useToast';
 
 interface FailManagerProps {
   surgeryMaster: Record<string, ExcelRow[]>;
@@ -13,6 +14,7 @@ interface FailManagerProps {
 }
 
 const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly }) => {
+  const { toast, showToast } = useToast();
   // 비교를 위한 정규화 함수
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
@@ -113,7 +115,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
   const handleOpenOrderModal = () => {
     if (currentRemainingFails <= 0) {
-      alert("현재 제조사에 반품 가능한 FAIL 잔여 건수가 없습니다.");
+      showToast('현재 제조사에 반품 가능한 FAIL 잔여 건수가 없습니다.', 'error');
       return;
     }
     setSelectedItems([{ brand: '', size: '', quantity: 1 }]);
@@ -139,7 +141,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     const maxPossibleQty = Math.min(item.remainingToOrder, globalLimitRoom);
 
     if (maxPossibleQty <= 0) {
-      alert("제조사 전체 반품 가능 수량을 초과할 수 없습니다.");
+      showToast('제조사 전체 반품 가능 수량을 초과할 수 없습니다.', 'error');
       return;
     }
 
@@ -163,13 +165,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const handleOrderSubmit = () => {
     const validItems = selectedItems.filter(i => i.brand && i.size).map(i => ({...i, quantity: Number(i.quantity)}));
     if (validItems.length === 0) {
-      alert("유효한 품목을 하나 이상 선택해주세요.");
+      showToast('유효한 품목을 하나 이상 선택해주세요.', 'error');
       return;
     }
 
     const totalOrderQty = validItems.reduce((sum, item) => sum + item.quantity, 0);
     if (totalOrderQty > currentRemainingFails) {
-      alert(`주문 수량(${totalOrderQty})이 잔여 FAIL 건수(${currentRemainingFails})를 초과할 수 없습니다.`);
+      showToast(`주문 수량(${totalOrderQty})이 잔여 FAIL 건수(${currentRemainingFails})를 초과할 수 없습니다.`, 'error');
       return;
     }
 
@@ -461,6 +463,11 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 };

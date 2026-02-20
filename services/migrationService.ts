@@ -39,8 +39,14 @@ export const migrationService = {
     const raw = localStorage.getItem(`${prefix}app_inventory`);
     if (!raw) return { migrated: 0, errors: 0 };
 
-    const items: InventoryItem[] = JSON.parse(raw);
-    if (items.length === 0) return { migrated: 0, errors: 0 };
+    let items: InventoryItem[];
+    try {
+      items = JSON.parse(raw);
+    } catch (e) {
+      console.error('[migration] Inventory localStorage JSON 파싱 실패:', e);
+      return { migrated: 0, errors: 1 };
+    }
+    if (!Array.isArray(items) || items.length === 0) return { migrated: 0, errors: 0 };
 
     const dbItems = items.map(item => inventoryToDb(item, hospitalId));
 
@@ -62,7 +68,14 @@ export const migrationService = {
     const raw = localStorage.getItem(`${prefix}app_surgery_master`);
     if (!raw) return { migrated: 0, errors: 0 };
 
-    const surgeryMaster: Record<string, ExcelRow[]> = JSON.parse(raw);
+    let surgeryMaster: Record<string, ExcelRow[]>;
+    try {
+      surgeryMaster = JSON.parse(raw);
+    } catch (e) {
+      console.error('[migration] Surgery localStorage JSON 파싱 실패:', e);
+      return { migrated: 0, errors: 1 };
+    }
+    if (!surgeryMaster || typeof surgeryMaster !== 'object') return { migrated: 0, errors: 0 };
     const rows = surgeryMaster['수술기록지'] || [];
     if (rows.length === 0) return { migrated: 0, errors: 0 };
 
@@ -95,8 +108,14 @@ export const migrationService = {
     const raw = localStorage.getItem(`${prefix}app_orders`);
     if (!raw) return { migrated: 0, errors: 0 };
 
-    const orders: Order[] = JSON.parse(raw);
-    if (orders.length === 0) return { migrated: 0, errors: 0 };
+    let orders: Order[];
+    try {
+      orders = JSON.parse(raw);
+    } catch (e) {
+      console.error('[migration] Orders localStorage JSON 파싱 실패:', e);
+      return { migrated: 0, errors: 1 };
+    }
+    if (!Array.isArray(orders) || orders.length === 0) return { migrated: 0, errors: 0 };
 
     let migrated = 0;
     let errors = 0;

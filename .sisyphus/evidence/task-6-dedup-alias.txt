@@ -1,0 +1,13 @@
+=== manufacturerAliasKey definition count ===
+./services/appUtils.ts:7:export function manufacturerAliasKey(raw: string): string {
+
+=== import from appUtils ===
+./App.tsx:61:import { manufacturerAliasKey } from './services/appUtils';
+./components/InventoryManager.tsx:8:import { manufacturerAliasKey } from '../services/appUtils';
+
+=== Verification ===
+✓ manufacturerAliasKey defined exactly once in services/appUtils.ts
+✓ App.tsx imports from appUtils
+✓ InventoryManager.tsx imports from appUtils
+✓ npm run lint: PASSED
+✓ npm run build: PASSED

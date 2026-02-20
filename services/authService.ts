@@ -95,16 +95,15 @@ export const authService = {
         const filePath = `${userId}/biz-doc.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('biz-documents')
-          .upload(filePath, bizFile);
+          .upload(filePath, bizFile, { upsert: true });
 
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from('biz-documents')
-            .getPublicUrl(filePath);
-
+        if (uploadError) {
+          console.error('[authService] Biz file upload failed:', uploadError);
+        } else {
+          // private bucket 기준: URL 대신 안정적인 "bucket/path" 참조값 저장
           await supabase
             .from('hospitals')
-            .update({ biz_file_url: urlData.publicUrl })
+            .update({ biz_file_url: `biz-documents/${filePath}` })
             .eq('id', hospital.id);
         }
       }

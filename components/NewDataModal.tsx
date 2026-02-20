@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ExcelRow } from '../types';
+import { useToast } from '../hooks/useToast';
 
 interface NewDataModalProps {
   onClose: () => void;
@@ -18,6 +19,7 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
   const [rows, setRows] = useState<TempRow[]>([
     { manufacturer: '', brand: '', size: '', unused: false }
   ]);
+  const { toast, showToast } = useToast();
 
   const addRow = () => {
     setRows([...rows, { manufacturer: '', brand: '', size: '', unused: false }]);
@@ -46,7 +48,7 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
       }));
 
     if (validatedRows.length === 0) {
-      alert("입력된 데이터가 없습니다.");
+      showToast('입력된 데이터가 없습니다.', 'error');
       return;
     }
 
@@ -54,6 +56,7 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
@@ -168,6 +171,12 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
         </div>
       </div>
     </div>
+    {toast && (
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        {toast.message}
+      </div>
+    )}
+    </>
   );
 };
 

@@ -2,8 +2,7 @@ import { supabase } from './supabaseClient';
 import { planService } from './planService';
 import { PlanType, BillingCycle, PLAN_PRICING, PLAN_NAMES, DbBillingHistory } from '../types';
 
-// Make 웹훅 URL: .env.local에서 설정
-const MAKE_WEBHOOK_URL = import.meta.env.VITE_MAKE_WEBHOOK_URL || '';
+const PAYMENT_PROXY_FUNCTION = 'payment-request-proxy';
 
 export interface PaymentRequest {
   hospitalId: string;
@@ -22,6 +21,12 @@ export interface PaymentResult {
   error?: string;
 }
 
+interface PaymentProxyResponse {
+  forwarded?: boolean;
+  manual?: boolean;
+  message?: string;
+}
+
 export const makePaymentService = {
   /** 결제 요청: billing_history 생성 + Make 웹훅 호출 */
   async requestPayment(request: PaymentRequest): Promise<PaymentResult> {
@@ -33,46 +38,50 @@ export const makePaymentService = {
       return { success: false, billingId: null, error: '결제 이력 생성 실패' };
     }
 
-    // 2. Make 웹훅 URL이 없으면 pending 상태로만 생성 (운영자가 수동 처리)
-    if (!MAKE_WEBHOOK_URL) {
-      console.warn('[makePaymentService] MAKE_WEBHOOK_URL not configured. Payment pending for manual processing.');
-      return { success: true, billingId };
-    }
-
-    // 3. Make 웹훅으로 결제 요청 전송
+    // 2. 서버사이드 프록시(Edge Function)로 결제 요청 전송
     const price = billingCycle === 'yearly'
       ? PLAN_PRICING[plan].yearlyPrice * 12
       : PLAN_PRICING[plan].monthlyPrice;
 
     try {
-      const response = await fetch(MAKE_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          billing_id: billingId,
-          hospital_id: hospitalId,
-          hospital_name: request.hospitalName,
-          plan_name: PLAN_NAMES[plan],
-          plan: plan,
-          billing_cycle: billingCycle,
-          amount: price,
-          contact_phone: request.contactPhone,
-          contact_name: request.contactName,
-          payment_method: request.paymentMethod,
-          receipt_type: request.receiptType || null,
-          callback_url: `${window.location.origin}`,
-        }),
+      const payload = {
+        billing_id: billingId,
+        hospital_id: hospitalId,
+        hospital_name: request.hospitalName,
+        plan_name: PLAN_NAMES[plan],
+        plan: plan,
+        billing_cycle: billingCycle,
+        amount: price,
+        contact_phone: request.contactPhone,
+        contact_name: request.contactName,
+        payment_method: request.paymentMethod,
+        receipt_type: request.receiptType || null,
+      };
+
+      const { data, error } = await supabase.functions.invoke(PAYMENT_PROXY_FUNCTION, {
+        body: payload,
       });
 
-      if (!response.ok) {
-        console.error('[makePaymentService] Webhook call failed:', response.status);
-        return { success: true, billingId, error: '결제 요청 전송 실패. 운영자에게 문의하세요.' };
+      if (error) {
+        console.error('[makePaymentService] Payment proxy call failed:', error);
+        return { success: false, billingId, error: '결제 요청 전송 실패. 운영자에게 문의하세요.' };
+      }
+
+      const proxyResponse = (data || {}) as PaymentProxyResponse;
+      if (proxyResponse.manual) {
+        console.warn('[makePaymentService] Proxy manual mode:', proxyResponse.message || 'No webhook configured');
+        // billing 레코드는 pending 상태 유지 (운영자 수동 처리)
+        return { success: true, billingId };
+      }
+      if (!proxyResponse.forwarded) {
+        return { success: false, billingId, error: '결제 요청 전송 실패. 운영자에게 문의하세요.' };
       }
 
       return { success: true, billingId };
     } catch (err) {
-      console.error('[makePaymentService] Webhook error:', err);
-      return { success: true, billingId, error: '결제 요청 전송 중 오류. 운영자에게 문의하세요.' };
+      console.error('[makePaymentService] Payment proxy error:', err);
+      // billing 레코드는 pending 상태로 유지 — 운영자 수동 처리 필요
+      return { success: false, billingId, error: '결제 요청 전송 중 오류. 운영자에게 문의하세요.' };
     }
   },
 

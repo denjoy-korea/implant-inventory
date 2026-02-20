@@ -1,0 +1,3 @@
+=== signatures ===
+6: export const parseExcelFile = async (file: File): Promise<ExcelData> => {
+33: export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {

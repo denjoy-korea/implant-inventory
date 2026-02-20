@@ -1,0 +1,5 @@
+=== XLSX.write method ===
+  // XLSX.write(buffer) 사용 — Deno 환경은 파일 시스템 쓰기 불가이므로 XLSX.writeFile 사용 금지
+  const buffer: Uint8Array = XLSX.write(workbook, {
+  // XLSX.write(buffer) 사용 — Deno 환경은 파일 시스템 쓰기 불가이므로 XLSX.writeFile 사용 금지
+writeFile: appears only in comment (NOT as actual call)

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, UserRole, Hospital, HospitalPlanState, PLAN_LIMITS, PLAN_NAMES } from '../types';
+import {
+  User, UserRole, Hospital, HospitalPlanState, PLAN_LIMITS, PLAN_NAMES,
+  MemberPermissions, PermissionLevel, DEFAULT_STAFF_PERMISSIONS, READONLY_PERMISSIONS, PERMISSION_LABELS,
+} from '../types';
 import { hospitalService } from '../services/hospitalService';
 import { dbToHospital } from '../services/mappers';
 import { planService } from '../services/planService';
@@ -14,8 +17,192 @@ interface MemberManagerProps {
     onGoToPricing?: () => void;
 }
 
-type MemberWithId = User & { _id: string };
+type MemberWithId = User & { _id: string; permissions: MemberPermissions | null };
 type InvitedMember = { id: string; email: string; name: string; created_at: string; expires_at: string };
+
+// ─── Permission Modal ────────────────────────────────────────────────────────
+
+function detectLevel(perms: MemberPermissions): PermissionLevel {
+    const allTrue = Object.values(perms).every(Boolean);
+    if (allTrue) return 'full';
+    const readonlyMatch = (Object.keys(READONLY_PERMISSIONS) as (keyof MemberPermissions)[]).every(
+        k => perms[k] === READONLY_PERMISSIONS[k]
+    );
+    if (readonlyMatch) return 'readonly';
+    return 'custom';
+}
+
+/** 세부 권한 카테고리 정의 */
+const PERM_GROUPS: { label: string; keys: (keyof MemberPermissions)[] }[] = [
+    {
+        label: '재고 관리 권한',
+        keys: ['canViewInventory', 'canEditInventory'],
+    },
+    {
+        label: '수술기록 권한',
+        keys: ['canViewSurgery', 'canEditSurgery'],
+    },
+    {
+        label: '발주 · 실패 관리',
+        keys: ['canManageOrders', 'canManageFails'],
+    },
+    {
+        label: '분석 · 보고서',
+        keys: ['canViewAnalytics'],
+    },
+];
+
+interface PermissionModalProps {
+    member: MemberWithId;
+    onClose: () => void;
+    onSave: (permissions: MemberPermissions) => Promise<void>;
+}
+
+const PermissionModal: React.FC<PermissionModalProps> = ({ member, onClose, onSave }) => {
+    const initialPerms = member.permissions ?? DEFAULT_STAFF_PERMISSIONS;
+    const [level, setLevel] = useState<PermissionLevel>(detectLevel(initialPerms));
+    const [custom, setCustom] = useState<MemberPermissions>({ ...initialPerms });
+    const [isSaving, setIsSaving] = useState(false);
+
+    const effectivePerms: MemberPermissions =
+        level === 'full' ? DEFAULT_STAFF_PERMISSIONS :
+        level === 'readonly' ? READONLY_PERMISSIONS :
+        custom;
+
+    const handleLevelChange = (next: PermissionLevel) => {
+        setLevel(next);
+        if (next === 'full') setCustom({ ...DEFAULT_STAFF_PERMISSIONS });
+        else if (next === 'readonly') setCustom({ ...READONLY_PERMISSIONS });
+        // custom: 현재 effectivePerms 그대로 유지
+    };
+
+    const togglePerm = (key: keyof MemberPermissions) => {
+        const next = { ...effectivePerms, [key]: !effectivePerms[key] };
+        setCustom(next);
+        setLevel(detectLevel(next));
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        await onSave(effectivePerms);
+        setIsSaving(false);
+    };
+
+    // 2열 분배: 짝수 인덱스 → 왼쪽, 홀수 인덱스 → 오른쪽
+    const leftGroups  = PERM_GROUPS.filter((_, i) => i % 2 === 0);
+    const rightGroups = PERM_GROUPS.filter((_, i) => i % 2 === 1);
+
+    const renderGroup = (group: typeof PERM_GROUPS[0]) => (
+        <div key={group.label} className="mb-4">
+            <p className="flex items-center gap-1 text-xs font-bold text-slate-700 mb-2">
+                <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 8 8"><polygon points="0,0 8,4 0,8" /></svg>
+                {group.label}
+            </p>
+            <div className="space-y-1.5 pl-1">
+                {group.keys.map(key => (
+                    <label
+                        key={key}
+                        className="flex items-center gap-2 cursor-pointer group"
+                        onClick={() => togglePerm(key)}
+                    >
+                        {/* 체크박스 */}
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                            effectivePerms[key]
+                                ? 'bg-indigo-600 border-indigo-600'
+                                : 'bg-white border-slate-300 group-hover:border-indigo-400'
+                        }`}>
+                            {effectivePerms[key] && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                            )}
+                        </div>
+                        <span className={`text-xs leading-tight select-none ${effectivePerms[key] ? 'text-slate-800' : 'text-slate-400'}`}>
+                            {PERMISSION_LABELS[key]}
+                        </span>
+                    </label>
+                ))}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm flex-shrink-0">
+                            {member.name.charAt(0)}
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900 leading-none">{member.name} <span className="font-normal text-slate-400 text-sm">세부권한 설정</span></h3>
+                            <p className="text-xs text-slate-400 mt-0.5">{member.email}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                    {/* 권한 등급 (프리셋) */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-500 mr-1">권한 등급</span>
+                        {([
+                            { value: 'full' as PermissionLevel, label: '전체 권한' },
+                            { value: 'readonly' as PermissionLevel, label: '읽기 전용' },
+                            { value: 'custom' as PermissionLevel, label: '직접 설정' },
+                        ]).map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => handleLevelChange(opt.value)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                    level === opt.value
+                                        ? opt.value === 'full' ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : opt.value === 'readonly' ? 'bg-amber-500 text-white border-amber-500'
+                                        : 'bg-slate-700 text-white border-slate-700'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* 세부 권한 — 2열 그리드 */}
+                    <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60">
+                        <div className="grid grid-cols-2 gap-x-6">
+                            {/* 왼쪽 열 */}
+                            <div>{leftGroups.map(renderGroup)}</div>
+                            {/* 오른쪽 열 */}
+                            <div>{rightGroups.map(renderGroup)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 pb-5 pt-4 border-t border-slate-100 flex gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 h-10 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors text-sm"
+                    >
+                        취소
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="flex-1 h-10 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                        {isSaving ? '저장 중...' : '저장'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, planState, onGoToPricing }) => {
     const [members, setMembers] = useState<MemberWithId[]>([]);
@@ -29,6 +216,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
     const [currentHospital, setCurrentHospital] = useState<Hospital | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'indigo'; confirmLabel?: string; onConfirm: () => void } | null>(null);
     const [inviteUrlModal, setInviteUrlModal] = useState<{ url: string; name: string; email: string } | null>(null);
+    const [permissionModal, setPermissionModal] = useState<MemberWithId | null>(null);
     const { toast, showToast } = useToast();
 
     useEffect(() => {
@@ -53,9 +241,10 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             hospitalService.getMyHospital(),
         ]);
 
-        setMembers(activeData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
-        setPendingMembers(pendingData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
-        setReadonlyMembers(readonlyData.map(p => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status })));
+        const mapProfile = (p: typeof activeData[0]) => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status, permissions: p.permissions ?? null });
+        setMembers(activeData.map(mapProfile));
+        setPendingMembers(pendingData.map(mapProfile));
+        setReadonlyMembers(readonlyData.map(mapProfile));
         setInvitedMembers(invitedData);
         if (hospital) setCurrentHospital(dbToHospital(hospital));
     };
@@ -462,12 +651,27 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             {member.role !== 'master' && (
-                                                <button
-                                                    onClick={() => handleDeleteMember(member._id)}
-                                                    className="text-slate-400 hover:text-rose-600 font-medium text-sm transition-colors"
-                                                >
-                                                    방출
-                                                </button>
+                                                <div className="inline-flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => setPermissionModal(member)}
+                                                        title="권한 설정"
+                                                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteMember(member._id)}
+                                                        title="방출"
+                                                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 font-medium text-sm transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
                                             )}
                                         </td>
                                     </tr>
@@ -497,19 +701,37 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                                 읽기 전용
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                                            <button
-                                                onClick={() => handleReactivateMember(member._id)}
-                                                className="text-indigo-500 hover:text-indigo-700 font-medium text-sm transition-colors"
-                                            >
-                                                활성화
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteMember(member._id)}
-                                                className="text-slate-400 hover:text-rose-600 font-medium text-sm transition-colors"
-                                            >
-                                                방출
-                                            </button>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <div className="inline-flex items-center gap-1">
+                                                <button
+                                                    onClick={() => setPermissionModal(member)}
+                                                    title="권한 설정"
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReactivateMember(member._id)}
+                                                    title="활성화"
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 font-medium text-sm transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteMember(member._id)}
+                                                    title="방출"
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 font-medium text-sm transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -526,6 +748,23 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                 </div>
             </div>
         </div>
+        {permissionModal && (
+            <PermissionModal
+                member={permissionModal}
+                onClose={() => setPermissionModal(null)}
+                onSave={async (permissions) => {
+                    try {
+                        await hospitalService.updateMemberPermissions(permissionModal._id, permissions);
+                        operationLogService.logOperation('member_permission_update', `구성원 권한 수정: ${permissionModal.name}`, { userId: permissionModal._id });
+                        await loadData();
+                        setPermissionModal(null);
+                        showToast('권한이 저장되었습니다.', 'success');
+                    } catch (error: any) {
+                        showToast(error.message || '권한 저장에 실패했습니다.', 'error');
+                    }
+                }}
+            />
+        )}
         {confirmModal && (
             <ConfirmModal
                 title={confirmModal.title}

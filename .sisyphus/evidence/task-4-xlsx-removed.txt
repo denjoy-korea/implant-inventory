@@ -1,0 +1,7 @@
+=== xlsx import check ===
+CLEAN: no xlsx import
+=== loadXlsx check ===
+CLEAN: no loadXlsx
+=== functions.invoke check ===
+19: const { data, error } = await supabase.functions.invoke('xlsx-parse', {
+39: const { data: binaryData, error } = await supabase.functions.invoke('xlsx-generate', {

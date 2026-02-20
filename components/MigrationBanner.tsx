@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { migrationService } from '../services/migrationService';
+import ConfirmModal from './ConfirmModal';
 
 interface MigrationBannerProps {
   user: User;
@@ -11,6 +12,7 @@ const MigrationBanner: React.FC<MigrationBannerProps> = ({ user, onMigrationComp
   const [hasLocalData, setHasLocalData] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (user.hospitalId) {
@@ -20,10 +22,8 @@ const MigrationBanner: React.FC<MigrationBannerProps> = ({ user, onMigrationComp
 
   if (!hasLocalData) return null;
 
-  const handleMigrate = async () => {
+  const doMigrate = async () => {
     if (!user.hospitalId) return;
-    if (!window.confirm('localStorage 데이터를 Supabase로 마이그레이션하시겠습니까?\n기존 데이터는 마이그레이션 후 삭제됩니다.')) return;
-
     setIsMigrating(true);
     try {
       const migrationResult = await migrationService.migrateAll(user.hospitalId);
@@ -52,6 +52,7 @@ const MigrationBanner: React.FC<MigrationBannerProps> = ({ user, onMigrationComp
   };
 
   return (
+    <>
     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -79,7 +80,7 @@ const MigrationBanner: React.FC<MigrationBannerProps> = ({ user, onMigrationComp
             나중에
           </button>
           <button
-            onClick={handleMigrate}
+            onClick={() => setShowConfirm(true)}
             disabled={isMigrating}
             className="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
           >
@@ -88,6 +89,17 @@ const MigrationBanner: React.FC<MigrationBannerProps> = ({ user, onMigrationComp
         </div>
       )}
     </div>
+    {showConfirm && (
+      <ConfirmModal
+        title="마이그레이션 확인"
+        message={'localStorage 데이터를 Supabase로 마이그레이션하시겠습니까?\n기존 데이터는 마이그레이션 후 삭제됩니다.'}
+        confirmColor="amber"
+        confirmLabel="마이그레이션"
+        onConfirm={() => { setShowConfirm(false); doMigrate(); }}
+        onCancel={() => setShowConfirm(false)}
+      />
+    )}
+    </>
   );
 };
 

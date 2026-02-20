@@ -1,7 +1,21 @@
 /**
  * 환자정보 암호화/복호화 유틸리티
- * - ENCv2: Web Crypto API(AES-GCM)
- * - ENCv1(ENC:): 기존 XOR 포맷 하위 호환
+ * - ENCv2: Web Crypto API(AES-GCM + PBKDF2 키 도출)
+ * - ENCv1(ENC:): 기존 XOR 포맷 하위 호환 (복호화 전용)
+ *
+ * ⚠️  보안 주의사항 (VITE_PATIENT_DATA_KEY):
+ *   VITE_ 접두어 환경변수는 Vite 빌드 시 클라이언트 번들에 인라인됩니다.
+ *   즉, dist/*.js 파일과 브라우저 DevTools Source에서 키 값이 노출될 수 있습니다.
+ *
+ *   현재 위험 수준:
+ *   - 공격자가 키를 얻더라도 암호문(DB 저장값)에 별도로 접근해야 복호화 가능
+ *   - PBKDF2 100,000회 반복으로 무차별대입 공격에 방어
+ *   - 환자명 해시는 단방향이므로 키 노출 시에도 원본 복원 불가
+ *
+ *   향후 개선 방향 (다음 스프린트):
+ *   - VITE_PATIENT_DATA_KEY → PATIENT_DATA_KEY (서버 전용)
+ *   - 암·복호화 로직을 Supabase Edge Function으로 이전
+ *   - 클라이언트는 암호문만 저장·전달
  */
 
 const LEGACY_SALT = 'dentweb-patient-info-2026';
@@ -66,15 +80,51 @@ function legacyDecryptXor(encrypted: string): string {
   return new TextDecoder().decode(result);
 }
 
+/** PBKDF2 salt — 고정값이지만 SHA-256 직접 사용보다 무차별대입 방어에 유리 */
+const PBKDF2_SALT = new TextEncoder().encode('implant-inventory-pbkdf2-salt-v1');
+const PBKDF2_ITERATIONS = 100_000;
+
 async function getAesKey(): Promise<CryptoKey> {
   if (!globalThis.crypto?.subtle) {
-    throw new Error('WebCrypto is unavailable');
+    throw new Error('WebCrypto is unavailable — 이 브라우저에서는 환자 데이터 암호화를 사용할 수 없습니다.');
   }
   if (cachedAesKeyPromise) {
     return cachedAesKeyPromise;
   }
 
   cachedAesKeyPromise = (async () => {
+    const keyMaterial = await globalThis.crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(ENCRYPTION_SECRET),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+    return globalThis.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: PBKDF2_SALT,
+        iterations: PBKDF2_ITERATIONS,
+        hash: 'SHA-256',
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  })();
+
+  return cachedAesKeyPromise;
+}
+
+/**
+ * 레거시 SHA-256 직접 키 도출 (ENCv2 초기 버전 복호화 전용)
+ * 새 암호화에는 사용하지 않음
+ */
+let cachedLegacyV2KeyPromise: Promise<CryptoKey> | null = null;
+async function getLegacyV2AesKey(): Promise<CryptoKey> {
+  if (cachedLegacyV2KeyPromise) return cachedLegacyV2KeyPromise;
+  cachedLegacyV2KeyPromise = (async () => {
     const keyMaterial = new TextEncoder().encode(ENCRYPTION_SECRET);
     const digest = await globalThis.crypto.subtle.digest('SHA-256', keyMaterial);
     return globalThis.crypto.subtle.importKey(
@@ -82,11 +132,10 @@ async function getAesKey(): Promise<CryptoKey> {
       digest,
       { name: 'AES-GCM' },
       false,
-      ['encrypt', 'decrypt']
+      ['decrypt']
     );
   })();
-
-  return cachedAesKeyPromise;
+  return cachedLegacyV2KeyPromise;
 }
 
 /**
@@ -105,25 +154,21 @@ export async function hashPatientInfo(text: string): Promise<string> {
 
 export async function encryptPatientInfo(text: string): Promise<string> {
   if (!text) return '';
-  try {
-    const key = await getAesKey();
-    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(text);
-    const encrypted = await globalThis.crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      encoded
-    );
+  // WebCrypto 미지원 시 XOR 폴백 대신 에러 throw (보안 우선)
+  const key = await getAesKey();
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const encrypted = await globalThis.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoded
+  );
 
-    const cipherBytes = new Uint8Array(encrypted);
-    const combined = new Uint8Array(iv.length + cipherBytes.length);
-    combined.set(iv, 0);
-    combined.set(cipherBytes, iv.length);
-    return ENC_V2_PREFIX + bytesToBase64(combined);
-  } catch {
-    // WebCrypto를 사용할 수 없는 환경에 대한 호환 폴백
-    return legacyEncryptXor(text);
-  }
+  const cipherBytes = new Uint8Array(encrypted);
+  const combined = new Uint8Array(iv.length + cipherBytes.length);
+  combined.set(iv, 0);
+  combined.set(cipherBytes, iv.length);
+  return ENC_V2_PREFIX + bytesToBase64(combined);
 }
 
 export async function decryptPatientInfo(encrypted: string): Promise<string> {
@@ -147,13 +192,26 @@ export async function decryptPatientInfo(encrypted: string): Promise<string> {
 
     const iv = combined.slice(0, 12);
     const cipherBytes = combined.slice(12);
-    const key = await getAesKey();
-    const decrypted = await globalThis.crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      cipherBytes
-    );
-    return new TextDecoder().decode(decrypted);
+
+    // 1차: PBKDF2 키로 복호화 시도 (새 암호화 방식)
+    try {
+      const key = await getAesKey();
+      const decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        cipherBytes
+      );
+      return new TextDecoder().decode(decrypted);
+    } catch {
+      // 2차: 레거시 SHA-256 키로 재시도 (기존 ENCv2 데이터 하위 호환)
+      const legacyKey = await getLegacyV2AesKey();
+      const decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        legacyKey,
+        cipherBytes
+      );
+      return new TextDecoder().decode(decrypted);
+    }
   } catch {
     return encrypted;
   }

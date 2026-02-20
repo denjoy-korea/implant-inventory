@@ -3,6 +3,34 @@ export interface ExcelRow {
   [key: string]: any;
 }
 
+/** 재고(Fixture) 엑셀 행 — 알려진 컬럼 명시 */
+export interface FixtureRow {
+  '제조사'?: string;
+  '브랜드'?: string;
+  '규격(SIZE)'?: string;
+  '규격'?: string;
+  '사이즈'?: string;
+  'Size'?: string;
+  'size'?: string;
+  '수량'?: string | number;
+  '사용안함'?: boolean;
+  '발주수량'?: string | number;
+  [key: string]: string | number | boolean | undefined;
+}
+
+/** 수술기록 엑셀 행 — 알려진 컬럼 명시 */
+export interface SurgeryRow {
+  '수술일'?: string | number;
+  '환자명'?: string;
+  '제조사'?: string;
+  '브랜드'?: string;
+  '규격(SIZE)'?: string;
+  '규격'?: string;
+  '수량'?: string | number;
+  '수술기록'?: string;
+  [key: string]: string | number | boolean | undefined;
+}
+
 export interface ExcelSheet {
   name: string;
   columns: string[];
@@ -26,6 +54,13 @@ export interface InventoryItem {
   recommendedStock: number;
   monthlyAvgUsage?: number;
   dailyMaxUsage?: number;
+  lastMonthUsage?: number;
+  /** 예측 모델 기반 일평균 소진량 (최근 추세+변동성 반영) */
+  predictedDailyUsage?: number;
+  /** 예측 모델 신뢰도 (0~1) */
+  forecastConfidence?: number;
+  /** 가장 최근 수술에 사용된 날짜 (ISO string). 수술기록 데이터 로드 시 계산됨. */
+  lastUsedDate?: string | null;
 }
 
 export type OrderType = 'replenishment' | 'fail_exchange';
@@ -69,9 +104,40 @@ export interface User {
   role: UserRole;
   hospitalId: string;
   status?: 'pending' | 'active' | 'readonly' | 'paused'; // New field for approval flow
+  permissions?: MemberPermissions | null;
 }
 
-export type View = 'landing' | 'login' | 'signup' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices';
+/** 주어진 탭에 접근 가능한지 권한 확인 */
+export function canAccessTab(
+  tab: DashboardTab,
+  permissions: MemberPermissions | null | undefined,
+  role: UserRole,
+): boolean {
+  // master / admin 은 항상 모든 탭 접근 가능
+  if (role === 'master' || role === 'admin') return true;
+  // permissions 미설정 시 전체 허용 (기본값)
+  if (!permissions) return true;
+
+  // 레거시/비정상 권한 객체 호환:
+  // 일부 키가 누락된 경우는 "차단"이 아니라 기존 동작(허용)으로 간주한다.
+  const safe = permissions as Partial<MemberPermissions>;
+
+  switch (tab) {
+    case 'overview':          return safe.canViewAnalytics ?? true;
+    case 'inventory_master':  return safe.canViewInventory ?? true;
+    case 'inventory_audit':   return safe.canViewInventory ?? true;
+    case 'fixture_upload':    return safe.canEditInventory ?? true;
+    case 'fixture_edit':      return safe.canEditInventory ?? true;
+    case 'surgery_database':  return safe.canViewSurgery ?? true;
+    case 'surgery_upload':    return safe.canEditSurgery ?? true;
+    case 'order_management':  return safe.canManageOrders ?? true;
+    case 'fail_management':   return safe.canManageFails ?? true;
+    // 설정·멤버관리·감사로그 는 항상 접근 허용 (master 전용 여부는 별도 처리)
+    default:                  return true;
+  }
+}
+
+export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices';
 
 export interface DiagnosticItem {
   category: string;
@@ -89,6 +155,24 @@ export interface UnmatchedItem {
   size: string;
   source: 'surgery_only' | 'fixture_only';
   reason: string;
+}
+
+/** 수술기록지에는 있으나 재고 마스터에 없는 품목 알림용 */
+export interface SurgeryUnregisteredSample {
+  date: string;
+  patientMasked: string;
+  chartNumber: string;
+  recordId?: string;
+}
+
+export interface SurgeryUnregisteredItem {
+  manufacturer: string;
+  brand: string;
+  size: string;
+  usageCount: number;
+  reason?: 'not_in_inventory' | 'non_list_input';
+  samples?: SurgeryUnregisteredSample[];
+  recordIds?: string[];
 }
 
 export interface AnalysisReport {
@@ -219,7 +303,7 @@ export interface HospitalPlanState {
 /** 플랜별 제한 상수 */
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
-    maxItems: 80,
+    maxItems: 100,
     maxUsers: 1,
     maxBaseStockEdits: 3,
     retentionMonths: 3,
@@ -227,7 +311,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   },
   basic: {
     maxItems: 200,
-    maxUsers: 1,
+    maxUsers: 3,
     maxBaseStockEdits: 5,
     retentionMonths: 6,
     features: ['dashboard_basic', 'excel_upload', 'realtime_stock', 'brand_analytics'],
@@ -271,9 +355,9 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
 /** 플랜별 가격 */
 export const PLAN_PRICING: Record<PlanType, PlanPricing> = {
   free: { monthlyPrice: 0, yearlyPrice: 0 },
-  basic: { monthlyPrice: 19000, yearlyPrice: 15000 },
-  plus: { monthlyPrice: 49000, yearlyPrice: 39000 },
-  business: { monthlyPrice: 99000, yearlyPrice: 79000 },
+  basic: { monthlyPrice: 29000, yearlyPrice: 23000 },
+  plus: { monthlyPrice: 69000, yearlyPrice: 55000 },
+  business: { monthlyPrice: 129000, yearlyPrice: 103000 },
   ultimate: { monthlyPrice: 0, yearlyPrice: 0 },
 };
 
@@ -323,6 +407,50 @@ export interface DbHospital {
   work_days: number[];
 }
 
+/** 구성원 세부 권한 */
+export interface MemberPermissions {
+  canViewInventory: boolean;   // 재고 조회
+  canEditInventory: boolean;   // 재고 수정
+  canViewSurgery: boolean;     // 수술기록 조회
+  canEditSurgery: boolean;     // 수술기록 등록/수정
+  canManageOrders: boolean;    // 발주 관리
+  canViewAnalytics: boolean;   // 분석/보고서 열람
+  canManageFails: boolean;     // 실패 관리
+}
+
+/** 권한 레벨 프리셋 */
+export type PermissionLevel = 'full' | 'readonly' | 'custom';
+
+export const DEFAULT_STAFF_PERMISSIONS: MemberPermissions = {
+  canViewInventory: true,
+  canEditInventory: true,
+  canViewSurgery: true,
+  canEditSurgery: true,
+  canManageOrders: true,
+  canViewAnalytics: true,
+  canManageFails: true,
+};
+
+export const READONLY_PERMISSIONS: MemberPermissions = {
+  canViewInventory: true,
+  canEditInventory: false,
+  canViewSurgery: true,
+  canEditSurgery: false,
+  canManageOrders: false,
+  canViewAnalytics: true,
+  canManageFails: false,
+};
+
+export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
+  canViewInventory: '재고 조회',
+  canEditInventory: '재고 수정',
+  canViewSurgery: '수술기록 조회',
+  canEditSurgery: '수술기록 등록/수정',
+  canManageOrders: '발주 관리',
+  canViewAnalytics: '분석/보고서 열람',
+  canManageFails: '실패 관리',
+};
+
 /** Supabase profiles 테이블 Row */
 export interface DbProfile {
   id: string;
@@ -332,8 +460,10 @@ export interface DbProfile {
   role: UserRole;
   hospital_id: string | null;
   status: 'pending' | 'active' | 'readonly' | 'paused';
+  permissions: MemberPermissions | null;
   created_at: string;
   updated_at: string;
+  last_sign_in_at?: string | null;
 }
 
 /** Supabase inventory 테이블 Row */
@@ -436,6 +566,19 @@ export interface DbResetRequest {
   completed_at: string | null;
   cancelled_at: string | null;
   created_at: string;
+}
+
+/** Supabase public_notices 테이블 Row */
+export interface DbNotice {
+  id: string;
+  title: string;
+  content: string;
+  category: NoticeCategory;
+  is_important: boolean;
+  author: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** 서비스 에러 */

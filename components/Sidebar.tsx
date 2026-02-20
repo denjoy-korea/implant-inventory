@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ExcelData, DashboardTab, PlanType, PlanFeature, UserRole } from '../types';
+import { ExcelData, DashboardTab, PlanType, PlanFeature, UserRole, MemberPermissions, canAccessTab } from '../types';
 import { planService } from '../services/planService';
 
 interface SidebarProps {
@@ -8,11 +8,13 @@ interface SidebarProps {
   onTabChange: (tab: DashboardTab) => void;
   fixtureData: ExcelData | null;
   surgeryData: ExcelData | null;
+  surgeryUnregisteredCount?: number;
   isAdmin: boolean;
   isMaster: boolean;
   plan?: PlanType;
   hospitalName?: string;
   userRole?: UserRole;
+  userPermissions?: MemberPermissions | null;
   onReturnToAdmin?: () => void;
 }
 
@@ -31,11 +33,25 @@ const LockMenuIcon = () => (
 
 const LOCKED_STYLE = 'text-amber-500/50 hover:text-amber-500/70 hover:bg-slate-800/50';
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, surgeryData, isAdmin, isMaster, plan = 'free', hospitalName, userRole, onReturnToAdmin }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, surgeryData, surgeryUnregisteredCount = 0, isAdmin, isMaster, plan = 'free', hospitalName, userRole, userPermissions, onReturnToAdmin }) => {
+  const unregisteredBadgeText = surgeryUnregisteredCount > 99 ? '99+' : String(surgeryUnregisteredCount);
+
   const isLocked = (tab: DashboardTab): boolean => {
     const feature = TAB_FEATURE_MAP[tab];
     if (!feature) return false;
     return !planService.canAccess(plan as PlanType, feature);
+  };
+
+  /** 권한 설정에 의해 접근 차단된 탭인지 */
+  const isPermBlocked = (tab: DashboardTab): boolean => {
+    const effectiveRole: UserRole = isMaster ? 'master' : (userRole ?? 'dental_staff');
+    return !canAccessTab(tab, userPermissions, effectiveRole);
+  };
+
+  /** 탭 버튼 클릭 처리 — 차단된 탭은 무시 */
+  const handleTabClick = (tab: DashboardTab) => {
+    if (isPermBlocked(tab)) return;
+    onTabChange(tab);
   };
 
   return (
@@ -68,10 +84,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Overview</h3>
           <nav className="space-y-1">
             <button
-              onClick={() => onTabChange('overview')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('overview')}
+              disabled={isPermBlocked('overview')}
+              title={isPermBlocked('overview') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('overview') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+              {isPermBlocked('overview') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>}
               대시보드 홈
             </button>
           </nav>
@@ -82,38 +103,88 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Master Management</h3>
           <nav className="space-y-1">
             <button
-              onClick={() => onTabChange('inventory_master')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'inventory_master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('inventory_master')}
+              disabled={isPermBlocked('inventory_master')}
+              title={isPermBlocked('inventory_master') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('inventory_master') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'inventory_master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-              재고 관리 마스터
+              {isPermBlocked('inventory_master') ? (
+                <LockMenuIcon />
+              ) : surgeryUnregisteredCount > 0 ? (
+                <span
+                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${
+                    activeTab === 'inventory_master' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {unregisteredBadgeText}
+                </span>
+              ) : (
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+              )}
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">재고 관리 마스터</span>
             </button>
             <button
-              onClick={() => onTabChange('inventory_audit')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('inventory_audit')}
+              disabled={isPermBlocked('inventory_audit')}
+              title={isPermBlocked('inventory_audit') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('inventory_audit') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+              {isPermBlocked('inventory_audit') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
               재고 실사
             </button>
             <button
-              onClick={() => onTabChange('order_management')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isLocked('order_management') ? LOCKED_STYLE : activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('order_management')}
+              disabled={isPermBlocked('order_management')}
+              title={isPermBlocked('order_management') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('order_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : isLocked('order_management') ? LOCKED_STYLE
+                : activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              {isLocked('order_management') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
+              {(isPermBlocked('order_management') || isLocked('order_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
               주문 관리 마스터
             </button>
             <button
-              onClick={() => onTabChange('surgery_database')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'surgery_database' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('surgery_database')}
+              disabled={isPermBlocked('surgery_database')}
+              title={isPermBlocked('surgery_database') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('surgery_database') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'surgery_database' ? 'bg-slate-800 text-white shadow-md border border-slate-700'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-              수술 기록 데이터베이스
+              {isPermBlocked('surgery_database') ? (
+                <LockMenuIcon />
+              ) : surgeryUnregisteredCount > 0 ? (
+                <span
+                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${
+                    activeTab === 'surgery_database' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {unregisteredBadgeText}
+                </span>
+              ) : (
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              )}
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">수술 기록 데이터베이스</span>
             </button>
             <button
-              onClick={() => onTabChange('fail_management')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+              onClick={() => handleTabClick('fail_management')}
+              disabled={isPermBlocked('fail_management')}
+              title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                isPermBlocked('fail_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              {isPermBlocked('fail_management') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
               식립 FAIL 관리
             </button>
           </nav>

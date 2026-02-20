@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { InventoryItem, Order, ExcelData, HospitalPlanState } from '../types';
 import BrandChart from './BrandChart';
 import FeatureGate from './FeatureGate';
+import { LOW_STOCK_RATIO } from '../constants';
 
 interface DashboardOverviewProps {
     inventory: InventoryItem[];
@@ -31,7 +32,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
     const stockStats = useMemo(() => {
         const totalItems = inventory.length;
-        const lowStockItems = inventory.filter(item => item.currentStock <= item.recommendedStock * 0.3).length;
+        const lowStockItems = inventory.filter(item => item.currentStock <= item.recommendedStock * LOW_STOCK_RATIO).length;
         return { totalItems, lowStockItems };
     }, [inventory]);
 
@@ -46,6 +47,17 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const count = records.filter(r => String(r['날짜']).startsWith(thisMonth)).length;
         return { thisMonthCount: count };
     }, [surgeryMaster]);
+
+    // 대시보드용: 활성 제조사 목록 (읽기 전용)
+    const dashboardEnabledManufacturers = useMemo(() => {
+        if (!fixtureData?.sheets?.[fixtureData.activeSheetName]) return [];
+        const s = new Set<string>();
+        fixtureData.sheets[fixtureData.activeSheetName].rows.forEach(r => {
+            const m = String(r['제조사'] || '기타');
+            if (r['사용안함'] !== true && !m.startsWith('수술중FAIL_') && m !== '보험청구') s.add(m);
+        });
+        return Array.from(s).sort();
+    }, [fixtureData]);
 
     const today = new Date();
     const dateStr = `${today.getFullYear()}. ${today.getMonth() + 1}. ${today.getDate()}.`;
@@ -141,7 +153,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <div className="lg:col-span-3">
                     {fixtureData && fixtureData.sheets[fixtureData.activeSheetName] ? (
                         <FeatureGate feature="brand_analytics" plan={planState?.plan ?? 'free'}>
-                            <BrandChart data={fixtureData.sheets[fixtureData.activeSheetName]} onToggleBrand={() => { }} />
+                            <BrandChart data={fixtureData.sheets[fixtureData.activeSheetName]} enabledManufacturers={dashboardEnabledManufacturers} onToggleBrand={() => { }} onToggleAllBrands={() => { }} />
                         </FeatureGate>
                     ) : (
                         <div className="bg-white rounded-xl border border-slate-200 p-6">

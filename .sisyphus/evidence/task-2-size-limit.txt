@@ -1,0 +1,4 @@
+=== 2MB limit ===
+10:const MAX_FILE_SIZE = 2 * 1024 * 1024;
+69:  if (fileBytes.byteLength > MAX_FILE_SIZE) {
+70:    return jsonResponse({ error: "파일 크기가 2MB를 초과합니다." }, 413);

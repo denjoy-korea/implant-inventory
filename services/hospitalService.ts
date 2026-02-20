@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
-import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS } from '../types';
+import { FunctionsError } from '@supabase/supabase-js';
+import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole } from '../types';
 import { dbToHospital } from './mappers';
 
 export const hospitalService = {
@@ -119,7 +120,7 @@ export const hospitalService = {
     if (error) {
       // FunctionsHttpError에서 실제 에러 메시지 추출
       try {
-        const errBody = await (error as any).context?.json?.();
+        const errBody = error instanceof FunctionsError ? await error.context?.json?.() : null;
         throw new Error(errBody?.error || '초대 링크 생성에 실패했습니다.');
       } catch (e) {
         if (e instanceof Error) throw e;
@@ -213,7 +214,7 @@ export const hospitalService = {
     });
     if (error) {
       try {
-        const errBody = await (error as any).context?.json?.();
+        const errBody = error instanceof FunctionsError ? await error.context?.json?.() : null;
         throw new Error(errBody?.error || '방출에 실패했습니다.');
       } catch (e) {
         if (e instanceof Error) throw e;
@@ -233,6 +234,32 @@ export const hospitalService = {
       .eq('id', user.id);
 
     if (error) throw new Error('병원 탈퇴에 실패했습니다.');
+  },
+
+  /** 구성원 세부 권한 업데이트 */
+  async updateMemberPermissions(userId: string, permissions: MemberPermissions): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ permissions })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('[hospitalService] updateMemberPermissions failed:', error);
+      throw new Error('권한 저장에 실패했습니다.');
+    }
+  },
+
+  /** 구성원 역할 업데이트 (dental_staff ↔ staff 등) */
+  async updateMemberRole(userId: string, role: UserRole): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('[hospitalService] updateMemberRole failed:', error);
+      throw new Error('역할 저장에 실패했습니다.');
+    }
   },
 
   /**

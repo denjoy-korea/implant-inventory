@@ -1,0 +1,28 @@
+
+> 임플란트-재고관리-시스템-with-dentweb@0.0.0 test
+> node --test scripts/security-regression.test.mjs
+
+✔ crypto utils use AES-GCM with legacy compatibility (1.216792ms)
+✔ crypto utils do not fall back to supabase anon key for encryption (0.228542ms)
+✔ order service uses transactional RPC with compatibility fallback (0.189792ms)
+✔ rich HTML sinks are sanitized (0.74025ms)
+✔ phase2 SQL migration keeps critical permission guards (0.174291ms)
+✔ create_order_with_items ambiguity hotfix exists (0.169333ms)
+✔ create_order_with_items hotfix verification query exists (0.101666ms)
+✔ patient info encryption report query exists (0.090791ms)
+✔ maintenance service is wired for dev operations (0.458ms)
+✔ free plan max item limit is 100 (0.193708ms)
+✔ crypto utils throw in production when encryption key is missing (0.093334ms)
+✔ gemini api key is not injected into client bundle via vite define (0.070667ms)
+✔ payment request uses edge proxy instead of client webhook url (0.693833ms)
+✔ payment proxy validates auth scope before forwarding webhook (0.205083ms)
+✔ payment callback function validates token and updates billing via rpc (0.133958ms)
+✔ notice board uses Supabase-backed notices instead of localStorage cache (0.459625ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54.058667
