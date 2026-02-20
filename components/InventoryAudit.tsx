@@ -927,7 +927,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                 {groupedHistory.length > 0 ? (
                   <div className="divide-y divide-slate-100">
                     {/* 컬럼 헤더 */}
-                    <div className="grid grid-cols-[1fr_56px_56px_56px_88px_56px] sm:grid-cols-[1fr_64px_64px_64px_100px_64px] gap-1 sm:gap-2 px-3 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 md:sticky md:top-0">
+                    <div className="grid grid-cols-[1fr_56px_56px_56px_88px_56px] sm:grid-cols-[1fr_64px_64px_64px_100px_64px] gap-1 sm:gap-2 px-3 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                       <span className="text-[11px] font-bold text-slate-400">실사일</span>
                       <span className="text-[11px] font-bold text-slate-400 text-center">시스템</span>
                       <span className="text-[11px] font-bold text-slate-400 text-center">실제</span>
