@@ -34,13 +34,18 @@ function MiniSparkline({ data, color, id, height = 24, width = 80 }: { data: num
 function TrendBadge({ value, prevValue, suffix = '건', label = '전월대비' }: { value: number; prevValue?: number; suffix?: string; label?: string }) {
   if (value === 0) return null;
   const isUp = value > 0;
+  // #8: Truncate extreme percentages — "-97.0%" → "-97%", "-100.0%" → "-100%"
   const pctChange = prevValue && prevValue > 0
-    ? ((value / prevValue) * 100).toFixed(1)
+    ? ((value / prevValue) * 100)
     : null;
+  const pctDisplay = pctChange !== null
+    ? (Math.abs(pctChange) >= 10 ? `${Math.round(pctChange)}%` : `${pctChange.toFixed(1)}%`)
+    : null;
+  const ariaText = `${isUp ? '증가' : '감소'} ${Math.abs(value)}${suffix}${pctDisplay ? ` (${pctDisplay})` : ''} ${label}`;
   return (
-    <div className="inline-flex flex-col items-end ml-auto text-[10px] leading-tight">
+    <div className="inline-flex flex-col items-end ml-auto text-[10px] leading-tight" role="status" aria-label={ariaText}>
       <span className={`font-semibold ${isUp ? 'text-emerald-600' : 'text-red-600'}`}>
-        {isUp ? '▲' : '▼'} {Math.abs(value)}{suffix} {pctChange && <>({isUp ? '+' : ''}{pctChange}%)</>}
+        {isUp ? '▲' : '▼'} {Math.abs(value)}{suffix} {pctDisplay && <>({isUp ? '+' : ''}{pctDisplay})</>}
       </span>
       <span className="text-slate-400 font-medium">{label}</span>
     </div>
@@ -72,13 +77,13 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
     { ko: '월 평균', en: 'Avg Monthly', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: sparkline.placementDelta, prevValue: sparkline.placementPrev, badgeLabel: '전월대비', badgeSuffix: '개' },
     { ko: 'FAIL률', en: 'Failure Rate', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: sparkline.failDelta, prevValue: sparkline.failPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
     { ko: '보험청구', en: 'Insurance Claim', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: sparkline.claimDelta, prevValue: sparkline.claimPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
-    { ko: '일 평균', en: `Avg Daily (${displayWorkDays}d/mo)`, value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
+    { ko: '일 평균', en: 'Avg Daily', value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-0 bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm divide-y divide-slate-50 sm:divide-y-0 xl:divide-x">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-0 bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm divide-y divide-slate-50 sm:divide-y-0 lg:divide-x lg:divide-y-0">
       {metrics.map((m, i) => (
-        <div key={i} className={`px-4 sm:px-5 xl:px-6 py-4 sm:py-5 hover:bg-slate-50/50 transition-colors ${i === 0 ? 'bg-indigo-50/30 xl:border-r-2 xl:border-r-indigo-200' : ''}`}>
+        <div key={i} className={`px-4 sm:px-5 xl:px-6 py-4 sm:py-5 hover:bg-slate-50/50 transition-colors ${i === 0 ? 'bg-indigo-50/30 lg:border-r-2 lg:border-r-indigo-200' : ''}`}>
           <h4 className="text-sm font-semibold text-slate-800">{m.ko}</h4>
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">{m.en}</p>
           <div className="flex items-center gap-1.5" aria-live="polite" aria-atomic="true">
@@ -86,15 +91,8 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
             <span className="text-xs font-semibold text-slate-400">{m.unit}</span>
             {m.delta !== 0 && <TrendBadge value={m.badgeSuffix ? m.delta : m.delta / 10} prevValue={m.prevValue} suffix={m.badgeSuffix || ''} label={m.badgeLabel} />}
           </div>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3">
             <MiniSparkline data={m.sparkData} color={m.sparkColor} id={m.sparkId} height={24} width={80} />
-            {m.sparkId === 'daily' && (
-              <div className="inline-flex items-baseline gap-1 ml-auto text-[10px] leading-tight mt-2 whitespace-nowrap">
-                <span className="text-slate-400 font-medium">최근 1개월 ({dailyBasisLabel})</span>
-                <span className="font-bold text-slate-700 tabular-nums">{(animRecentDailyAvg / 10).toFixed(1)}</span>
-                <span className="text-slate-400">개/일</span>
-              </div>
-            )}
           </div>
         </div>
       ))}

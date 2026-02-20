@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { useToast } from '../hooks/useToast';
@@ -60,10 +60,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return Array.from(set).sort();
   }, [historyFailList]);
 
-  const [activeM, setActiveM] = useState<string>(manufacturers[0] || '');
+  const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
+  const orderModalRef = useRef<HTMLDivElement>(null);
+  const orderModalCloseButtonRef = useRef<HTMLButtonElement>(null);
 
   // 제조사별 통계
   const mStats = useMemo(() => {
@@ -78,10 +80,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return stats;
   }, [historyFailList]);
 
-  const currentStats = mStats[activeM] || { total: 0, processed: 0, pending: 0 };
+  const currentStats = activeM === 'all'
+    ? { total: historyFailList.length, processed: historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length, pending: pendingFailList.length }
+    : (mStats[activeM] || { total: 0, processed: 0, pending: 0 });
   const currentRemainingFails = currentStats.pending;
 
-  const mPendingList = pendingFailList.filter(f => String(f['제조사'] || '기타') === activeM);
+  const mPendingList = activeM === 'all'
+    ? pendingFailList
+    : pendingFailList.filter(f => String(f['제조사'] || '기타') === activeM);
 
   // ============================================================
   // 월별 FAIL 추세 데이터
@@ -212,6 +218,50 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     setIsModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    orderModalCloseButtonRef.current?.focus();
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsModalOpen(false);
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+      const container = orderModalRef.current;
+      if (!container) return;
+
+      const focusable = Array.from(
+        container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')
+      ) as HTMLElement[];
+      const enabledFocusable = focusable.filter((el) => !el.hasAttribute('disabled'));
+      if (enabledFocusable.length === 0) return;
+
+      const first = enabledFocusable[0];
+      const last = enabledFocusable[enabledFocusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (active === first || !container.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
   const updateOrderItem = (index: number, field: string, value: any) => {
     const next = [...selectedItems];
     if (field === 'brand') {
@@ -316,7 +366,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const chartTicks = Array.from({ length: 5 }, (_, i) => i * chartTickStep);
   const chartYMax = chartTicks[chartTicks.length - 1];
 
-  const activeOrders = failOrders.filter(o => o.manufacturer === activeM);
+  const activeOrders = activeM === 'all' ? failOrders : failOrders.filter(o => o.manufacturer === activeM);
 
   return (
     <div className="space-y-6" style={{ animationDuration: '0s' }}>
@@ -324,7 +374,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* ========================================= */}
       {/* STICKY HEADER + KPI + FILTER              */}
       {/* ========================================= */}
-      <div className="sticky top-[44px] z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}>
+      <div
+        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
+      >
 
         {/* A. Header Strip */}
         <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
@@ -428,6 +481,15 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         {/* C. Manufacturer Filter Strip (Pill style) */}
         <div className="bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setActiveM('all')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
+              전체
+              {pendingFailList.length > 0 && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === 'all' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{pendingFailList.length}</span>
+              )}
+            </button>
             {manufacturers.map(m => {
               const stats = mStats[m];
               return (
@@ -457,14 +519,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM} FAIL 현황</h3>
+                  <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM === 'all' ? '전체' : activeM} FAIL 현황</h3>
                   <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Status</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleOpenOrderModal}
-                    disabled={isReadOnly || currentRemainingFails <= 0}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || currentRemainingFails <= 0 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
+                    disabled={isReadOnly || currentRemainingFails <= 0 || activeM === 'all'}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || currentRemainingFails <= 0 || activeM === 'all' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                     반품/교환 주문
@@ -815,14 +877,25 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* ORDER MODAL                               */}
       {/* ========================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            ref={orderModalRef}
+            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fail-order-modal-title"
+            aria-describedby="fail-order-modal-desc"
+          >
             <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black tracking-tight">대체 주문 및 반품 처리</h3>
-                <p className="text-xs opacity-80 mt-1 font-bold uppercase tracking-wider">{activeM} / 반품 가능 잔량: {currentRemainingFails}건</p>
+                <h3 id="fail-order-modal-title" className="text-2xl font-black tracking-tight">대체 주문 및 반품 처리</h3>
+                <p id="fail-order-modal-desc" className="text-xs opacity-80 mt-1 font-bold uppercase tracking-wider">{activeM} / 반품 가능 잔량: {currentRemainingFails}건</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-all">
+              <button ref={orderModalCloseButtonRef} onClick={() => setIsModalOpen(false)} aria-label="대체 주문 모달 닫기" className="p-2 hover:bg-white/10 rounded-full transition-all">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -839,10 +912,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   </div>
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                     {recommendedExchangeItems.map((item, idx) => (
-                      <div
+                      <button
+                        type="button"
                         key={idx}
                         onClick={() => quickAddRecommended(item)}
-                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[160px]"
+                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[160px] text-left"
+                        aria-label={`권장 품목 추가: ${item.brand} ${item.size}, ${item.remainingToOrder}건`}
                       >
                         <div className="flex justify-between items-start mb-2">
                           <span className="text-[10px] font-bold text-rose-400 uppercase tracking-tighter">PENDING {item.remainingToOrder}건</span>
@@ -850,7 +925,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                         </div>
                         <p className="text-xs font-black text-slate-800 truncate">{item.brand}</p>
                         <p className="text-[11px] font-bold text-slate-500">{item.size}</p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -877,9 +952,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
                 {selectedItems.map((item, idx) => {
                   const brandOptions = Array.from(new Set(availableInventoryForM.map(i => i.brand))).sort();
-                  const sizeOptions = availableInventoryForM
+                  const sizeOptions = Array.from(new Set(availableInventoryForM
                     .filter(i => i.brand === item.brand)
-                    .map(i => i.size)
+                    .map(i => i.size)))
                     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
                   return (
                     <div key={idx} className="flex gap-3 items-end p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
@@ -920,6 +995,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                         onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))}
                         disabled={selectedItems.length === 1}
                         className="p-2.5 text-slate-300 hover:text-rose-500 transition-all"
+                        aria-label={`${idx + 1}번째 품목 삭제`}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>

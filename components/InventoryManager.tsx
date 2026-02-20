@@ -5,6 +5,7 @@ import { planService } from '../services/planService';
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { normalizeSurgery } from '../services/normalizationService';
+import { smoothLine, smoothArea } from './surgery-dashboard/shared';
 import AddItemModal from './AddItemModal';
 import EditNoticeModal from './inventory/EditNoticeModal';
 import BaseStockModal from './inventory/BaseStockModal';
@@ -68,21 +69,7 @@ function toMonthKey(value: unknown): string | null {
   return `${y}-${m}`;
 }
 
-function buildSparklinePath(values: number[], width: number, height: number): string {
-  if (values.length === 0) return '';
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
 
-  return values
-    .map((value, index) => {
-      const x = index * stepX;
-      const y = height - ((value - min) / range) * height;
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
 
 type InventoryDetailColumnKey =
   | 'manufacturer'
@@ -468,9 +455,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       {/* ================================================= */}
       {/* Sticky Header Block                               */}
       {/* ================================================= */}
-      <div className="sticky top-[44px] z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}>
+      <div
+        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
+      >
         {/* A. Header Strip */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+        <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Left: summary metrics */}
             <div className="flex items-start gap-6 flex-wrap">
@@ -481,9 +471,9 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 {hiddenCategoryCount > 0 && (() => {
                   const isNormal = hiddenCategoryCount === visibleInventory.length + 1;
                   return (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isNormal ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                      <p className={`text-[10px] font-medium ${isNormal ? 'text-indigo-500' : 'text-rose-500'}`}>
+                    <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-white/60 backdrop-blur-md border border-slate-200/60 shadow-sm w-fit">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isNormal ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'}`} />
+                      <p className={`text-[10px] font-bold tracking-tight ${isNormal ? 'text-slate-600' : 'text-rose-600'}`}>
                         + FAIL/청구 {hiddenCategoryCount}개 별도{!isNormal && ' · 품목오류'}
                       </p>
                     </div>
@@ -630,7 +620,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
 
         {/* C. Manufacturer Filter Strip */}
-        <div className="bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
+        <div className="bg-white/90 backdrop-blur-xl rounded-2xl px-5 py-3 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setSelectedManufacturer(null)}
@@ -662,7 +652,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       </div>{/* end sticky wrapper */}
 
       {unregisteredFromSurgery.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100/40 border border-amber-200/80 rounded-2xl p-4 shadow-[0_8px_24px_-4px_rgba(245,158,11,0.12)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-black text-amber-800 tracking-tight">
@@ -726,7 +716,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       {/* ================================================= */}
       {/* Usage Analysis Card — redesigned                  */}
       {/* ================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
           <div>
@@ -765,100 +755,120 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               </div>
             )}
             <div className="space-y-2">
-            {chartData.length > 0 ? chartData.map((item, idx) => {
-              const pct = Math.round((item.usageCount / maxUsage) * 100);
-              const isTop = idx === 0;
-              const isLow = item.currentStock < Math.ceil((item.recommendedStock ?? 0) * monthFactor);
-              const avg = item.monthlyAvgUsage ?? 0;
-              const last = item.lastMonthUsage ?? 0;
-              const isSurge = avg > 0 && last > avg * 1.5 && last - avg >= 2;
-              const isDrop = avg >= 2 && last < avg * 0.5 && avg - last >= 2;
-              return (
-                <div key={item.id} className="group flex items-center gap-3">
-                  {/* 순위 */}
-                  <span className={`w-5 text-right text-[10px] font-black shrink-0 ${isTop ? 'text-indigo-500' : 'text-slate-300'}`}>
-                    {idx + 1}
-                  </span>
-                  {/* 라벨 */}
-                  <div className="w-[100px] shrink-0">
-                    <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter leading-none">{item.brand}</p>
-                    <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
-                  </div>
-                  {/* 바 (최대 너비 제한) */}
-                  <div className="flex-1 max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  {/* 수치 그리드 */}
-                  <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
-                    {/* 월평균 */}
-                    <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
-                      {avg.toFixed(1)}
-                    </p>
-                    {/* 지난달 */}
-                    <div className="flex items-center justify-center gap-0.5">
-                      <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-                        {last}
-                      </p>
-                      {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
-                      {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
+              {chartData.length > 0 ? chartData.map((item, idx) => {
+                const pct = Math.round((item.usageCount / maxUsage) * 100);
+                const isTop = idx === 0;
+                const isLow = item.currentStock < Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+                const avg = item.monthlyAvgUsage ?? 0;
+                const last = item.lastMonthUsage ?? 0;
+                const isSurge = avg > 0 && last > avg * 1.5 && last - avg >= 2;
+                const isDrop = avg >= 2 && last < avg * 0.5 && avg - last >= 2;
+                return (
+                  <div key={item.id} className="group flex items-center gap-3">
+                    {/* 순위 */}
+                    <span className={`w-5 text-right text-[10px] font-black shrink-0 ${isTop ? 'text-indigo-500' : 'text-slate-300'}`}>
+                      {idx + 1}
+                    </span>
+                    {/* 라벨 */}
+                    <div className="w-[100px] shrink-0">
+                      <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter leading-none">{item.brand}</p>
+                      <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
                     </div>
-                    {/* 현재재고 */}
-                    <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
-                      {item.currentStock}
-                    </p>
-                    {/* 부족분 */}
-                    {(() => {
-                      const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);
-                      const shortage = recommended - item.currentStock;
-                      return shortage > 0
-                        ? <p className="text-xs font-black tabular-nums text-center text-rose-500">-{shortage}</p>
-                        : <p className="text-xs font-bold tabular-nums text-center text-emerald-500">충분</p>;
-                    })()}
-                  </div>
-                  {/* 스파크라인 */}
-                  <div className="w-[176px] shrink-0 px-2">
-                    {(() => {
-                      const series = sparklineSeriesByItemId.get(item.id) ?? [];
-                      if (!series.some(v => v > 0)) {
+                    {/* 바 (최대 너비 제한) */}
+                    <div className="flex-1 max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {/* 수치 그리드 */}
+                    <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
+                      {/* 월평균 */}
+                      <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
+                        {avg.toFixed(1)}
+                      </p>
+                      {/* 지난달 */}
+                      <div className="flex items-center justify-center gap-0.5">
+                        <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+                          {last}
+                        </p>
+                        {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
+                        {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
+                      </div>
+                      {/* 현재재고 */}
+                      <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+                        {item.currentStock}
+                      </p>
+                      {/* 부족분 */}
+                      {(() => {
+                        const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+                        const shortage = recommended - item.currentStock;
+                        return shortage > 0
+                          ? <p className="text-xs font-black tabular-nums text-center text-rose-500">-{shortage}</p>
+                          : <p className="text-xs font-bold tabular-nums text-center text-emerald-500">충분</p>;
+                      })()}
+                    </div>
+                    {/* 스파크라인 */}
+                    <div className="w-[176px] shrink-0 px-2">
+                      {(() => {
+                        const series = sparklineSeriesByItemId.get(item.id) ?? [];
+                        if (!series.some(v => v > 0)) {
+                          return (
+                            <div className="h-8 rounded-lg border border-slate-100 bg-slate-50/60 flex items-center justify-center">
+                              <span className="text-[9px] font-semibold text-slate-300">데이터 없음</span>
+                            </div>
+                          );
+                        }
+
+                        const width = 152;
+                        const height = 28;
+                        const minVal = Math.min(...series);
+                        const maxVal = Math.max(...series, 0);
+                        const range = Math.max(1, maxVal - minVal);
+                        const stepX = series.length > 1 ? width / (series.length - 1) : 0;
+
+                        const points = series.map((val, idx) => ({
+                          x: idx * stepX,
+                          y: height - ((val - minVal) / range) * height
+                        }));
+                        const pathLine = smoothLine(points);
+                        const pathArea = smoothArea(points, height);
+
+                        const lastPoint = points[points.length - 1] || { x: 0, y: height };
+                        const strokeColor = isTop ? '#4f46e5' : '#818cf8';
+                        const gradId = `sparkg-${item.id}`;
+
                         return (
-                          <div className="h-8 rounded-lg border border-slate-100 bg-slate-50/60 flex items-center justify-center">
-                            <span className="text-[9px] font-semibold text-slate-300">데이터 없음</span>
+                          <div className="relative h-8 rounded-lg border border-indigo-50 bg-indigo-50/20 px-2 py-1 group-hover:border-indigo-100 transition-colors">
+                            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none" aria-label="품목 사용 추이">
+                              <defs>
+                                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={strokeColor} stopOpacity={0.25} />
+                                  <stop offset="100%" stopColor={strokeColor} stopOpacity={0.0} />
+                                </linearGradient>
+                              </defs>
+                              <path d={pathArea} fill={`url(#${gradId})`} />
+                              <path d={pathLine} fill="none" stroke={strokeColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
+                              <circle cx={lastPoint.x} cy={lastPoint.y} r="2.5" fill="white" stroke={strokeColor} strokeWidth={1.5} className="shadow-sm" />
+                            </svg>
                           </div>
                         );
-                      }
-
-                      const width = 152;
-                      const height = 28;
-                      const path = buildSparklinePath(series, width, height);
-                      const maxVal = Math.max(...series, 0);
-                      const lastVal = series[series.length - 1] ?? 0;
-                      return (
-                        <div className="h-8 rounded-lg border border-indigo-100 bg-indigo-50/40 px-2 py-1">
-                          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none" aria-label="품목 사용 추이">
-                            <path d={path} fill="none" stroke={isTop ? '#4f46e5' : '#94a3ff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx={((series.length - 1) / Math.max(1, series.length - 1)) * width} cy={height - ((lastVal - Math.min(...series)) / Math.max(1, maxVal - Math.min(...series))) * height} r="1.8" fill={isTop ? '#4f46e5' : '#6366f1'} />
-                          </svg>
-                        </div>
-                      );
-                    })()}
+                      })()}
+                    </div>
+                    {/* 재고 부족 닷 */}
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
                   </div>
-                  {/* 재고 부족 닷 */}
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
+                );
+              }) : (
+                <div className="py-10 text-center flex flex-col items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-slate-400 font-bold italic">사용 데이터가 없습니다.</p>
                 </div>
-              );
-            }) : (
-              <div className="py-10 text-center flex flex-col items-center gap-2">
-                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <p className="text-xs text-slate-400 font-bold italic">사용 데이터가 없습니다.</p>
-              </div>
-            )}
+              )}
             </div>
           </div>
 
@@ -974,7 +984,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       {/* ================================================= */}
       {/* Table Card                                        */}
       {/* ================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
           <div className="flex-1 min-w-0" />
           <div className="flex items-center gap-2">
@@ -984,11 +994,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 onClick={() => setShowInventoryDetailColumnFilter(prev => !prev)}
                 aria-label="재고 상세 컬럼 필터 열기"
                 title="컬럼 필터"
-                className={`p-2 rounded-lg border transition-all ${
-                  showInventoryDetailColumnFilter
+                className={`p-2 rounded-lg border transition-all ${showInventoryDetailColumnFilter
                     ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                     : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -1040,11 +1049,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             <button
               type="button"
               onClick={() => setShowOnlyOrderNeededRows(prev => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${
-                showOnlyOrderNeededRows
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${showOnlyOrderNeededRows
                   ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
                   : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
+                }`}
               title="권장량 대비 주문이 필요한 항목만 보기"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -1056,58 +1064,58 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-[44px] z-10 bg-slate-50 border-b border-slate-200 shadow-sm">
+            <thead className="sticky z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 shadow-sm" style={{ top: 'var(--dashboard-header-height, 44px)' }}>
               <tr>
                 {inventoryDetailColumnVisibility.manufacturer && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 uppercase tracking-widest">
                     <div className="h-4 mb-1" />
                     제조사
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.brand && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 uppercase tracking-widest">
                     <div className="h-4 mb-1" />
                     브랜드
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.size && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 uppercase tracking-widest">
                     <div className="h-4 mb-1" />
                     규격
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.initialStock && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 text-center tracking-widest">
                     <div className="h-4 mb-1" />
                     기초 재고
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.usageCount && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 text-center tracking-widest">
                     <div className="text-sm font-black text-rose-500 tabular-nums h-4 mb-1 flex items-center justify-center">{inventoryDetailUsageTotal}</div>
                     사용량
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.monthlyAvgUsage && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-400 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-indigo-400 text-center tracking-widest">
                     <div className="h-4 mb-1" />
                     월평균사용
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.dailyMaxUsage && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-400 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-indigo-400 text-center tracking-widest">
                     <div className="h-4 mb-1" />
                     일최대사용
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.currentStock && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-slate-400 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 text-center tracking-widest">
                     <div className="text-sm font-black text-slate-800 tabular-nums h-4 mb-1 flex items-center justify-center">{inventoryDetailCurrentStockTotal}</div>
                     현재 재고
                   </th>
                 )}
                 {inventoryDetailColumnVisibility.recommendedStock && (
-                  <th className="px-6 pt-2 pb-2 text-[11px] font-bold text-indigo-600 text-center">
+                  <th className="px-6 pt-2 pb-2 text-[11px] font-black text-indigo-600 text-center tracking-widest">
                     <div className="h-4 mb-1" />
                     권장량
                   </th>
@@ -1131,12 +1139,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   const isEven = idx % 2 === 1;
 
                   return (
-                    <tr key={item.id} className={`group transition-colors hover:bg-indigo-50/40 ${isEven ? 'bg-slate-100/70' : 'bg-white'}`}>
+                    <tr key={item.id} className={`group transition-all duration-200 hover:bg-indigo-50/60 hover:shadow-[inset_3px_0_0_#818cf8] ${isEven ? 'bg-slate-100/70' : 'bg-white'}`}>
                       {inventoryDetailColumnVisibility.manufacturer && (
-                        <td className="px-6 py-2.5 text-[10px] font-bold text-slate-400">{item.manufacturer}</td>
+                        <td className="px-6 py-2.5 text-[10px] font-bold text-slate-400 group-hover:text-slate-500 transition-colors">{item.manufacturer}</td>
                       )}
                       {inventoryDetailColumnVisibility.brand && (
-                        <td className="px-6 py-2.5 text-sm font-black text-slate-800 tracking-tight">{item.brand}</td>
+                        <td className="px-6 py-2.5 text-sm font-black text-slate-800 tracking-tight group-hover:text-indigo-900 transition-colors">{item.brand}</td>
                       )}
                       {inventoryDetailColumnVisibility.size && (
                         <td className="px-6 py-2.5 text-sm font-semibold text-slate-600">{item.size}</td>
@@ -1195,8 +1203,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             // FAIL 연동 품목 자동 생성 (미존재 시에만)
             const failAlreadyExists = inventory.some(
               i => i.manufacturer === `수술중FAIL_${newItem.manufacturer}` &&
-                   i.brand === newItem.brand &&
-                   i.size === newItem.size
+                i.brand === newItem.brand &&
+                i.size === newItem.size
             );
             if (!failAlreadyExists) {
               const failItem: InventoryItem = {

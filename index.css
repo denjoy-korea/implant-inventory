@@ -171,12 +171,6 @@ textarea:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Table rendering optimization */
-table tbody tr {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 52px;
-}
-
 /* Notice rich text content styles */
 .notice-content h2 { font-size: 1.25rem; font-weight: 700; margin: 12px 0 4px; color: #1e293b; }
 .notice-content h3 { font-size: 1.1rem; font-weight: 700; margin: 10px 0 4px; color: #334155; }

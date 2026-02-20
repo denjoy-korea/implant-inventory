@@ -5,7 +5,8 @@ export interface AuditEntry {
   systemStock: number;
   actualStock: number;
   difference: number;
-  reason: string;
+  reason: string | null;
+  performedBy?: string;
 }
 
 export interface AuditHistoryItem {
@@ -19,6 +20,7 @@ export interface AuditHistoryItem {
   manufacturer: string;
   brand: string;
   size: string;
+  performedBy?: string | null;
 }
 
 export const auditService = {
@@ -128,6 +130,7 @@ export const auditService = {
       manufacturer: row.inventory?.manufacturer || '',
       brand: row.inventory?.brand || '',
       size: row.inventory?.size || '',
+      performedBy: row.performed_by ?? null,
     }));
   },
 };

@@ -42,6 +42,14 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
         return '#f43f5e'; // Rose 500
     };
 
+    /** Hatching pattern ID for color-blind accessibility */
+    const getPatternId = (failRate: number, total: number): string | null => {
+        if (total === 0) return 'pattern-empty';  // dashed
+        if (failRate === 0) return null;            // solid, no overlay
+        if (failRate < 7) return 'pattern-caution'; // diagonal lines
+        return 'pattern-danger';                    // crosshatch
+    };
+
     const getOpacity = (total: number) => 1;
 
     const getTextContrast = (failRate: number, total: number) => {
@@ -109,6 +117,14 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
                         <div className="w-3 h-3 rounded bg-rose-500 border border-rose-600" />
                         <span className="text-[10px] text-slate-400">위험 (7%+)</span>
                     </div>
+                    <div className="flex items-center gap-1.5">
+                        <svg className="w-3 h-3" viewBox="0 0 12 12">
+                            <rect width="12" height="12" fill="#f1f5f9" rx="2" />
+                            <line x1="0" y1="3" x2="12" y2="3" stroke="#94a3b8" strokeWidth="0.6" strokeDasharray="2 1" />
+                            <line x1="0" y1="9" x2="12" y2="9" stroke="#94a3b8" strokeWidth="0.6" strokeDasharray="2 1" />
+                        </svg>
+                        <span className="text-[10px] text-slate-400">패턴: 색맹 대응</span>
+                    </div>
                 </div>
             </div>
 
@@ -129,6 +145,19 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
                         }
                     }}
                 >
+                    {/* Color-blind accessible hatching patterns */}
+                    <defs>
+                        <pattern id="pattern-empty" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(0)">
+                            <line x1="0" y1="3" x2="6" y2="3" stroke="#e2e8f0" strokeWidth="0.8" strokeDasharray="2 2" />
+                        </pattern>
+                        <pattern id="pattern-caution" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(0,0,0,0.15)" strokeWidth="1" />
+                        </pattern>
+                        <pattern id="pattern-danger" width="6" height="6" patternUnits="userSpaceOnUse">
+                            <line x1="0" y1="0" x2="6" y2="6" stroke="rgba(255,255,255,0.25)" strokeWidth="0.8" />
+                            <line x1="6" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.25)" strokeWidth="0.8" />
+                        </pattern>
+                    </defs>
                     {/* Y Axis Labels */}
                     {ranges.map((label, i) => {
                         const y = pad.t + i * cellH + cellH / 2;
@@ -166,11 +195,26 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
                                         width={cellW}
                                         height={cellH}
                                         fill={color}
-                                        stroke={isFocused ? '#334155' : '#fff'}
+                                        stroke={isFocused ? '#334155' : (total === 0 ? '#e2e8f0' : '#fff')}
                                         strokeWidth={isFocused ? 3 : 2}
+                                        strokeDasharray={total === 0 ? '4 3' : 'none'}
                                         className="transition-colors duration-200 hover:opacity-90"
                                     />
-                                    {total > 0 && (
+                                    {/* Color-blind pattern overlay */}
+                                    {(() => {
+                                        const patId = getPatternId(rate, total);
+                                        return patId ? (
+                                            <rect
+                                                x={x}
+                                                y={y}
+                                                width={cellW}
+                                                height={cellH}
+                                                fill={`url(#${patId})`}
+                                                pointerEvents="none"
+                                            />
+                                        ) : null;
+                                    })()}
+                                    {total > 0 ? (
                                         <>
                                             <text x={x + cellW / 2} y={y + cellH / 2 - 2} textAnchor="middle" fontSize={12} fontWeight={700} fill={getTextContrast(rate, total)}>
                                                 {rate > 0 ? `${rate.toFixed(0)}%` : '-'}
@@ -179,6 +223,10 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
                                                 {fail}/{total}
                                             </text>
                                         </>
+                                    ) : (
+                                        <text x={x + cellW / 2} y={y + cellH / 2 + 3} textAnchor="middle" fontSize={9} fontWeight={500} fill="#cbd5e1">
+                                            n=0
+                                        </text>
                                     )}
                                 </g>
                             );

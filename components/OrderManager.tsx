@@ -2,6 +2,22 @@
 import React, { useMemo, useState } from 'react';
 import { Order, OrderStatus, OrderType, InventoryItem } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
+import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
+
+function buildSparklinePath(values: number[], width: number, height: number): string {
+  if (values.length === 0) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
+  return values
+    .map((value, index) => {
+      const x = index * stepX;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+}
 
 interface OrderManagerProps {
   orders: Order[];
@@ -11,6 +27,13 @@ interface OrderManagerProps {
   onQuickOrder: (item: InventoryItem) => void;
   isReadOnly?: boolean;
 }
+
+type LowStockEntry = {
+  item: InventoryItem;
+  rawDeficit: number;
+  pendingQty: number;
+  remainingDeficit: number;
+};
 
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
@@ -24,6 +47,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
 
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+  const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
+    `${simpleNormalize(manufacturer)}|${simpleNormalize(brand)}|${getSizeMatchKey(size, manufacturer)}`;
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -33,30 +58,43 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [orders, filterType, filterStatus]);
 
-  const lowStockItems = useMemo(() => {
+  const pendingQtyByItemKey = useMemo(() => {
+    const qtyMap = new Map<string, number>();
+    orders.forEach(order => {
+      if (order.status !== 'ordered' || order.type !== 'replenishment') return;
+      order.items.forEach(oi => {
+        const key = buildOrderItemKey(order.manufacturer, oi.brand, oi.size);
+        qtyMap.set(key, (qtyMap.get(key) ?? 0) + Number(oi.quantity || 0));
+      });
+    });
+    return qtyMap;
+  }, [orders]);
+
+  const lowStockItems = useMemo<LowStockEntry[]>(() => {
     return inventory
-      .filter(item => {
-        const isBelowRecommended = item.currentStock < item.recommendedStock;
-        if (!isBelowRecommended) return false;
-        const hasPendingOrder = orders.some(order =>
-          order.status === 'ordered' &&
-          simpleNormalize(order.manufacturer) === simpleNormalize(item.manufacturer) &&
-          order.items.some(oi =>
-            simpleNormalize(oi.brand) === simpleNormalize(item.brand) &&
-            getSizeMatchKey(oi.size, order.manufacturer) === getSizeMatchKey(item.size, item.manufacturer)
-          )
-        );
-        return !hasPendingOrder;
+      .map(item => {
+        const rawDeficit = Math.max(0, item.recommendedStock - item.currentStock);
+        if (rawDeficit <= 0) return null;
+        const itemKey = buildOrderItemKey(item.manufacturer, item.brand, item.size);
+        const pendingQty = pendingQtyByItemKey.get(itemKey) ?? 0;
+        const remainingDeficit = Math.max(0, rawDeficit - pendingQty);
+        if (remainingDeficit <= 0) return null;
+        return { item, rawDeficit, pendingQty, remainingDeficit };
       })
-      .sort((a, b) => (a.currentStock / a.recommendedStock) - (b.currentStock / b.recommendedStock));
-  }, [inventory, orders]);
+      .filter((entry): entry is LowStockEntry => entry !== null)
+      .sort((a, b) => {
+        const aSeverity = a.remainingDeficit / Math.max(a.item.recommendedStock, 1);
+        const bSeverity = b.remainingDeficit / Math.max(b.item.recommendedStock, 1);
+        return bSeverity - aSeverity;
+      });
+  }, [inventory, pendingQtyByItemKey]);
 
   const stats = useMemo(() => {
     const totalOrders = orders.filter(o => filterType === 'all' || o.type === filterType);
     const pendingOrders = totalOrders.filter(o => o.status === 'ordered');
     const receivedOrders = totalOrders.filter(o => o.status === 'received');
     const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + (o.items[0]?.quantity || 0), 0);
-    const lowStockDeficit = lowStockItems.reduce((acc, item) => acc + (item.recommendedStock - item.currentStock), 0);
+    const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
     return {
       totalCount: totalOrders.length,
       totalQty: sumQty(totalOrders),
@@ -69,265 +107,420 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     };
   }, [orders, lowStockItems, filterType]);
 
-  // 탭별 건수 (전체 orders 기준)
   const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange', number> = useMemo(() => ({
     all: orders.length,
     replenishment: orders.filter(o => o.type === 'replenishment').length,
     fail_exchange: orders.filter(o => o.type === 'fail_exchange').length,
   }), [orders]);
 
+  // ── 월별 주문 추세 데이터 ──
+  const monthlyOrderData = useMemo(() => {
+    const monthMap: Record<string, { replenishment: number; fail_exchange: number; total: number }> = {};
+    orders.forEach(o => {
+      const d = o.date;
+      if (!d || d.length < 7) return;
+      const month = d.substring(0, 7);
+      if (!monthMap[month]) monthMap[month] = { replenishment: 0, fail_exchange: 0, total: 0 };
+      if (o.type === 'replenishment') monthMap[month].replenishment++;
+      else monthMap[month].fail_exchange++;
+      monthMap[month].total++;
+    });
+    return Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, data]) => ({ month, ...data }));
+  }, [orders]);
+
+  const orderSparkline = useMemo(() => monthlyOrderData.map(d => d.total), [monthlyOrderData]);
+
+  // ── 제조사별 주문 분포 (도넛) ──
+  const manufacturerDonut = useMemo(() => {
+    const counts: Record<string, number> = {};
+    orders.forEach(o => {
+      counts[o.manufacturer] = (counts[o.manufacturer] || 0) + 1;
+    });
+    const total = orders.length;
+    if (total === 0) return [];
+    return Object.entries(counts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, count], i) => ({
+        name, count,
+        percent: Math.round((count / total) * 100),
+        color: DONUT_COLORS[i % DONUT_COLORS.length]
+      }));
+  }, [orders]);
+
+  const donutPaths = useMemo(() => {
+    const total = manufacturerDonut.reduce((s, d) => s + d.count, 0);
+    if (total === 0) return [];
+    const r = 50, cx = 60, cy = 60;
+    let cumulativeAngle = -90;
+    return manufacturerDonut.map(seg => {
+      const angle = (seg.count / total) * 360;
+      const startAngle = cumulativeAngle;
+      const endAngle = cumulativeAngle + angle;
+      cumulativeAngle = endAngle;
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+      const x1 = cx + r * Math.cos(startRad);
+      const y1 = cy + r * Math.sin(startRad);
+      const x2 = cx + r * Math.cos(endRad);
+      const y2 = cy + r * Math.sin(endRad);
+      const largeArc = angle > 180 ? 1 : 0;
+      const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+      return { ...seg, path };
+    });
+  }, [manufacturerDonut]);
+
+  // ── 발주 권장 품목 제조사별 그룹핑 ──
+  const groupedLowStock = useMemo(() => {
+    const groups: Record<string, LowStockEntry[]> = {};
+    lowStockItems.forEach(entry => {
+      const m = entry.item.manufacturer;
+      if (!groups[m]) groups[m] = [];
+      groups[m].push(entry);
+    });
+    return Object.entries(groups).sort(([, a], [, b]) => b.length - a.length);
+  }, [lowStockItems]);
+
+  // ── Animated KPI ──
+  const animTotal = useCountUp(stats.totalCount);
+  const animPending = useCountUp(stats.pendingCount);
+  const animReceived = useCountUp(stats.receivedCount);
+  const animLowStock = useCountUp(stats.lowStockCount);
+
   const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange'; label: string }[] = [
     { key: 'all', label: '전체' },
     { key: 'replenishment', label: '재고 발주' },
     { key: 'fail_exchange', label: 'FAIL 교환' },
   ];
-
   const STATUS_FILTERS: { key: 'all' | OrderStatus; label: string }[] = [
     { key: 'all', label: '모든 상태' },
     { key: 'ordered', label: '입고대기' },
     { key: 'received', label: '입고완료' },
   ];
 
+  const chartW = 600;
+  const chartH = 160;
+  const barPad = 4;
+  const maxBarVal = Math.max(...monthlyOrderData.map(d => d.total), 1);
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6" style={{ animationDuration: '0s' }}>
 
-      {/* ── Zone 1: KPI Strip ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between px-6 py-5">
-          <div className="flex items-center divide-x divide-slate-100">
+      {/* ═══════════════════════════════════════ */}
+      {/* STICKY HEADER + KPI + FILTERS           */}
+      {/* ═══════════════════════════════════════ */}
+      <div
+        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
+      >
+
+        {/* A. KPI Strip */}
+        <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
+          <div className="grid grid-cols-4 divide-x divide-slate-100/50">
             {/* 전체 주문 */}
-            <div className="pr-8">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                전체 주문<br />TOTAL ORDERS
-              </p>
-              <p className="text-2xl font-black text-slate-800 tabular-nums leading-none">
-                {stats.totalCount}<span className="text-xs ml-0.5 font-bold">건</span>
-              </p>
-              <p className="text-[11px] font-bold text-slate-400 mt-1">{stats.totalQty}개</p>
-            </div>
-
-            {/* 입고 대기 */}
-            <div className="px-8">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                입고 대기<br />PENDING
-              </p>
-              <p className="text-2xl font-black text-rose-500 tabular-nums leading-none">
-                {stats.pendingCount}<span className="text-xs ml-0.5 font-bold">건</span>
-              </p>
-              <p className="text-[11px] font-bold text-rose-300 mt-1">{stats.pendingQty}개</p>
-            </div>
-
-            {/* 처리 완료 */}
-            <div className="px-8">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                처리 완료<br />RECEIVED
-              </p>
-              <p className="text-2xl font-black text-emerald-500 tabular-nums leading-none">
-                {stats.receivedCount}<span className="text-xs ml-0.5 font-bold">건</span>
-              </p>
-              <p className="text-[11px] font-bold text-emerald-300 mt-1">{stats.receivedQty}개</p>
-            </div>
-
-            {/* 발주 권장 */}
-            <div className="pl-8">
-              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1.5">
-                발주 권장<br />LOW STOCK
-              </p>
-              <p className="text-2xl font-black text-rose-600 tabular-nums leading-none">
-                {stats.lowStockCount}<span className="text-xs ml-0.5 font-bold">품목</span>
-              </p>
-              <p className="text-[11px] font-bold text-rose-400 mt-1">{stats.lowStockQty}개 부족</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Zone 2: 유형 탭 + 상태 필터 ── */}
-      <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
-        {/* 유형 탭 */}
-        <div className="flex gap-1">
-          {TYPE_TABS.map(({ key, label }) => {
-            const isActive = filterType === key;
-            const isFail = key === 'fail_exchange';
-            return (
-              <button
-                key={key}
-                onClick={() => setFilterType(key)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  isActive
-                    ? isFail
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                {label}
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                    isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  {typeCounts[key]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 상태 필터 */}
-        <div className="flex items-center gap-0.5 p-1 bg-slate-100 rounded-xl">
-          {STATUS_FILTERS.map(({ key, label }) => {
-            const isActive = filterStatus === key;
-            const activeColor =
-              key === 'ordered' ? 'text-rose-600' :
-              key === 'received' ? 'text-emerald-600' :
-              'text-indigo-600';
-            return (
-              <button
-                key={key}
-                onClick={() => setFilterStatus(key)}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  isActive ? `bg-white shadow-sm ${activeColor}` : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Zone 3: 발주 권장 배너 ── */}
-      {lowStockItems.length > 0 && (
-        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse flex-shrink-0" />
-              <span className="text-sm font-black text-rose-700">
-                발주 권장 품목 {lowStockItems.length}종
-              </span>
-              <span className="text-xs font-bold text-rose-400">
-                재고 기준 권장 수량 미달 품목입니다.
-              </span>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-xs font-bold text-rose-500">
-                누적 {stats.lowStockQty}개 부족
-              </span>
-              {!isReadOnly && (
-                <span className="text-[10px] font-bold text-rose-400 italic">
-                  품목 클릭 시 즉시 발주
-                </span>
+            <div className="p-6 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <h4 className="text-sm font-black text-slate-800 relative z-10">전체 주문</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Total Orders</p>
+              <p className="text-[32px] font-black text-slate-800 tabular-nums leading-none tracking-tight mt-3 relative z-10">{animTotal}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+              <p className="text-[11px] font-bold text-slate-400 mt-1.5 relative z-10">{stats.totalQty}개</p>
+              {orderSparkline.length > 1 && (
+                <svg className="absolute bottom-0 right-2 opacity-50 drop-shadow-sm transition-all group-hover:opacity-80" width="80" height="28">
+                  <defs>
+                    <linearGradient id="totalSparkGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#818cf8" />
+                      <stop offset="100%" stopColor="#4f46e5" />
+                    </linearGradient>
+                  </defs>
+                  <path d={buildSparklinePath(orderSparkline, 76, 24)} fill="none" stroke="url(#totalSparkGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               )}
             </div>
+            {/* 입고 대기 */}
+            <div className="p-6 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-rose-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <h4 className="text-sm font-black text-slate-800 relative z-10">입고 대기</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Pending</p>
+              <p className={`text-[32px] font-black tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm ${animPending > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animPending}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+              <p className={`text-[11px] font-bold mt-1.5 relative z-10 ${animPending > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{stats.pendingQty}개</p>
+            </div>
+            {/* 처리 완료 */}
+            <div className="p-6 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <h4 className="text-sm font-black text-slate-800 relative z-10">처리 완료</h4>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Received</p>
+              <p className="text-[32px] font-black text-emerald-600 tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm">{animReceived}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
+              <p className="text-[11px] font-bold text-emerald-400 mt-1.5 relative z-10">{stats.receivedQty}개</p>
+            </div>
+            {/* 발주 권장 */}
+            <div className="p-6 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <h4 className="text-sm font-black text-rose-600 relative z-10">발주 권장</h4>
+              <p className="text-[10px] text-rose-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Low Stock</p>
+              <p className={`text-[32px] font-black tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animLowStock}<span className="text-sm font-bold text-slate-400 ml-1">품목</span></p>
+              <p className="text-[11px] font-bold text-rose-400 mt-1.5 relative z-10">{stats.lowStockQty}개 부족</p>
+              {animLowStock > 0 && <span className="absolute top-6 right-6 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" /></span>}
+            </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            {lowStockItems.map(item => {
-              const deficit = item.recommendedStock - item.currentStock;
+        {/* B. Type Tabs + Status Filter */}
+        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 px-5 py-3 shadow-sm relative z-10">
+          <div className="flex gap-1.5 bg-indigo-50/40 p-1.5 rounded-xl border border-indigo-100/50 shadow-inner">
+            {TYPE_TABS.map(({ key, label }) => {
+              const isActive = filterType === key;
               return (
                 <button
-                  key={item.id}
-                  onClick={() => !isReadOnly && onQuickOrder(item)}
-                  disabled={isReadOnly}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded-xl text-[11px] font-bold transition-all ${
-                    isReadOnly
-                      ? 'border-rose-100 text-rose-300 cursor-not-allowed opacity-70'
-                      : 'border-rose-200 text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600 cursor-pointer active:scale-95'
-                  }`}
+                  key={key}
+                  onClick={() => setFilterType(key)}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${isActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                 >
-                  <span className="text-[9px] font-bold text-slate-400 uppercase leading-none">
-                    {item.manufacturer}
-                  </span>
-                  <span>{item.brand} {item.size}</span>
-                  <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded-md text-[9px] font-black">
-                    {deficit}개
-                  </span>
+                  {label}
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>{typeCounts[key]}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-0.5 p-1 bg-slate-100 rounded-xl">
+            {STATUS_FILTERS.map(({ key, label }) => {
+              const isActive = filterStatus === key;
+              const activeColor = key === 'ordered' ? 'text-rose-600' : key === 'received' ? 'text-emerald-600' : 'text-indigo-600';
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilterStatus(key)}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${isActive ? `bg-white shadow-sm ${activeColor}` : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {label}
                 </button>
               );
             })}
           </div>
         </div>
+      </div>{/* end sticky */}
+
+      {/* ═══════════════════════════════════════ */}
+      {/* 발주 권장 품목 (제조사별 그룹핑)          */}
+      {/* ═══════════════════════════════════════ */}
+      {groupedLowStock.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+              <h3 className="text-sm font-black text-slate-800 tracking-tight">발주 권장 품목 {lowStockItems.length}종</h3>
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Low Stock Items</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-rose-500">누적 {stats.lowStockQty}개 부족</span>
+              {!isReadOnly && <span className="text-[10px] font-bold text-slate-400 italic">품목 클릭 시 즉시 발주</span>}
+            </div>
+          </div>
+          <div className="space-y-4">
+            {groupedLowStock.map(([manufacturer, entries]) => (
+              <div key={manufacturer} className="bg-slate-50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{manufacturer}</span>
+                  <span className="text-[9px] font-bold text-rose-400 bg-rose-50 px-1.5 py-0.5 rounded">{entries.length}종 · {entries.reduce((s, e) => s + e.remainingDeficit, 0)}개 부족</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {entries.map(({ item, remainingDeficit, pendingQty }) => (
+                    <button
+                      key={item.id}
+                      onClick={() => !isReadOnly && onQuickOrder({ ...item, currentStock: item.recommendedStock - remainingDeficit })}
+                      disabled={isReadOnly}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded-lg text-[11px] font-bold transition-all ${isReadOnly ? 'border-slate-200 text-slate-400 cursor-not-allowed opacity-70' : 'border-slate-200 text-slate-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 cursor-pointer active:scale-95'}`}
+                    >
+                      <span>{item.brand} {item.size}</span>
+                      {pendingQty > 0 && (
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black">주문중 {pendingQty}</span>
+                      )}
+                      <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded text-[9px] font-black">{remainingDeficit}개</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* ── Zone 4: 주문 내역 테이블 ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* ═══════════════════════════════════════ */}
+      {/* 주문 분석 차트                            */}
+      {/* ═══════════════════════════════════════ */}
+      {orders.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
+          {/* LEFT: 월별 추세 */}
+          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-7 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
+            <div className="flex justify-between items-center mb-6 relative z-10">
+              <div>
+                <h3 className="text-base font-black text-slate-800 tracking-tight">월별 주문 추세</h3>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">Monthly Order Trend</p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-white shadow-sm">
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">재고 발주</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">FAIL 교환</span></div>
+              </div>
+            </div>
+            {monthlyOrderData.length > 0 ? (
+              <div className="overflow-x-auto relative z-10">
+                <svg viewBox={`0 0 ${Math.max(chartW, monthlyOrderData.length * 60)} ${chartH + 30}`} className="w-full min-w-[400px]" preserveAspectRatio="xMinYMid meet">
+                  <defs>
+                    <linearGradient id="barIndigoGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#818cf8" />
+                      <stop offset="100%" stopColor="#4f46e5" />
+                    </linearGradient>
+                    <linearGradient id="barRoseGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#fb7185" />
+                      <stop offset="100%" stopColor="#e11d48" />
+                    </linearGradient>
+                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="3" result="blur" />
+                      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                  </defs>
+                  {/* 도트 가이드라인 */}
+                  {[0, 0.25, 0.5, 0.75, 1].map(pct => {
+                    const y = chartH - pct * chartH;
+                    return <line key={pct} x1="40" y1={y} x2={Math.max(chartW, monthlyOrderData.length * 60)} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="2 4" opacity="0.6" />;
+                  })}
+                  {[0, 0.5, 1].map(pct => {
+                    const val = Math.round(maxBarVal * pct);
+                    const y = chartH - pct * chartH;
+                    return <text key={pct} x="35" y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="700">{val}</text>;
+                  })}
+                  {monthlyOrderData.map((d, i) => {
+                    const barWidth = Math.max(20, Math.min(40, (Math.max(chartW, monthlyOrderData.length * 60) - 60) / monthlyOrderData.length - barPad));
+                    const x = 50 + i * (barWidth + barPad);
+                    const hRep = (d.replenishment / maxBarVal) * chartH;
+                    const hFail = (d.fail_exchange / maxBarVal) * chartH;
+                    return (
+                      <g key={d.month} className="group cursor-pointer">
+                        {/* 툴팁 효과를 뒷받침할 배경 하이라이트 */}
+                        <rect x={x - barPad / 2} y={0} width={barWidth + barPad} height={chartH} fill="#f8fafc" opacity="0" className="group-hover:opacity-100 transition-opacity" rx="4" />
+
+                        {hFail > 0 && <rect x={x} y={chartH - hRep - hFail} width={barWidth} height={hFail} rx="4" fill="url(#barRoseGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
+                        {hRep > 0 && <rect x={x} y={chartH - hRep} width={barWidth} height={hRep} rx="4" fill="url(#barIndigoGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
+                        <text x={x + barWidth / 2} y={chartH + 18} textAnchor="middle" fontSize="9" fill="#64748b" fontWeight="800" className="transition-colors group-hover:fill-indigo-600">{d.month.slice(2)}</text>
+                        {/* Hover Quantity Text */}
+                        <text x={x + barWidth / 2} y={chartH - hRep - hFail - 8} textAnchor="middle" fontSize="10" fill="#1e293b" fontWeight="900" opacity="0" className="group-hover:opacity-100 transition-opacity drop-shadow-sm">{d.total}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            ) : (
+              <div className="py-16 text-center"><p className="text-sm text-slate-400 font-medium">차트 데이터 없음</p></div>
+            )}
+          </div>
+          {/* RIGHT: 제조사 도넛 */}
+          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-7 relative overflow-hidden flex flex-col" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
+            <div>
+              <h3 className="text-base font-black text-slate-800 tracking-tight">제조사별 주문 비율</h3>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">By Manufacturer</p>
+            </div>
+            <div className="flex items-center gap-6 mt-6 flex-1 relative z-10">
+              <div className="relative w-32 h-32 shrink-0">
+                <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-sm">
+                  <defs>
+                    <filter id="donutShadow" x="-10%" y="-10%" width="120%" height="120%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1" />
+                    </filter>
+                  </defs>
+                  {donutPaths.map((seg, i) => (
+                    <path key={i} d={seg.path} fill={seg.color} stroke="#ffffff" strokeWidth="2.5" className="transition-all duration-300 hover:opacity-80 cursor-pointer" filter="url(#donutShadow)" />
+                  ))}
+                  <circle cx="60" cy="60" r="34" fill="white" className="drop-shadow-sm" />
+                  <text x="60" y="56" textAnchor="middle" fontSize="18" fontWeight="900" fill="#0f172a">{orders.length}</text>
+                  <text x="60" y="73" textAnchor="middle" fontSize="8" fontWeight="800" fill="#64748b" letterSpacing="0.15em">ORDERS</text>
+                </svg>
+              </div>
+              <div className="flex-1 space-y-2.5">
+                {manufacturerDonut.map(seg => (
+                  <div key={seg.name} className="flex items-center justify-between group p-1.5 -mx-1.5 rounded-lg hover:bg-slate-50/80 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: seg.color }} />
+                      <span className="text-[13px] font-black text-slate-700">{seg.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-black text-slate-800 tabular-nums">{seg.count}</span>
+                      <span className="text-[10px] font-bold text-slate-400 w-6 text-right">{seg.percent}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════ */}
+      {/* 주문 내역 테이블                          */}
+      {/* ═══════════════════════════════════════ */}
+      <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+        <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
+        <div className="px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" />
+              주문 내역
+            </h3>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 ml-4">Order History</p>
+          </div>
+          <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{filteredOrders.length}건</span>
+        </div>
+        <div className="overflow-x-auto relative z-10">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200 sticky top-[44px] z-10">
+            <thead className="bg-slate-50/50 border-b border-slate-100/50 backdrop-blur-sm">
               <tr>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">주문일자</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">유형</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">제조사</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">품목 내역</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">수량</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">담당자</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">상태</th>
-                <th className="px-6 py-3.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">관리</th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">주문일자<br /><span className="text-[8px] tracking-widest">DATE</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">유형<br /><span className="text-[8px] tracking-widest">TYPE</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">제조사<br /><span className="text-[8px] tracking-widest">MFR</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">품목 내역<br /><span className="text-[8px] tracking-widest">ITEM</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">수량<br /><span className="text-[8px] tracking-widest">QTY</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">담당자<br /><span className="text-[8px] tracking-widest">MANAGER</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">상태<br /><span className="text-[8px] tracking-widest">STATUS</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">관리<br /><span className="text-[8px] tracking-widest">ACTION</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-50">
               {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
-                const accentColor = order.type === 'replenishment' ? 'border-l-indigo-400' : 'border-l-rose-400';
+                const accentColor = order.type === 'replenishment' ? 'border-l-indigo-500' : 'border-l-rose-500';
                 const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
                 const isEven = idx % 2 === 1;
                 return (
-                  <tr
-                    key={order.id}
-                    className={`group transition-colors border-l-[3px] ${accentColor} hover:bg-indigo-50/30 ${isEven ? 'bg-slate-100/70' : ''}`}
-                  >
-                    <td className="px-6 py-2.5">
-                      <span className="text-xs font-black text-slate-800">{order.date}</span>
-                    </td>
-                    <td className="px-6 py-2.5">
-                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${
-                        order.type === 'replenishment'
-                          ? 'bg-indigo-50 text-indigo-600'
-                          : 'bg-rose-50 text-rose-600'
-                      }`}>
+                  <tr key={order.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent hover:${accentColor} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
+                    <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{order.date}</span></td>
+                    <td className="px-6 py-3">
+                      <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
                         {order.type === 'replenishment' ? '재고 발주' : 'FAIL 교환'}
                       </span>
                     </td>
-                    <td className="px-6 py-2.5">
-                      <span className="text-sm font-black text-slate-800">{order.manufacturer}</span>
-                    </td>
-                    <td className="px-6 py-2.5">
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black text-slate-800">{item.brand}</span>
-                        <span className="text-[10px] font-bold text-slate-400 mt-0.5">{item.size}</span>
+                    <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{order.manufacturer}</span></td>
+                    <td className="px-6 py-3">
+                      <div className="flex bg-white/60 border border-slate-100 items-center justify-between px-3 py-1.5 rounded-xl shadow-sm w-fit group-hover:border-indigo-100 group-hover:bg-white transition-colors">
+                        <span className="text-xs font-black text-slate-800 mr-4">{item.brand}</span>
+                        <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{item.size}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-2.5 text-center font-black text-slate-900 text-base tabular-nums">
-                      {item.quantity}<span className="text-[10px] ml-0.5 font-bold">개</span>
-                    </td>
-                    <td className="px-6 py-2.5">
-                      <span className="text-xs font-bold text-slate-600">{order.manager}</span>
-                    </td>
-                    <td className="px-6 py-2.5 text-center">
+                    <td className="px-6 py-3 text-center font-black text-slate-800 text-lg tabular-nums">{item.quantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
+                    <td className="px-6 py-3"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1.5 rounded-lg">{order.manager}</span></td>
+                    <td className="px-6 py-3 text-center">
                       <button
                         onClick={() => !isReadOnly && onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
                         disabled={isReadOnly}
-                        className={`px-4 py-1.5 rounded-xl text-[10px] font-black transition-all ${
-                          isReadOnly
-                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                            : order.status === 'received'
-                            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                            : 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white'
-                        }`}
+                        className={`px-4 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-sm active:scale-95 ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : order.status === 'received' ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white hover:shadow-md hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/20' : 'bg-white border border-slate-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50'}`}
                       >
                         {order.status === 'received' ? '입고 완료' : '입고 확인'}
                       </button>
                     </td>
-                    <td className="px-6 py-2.5 text-right">
+                    <td className="px-6 py-3 text-right">
                       {!isReadOnly && (
-                        <button
-                          onClick={() => onDeleteOrder(order.id)}
-                          className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                          title="주문 삭제"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                        <button onClick={() => onDeleteOrder(order.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-xl transition-all" title="주문 삭제">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       )}
                     </td>
@@ -337,10 +530,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <tr>
                   <td colSpan={8} className="px-8 py-24 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <svg className="w-12 h-12 text-slate-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                      <p className="text-slate-400 font-medium italic text-sm">표시할 주문 내역이 없습니다.</p>
+                      <svg className="w-12 h-12 text-slate-200 drop-shadow-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                      <p className="text-slate-400 font-bold text-sm mt-2">표시할 주문 내역이 없습니다.</p>
                     </div>
                   </td>
                 </tr>

@@ -45,7 +45,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
         <div className="flex items-center gap-5">
           <div className="relative w-28 h-28 flex-shrink-0">
             <svg viewBox="0 0 100 100" className={`w-full h-full transform -rotate-90 ${CHART_FOCUS_CLASS}`}
-              role="img" aria-label="제조사별 식립 분포 도넛 차트"
+              role="img" aria-label={`제조사별 식립 분포: ${manufacturerDonut.map(d => `${d.name} ${Math.round(d.percent * 100)}%`).join(', ')}`}
               tabIndex={0} onKeyDown={handleKeyDown}
               onBlur={() => setHoveredDonut(null)}
               style={{ touchAction: 'manipulation' }}>
@@ -99,7 +99,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
           {topSizes.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-8">사이즈 데이터 없음</p>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-2.5" role="list" aria-label="사이즈별 TOP 5 랭킹">
               {topSizes.map((item, i) => {
                 const pct = totalPlacements > 0 ? Math.round((item.count / totalPlacements) * 100) : 0;
                 const label = [item.brand, item.size].filter(Boolean).join(' - ') || '-';
@@ -132,7 +132,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
           {manufacturerFailStats.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-8">FAIL 데이터 없음</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3" role="list" aria-label="제조사별 FAIL률 순위">
               {(() => {
                 return manufacturerFailStats.map((f, i) => {
                   // Use absolute percentage (0-100%) instead of relative to max

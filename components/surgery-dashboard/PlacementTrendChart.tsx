@@ -14,9 +14,11 @@ interface Props {
   monthlyAvgPlacement: number;
   trendline: TrendlineData | null;
   mounted: boolean;
+  onMonthClick?: (month: string) => void;
+  selectedMonth?: string | null;
 }
 
-export default function PlacementTrendChart({ monthlyData, mounted }: Props) {
+export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick, selectedMonth }: Props) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [activeKey, setActiveKey] = useState<SeriesKey>('식립');
   const activeOption = SERIES_OPTIONS.find(s => s.key === activeKey)!;
@@ -81,11 +83,10 @@ export default function PlacementTrendChart({ monthlyData, mounted }: Props) {
           {SERIES_OPTIONS.map(s => (
             <button key={s.key}
               onClick={() => { setActiveKey(s.key); setHoveredIdx(null); }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 ${
-                activeKey === s.key
-                  ? 'bg-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 ${activeKey === s.key
+                ? 'bg-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-600'
+                }`}
               style={activeKey === s.key ? { color: s.color } : undefined}>
               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                 style={{ backgroundColor: s.color, opacity: activeKey === s.key ? 1 : 0.4 }} />
@@ -169,8 +170,9 @@ export default function PlacementTrendChart({ monthlyData, mounted }: Props) {
             const halfGap = count > 1 ? plotW / (count - 1) / 2 : plotW / 2;
             return (
               <rect key={`hover-${i}`} x={p.x - halfGap} y={pad.t} width={halfGap * 2} height={plotH + pad.b}
-                fill="transparent" className="cursor-pointer"
-                onPointerEnter={() => setHoveredIdx(i)} />
+                fill="transparent" className={onMonthClick ? "cursor-pointer" : ""}
+                onPointerEnter={() => setHoveredIdx(i)}
+                onClick={() => onMonthClick?.(p.month)} />
             );
           })}
           {/* Crosshair */}
@@ -178,26 +180,41 @@ export default function PlacementTrendChart({ monthlyData, mounted }: Props) {
             <line x1={linePoints[hoveredIdx].x} y1={pad.t} x2={linePoints[hoveredIdx].x} y2={pad.t + plotH}
               stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 3" />
           )}
+          {selectedMonth && linePoints.find(p => p.month === selectedMonth) && (() => {
+            const p = linePoints.find(p => p.month === selectedMonth)!;
+            return (
+              <line x1={p.x} y1={pad.t} x2={p.x} y2={pad.t + plotH}
+                stroke="#818cf8" strokeWidth={1.5} strokeDasharray="4 4" />
+            );
+          })()}
           {/* Data points */}
           {linePoints.map((p, i) => {
             const isHovered = hoveredIdx === i;
+            const isSelected = selectedMonth === p.month;
+            const hasSelection = selectedMonth != null;
+            const isDimmed = hasSelection && !isSelected && !isHovered;
+
             return (
-              <g key={i}>
-                <circle cx={p.x} cy={p.y} r={isHovered ? 8 : 0} fill={color} opacity={isHovered ? 0.1 : 0}
+              <g key={i} className="transition-opacity duration-300" style={{ opacity: isDimmed ? 0.3 : 1 }}>
+                <circle cx={p.x} cy={p.y} r={isHovered || isSelected ? 8 : 0} fill={color} opacity={isHovered || isSelected ? 0.1 : 0}
                   className="transition-[r,opacity] duration-200" />
-                <circle cx={p.x} cy={p.y} r={isHovered ? 6 : 4} fill="white" stroke={color} strokeWidth={2.5}
+                <circle cx={p.x} cy={p.y} r={isHovered || isSelected ? 6 : 4} fill="white" stroke={color} strokeWidth={isSelected ? 3 : 2.5}
                   className="transition-[r] duration-150" />
                 <circle cx={p.x} cy={p.y} r={2} fill={color} />
               </g>
             );
           })}
           {/* X labels */}
-          {linePoints.map((p, i) => (
-            <text key={i} x={p.x} y={H - pad.b + 20} textAnchor="middle"
-              fontSize={10} fontWeight={hoveredIdx === i ? 500 : 400} fill={hoveredIdx === i ? '#334155' : '#94a3b8'}>
-              {monthlyData[i]?.month.substring(2)}
-            </text>
-          ))}
+          {linePoints.map((p, i) => {
+            const isHovered = hoveredIdx === i;
+            const isSelected = selectedMonth === p.month;
+            return (
+              <text key={i} x={p.x} y={H - pad.b + 20} textAnchor="middle"
+                fontSize={10} fontWeight={isHovered || isSelected ? 600 : 400} fill={isSelected ? '#4f46e5' : isHovered ? '#334155' : '#94a3b8'}>
+                {monthlyData[i]?.month.substring(2)}
+              </text>
+            );
+          })}
           {/* Tooltip */}
           {hoveredIdx !== null && linePoints[hoveredIdx] && (() => {
             const p = linePoints[hoveredIdx];

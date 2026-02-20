@@ -14,6 +14,121 @@ import ToothAnalysis from './surgery-dashboard/ToothAnalysis';
 import { useClinicalStats } from './surgery-dashboard/useClinicalStats';
 import ClinicalAnalysisSection from './surgery-dashboard/ClinicalAnalysisSection';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
+import CollapsibleSection from './surgery-dashboard/CollapsibleSection';
+import SurgeryDashboardSkeleton from './surgery-dashboard/SurgeryDashboardSkeleton';
+
+// =====================================================
+// Floating TOC Navigator
+// =====================================================
+const TOC_ICONS = {
+  'section-charts': (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  'section-deep': (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
+  'section-clinical': (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    </svg>
+  ),
+} as const;
+
+const TOC_SECTIONS = [
+  { id: 'section-charts', label: '차트' },
+  { id: 'section-deep', label: '심층' },
+  { id: 'section-clinical', label: '임상' },
+] as const;
+
+function FloatingTOC({ hasClinical }: { hasClinical: boolean }) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Dynamically compute the bottom of the sticky header area
+  const getStickyOffset = () => {
+    const stickyEl = document.querySelector<HTMLElement>('.sticky.z-20');
+    if (stickyEl) {
+      return stickyEl.getBoundingClientRect().bottom + 12; // 12px breathing room
+    }
+    return 300; // fallback
+  };
+
+  useEffect(() => {
+    const filteredIds = TOC_SECTIONS
+      .filter(s => hasClinical || s.id !== 'section-clinical')
+      .map(s => s.id);
+
+    const handleScroll = () => {
+      setIsVisible(window.scrollY > 400);
+
+      const offset = getStickyOffset();
+      // Determine which section is currently in view
+      // Pick the last section whose top is above the detection line
+      let current: string | null = null;
+      for (const id of filteredIds) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        // Section is "active" if its top has scrolled past the sticky area
+        if (rect.top <= offset + 20) {
+          current = id;
+        }
+      }
+      setActiveId(current);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // run once on mount
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasClinical]);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    setActiveId(id); // instant feedback
+    const offset = getStickyOffset();
+    const y = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+
+  const filteredSections = TOC_SECTIONS.filter(s => hasClinical || s.id !== 'section-clinical');
+
+  return (
+    <div
+      className="fixed right-6 bottom-8 z-30 transition-all duration-300"
+      style={{
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
+        pointerEvents: isVisible ? 'auto' : 'none',
+      }}
+    >
+      <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/80 py-2 px-1.5 flex flex-col gap-1">
+        {filteredSections.map(s => {
+          const isActive = activeId === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => scrollTo(s.id)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 whitespace-nowrap ${isActive
+                ? 'bg-indigo-50 text-indigo-700 shadow-sm'
+                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                }`}
+              title={s.label}
+            >
+              <span className={isActive ? 'text-indigo-500' : 'text-slate-400'}>{TOC_ICONS[s.id]}</span>
+              <span>{s.label}</span>
+              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 ml-1 animate-pulse" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface SurgeryDashboardProps {
   rows: ExcelRow[];
@@ -38,6 +153,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
 }) => {
   const [mounted, setMounted] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
+  const [dataViewerDayFilter, setDataViewerDayFilter] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 50);
     return () => clearTimeout(timer);
@@ -81,6 +198,16 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   const handleRangeChange = useCallback((s: number, e: number) => {
     setRangeStart(s);
     setRangeEnd(e);
+    setSelectedMonth(null); // Clear selection when range changes
+  }, []);
+
+  const handleMonthClick = useCallback((monthStr: string) => {
+    setSelectedMonth(prev => prev === monthStr ? null : monthStr);
+  }, []);
+
+  const handleDayClick = useCallback((dayName: string) => {
+    setDataViewerDayFilter(dayName);
+    setShowDataViewer(true);
   }, []);
 
   // Filtered rows for charts below the slider
@@ -109,7 +236,16 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
     if (vals.length === 0) return 25;
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
   }, [workDaysMap]);
-  const kpiStats = isRangeFiltered ? filteredStats : stats;
+
+  // If a specific month is selected via chart highlight, compute stats ONLY for that month for the KPI strip.
+  const selectedMonthRows = useMemo(() => {
+    if (!selectedMonth) return null;
+    return filteredRows.filter(r => String(r['날짜']).startsWith(selectedMonth));
+  }, [filteredRows, selectedMonth]);
+
+  const selectedMonthStats = useSurgeryStats(selectedMonthRows || [], workDaysMap);
+
+  const kpiStats = selectedMonth ? selectedMonthStats : (isRangeFiltered ? filteredStats : stats);
 
   // Animated KPI values
   const animPlacement = useCountUp(kpiStats.classificationStats['식립']);
@@ -126,20 +262,19 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   };
 
   // =====================================================
-  // EMPTY STATE
+  // EMPTY STATE / SKELETON
   // =====================================================
   if (stats.cleanRows.length === 0) {
+    if (isLoading) {
+      return <SurgeryDashboardSkeleton />;
+    }
     return (
       <div className="flex flex-col items-center justify-center min-h-[55vh] text-center">
-        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 shadow-sm ${isLoading ? 'bg-indigo-50 border border-indigo-200' : 'bg-white border border-slate-200'}`}>
-          {isLoading ? (
-            <svg className="animate-spin w-7 h-7 text-indigo-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
-          ) : (
-            <svg className="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-          )}
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 shadow-sm bg-white border border-slate-200">
+          <svg className="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
         </div>
         <div className="space-y-2 mb-8">
-          <h3 className="text-xl font-bold text-slate-800 tracking-tight">{isLoading ? '데이터 분석 중\u2026' : '수술기록을 업로드해주세요'}</h3>
+          <h3 className="text-xl font-bold text-slate-800 tracking-tight">수술기록을 업로드해주세요</h3>
           <p className="text-slate-500 max-w-sm mx-auto text-sm leading-relaxed">덴트웹에서 다운로드한 <span className="font-semibold text-slate-700">.xlsx 파일</span>을<br />드래그하거나 아래 버튼을 눌러 업로드하세요.</p>
         </div>
         <button onClick={onUpload} disabled={isLoading} className="px-6 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-200">
@@ -159,38 +294,50 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   );
 
   return (
-    <div className="space-y-6" style={{ animationDuration: '0s' }}>
+    <div className="space-y-6 pb-16" style={{ animationDuration: '0s' }}>
       {/* Sticky header + KPI + Range slider wrapper */}
-      <div className="sticky top-[44px] z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}>
+      <div
+        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
+      >
         {/* A. Header Strip */}
         <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-6">
-              <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-stretch gap-2.5 sm:gap-3 flex-1 min-w-0">
+              {/* 데이터 기간 + 선택 기간 통합 카드 */}
+              <div className="min-w-[190px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">데이터 기간</h4>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Data Period</p>
-                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{formatDate(kpiStats.dateRange.min)} <span className="text-slate-300 font-light mx-1">~</span> {formatDate(kpiStats.dateRange.max)}</p>
-                {isRangeFiltered && <p className="text-[10px] text-indigo-500 mt-1 font-semibold">선택 기간 기준</p>}
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">
+                  {formatDate(stats.dateRange.min)} <span className="text-slate-300 font-light mx-1">~</span> {formatDate(stats.dateRange.max)}
+                </p>
+                {(isRangeFiltered || selectedMonth) && (
+                  <div className="mt-1 flex items-center gap-1">
+                    <svg className="w-2.5 h-2.5 text-indigo-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                    <span className="text-[10px] font-bold text-indigo-500">
+                      {selectedMonth ? `${selectedMonth} 선택됨` : `${formatDate(kpiStats.dateRange.min)} ~ ${formatDate(kpiStats.dateRange.max)}`}
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="h-10 w-px bg-slate-100" />
-              <div>
+              <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">총 레코드</h4>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Records</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{kpiStats.dateRange.total.toLocaleString()}<span className="text-xs font-semibold text-slate-400 ml-1">cases</span></p>
               </div>
-              <div className="h-10 w-px bg-slate-100" />
-              <div>
+              <div className="min-w-[160px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">다음 다운로드</h4>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Next Download</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{formatDate(stats.nextDownloadDate)}~</p>
+                <p className="text-[10px] text-slate-400 mt-1 leading-tight">마지막 레코드 다음 날부터<br />덴트웹 재다운로드 필요</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
               <button onClick={onUpload} disabled={isLoading} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 active:scale-[0.98] transition-colors flex items-center gap-2 disabled:opacity-50 shadow-md shadow-slate-200">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 데이터 업데이트
               </button>
-              <button onClick={() => setShowDataViewer(true)} className="px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 active:scale-[0.98] transition-colors flex items-center gap-2 shadow-sm">
+              <button onClick={() => { setDataViewerDayFilter(null); setShowDataViewer(true); }} className="px-4 py-2 bg-white text-slate-700 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 active:scale-[0.98] transition-colors flex items-center gap-2 shadow-sm">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 데이터 조회
               </button>
@@ -223,99 +370,100 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
       </div>{/* end sticky wrapper */}
 
       {unregisteredFromSurgery.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-black text-amber-800 tracking-tight">
-                수술기록에 재고 미등록 품목 {unregisteredFromSurgery.length}종
-              </h3>
-              <p className="text-xs text-amber-700 mt-1">
-                수술기록지 기준 누적 {unregisteredUsageTotal.toLocaleString()}개가 재고 마스터에 없습니다.
-              </p>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-slate-800">미등록 품목</span>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Unregistered</span>
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{unregisteredFromSurgery.length}종 · {unregisteredUsageTotal.toLocaleString()}개</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 ml-2">
+                {unregisteredFromSurgery.slice(0, 4).map((item) => {
+                  const label = `${item.manufacturer} / ${item.brand} ${item.size}`;
+                  return (
+                    <span key={label} className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600" title={label}>
+                      {item.brand} {item.size}
+                    </span>
+                  );
+                })}
+                {unregisteredFromSurgery.length > 4 && (
+                  <span className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-400">+{unregisteredFromSurgery.length - 4}</span>
+                )}
+              </div>
             </div>
             {onGoInventoryMaster && (
-              <button
-                onClick={onGoInventoryMaster}
-                className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
-              >
+              <button onClick={onGoInventoryMaster} className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-[10px] font-bold hover:bg-slate-700 transition-colors shrink-0">
                 재고 마스터에서 확인
               </button>
-            )}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {unregisteredFromSurgery.slice(0, 6).map((item) => {
-              const label = `${item.manufacturer} / ${item.brand} ${item.size}`;
-              return (
-                <span
-                  key={label}
-                  className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-semibold text-amber-800"
-                  title={label}
-                >
-                  {item.brand} {item.size} · {item.usageCount}개
-                </span>
-              );
-            })}
-            {unregisteredFromSurgery.length > 6 && (
-              <span className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-semibold text-amber-700">
-                +{unregisteredFromSurgery.length - 6}종 더 있음
-              </span>
             )}
           </div>
         </div>
       )}
 
       {/* D. Charts 2x2 grid (filtered by range slider) */}
-      <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
-        <MonthlyTrendChart monthlyData={filteredStats.monthlyData} mounted={mounted} />
-        <DayOfWeekChart dayOfWeekStats={filteredStats.dayOfWeekStats} dayInsight={filteredStats.dayInsight} mounted={mounted} />
-        <PlacementTrendChart monthlyData={filteredStats.monthlyData} monthlyAvgPlacement={filteredStats.monthlyAvgPlacement} trendline={filteredStats.trendline} mounted={mounted} />
-        <ClassificationRatios classificationStats={filteredStats.classificationStats} mounted={mounted} />
-      </div>
-
-      {/* D. Deep Analysis Divider */}
-      <div className="flex items-center gap-4 py-4">
-        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-50 rounded-full border border-slate-100">
-          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-          <span className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-semibold">Deep Analysis</span>
+      <CollapsibleSection
+        id="section-charts"
+        title="통계 차트"
+        subtitle="Statistical Charts"
+        accentColor="slate"
+        icon={<svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
+        badge="월별 · 요일별 · 구분별"
+        storageKey="surgery-charts"
+      >
+        <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
+          <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+          <DayOfWeekChart dayOfWeekStats={kpiStats.dayOfWeekStats} dayInsight={kpiStats.dayInsight} mounted={mounted} onDayClick={handleDayClick} />
+          <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+          <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
         </div>
-        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-      </div>
+      </CollapsibleSection>
 
-      {/* F. Manufacturer Analysis (filtered) */}
-      <ManufacturerAnalysis
-        manufacturerDonut={filteredStats.manufacturerDonut}
-        manufacturerFailStats={filteredStats.manufacturerFailStats}
-        topSizes={filteredStats.topSizes}
-        totalPlacements={filteredStats.classificationStats['식립']}
-        mounted={mounted}
-      />
+      {/* E. Deep Analysis Section */}
+      <CollapsibleSection
+        id="section-deep"
+        title="심층 분석"
+        subtitle="Deep Analysis"
+        accentColor="indigo"
+        icon={<svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+        badge="제조사 · 치아 부위 · 사이즈"
+        storageKey="surgery-deep"
+      >
+        <ManufacturerAnalysis
+          manufacturerDonut={kpiStats.manufacturerDonut}
+          manufacturerFailStats={kpiStats.manufacturerFailStats}
+          topSizes={kpiStats.topSizes}
+          totalPlacements={kpiStats.classificationStats['식립']}
+          mounted={mounted}
+        />
+        <ToothAnalysis toothAnalysis={kpiStats.toothAnalysis} toothHeatmap={kpiStats.toothHeatmap} mounted={mounted} />
+      </CollapsibleSection>
 
-      {/* G. Tooth Analysis (filtered) */}
-      <ToothAnalysis toothAnalysis={filteredStats.toothAnalysis} toothHeatmap={filteredStats.toothHeatmap} mounted={mounted} />
-
-      {/* H. Clinical Analysis (filtered) */}
+      {/* F. Clinical Analysis (filtered) */}
       {clinicalStats.hasClinicalData && (
-        <>
-          <div className="flex items-center gap-4 py-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-indigo-50 rounded-full border border-indigo-100">
-              <span className="text-[10px] text-indigo-500 uppercase tracking-[0.2em] font-semibold">Clinical Insight</span>
-            </div>
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-          </div>
-
-
+        <CollapsibleSection
+          id="section-clinical"
+          title="임상 인사이트"
+          subtitle="Clinical Insight"
+          accentColor="rose"
+          icon={<svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
+          badge="골질 · 초기고정 · 실패율"
+          storageKey="surgery-clinical"
+        >
           <ClinicalAnalysisSection
-            rows={filteredRows}
-            manufacturers={filteredStats.manufacturerFailStats}
+            rows={selectedMonth ? selectedMonthRows || [] : filteredRows}
+            manufacturers={kpiStats.manufacturerFailStats}
             mounted={mounted}
           />
-        </>
+        </CollapsibleSection>
       )}
 
+      {/* Floating TOC */}
+      <FloatingTOC hasClinical={clinicalStats.hasClinicalData} />
+
       {/* Data Viewer Modal */}
-      {showDataViewer && <DataViewerModal rows={rows} onClose={() => setShowDataViewer(false)} />}
+      {showDataViewer && <DataViewerModal rows={filteredRows} initialDayFilter={dataViewerDayFilter} onClose={() => { setShowDataViewer(false); setDataViewerDayFilter(null); }} />}
     </div>
   );
 };
@@ -327,10 +475,36 @@ const COLUMNS = ['날짜', '환자정보', '치아번호', '갯수', '수술기�
 const COL_WIDTHS: Record<string, number> = { '날짜': 100, '환자정보': 100, '치아번호': 65, '갯수': 45, '수술기록': 320, '구분': 80, '제조사': 100, '브랜드': 100, '규격(SIZE)': 100, '골질': 60, '초기고정': 60 };
 const PAGE_SIZE = 50;
 
-const DataViewerModal: React.FC<{ rows: ExcelRow[]; onClose: () => void }> = ({ rows, onClose }) => {
+function getKoreanWeekday(dateValue: unknown): string | null {
+  const raw = String(dateValue || '').trim();
+  if (!raw) return null;
+
+  // Prefer date-only parsing to avoid timezone day shifts from Date string parsing.
+  const datePart = raw.slice(0, 10);
+  const match = datePart.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+  let parsed: Date | null = null;
+
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const localDate = new Date(year, month - 1, day);
+    if (!Number.isNaN(localDate.getTime())) parsed = localDate;
+  } else {
+    const fallback = new Date(raw);
+    if (!Number.isNaN(fallback.getTime())) parsed = fallback;
+  }
+
+  if (!parsed) return null;
+  const days = ['일', '월', '화', '수', '목', '금', '토'] as const;
+  return days[parsed.getDay()];
+}
+
+const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | null; onClose: () => void }> = ({ rows, initialDayFilter, onClose }) => {
   const [search, setSearch] = useState('');
   const [filterCol, setFilterCol] = useState<string>('전체');
   const [filterCls, setFilterCls] = useState<string | null>(null);
+  const [dayFilter, setDayFilter] = useState<string | null>(initialDayFilter);
   const [page, setPage] = useState(0);
   const COL_SETTINGS_KEY = 'dentweb_data_viewer_col_settings';
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -390,6 +564,12 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; onClose: () => void }> = ({ 
 
   const filtered = useMemo(() => {
     let result = rows;
+    if (dayFilter) {
+      result = result.filter(row => {
+        const weekday = getKoreanWeekday(row['날짜']);
+        return weekday === dayFilter;
+      });
+    }
     if (filterCls) {
       result = result.filter(row => String(row['구분'] || '') === filterCls);
     }
@@ -413,12 +593,12 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; onClose: () => void }> = ({ 
       });
     }
     return result;
-  }, [rows, search, filterCol, filterCls, sortCol, sortDir]);
+  }, [rows, search, filterCol, filterCls, dayFilter, sortCol, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  useEffect(() => { setPage(0); }, [search, filterCol, filterCls, sortCol, sortDir]);
+  useEffect(() => { setPage(0); }, [search, filterCol, filterCls, dayFilter, sortCol, sortDir]);
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
@@ -489,8 +669,18 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; onClose: () => void }> = ({ 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
           <div>
-            <h3 id="surgery-data-viewer-title" className="text-lg font-black text-slate-900">수술기록 데이터 조회</h3>
-            <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{rows.length}건의 레코드</p>
+            <div className="flex items-center gap-2">
+              <h3 id="surgery-data-viewer-title" className="text-lg font-black text-slate-900">수술기록 데이터 조회</h3>
+              {dayFilter && (
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-md border border-indigo-200 flex items-center gap-1.5">
+                  {dayFilter}요일
+                  <button onClick={() => setDayFilter(null)} className="hover:text-indigo-900 focus:outline-none">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </span>
+              )}
+            </div>
+            <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{filtered.length}건의 레코드 (총 {rows.length}건)</p>
           </div>
           <button ref={closeButtonRef} onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
             <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -498,27 +688,30 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; onClose: () => void }> = ({ 
         </div>
 
         {/* Summary Strip + Classification Filter */}
-        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 gap-4">
           <div className="flex flex-wrap gap-3">
             {summary.map(([cls, { rows: cnt, qty }]) => {
               const noUsage = cls === '청구' || cls === '골이식만';
               return (
-                <div key={cls} className="px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
+                <div key={cls} className="px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 text-xs whitespace-nowrap">
                   <span className="font-bold text-slate-700">{cls}</span>
                   <span className="text-slate-400 mx-1.5">|</span>
-                  <span className="text-slate-500">{cnt}건</span>
-                  {!noUsage && (<><span className="text-slate-300 mx-1">/</span><span className="font-bold text-indigo-600">갯수합계 {qty}</span></>)}
+                  {noUsage ? (
+                    <span className="text-slate-500">{cnt}건</span>
+                  ) : (
+                    <span className="font-bold text-indigo-600">갯수합계 {qty}</span>
+                  )}
                 </div>
               );
             })}
           </div>
-          <div className="flex gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
+          <div className="flex flex-nowrap shrink-0 overflow-x-auto gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
             {([null, '식립', '수술중 FAIL', '청구', '골이식만'] as const).map(cls => {
               const active = filterCls === cls;
               const colors: Record<string, string> = { '식립': 'bg-indigo-600 text-white', '수술중 FAIL': 'bg-rose-500 text-white', '청구': 'bg-teal-500 text-white', '골이식만': 'bg-amber-500 text-white' };
               const label = cls === null ? '전체' : cls === '수술중 FAIL' ? 'FAIL' : cls;
               return (
-                <button key={label} onClick={() => setFilterCls(cls)} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${active ? (cls === null ? 'bg-slate-800 text-white' : colors[cls]) : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+                <button key={label} onClick={() => setFilterCls(cls)} className={`whitespace-nowrap px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${active ? (cls === null ? 'bg-slate-800 text-white' : colors[cls]) : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
                   {label}
                 </button>
               );

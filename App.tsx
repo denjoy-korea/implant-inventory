@@ -84,6 +84,7 @@ type BrandSizeFormatEntry = {
 };
 
 type BrandSizeFormatIndex = Map<string, BrandSizeFormatEntry[]>;
+const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1360;
 
 function normalizeSizeTextStrict(raw: string): string {
   return String(raw || '').trim();
@@ -203,6 +204,7 @@ function appendUnregisteredSample(
 const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
+  const dashboardHeaderRef = useRef<HTMLElement>(null);
 
   const { toast: alertToast, showToast: showAlertToast } = useToast(3500);
 
@@ -238,6 +240,10 @@ const App: React.FC = () => {
 
   const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
+  const [isFinePointer, setIsFinePointer] = useState(true);
+  const [dashboardHeaderHeight, setDashboardHeaderHeight] = useState(44);
 
   // 초대 토큰 상태
   const [inviteInfo, setInviteInfo] = React.useState<{
@@ -284,6 +290,8 @@ const App: React.FC = () => {
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
+  const showDashboardSidebar = state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user');
+  const showStandardDashboardHeader = state.currentView === 'dashboard' && !(isSystemAdmin && state.adminViewMode !== 'user');
 
   // Dev convenience: expose maintenance helpers for one-off operations.
   useEffect(() => {
@@ -299,6 +307,80 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, currentView: prev.user ? 'dashboard' : 'landing' }));
     }
   }, [state.currentView, isSystemAdmin]);
+
+  // sticky 섹션들이 참조할 대시보드 헤더 높이 동기화
+  useEffect(() => {
+    if (!showStandardDashboardHeader) return;
+
+    const headerEl = dashboardHeaderRef.current;
+    if (!headerEl) return;
+
+    const syncHeaderHeight = () => {
+      const measured = Math.round(headerEl.getBoundingClientRect().height);
+      if (measured > 0) {
+        setDashboardHeaderHeight(prev => (prev === measured ? prev : measured));
+      }
+    };
+
+    syncHeaderHeight();
+    window.addEventListener('resize', syncHeaderHeight);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(syncHeaderHeight);
+      observer.observe(headerEl);
+    }
+
+    return () => {
+      window.removeEventListener('resize', syncHeaderHeight);
+      observer?.disconnect();
+    };
+  }, [showStandardDashboardHeader, state.dashboardTab]);
+
+  // 터치 환경에서는 hover가 없으므로 사이드바 열기 버튼을 항상 노출
+  useEffect(() => {
+    if (!showDashboardSidebar) return;
+    const mediaQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const syncPointerMode = () => setIsFinePointer(mediaQuery.matches);
+
+    syncPointerMode();
+    mediaQuery.addEventListener('change', syncPointerMode);
+    return () => mediaQuery.removeEventListener('change', syncPointerMode);
+  }, [showDashboardSidebar]);
+
+  // 화면이 좁아지면 사이드바 자동 접기
+  useEffect(() => {
+    if (!showDashboardSidebar) {
+      setIsSidebarToggleVisible(false);
+      return;
+    }
+
+    const syncSidebarForViewport = () => {
+      if (window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    syncSidebarForViewport();
+    window.addEventListener('resize', syncSidebarForViewport);
+    return () => window.removeEventListener('resize', syncSidebarForViewport);
+  }, [showDashboardSidebar]);
+
+  // Notion 스타일 단축키: Ctrl/Cmd + \
+  useEffect(() => {
+    if (!showDashboardSidebar) return;
+
+    const handleSidebarShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key !== '\\') return;
+      event.preventDefault();
+      setIsSidebarCollapsed(prev => !prev);
+      setIsSidebarToggleVisible(false);
+    };
+
+    window.addEventListener('keydown', handleSidebarShortcut);
+    return () => window.removeEventListener('keydown', handleSidebarShortcut);
+  }, [showDashboardSidebar]);
 
   /** 플랜 품목 수 계산 시 수술중FAIL_ / 보험청구 제외 */
   const countBillableItems = useCallback((items: InventoryItem[]) => {
@@ -1126,11 +1208,15 @@ const App: React.FC = () => {
           });
           nextSurgeryMaster[sheetName] = rows;
         }
+        // Realtime이 먼저 추가했을 경우 중복 방지
+        const alreadyExists = prev.orders.some(o => o.id === nextOrder.id);
         return {
           ...prev,
-          orders: [nextOrder, ...prev.orders],
+          orders: alreadyExists ? prev.orders : [nextOrder, ...prev.orders],
           surgeryMaster: nextSurgeryMaster,
-          dashboardTab: 'order_management'
+          // fail_exchange 주문은 FailManager 화면에 교환 이력이 표시되므로 탭 이동 없음
+          // replenishment 주문만 order_management 탭으로 이동
+          ...(nextOrder.type !== 'fail_exchange' ? { dashboardTab: 'order_management' as const } : {}),
         };
       });
     };
@@ -1681,15 +1767,54 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div
+      className="min-h-screen bg-slate-50 flex"
+      style={{ ['--dashboard-header-height' as string]: `${dashboardHeaderHeight}px` } as React.CSSProperties}
+    >
+      {showDashboardSidebar && isSidebarCollapsed && (
+        <div
+          className="fixed left-0 top-0 z-[260] h-20 w-20"
+          onMouseEnter={() => {
+            if (isFinePointer) setIsSidebarToggleVisible(true);
+          }}
+          onMouseLeave={() => {
+            if (isFinePointer) setIsSidebarToggleVisible(false);
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setIsSidebarCollapsed(false);
+              setIsSidebarToggleVisible(false);
+            }}
+            className={`absolute left-3 top-3 h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-lg shadow-slate-300/40 transition-all duration-200 hover:border-indigo-300 hover:text-indigo-600 ${
+              (!isFinePointer || isSidebarToggleVisible)
+                ? 'opacity-100 translate-x-0 pointer-events-auto'
+                : 'opacity-0 -translate-x-2 pointer-events-none'
+            }`}
+            title="사이드바 열기 (Ctrl/Cmd + \\)"
+            aria-label="사이드바 열기"
+          >
+            <svg className="mx-auto h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l5 5-5 5M4 7l5 5-5 5" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Sidebar - Only Visible in Dashboard for Non-Admin Users OR when Admin is simulating User View */}
-      {state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user') && (
+      {showDashboardSidebar && (
         <Sidebar
           activeTab={state.dashboardTab}
           onTabChange={(tab) => {
             // 권한 없는 탭은 전환 차단
             if (!canAccessTab(tab, state.user?.permissions, effectiveAccessRole)) return;
             setState(prev => ({ ...prev, dashboardTab: tab }));
+          }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => {
+            setIsSidebarCollapsed(prev => !prev);
+            setIsSidebarToggleVisible(false);
           }}
           fixtureData={state.fixtureData}
           surgeryData={state.surgeryData}
@@ -1720,7 +1845,7 @@ const App: React.FC = () => {
           ) : (
             /* Standard Dashboard with Header */
             <>
-              <header className="bg-white border-b border-slate-200 px-6 py-2.5 sticky top-0 z-[100] flex items-center justify-between">
+              <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-6 py-2.5 sticky top-0 z-[100] flex items-center justify-between">
                 {/* Hidden file inputs */}
                 <input type="file" ref={fixtureFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'fixture'); e.target.value = ''; }} />
                 <input type="file" ref={surgeryFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'surgery'); e.target.value = ''; }} />
@@ -1955,6 +2080,9 @@ const App: React.FC = () => {
                           orders={state.orders}
                           surgeryMaster={state.surgeryMaster}
                           fixtureData={state.fixtureData}
+                          surgeryUnregisteredItems={surgeryUnregisteredItems}
+                          hospitalId={state.user?.hospitalId}
+                          hospitalWorkDays={state.hospitalWorkDays}
                           onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
                           isAdmin={isHospitalAdmin}
                           planState={state.planState}
@@ -2402,7 +2530,7 @@ const App: React.FC = () => {
                           unregisteredFromSurgery={surgeryUnregisteredItems}
                           onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
                           onResolveManualInput={resolveManualSurgeryInput}
-                          onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
+                          onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
                         />
                       )}
                       {state.dashboardTab === 'inventory_audit' && (
@@ -2452,7 +2580,7 @@ const App: React.FC = () => {
                                 showAlertToast('주문 삭제에 실패했습니다.', 'error');
                               }
                             }}
-                            onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
+                            onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
                             isReadOnly={isReadOnly}
                           />
                         </FeatureGate>

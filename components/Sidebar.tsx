@@ -6,6 +6,8 @@ import { planService } from '../services/planService';
 interface SidebarProps {
   activeTab: DashboardTab;
   onTabChange: (tab: DashboardTab) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   fixtureData: ExcelData | null;
   surgeryData: ExcelData | null;
   surgeryUnregisteredCount?: number;
@@ -33,7 +35,22 @@ const LockMenuIcon = () => (
 
 const LOCKED_STYLE = 'text-amber-500/50 hover:text-amber-500/70 hover:bg-slate-800/50';
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, surgeryData, surgeryUnregisteredCount = 0, isAdmin, isMaster, plan = 'free', hospitalName, userRole, userPermissions, onReturnToAdmin }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  isCollapsed = false,
+  onToggleCollapse,
+  fixtureData,
+  surgeryData,
+  surgeryUnregisteredCount = 0,
+  isAdmin,
+  isMaster,
+  plan = 'free',
+  hospitalName,
+  userRole,
+  userPermissions,
+  onReturnToAdmin,
+}) => {
   const unregisteredBadgeText = surgeryUnregisteredCount > 99 ? '99+' : String(surgeryUnregisteredCount);
 
   const isLocked = (tab: DashboardTab): boolean => {
@@ -55,8 +72,29 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, fixtureData, 
   };
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col sticky top-0 h-screen shrink-0 transition-all duration-300 z-[200] shadow-xl">
-      <div className="p-6 pb-2">
+    <aside
+      aria-hidden={isCollapsed}
+      className={`bg-slate-900 flex flex-col sticky top-0 h-screen shrink-0 overflow-hidden transition-all duration-300 z-[200] shadow-xl ${
+        isCollapsed
+          ? 'w-0 -translate-x-full opacity-0 pointer-events-none border-r-0'
+          : 'w-64 translate-x-0 opacity-100 border-r border-slate-800'
+      }`}
+    >
+      <div className="p-6 pb-2 relative">
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="absolute right-5 top-5 h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+            title="사이드바 닫기 (Ctrl/Cmd + \\)"
+            aria-label="사이드바 닫기"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l-5 5 5 5M16 7l-5 5 5 5" />
+            </svg>
+          </button>
+        )}
+
         <div className="mb-6">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-900/30">

@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS,
+  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder,
 } from '../types';
 import { authService } from '../services/authService';
 import { inventoryService } from '../services/inventoryService';
@@ -330,9 +330,22 @@ export function useAppState(onNotify?: NotifyFn) {
 
     const ordersChannel = orderService.subscribeToChanges(hospitalId, (payload) => {
       if (payload.eventType === 'INSERT') {
-        orderService.getOrders().then(ordersData => {
-          setState(prev => ({ ...prev, orders: ordersData.map(dbToOrder) }));
-        });
+        const insertedId = (payload.new as { id?: string })?.id;
+        if (!insertedId) return;
+        // 전체 재조회(getOrders) 대신 새 주문 1건만 조회 → 기존 state.orders를 덮어쓰는 race condition 방지
+        supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .eq('id', insertedId)
+          .single()
+          .then(({ data, error }) => {
+            if (error || !data) return;
+            const newOrder = dbToOrder(data as DbOrder & { order_items: [] });
+            setState(prev => {
+              if (prev.orders.some(o => o.id === newOrder.id)) return prev;
+              return { ...prev, orders: [newOrder, ...prev.orders] };
+            });
+          });
       } else if (payload.eventType === 'UPDATE') {
         const updated = payload.new;
         setState(prev => ({

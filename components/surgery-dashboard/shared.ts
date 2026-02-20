@@ -150,8 +150,8 @@ export function useCountUp(target: number, duration = 800): number {
   return current;
 }
 
-// Chart keyboard navigation helper
-export const CHART_FOCUS_CLASS = 'w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-lg';
+// Chart keyboard navigation helper — enhanced focus ring for accessibility (#7)
+export const CHART_FOCUS_CLASS = 'w-full focus:outline-none focus-visible:ring-[3px] focus-visible:ring-indigo-400 focus-visible:ring-offset-4 focus-visible:ring-offset-white rounded-xl';
 
 // ============================================================
 // TOOTH UTILITIES

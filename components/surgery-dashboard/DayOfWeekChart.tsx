@@ -5,9 +5,10 @@ interface Props {
   dayOfWeekStats: DayOfWeekStat[];
   dayInsight: DayInsight | null;
   mounted: boolean;
+  onDayClick?: (dayName: string) => void;
 }
 
-export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted }: Props) {
+export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted, onDayClick }: Props) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const svgW = 280, svgH = 260;
@@ -61,9 +62,10 @@ export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted }: 
           return (
             <g key={i}>
               <rect x={pad.l + i * colW} y={pad.t} width={colW} height={plotH + pad.b}
-                fill="transparent" className="cursor-pointer"
+                fill="transparent" className={onDayClick ? "cursor-pointer" : ""}
                 onPointerEnter={() => setHoveredIdx(i)}
-                onPointerLeave={() => setHoveredIdx(null)} />
+                onPointerLeave={() => setHoveredIdx(null)}
+                onClick={() => onDayClick?.(d.name)} />
               <rect x={x} y={mounted ? y : pad.t + plotH} width={w} height={mounted ? Math.max(h, 0) : 0} rx={3}
                 fill={isWeekend ? '#e2e8f0' : '#4F46E5'}
                 opacity={isHovered ? 1 : (isWeekend ? 1 : 0.85)}
@@ -80,13 +82,15 @@ export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted }: 
         })}
       </svg>
       {dayInsight && (
-        <div className="mt-3 px-1 space-y-0.5">
-          <div className="flex items-center gap-2 text-[10px]">
-            <span className="text-slate-400 font-medium">피크 요일</span>
-            <span className="font-semibold text-indigo-600">{dayInsight.peakDay.name} ({dayInsight.peakDay.count}건)</span>
-            <span className="text-slate-300 mx-0.5">|</span>
-            <span className="text-slate-400 font-medium">비수기</span>
-            <span className="font-semibold text-slate-500">{dayInsight.lowDay.name} ({dayInsight.lowDay.count}건)</span>
+        <div className="mt-3 px-1 space-y-1.5">
+          <div className="bg-indigo-50 rounded-lg px-3 py-2 space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px]">🏆</span>
+              <span className="text-[11px] font-black text-indigo-600">가장 바쁜 요일: {dayInsight.peakDay.name}요일 ({dayInsight.peakDay.count}건)</span>
+            </div>
+            <div className="flex items-center gap-1.5 pl-[18px]">
+              <span className="text-[10px] font-medium text-slate-400">가장 한가한: {dayInsight.lowDay.name}요일 ({dayInsight.lowDay.count}건)</span>
+            </div>
           </div>
           <div className="flex items-center gap-2 text-[10px]">
             <span className="text-slate-400 font-medium">평일 vs 주말</span>

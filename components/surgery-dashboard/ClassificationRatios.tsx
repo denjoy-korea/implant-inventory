@@ -34,7 +34,7 @@ function RingGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, de
     <div className="flex items-center gap-5">
       <div className="relative w-24 h-24 flex-shrink-0">
         <svg viewBox="0 0 100 100" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-full"
-          role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% 비율 링 게이지`}
+          role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% 비율 링 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
           tabIndex={0} onKeyDown={handleKeyDown}
           onBlur={() => setHovered(null)}
           style={{ touchAction: 'manipulation' }}>
@@ -85,6 +85,103 @@ function RingGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, de
   );
 }
 
+/** Semi-circle (half-ring) gauge — visually distinct from RingGauge */
+function SemiGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, delay = 0 }: {
+  labelA: string; labelB: string; countA: number; countB: number;
+  colorA: string; colorB: string; mounted: boolean; delay?: number;
+}) {
+  const [hovered, setHovered] = useState<'a' | 'b' | null>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setHovered(prev => prev === 'a' ? 'b' : 'a');
+    } else if (e.key === 'Escape') {
+      setHovered(null);
+    }
+  };
+
+  const total = countA + countB || 1;
+  const pctA = Math.round((countA / total) * 100);
+  const pctB = 100 - pctA;
+
+  // Semi-circle arc params
+  const cx = 50, cy = 55;
+  const r = 36;
+  const halfCirc = Math.PI * r; // half-circumference
+  const dashA = (pctA / 100) * halfCirc;
+
+  const centerText = hovered === 'a' ? `${pctA}%` : hovered === 'b' ? `${pctB}%` : `${pctB}%`;
+  const centerColor = hovered === 'a' ? colorA : hovered === 'b' ? colorB : '#334155';
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative w-24 h-16 flex-shrink-0">
+        <svg viewBox="0 0 100 60" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 rounded-lg"
+          role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% FAIL 비율 반원 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
+          tabIndex={0} onKeyDown={handleKeyDown}
+          onBlur={() => setHovered(null)}
+          style={{ touchAction: 'manipulation', overflow: 'visible' }}>
+          {/* Background arc (half-circle) */}
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke="#f1f5f9" strokeWidth="8"
+            strokeLinecap="round"
+          />
+          {/* A segment arc */}
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke={colorA}
+            strokeWidth={hovered === 'a' ? 11 : 8}
+            strokeLinecap="round"
+            strokeDasharray={`${mounted ? dashA : 0} ${halfCirc}`}
+            className="cursor-pointer"
+            style={{ transition: `stroke-dasharray 1s cubic-bezier(0.16,1,0.3,1) ${delay}s, stroke-width 0.3s ease` }}
+            onPointerEnter={() => setHovered('a')}
+            onPointerLeave={() => setHovered(null)}
+          />
+          {/* B segment arc */}
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke={colorB}
+            strokeWidth={hovered === 'b' ? 11 : 8}
+            strokeLinecap="round"
+            strokeDasharray={`${mounted ? halfCirc - dashA : 0} ${halfCirc}`}
+            strokeDashoffset={mounted ? -dashA : 0}
+            className="cursor-pointer"
+            style={{ transition: `stroke-dasharray 1s cubic-bezier(0.16,1,0.3,1) ${delay + 0.15}s, stroke-dashoffset 1s cubic-bezier(0.16,1,0.3,1) ${delay + 0.15}s, stroke-width 0.3s ease` }}
+            onPointerEnter={() => setHovered('b')}
+            onPointerLeave={() => setHovered(null)}
+          />
+        </svg>
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center pointer-events-none">
+          <span className="text-sm font-bold tabular-nums transition-colors duration-200" style={{ color: centerColor }}>{centerText}</span>
+        </div>
+      </div>
+      <div className="flex-1 space-y-2">
+        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">{labelA} vs {labelB}</p>
+        <div className="space-y-1.5">
+          {([
+            { key: 'a' as const, label: labelA, count: countA, pct: pctA, color: colorA },
+            { key: 'b' as const, label: labelB, count: countB, pct: pctB, color: colorB },
+          ]).map(item => (
+            <div key={item.label}
+              className={`flex items-center justify-between px-1.5 py-0.5 rounded transition-colors cursor-default ${hovered === item.key ? 'bg-slate-50' : ''}`}
+              onPointerEnter={() => setHovered(item.key)}
+              onPointerLeave={() => setHovered(null)}>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 transition-transform duration-200 ${item.key === 'b' ? 'rounded-sm' : 'rounded-full'}`} style={{ backgroundColor: item.color, transform: hovered === item.key ? 'scale(1.4)' : 'scale(1)' }} />
+                <span className={`text-[11px] font-medium transition-colors duration-200 ${hovered === item.key ? 'text-slate-800' : 'text-slate-600'}`}>{item.label}</span>
+              </div>
+              <span className={`text-[11px] tabular-nums transition-colors duration-200 ${hovered === item.key ? 'text-slate-700' : 'text-slate-500'}`}>{item.count}건 <span className="font-semibold" style={{ color: hovered === item.key ? item.color : undefined }}>{item.pct}%</span></span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClassificationRatios({ classificationStats, mounted }: Props) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-violet-400 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
@@ -98,7 +195,7 @@ export default function ClassificationRatios({ classificationStats, mounted }: P
           countA={classificationStats['식립']} countB={classificationStats['청구']}
           colorA="#4F46E5" colorB="#0EA5E9" mounted={mounted} delay={0} />
         <div className="h-px bg-slate-100" />
-        <RingGauge
+        <SemiGauge
           labelA="식립" labelB="수술중 FAIL"
           countA={classificationStats['식립']} countB={classificationStats['수술중 FAIL']}
           colorA="#4F46E5" colorB="#F43F5E" mounted={mounted} delay={0.3} />
