@@ -13,6 +13,7 @@ export type OperationAction =
   | 'member_reject'
   | 'member_invite'
   | 'member_kick'
+  | 'member_permission_update'
   | 'surgery_upload';
 
 export interface OperationLog {

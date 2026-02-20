@@ -1,6 +1,7 @@
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbOrder, DbOrderItem, OrderStatus } from '../types';
+import { toCanonicalSize } from './sizeNormalizer';
 
 export const orderService = {
   /** 주문 목록 조회 (order_items JOIN) */
@@ -22,10 +23,15 @@ export const orderService = {
     order: Omit<DbOrder, 'id' | 'created_at'>,
     items: Omit<DbOrderItem, 'id' | 'order_id'>[]
   ): Promise<(DbOrder & { order_items: DbOrderItem[] }) | null> {
+    const normalizedItems = items.map(item => ({
+      ...item,
+      size: toCanonicalSize(item.size, order.manufacturer),
+    }));
+
     // 0. 트랜잭션 RPC 우선 시도 (order + order_items 원자적 생성)
     const { data: rpcData, error: rpcError } = await supabase.rpc('create_order_with_items', {
       p_order: order,
-      p_items: items,
+      p_items: normalizedItems,
     });
 
     if (!rpcError) {
@@ -60,7 +66,7 @@ export const orderService = {
     }
 
     // 2. order_items 생성
-    const orderItems = items.map(item => ({
+    const orderItems = normalizedItems.map(item => ({
       ...item,
       order_id: orderData.id,
     }));

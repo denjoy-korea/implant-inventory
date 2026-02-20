@@ -10,6 +10,7 @@ import {
   PLAN_PRICING,
   TRIAL_DAYS,
 } from '../types';
+import { UNLIMITED_DAYS } from '../constants';
 
 export const planService = {
   /** 병원의 플랜 상태 조회 */
@@ -29,7 +30,7 @@ export const planService = {
         trialUsed: false,
         isTrialActive: false,
         trialDaysRemaining: 0,
-        daysUntilExpiry: 9999,
+        daysUntilExpiry: UNLIMITED_DAYS,
       };
     }
 
@@ -75,17 +76,7 @@ export const planService = {
       return { allowed: false, nextAvailableDate: nextDate };
     }
 
-    if (plan === 'basic') {
-      // Basic: 주 1회 (7일)
-      const nextDate = new Date(lastUploadDate);
-      nextDate.setDate(nextDate.getDate() + 7);
-      if (now >= nextDate) {
-        return { allowed: true, nextAvailableDate: null };
-      }
-      return { allowed: false, nextAvailableDate: nextDate };
-    }
-
-    // 그 외(business, ultimate): 무제한
+    // 그 외(basic, business, ultimate): 무제한
     return { allowed: true, nextAvailableDate: null };
   },
 
@@ -138,9 +129,10 @@ export const planService = {
   },
 
   /** 무료 체험 시작 (1회만 가능) */
-  async startTrial(hospitalId: string): Promise<boolean> {
+  async startTrial(hospitalId: string, trialPlan: PlanType = 'plus'): Promise<boolean> {
     const { data, error } = await supabase.rpc('start_hospital_trial', {
       p_hospital_id: hospitalId,
+      p_plan: trialPlan,
     });
 
     if (!error) {
@@ -156,13 +148,12 @@ export const planService = {
     const { error: fallbackError } = await supabase
       .from('hospitals')
       .update({
-        plan: 'plus',
+        plan: trialPlan,
         trial_started_at: new Date().toISOString(),
         trial_used: false,
       })
       .eq('id', hospitalId)
-      .is('trial_started_at', null)
-      .eq('trial_used', false);
+      .is('trial_started_at', null);
 
     if (fallbackError) {
       console.error('[planService] Start trial fallback failed:', fallbackError);
@@ -510,7 +501,7 @@ export const planService = {
     const expiresAt = data.plan_expires_at ? new Date(data.plan_expires_at) : null;
     const daysUntilExpiry = expiresAt
       ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-      : 9999;
+      : UNLIMITED_DAYS;
 
     return {
       plan: data.plan as PlanType,
@@ -522,5 +513,16 @@ export const planService = {
       trialDaysRemaining,
       daysUntilExpiry,
     };
+  },
+
+  /** 플랜별 가용 여부 조회 (품절 체크용, 비로그인도 호출 가능) */
+  async getPlanAvailability(): Promise<Record<string, boolean>> {
+    const { data, error } = await supabase.rpc('get_plan_availability_public');
+    if (error || !data) return {};
+    const result: Record<string, boolean> = {};
+    (data as { plan: string; available: boolean }[]).forEach(r => {
+      result[r.plan] = r.available;
+    });
+    return result;
   },
 };

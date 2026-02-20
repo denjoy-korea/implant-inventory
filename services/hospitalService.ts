@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS } from '../types';
+import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole } from '../types';
 import { dbToHospital } from './mappers';
 
 export const hospitalService = {
@@ -233,6 +233,32 @@ export const hospitalService = {
       .eq('id', user.id);
 
     if (error) throw new Error('병원 탈퇴에 실패했습니다.');
+  },
+
+  /** 구성원 세부 권한 업데이트 */
+  async updateMemberPermissions(userId: string, permissions: MemberPermissions): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ permissions })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('[hospitalService] updateMemberPermissions failed:', error);
+      throw new Error('권한 저장에 실패했습니다.');
+    }
+  },
+
+  /** 구성원 역할 업데이트 (dental_staff ↔ staff 등) */
+  async updateMemberRole(userId: string, role: UserRole): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('[hospitalService] updateMemberRole failed:', error);
+      throw new Error('역할 저장에 실패했습니다.');
+    }
   },
 
   /**
