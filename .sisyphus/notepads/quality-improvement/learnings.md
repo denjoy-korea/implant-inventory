@@ -119,3 +119,13 @@
 - Evidence saved: `.sisyphus/evidence/task-8-guards-pass.txt`
 - All 16 security regression tests pass
 - No lint failures
+
+## [2026-02-20] Task 9: InventoryManager 모달 분리 적용
+
+### What worked
+- `components/inventory/*`에 이미 분리된 모달들의 props 시그니처를 먼저 읽고, `InventoryManager.tsx`의 인라인 JSX를 컴포넌트 태그로 교체해 타입 에러 없이 축소함.
+- `BaseStockModal`의 저장 후 처리(`onAfterSave`)를 `handleBaseStockSaved`로 위임해 기존 편집 횟수 업데이트 동작을 유지함.
+
+### Result
+- `components/InventoryManager.tsx`: 2851줄 -> 1274줄
+- `npm run lint && npm run build` 통과

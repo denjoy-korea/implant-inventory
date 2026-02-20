@@ -1,0 +1,12 @@
+## 2026-02-20 Task 9 evidence
+
+### wc -l components/InventoryManager.tsx
+    1274 components/InventoryManager.tsx
+
+### ls components/inventory/
+BaseStockModal.tsx
+DentwebGuideModal.tsx
+EditNoticeModal.tsx
+inventoryTypes.ts
+OptimizeModal.tsx
+UnregisteredDetailModal.tsx
