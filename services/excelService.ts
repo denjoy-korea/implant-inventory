@@ -1,70 +1,70 @@
-import { ExcelData, ExcelSheet, ExcelRow } from '../types';
+import { ExcelData } from '../types';
+import { supabase } from './supabaseClient';
 
-type XlsxModule = typeof import('xlsx');
-let xlsxModulePromise: Promise<XlsxModule> | null = null;
-
-async function loadXlsx(): Promise<XlsxModule> {
-  if (!xlsxModulePromise) {
-    xlsxModulePromise = import('xlsx');
-  }
-  return xlsxModulePromise;
-}
+const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
-  const XLSX = await loadXlsx();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        if (!(data instanceof ArrayBuffer)) {
-          reject(new Error('파일을 읽을 수 없습니다.'));
-          return;
-        }
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error('파일 크기가 2MB를 초과합니다.');
+  }
 
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheets: Record<string, ExcelSheet> = {};
-        workbook.SheetNames.forEach((sheetName: string) => {
-          const worksheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, { defval: "" });
-          const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
-          const columns: string[] = [];
-          if (range) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-              const address = XLSX.utils.encode_col(C) + "1";
-              const cell = worksheet[address];
-              if (cell && cell.v !== undefined && cell.v !== null) columns.push(String(cell.v));
-            }
-          }
-          const cleanedRows = rows.map((row) => {
-            if (row['사용안함'] !== undefined) {
-              const val = row['사용안함'];
-              row['사용안함'] = (val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v');
-            }
-            return row;
-          });
-          sheets[sheetName] = { name: sheetName, columns, rows: cleanedRows };
-        });
-        resolve({ sheets, activeSheetName: workbook.SheetNames[0] });
-      } catch (error) { reject(error); }
-    };
-    reader.onerror = (error) => reject(error);
-    reader.readAsArrayBuffer(file);
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const fileBase64 = btoa(binary);
+
+  const { data, error } = await supabase.functions.invoke('xlsx-parse', {
+    body: { fileBase64, filename: file.name },
   });
+
+  if (error) {
+    throw new Error(`엑셀 파싱 실패: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error('엑셀 파싱 결과가 없습니다.');
+  }
+
+  return data as ExcelData;
 };
 
 export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {
   const activeSheet = data.sheets[data.activeSheetName];
-  if (!activeSheet) return;
-  const XLSX = await loadXlsx();
+  if (!activeSheet) {
+    return;
+  }
 
-  // 사용안함이 체크되지 않은 항목만 필터링하여 다운로드
-  const processedRows = activeSheet.rows.filter((row, index) => {
-    return selectedIndices.has(index) && row['사용안함'] !== true;
+  const { data: binaryData, error } = await supabase.functions.invoke('xlsx-generate', {
+    body: {
+      activeSheet: {
+        name: activeSheet.name,
+        columns: activeSheet.columns,
+        rows: activeSheet.rows,
+      },
+      selectedIndices: Array.from(selectedIndices),
+      fileName: fileName || 'export.xlsx',
+    },
+    responseType: 'arraybuffer',
+  } as any);
+
+  if (error) {
+    throw new Error(`엑셀 생성 실패: ${error.message}`);
+  }
+  if (!binaryData) {
+    throw new Error('엑셀 생성 결과가 없습니다.');
+  }
+
+  const blob = new Blob([binaryData as ArrayBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
-
-  const worksheet = XLSX.utils.json_to_sheet(processedRows, { header: activeSheet.columns });
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, activeSheet.name);
-  XLSX.writeFile(workbook, fileName || "processed_result.xlsx");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName || 'export.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
