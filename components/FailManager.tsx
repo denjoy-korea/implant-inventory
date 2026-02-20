@@ -538,7 +538,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 2: 월별 FAIL 추세 + TOP FAIL 규격       */}
           {/* ========================================= */}
-          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6 items-start">
             {/* LEFT: 월별 추세 차트 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <div className="flex justify-between items-center mb-4">
