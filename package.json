@@ -8,6 +8,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck && node scripts/lint-check.mjs",
     "test": "node --test scripts/*.test.mjs",
+    "smoke:ops": "node scripts/operational-smoke-checklist.mjs",
+    "smoke:edge": "node scripts/check-edge-functions.mjs",
+    "smoke:edge:strict": "node scripts/check-edge-functions.mjs --require-env --fail-on-unreachable",
+    "verify:premerge": "npm run smoke:ops && npm run lint && npm run test && npm run build",
+    "verify:release": "npm run smoke:edge:strict && npm run verify:premerge",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview"
   },
