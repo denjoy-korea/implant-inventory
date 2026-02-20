@@ -460,7 +460,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
       >
         {/* A. Header Strip */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
+        <div className="hidden md:block bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Left: summary metrics */}
             <div className="flex items-start gap-6 flex-wrap">
@@ -619,8 +619,62 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           </div>
         </div>
 
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-4 shadow-sm space-y-3">
+          <h3 className="text-sm font-black text-slate-800">모바일 재고 요약</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">총 품목</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">{filteredInventory.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">부족 품목</p>
+              <p className={`text-base font-black tabular-nums ${kpiData.shortageCount > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{kpiData.shortageCount}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 col-span-2">
+              <p className="text-[10px] font-bold text-slate-400">현재 재고 합계</p>
+              <p className={`text-base font-black tabular-nums ${kpiData.totalStock < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                {kpiData.totalStock.toLocaleString()}개
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="mobile-manufacturer-filter" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">제조사 필터</label>
+            <select
+              id="mobile-manufacturer-filter"
+              value={selectedManufacturer ?? '__all__'}
+              onChange={(event) => setSelectedManufacturer(event.target.value === '__all__' ? null : event.target.value)}
+              className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option value="__all__">전체 ({visibleInventory.length})</option>
+              {manufacturersList.map((manufacturer) => {
+                const count = visibleInventory.filter(i => i.manufacturer === manufacturer).length;
+                return (
+                  <option key={`mobile-mfr-${manufacturer}`} value={manufacturer}>
+                    {manufacturer} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월</button>
+            <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월</button>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => { setEditFormData({ initialStock: 0 }); setIsAddingItem(true); }}
+                className="h-10 px-3 rounded-xl bg-indigo-600 text-white text-xs font-black"
+              >
+                품목 추가
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* C. Manufacturer Filter Strip */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl px-5 py-3 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
+        <div className="hidden md:block bg-white/90 backdrop-blur-xl rounded-2xl px-5 py-3 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setSelectedManufacturer(null)}
@@ -716,14 +770,31 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       {/* ================================================= */}
       {/* Usage Analysis Card — redesigned                  */}
       {/* ================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+      <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <h3 className="text-sm font-black text-slate-800">모바일 사용량 요약</h3>
+        {chartData.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {chartData.slice(0, 3).map((item, idx) => (
+              <div key={`mobile-usage-${item.id}`} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                <p className="text-sm font-semibold text-slate-700 truncate">
+                  {idx + 1}. {item.brand} {item.size}
+                </p>
+                <p className="text-sm font-black text-indigo-600 tabular-nums">{item.usageCount}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-400">사용 데이터가 없습니다.</p>
+        )}
+      </div>
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-6 pt-5 pb-4 border-b border-slate-50">
           <div>
             <h3 className="text-sm font-black text-slate-800 tracking-tight">규격별 사용량 분석</h3>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Usage Analysis by Specification</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">TOP {Math.min(chartData.length, USAGE_TOP_ITEMS)}</span>
             <div className="w-px h-3 bg-slate-200" />
             <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
@@ -734,27 +805,28 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px]">
           {/* ── 좌측: 수평 바 차트 ── */}
-          <div className="px-6 py-4">
+          <div className="px-3 sm:px-6 py-4">
             {/* 컬럼 헤더 */}
             {chartData.length > 0 && (
-              <div className="flex items-center gap-3 mb-2 pb-2 border-b border-slate-50">
+              <div className="hidden lg:flex items-center gap-3 mb-2 pb-2 border-b border-slate-50">
                 <span className="w-5 shrink-0" />
                 <div className="w-[100px] shrink-0" />
-                <div className="flex-1 max-w-[280px]" />
-                <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0">
+                <div className="flex-1 max-w-[160px] sm:max-w-[280px]" />
+                <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0">
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">월평균</p>
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">지난달</p>
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">현재재고</p>
                   <p className="text-[9px] font-bold text-rose-400 text-center uppercase tracking-wide">부족분</p>
                 </div>
-                <div className="w-[176px] shrink-0 text-center">
+                <div className="w-[120px] sm:w-[176px] shrink-0 text-center">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">사용 추이</p>
                   <p className="text-[9px] font-semibold text-indigo-400 mt-0.5">값 시작월~종료월</p>
                 </div>
                 <span className="w-2 shrink-0" />
               </div>
             )}
-            <div className="space-y-2">
+            <div className="overflow-x-auto pb-1">
+              <div className="space-y-2 min-w-0">
               {chartData.length > 0 ? chartData.map((item, idx) => {
                 const pct = Math.round((item.usageCount / maxUsage) * 100);
                 const isTop = idx === 0;
@@ -775,14 +847,14 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
                     </div>
                     {/* 바 (최대 너비 제한) */}
-                    <div className="flex-1 max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
+                    <div className="flex-1 max-w-[160px] sm:max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
                     {/* 수치 그리드 */}
-                    <div className="w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
+                    <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
                       {/* 월평균 */}
                       <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
                         {avg.toFixed(1)}
@@ -809,7 +881,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       })()}
                     </div>
                     {/* 스파크라인 */}
-                    <div className="w-[176px] shrink-0 px-2">
+                    <div className="w-[120px] sm:w-[176px] shrink-0 px-2">
                       {(() => {
                         const series = sparklineSeriesByItemId.get(item.id) ?? [];
                         if (!series.some(v => v > 0)) {
@@ -869,11 +941,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   <p className="text-xs text-slate-400 font-bold italic">사용 데이터가 없습니다.</p>
                 </div>
               )}
+              </div>
             </div>
           </div>
 
           {/* ── 우측: 재고 확보 패널 ── */}
-          <div className="lg:border-l border-t lg:border-t-0 border-slate-100 px-5 py-5 flex flex-row lg:flex-col justify-between gap-4 min-w-[180px]">
+          <div className="lg:border-l border-t lg:border-t-0 border-slate-100 px-5 py-5 flex flex-col sm:flex-row lg:flex-col justify-between gap-4 min-w-[180px]">
 
             {/* 우선 확보 품목 */}
             <div className="flex-1">
@@ -952,7 +1025,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
 
         {/* 범례 */}
-        <div className="flex items-center gap-4 px-6 py-2.5 bg-slate-50/60 border-t border-slate-50">
+        <div className="flex flex-wrap items-center gap-3 px-4 sm:px-6 py-2.5 bg-slate-50/60 border-t border-slate-50">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-r from-indigo-500 to-violet-400" />
             <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-widest">1위</span>
@@ -988,7 +1061,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
           <div className="flex-1 min-w-0" />
           <div className="flex items-center gap-2">
-            <div className="relative" ref={inventoryDetailColumnFilterRef}>
+            <div className="relative hidden md:block" ref={inventoryDetailColumnFilterRef}>
               <button
                 type="button"
                 onClick={() => setShowInventoryDetailColumnFilter(prev => !prev)}
@@ -1062,7 +1135,70 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="md:hidden px-3 pb-3 space-y-2.5">
+          {inventoryDetailRows.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm font-semibold text-slate-400">
+              조건에 맞는 재고 항목이 없습니다.
+            </div>
+          ) : (
+            inventoryDetailRows.map((item) => {
+              const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+              const isLowStock = item.currentStock < recommended;
+              const deficit = Math.max(0, recommended - item.currentStock);
+              return (
+                <article
+                  key={`mobile-inventory-${item.id}`}
+                  className={`rounded-2xl border px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] ${
+                    isLowStock ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-slate-500 truncate">{item.manufacturer}</p>
+                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{item.brand}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{item.size}</p>
+                    </div>
+                    {isLowStock && (
+                      <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600">
+                        부족 {deficit}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                      <p className="text-[10px] font-bold text-slate-400">현재 재고</p>
+                      <p className={`text-sm font-black tabular-nums ${isLowStock ? 'text-rose-600' : 'text-slate-800'}`}>{item.currentStock}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                      <p className="text-[10px] font-bold text-slate-400">권장량</p>
+                      <p className="text-sm font-black text-indigo-600 tabular-nums">{recommended}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                      <p className="text-[10px] font-bold text-slate-400">사용량</p>
+                      <p className="text-sm font-black text-rose-500 tabular-nums">{item.usageCount > 0 ? `-${item.usageCount}` : '0'}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                      <p className="text-[10px] font-bold text-slate-400">월평균</p>
+                      <p className="text-sm font-black text-slate-700 tabular-nums">{item.monthlyAvgUsage ?? 0}</p>
+                    </div>
+                  </div>
+
+                  {!isReadOnly && onQuickOrder && isLowStock && (
+                    <button
+                      type="button"
+                      onClick={() => onQuickOrder({ ...item, recommendedStock: recommended })}
+                      className="mt-3 w-full min-h-11 rounded-xl bg-indigo-600 text-white text-sm font-bold active:scale-[0.98] transition-all"
+                    >
+                      부족분 바로 발주
+                    </button>
+                  )}
+                </article>
+              );
+            })
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="sticky z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 shadow-sm" style={{ top: 'var(--dashboard-header-height, 44px)' }}>
               <tr>

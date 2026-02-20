@@ -47,15 +47,34 @@ const TOC_SECTIONS = [
 function FloatingTOC({ hasClinical }: { hasClinical: boolean }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   // Dynamically compute the bottom of the sticky header area
   const getStickyOffset = () => {
-    const stickyEl = document.querySelector<HTMLElement>('.sticky.z-20');
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      return 84;
+    }
+
+    const stickyEl = document.querySelector<HTMLElement>('[data-sticky-anchor="surgery-dashboard"]');
     if (stickyEl) {
       return stickyEl.getBoundingClientRect().bottom + 12; // 12px breathing room
     }
     return 300; // fallback
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const sync = () => setIsMobileViewport(mediaQuery.matches);
+
+    sync();
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', sync);
+      return () => mediaQuery.removeEventListener('change', sync);
+    }
+    mediaQuery.addListener(sync);
+    return () => mediaQuery.removeListener(sync);
+  }, []);
 
   useEffect(() => {
     const filteredIds = TOC_SECTIONS
@@ -96,6 +115,7 @@ function FloatingTOC({ hasClinical }: { hasClinical: boolean }) {
   };
 
   const filteredSections = TOC_SECTIONS.filter(s => hasClinical || s.id !== 'section-clinical');
+  if (isMobileViewport) return null;
 
   return (
     <div
@@ -297,11 +317,12 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
     <div className="space-y-6 pb-16" style={{ animationDuration: '0s' }}>
       {/* Sticky header + KPI + Range slider wrapper */}
       <div
+        data-sticky-anchor="surgery-dashboard"
         className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
       >
         {/* A. Header Strip */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+        <div className="hidden md:block bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-wrap items-stretch gap-2.5 sm:gap-3 flex-1 min-w-0">
               {/* 데이터 기간 + 선택 기간 통합 카드 */}
@@ -342,6 +363,42 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
                 데이터 조회
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-4 shadow-sm space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">식립</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">{kpiStats.classificationStats['식립']}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">FAIL율</p>
+              <p className={`text-base font-black tabular-nums ${kpiStats.failRate > 15 ? 'text-rose-600' : 'text-slate-800'}`}>
+                {kpiStats.failRate.toFixed(1)}%
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 col-span-2">
+              <p className="text-[10px] font-bold text-slate-400">데이터 기간</p>
+              <p className="text-[12px] font-black text-slate-700 truncate">
+                {formatDate(kpiStats.dateRange.min)} ~ {formatDate(kpiStats.dateRange.max)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onUpload}
+              disabled={isLoading}
+              className="flex-1 min-h-11 rounded-xl bg-slate-900 text-white text-xs font-black"
+            >
+              데이터 업데이트
+            </button>
+            <button
+              onClick={() => { setDataViewerDayFilter(null); setShowDataViewer(true); }}
+              className="flex-1 min-h-11 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black"
+            >
+              데이터 조회
+            </button>
           </div>
         </div>
 

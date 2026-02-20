@@ -64,6 +64,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const orderModalRef = useRef<HTMLDivElement>(null);
   const orderModalCloseButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -224,6 +225,20 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   }, [isModalOpen]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+    syncViewport();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncViewport);
+      return () => mediaQuery.removeEventListener('change', syncViewport);
+    }
+    mediaQuery.addListener(syncViewport);
+    return () => mediaQuery.removeListener(syncViewport);
+  }, []);
+
+  useEffect(() => {
     if (!isModalOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -380,7 +395,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       >
 
         {/* A. Header Strip */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+        <div className="hidden md:block bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-6">
               <div>
@@ -420,7 +435,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         </div>
 
         {/* B. KPI Metrics Strip */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm">
           <div className="grid grid-cols-5 divide-x divide-slate-100">
             {/* 총 FAIL 발생 */}
             <div className="p-4 relative overflow-hidden">
@@ -479,7 +494,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         </div>
 
         {/* C. Manufacturer Filter Strip (Pill style) */}
-        <div className="bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
+        <div className="hidden md:block bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setActiveM('all')}
@@ -507,6 +522,49 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             })}
           </div>
         </div>
+
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-4 shadow-sm space-y-3">
+          <h3 className="text-sm font-black text-slate-800">모바일 FAIL 관리</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">미처리</p>
+              <p className={`text-base font-black tabular-nums ${pendingFailList.length > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{pendingFailList.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">교환완료</p>
+              <p className="text-base font-black text-emerald-600 tabular-nums">{historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length}</p>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="mobile-fail-manufacturer" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">제조사 선택</label>
+            <select
+              id="mobile-fail-manufacturer"
+              value={activeM}
+              onChange={(e) => setActiveM(e.target.value)}
+              className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option value="all">전체</option>
+              {manufacturers.map((m) => (
+                <option key={`mobile-fail-${m}`} value={m}>
+                  {m} (미처리 {mStats[m]?.pending ?? 0})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={handleOpenOrderModal}
+            disabled={isReadOnly || currentRemainingFails <= 0 || activeM === 'all'}
+            className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${
+              isReadOnly || currentRemainingFails <= 0 || activeM === 'all'
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-indigo-600 text-white active:scale-[0.98]'
+            }`}
+          >
+            반품/교환 주문 등록
+          </button>
+        </div>
       </div>{/* end sticky wrapper */}
 
       {activeM ? (
@@ -514,7 +572,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 1: 제조사별 현황 + 브랜드/규격 분포      */}
           {/* ========================================= */}
-          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+          <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 선택된 제조사 현황 카드 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
@@ -601,7 +659,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 2: 월별 FAIL 추세 + TOP FAIL 규격       */}
           {/* ========================================= */}
-          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+          <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 월별 추세 차트 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <div className="flex justify-between items-center mb-4">
@@ -633,13 +691,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 const TH = T_PAD + 14 + nMfr * T_ROW_H + T_PAD;
 
                 return (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto -mx-1 px-1">
                     <svg
                       viewBox={`0 0 ${SVG_W} ${SVG_H}`}
                       className="w-full"
-                      style={{ minWidth: Math.max(400, SVG_W) }}
+                      style={{ minWidth: Math.max(320, SVG_W) }}
                       preserveAspectRatio="xMinYMid meet"
                       onMouseLeave={() => setHoveredChartIdx(null)}
+                      onTouchEnd={() => setHoveredChartIdx(null)}
                     >
                       {/* Horizontal grid lines + Y labels */}
                       {chartTicks.map(tick => {
@@ -709,6 +768,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                               height={CHART_AREA_H + CHART_PAD.b}
                               fill="transparent"
                               onMouseEnter={() => setHoveredChartIdx(i)}
+                              onTouchStart={(e) => { e.preventDefault(); setHoveredChartIdx(i); }}
                               style={{ cursor: 'crosshair' }}
                             />
                           </g>
@@ -822,7 +882,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 3: 교환 주문 이력                       */}
           {/* ========================================= */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -883,24 +943,24 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         >
           <div
             ref={orderModalRef}
-            className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            className="bg-white w-full max-w-lg sm:max-w-2xl rounded-2xl sm:rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="fail-order-modal-title"
             aria-describedby="fail-order-modal-desc"
           >
-            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
+            <div className="px-4 py-4 sm:p-8 bg-slate-900 text-white flex justify-between items-center gap-3">
               <div>
-                <h3 id="fail-order-modal-title" className="text-2xl font-black tracking-tight">대체 주문 및 반품 처리</h3>
+                <h3 id="fail-order-modal-title" className="text-lg sm:text-2xl font-black tracking-tight">대체 주문 및 반품 처리</h3>
                 <p id="fail-order-modal-desc" className="text-xs opacity-80 mt-1 font-bold uppercase tracking-wider">{activeM} / 반품 가능 잔량: {currentRemainingFails}건</p>
               </div>
-              <button ref={orderModalCloseButtonRef} onClick={() => setIsModalOpen(false)} aria-label="대체 주문 모달 닫기" className="p-2 hover:bg-white/10 rounded-full transition-all">
+              <button ref={orderModalCloseButtonRef} onClick={() => setIsModalOpen(false)} aria-label="대체 주문 모달 닫기" className="h-11 w-11 inline-flex items-center justify-center hover:bg-white/10 rounded-full transition-all">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 custom-scrollbar">
               {recommendedExchangeItems.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -910,13 +970,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     </h4>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recommended for Exchange</span>
                   </div>
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                  <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-hide">
                     {recommendedExchangeItems.map((item, idx) => (
                       <button
                         type="button"
                         key={idx}
                         onClick={() => quickAddRecommended(item)}
-                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[160px] text-left"
+                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-3.5 sm:p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[150px] text-left"
                         aria-label={`권장 품목 추가: ${item.brand} ${item.size}, ${item.remainingToOrder}건`}
                       >
                         <div className="flex justify-between items-start mb-2">
@@ -931,7 +991,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">주문일자 (오늘)</label>
                   <input type="text" value={new Date().toLocaleDateString('ko-KR')} readOnly className="w-full bg-white border border-slate-200 p-3 rounded-xl font-black text-slate-700 shadow-sm outline-none" />
@@ -957,13 +1017,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     .map(i => i.size)))
                     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
                   return (
-                    <div key={idx} className="flex gap-3 items-end p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
+                    <div key={idx} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
                       <div className="flex-[2]">
                         <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">브랜드 선택</label>
                         <select
                           value={item.brand}
                           onChange={(e) => updateOrderItem(idx, 'brand', e.target.value)}
-                          className="w-full p-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer"
+                          className="w-full min-h-11 px-3 py-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer"
                         >
                           <option value="">브랜드 선택</option>
                           {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
@@ -975,26 +1035,26 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                           value={item.size}
                           onChange={(e) => updateOrderItem(idx, 'size', e.target.value)}
                           disabled={!item.brand}
-                          className="w-full p-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer disabled:bg-slate-100 disabled:opacity-50"
+                          className="w-full min-h-11 px-3 py-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer disabled:bg-slate-100 disabled:opacity-50"
                         >
                           <option value="">규격 선택</option>
                           {sizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
-                      <div className="w-24">
+                      <div className="w-full sm:w-24">
                         <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">수량</label>
                         <input
                           type="number"
                           min="1"
                           value={item.quantity}
                           onChange={(e) => updateOrderItem(idx, 'quantity', e.target.value)}
-                          className="w-full p-2.5 text-xs border border-indigo-200 rounded-lg outline-none font-black text-center text-indigo-600 bg-indigo-50/30"
+                          className="w-full min-h-11 px-3 py-2.5 text-xs border border-indigo-200 rounded-lg outline-none font-black text-center text-indigo-600 bg-indigo-50/30"
                         />
                       </div>
                       <button
                         onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))}
                         disabled={selectedItems.length === 1}
-                        className="p-2.5 text-slate-300 hover:text-rose-500 transition-all"
+                        className="h-11 w-11 sm:w-auto sm:p-2.5 inline-flex items-center justify-center text-slate-300 hover:text-rose-500 transition-all"
                         aria-label={`${idx + 1}번째 품목 삭제`}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -1005,22 +1065,22 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
                 <button
                   onClick={() => setSelectedItems([...selectedItems, { brand: '', size: '', quantity: 1 }])}
-                  className="w-full py-3 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
+                  className="w-full min-h-11 py-3 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
                 >
                   + 추가 품목 입력
                 </button>
               </div>
             </div>
 
-            <div className="p-8 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="px-4 py-4 sm:p-8 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="text-sm font-bold text-slate-600">
                 총 주문 수량: <span className={`text-xl font-black ml-1 tabular-nums ${selectedItems.reduce((s, i) => s + (Number(i.brand && i.size ? i.quantity : 0)), 0) > currentRemainingFails ? 'text-rose-600 underline decoration-wavy' : 'text-indigo-600'}`}>{selectedItems.reduce((s, i) => s + (Number(i.brand && i.size ? i.quantity : 0)), 0)}</span> / <span className="text-slate-400">{currentRemainingFails}</span>
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
-                <button onClick={() => setIsModalOpen(false)} className="flex-1 sm:flex-none px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">취소</button>
+                <button onClick={() => setIsModalOpen(false)} className="flex-1 sm:flex-none min-h-11 px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">취소</button>
                 <button
                   onClick={handleOrderSubmit}
-                  className="flex-1 sm:flex-none px-10 py-3 bg-slate-900 text-white font-black rounded-2xl shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all"
+                  className="flex-1 sm:flex-none min-h-11 px-10 py-3 bg-slate-900 text-white font-black rounded-2xl shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all"
                 >
                   주문 확인 및 완료
                 </button>
@@ -1038,7 +1098,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        <div
+          style={isMobileViewport ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}
+        >
           {toast.message}
         </div>
       )}

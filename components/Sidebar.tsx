@@ -8,6 +8,8 @@ interface SidebarProps {
   onTabChange: (tab: DashboardTab) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  isMobile?: boolean;
+  onRequestClose?: () => void;
   fixtureData: ExcelData | null;
   surgeryData: ExcelData | null;
   surgeryUnregisteredCount?: number;
@@ -40,6 +42,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   isCollapsed = false,
   onToggleCollapse,
+  isMobile = false,
+  onRequestClose,
   fixtureData,
   surgeryData,
   surgeryUnregisteredCount = 0,
@@ -69,29 +73,48 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleTabClick = (tab: DashboardTab) => {
     if (isPermBlocked(tab)) return;
     onTabChange(tab);
+    if (isMobile) onRequestClose?.();
+  };
+
+  const handleSidebarDismiss = () => {
+    if (isMobile) {
+      onRequestClose?.();
+      return;
+    }
+    onToggleCollapse?.();
   };
 
   return (
     <aside
       aria-hidden={isCollapsed}
-      className={`bg-slate-900 flex flex-col sticky top-0 h-screen shrink-0 overflow-hidden transition-all duration-300 z-[200] shadow-xl ${
-        isCollapsed
-          ? 'w-0 -translate-x-full opacity-0 pointer-events-none border-r-0'
-          : 'w-64 translate-x-0 opacity-100 border-r border-slate-800'
+      className={`bg-slate-900 flex flex-col overflow-hidden transition-all duration-300 shadow-xl ${
+        isMobile
+          ? (isCollapsed
+            ? 'fixed inset-y-0 left-0 w-72 max-w-[86vw] -translate-x-full pointer-events-none z-[280]'
+            : 'fixed inset-y-0 left-0 w-72 max-w-[86vw] translate-x-0 pointer-events-auto z-[280] border-r border-slate-800')
+          : (isCollapsed
+            ? 'sticky top-0 h-screen shrink-0 z-[200] w-0 -translate-x-full opacity-0 pointer-events-none border-r-0'
+            : 'sticky top-0 h-screen shrink-0 z-[200] w-64 translate-x-0 opacity-100 border-r border-slate-800')
       }`}
     >
       <div className="p-6 pb-2 relative">
-        {onToggleCollapse && (
+        {(onToggleCollapse || (isMobile && onRequestClose)) && (
           <button
             type="button"
-            onClick={onToggleCollapse}
-            className="absolute right-5 top-5 h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
-            title="사이드바 닫기 (Ctrl/Cmd + \\)"
+            onClick={handleSidebarDismiss}
+            className="absolute right-4 top-4 h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+            title={isMobile ? '메뉴 닫기' : '사이드바 닫기 (Ctrl/Cmd + \\)'}
             aria-label="사이드바 닫기"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l-5 5 5 5M16 7l-5 5 5 5" />
-            </svg>
+            {isMobile ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l-5 5 5 5M16 7l-5 5 5 5" />
+              </svg>
+            )}
           </button>
         )}
 
@@ -244,7 +267,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">SETTINGS</div>
           <nav className="space-y-1">
             <button
-              onClick={() => onTabChange('settings')}
+              onClick={() => {
+                onTabChange('settings');
+                if (isMobile) onRequestClose?.();
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${
                 ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'].includes(activeTab)
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'

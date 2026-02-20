@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+html {
+  /* 모바일 300ms 탭 딜레이 제거 */
+  touch-action: manipulation;
+  /* iOS 탭 하이라이트 제거 */
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   font-family: 'Inter', 'Noto Sans KR', sans-serif;
 }
@@ -209,4 +216,21 @@ textarea:focus-visible {
 .patient-info-cell:hover .patient-info-blur {
   filter: blur(0);
   user-select: auto;
+}
+
+/* ─── Mobile: hide scrollbar ─────────────────────────────────────── */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── Mobile: safe-area + overscroll ────────────────────────────── */
+.modal-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.modal-scroll {
+  overscroll-behavior: contain;
 }
