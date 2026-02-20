@@ -19,6 +19,7 @@ const ACTION_LABELS: Record<OperationAction, { label: string; color: string; bg:
   member_invite: { label: '멤버 초대', color: 'text-teal-700', bg: 'bg-teal-100' },
   member_kick: { label: '멤버 방출', color: 'text-pink-700', bg: 'bg-pink-100' },
   surgery_upload: { label: '수술기록 업로드', color: 'text-purple-700', bg: 'bg-purple-100' },
+  member_permission_update: { label: '권한 수정', color: 'text-indigo-700', bg: 'bg-indigo-100' },
 };
 
 const PAGE_SIZE = 50;

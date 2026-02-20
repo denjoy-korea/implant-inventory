@@ -15,6 +15,30 @@ import {
   DEFAULT_WORK_DAYS,
 } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
+import { toCanonicalSize } from './sizeNormalizer';
+
+// ============================================
+// IBS Implant 제조사/브랜드 위치 교정
+// 덴트웹 원본 데이터에서 제조사와 브랜드가 반대로 저장된 항목을 정규화
+// ============================================
+
+const IBS_SWAPPED_BRANDS = new Set(['Magicore', 'Magic FC Mini', 'Magic FC']);
+
+/**
+ * DB에 잘못 저장된 IBS Implant 계열 제조사/브랜드를 교정한다.
+ * - manufacturer: 'Magicore' | 'Magic FC Mini' | 'Magic FC'
+ * - brand: 'IBS Implant'
+ * → manufacturer: 'IBS Implant', brand: 'Magicore' | 'Magic FC Mini' | 'Magic FC'
+ */
+export function fixIbsImplant(
+  manufacturer: string,
+  brand: string
+): { manufacturer: string; brand: string } {
+  if (IBS_SWAPPED_BRANDS.has(manufacturer) && brand === 'IBS Implant') {
+    return { manufacturer: 'IBS Implant', brand: manufacturer };
+  }
+  return { manufacturer, brand };
+}
 
 // ============================================
 // DB → Frontend 변환
@@ -23,11 +47,12 @@ import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './crypt
 /** DbInventoryItem → InventoryItem (계산 필드 초기값 포함) */
 export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
   const adj = db.stock_adjustment ?? 0;
+  const { manufacturer, brand } = fixIbsImplant(db.manufacturer, db.brand);
   return {
     id: db.id,
-    manufacturer: db.manufacturer,
-    brand: db.brand,
-    size: db.size,
+    manufacturer,
+    brand,
+    size: toCanonicalSize(db.size, manufacturer),
     initialStock: db.initial_stock,
     stockAdjustment: adj,
     usageCount: 0,
@@ -38,6 +63,7 @@ export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
 
 /** DbSurgeryRecord → ExcelRow (기존 수술기록지 포맷 호환) */
 export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
+  const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
   return {
     '날짜': db.date || '',
     '환자정보': await decryptPatientInfo(db.patient_info || ''),
@@ -45,9 +71,9 @@ export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
     '갯수': db.quantity,
     '수술기록': db.surgery_record || '',
     '구분': db.classification,
-    '제조사': db.manufacturer || '',
-    '브랜드': db.brand || '',
-    '규격(SIZE)': db.size || '',
+    '제조사': manufacturer,
+    '브랜드': brand,
+    '규격(SIZE)': toCanonicalSize(db.size || '', manufacturer),
     '골질': db.bone_quality || '',
     '초기고정': db.initial_fixation || '',
     _id: db.id,
@@ -63,7 +89,7 @@ export function dbToOrder(db: DbOrder & { order_items: DbOrderItem[] }): Order {
     date: db.date,
     items: (db.order_items || []).map(i => ({
       brand: i.brand,
-      size: i.size,
+      size: toCanonicalSize(i.size, db.manufacturer),
       quantity: i.quantity,
     })),
     manager: db.manager,
@@ -93,6 +119,7 @@ export function dbToUser(db: DbProfile): User {
     role: db.role,
     hospitalId: db.hospital_id || '',
     status: db.status,
+    permissions: db.permissions ?? null,
   };
 }
 
@@ -105,11 +132,12 @@ export function inventoryToDb(
   item: InventoryItem,
   hospitalId: string
 ): Omit<DbInventoryItem, 'id' | 'created_at' | 'updated_at'> {
+  const { manufacturer, brand } = fixIbsImplant(item.manufacturer, item.brand);
   return {
     hospital_id: hospitalId,
-    manufacturer: item.manufacturer,
-    brand: item.brand,
-    size: item.size,
+    manufacturer,
+    brand,
+    size: toCanonicalSize(item.size, manufacturer),
     initial_stock: item.initialStock,
     stock_adjustment: item.stockAdjustment ?? 0,
   };
@@ -121,6 +149,8 @@ export async function excelRowToDbSurgery(
   hospitalId: string
 ): Promise<Omit<DbSurgeryRecord, 'id' | 'created_at'>> {
   const patientRaw = row['환자정보'] ? String(row['환자정보']) : '';
+  const { manufacturer, brand } = fixIbsImplant(row['제조사'] || '', row['브랜드'] || '');
+  const canonicalSize = toCanonicalSize(String(row['규격(SIZE)'] || ''), manufacturer);
   return {
     hospital_id: hospitalId,
     date: row['날짜'] || null,
@@ -130,9 +160,9 @@ export async function excelRowToDbSurgery(
     quantity: Number(row['갯수']) || 1,
     surgery_record: row['수술기록'] || null,
     classification: row['구분'] || '식립',
-    manufacturer: row['제조사'] || null,
-    brand: row['브랜드'] || null,
-    size: row['규격(SIZE)'] || null,
+    manufacturer: manufacturer || null,
+    brand: brand || null,
+    size: canonicalSize || null,
     bone_quality: row['골질'] || null,
     initial_fixation: row['초기고정'] || null,
   };
@@ -158,7 +188,7 @@ export function orderToDb(
     },
     items: order.items.map(i => ({
       brand: i.brand,
-      size: i.size,
+      size: toCanonicalSize(i.size, order.manufacturer),
       quantity: i.quantity,
     })),
   };

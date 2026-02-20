@@ -40,7 +40,7 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const StaffWaitingRoom = lazy(() => import('./components/StaffWaitingRoom'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
-import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, canAccessTab } from './types';
+import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, canAccessTab } from './types';
 import { parseExcelFile, downloadExcelFile, extractLengthFromSize } from './services/excelService';
 import { normalizeLength } from './components/LengthFilter';
 import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
@@ -100,7 +100,16 @@ function parseHash(hash: string): { view: View; tab?: DashboardTab } {
 }
 
 function manufacturerAliasKey(raw: string): string {
-  return normalizeSurgery(raw).replace(/implant/g, '');
+  const value = String(raw || '').trim();
+  if (!value) return '';
+
+  // FAIL 카테고리는 일반 제조사와 중복키가 섞이지 않도록 별도 네임스페이스 유지
+  const compact = value.toLowerCase().replace(/\s+/g, '');
+  if (compact.startsWith('수술중fail')) {
+    return `fail:${normalizeInventory(value)}`;
+  }
+
+  return normalizeSurgery(value).replace(/implant/g, '');
 }
 
 function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>): string {
@@ -110,6 +119,128 @@ function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | '
   const brandKey = normalizeInventory(fixed.brand);
   const sizeKey = getSizeMatchKey(canonicalSize, fixed.manufacturer);
   return `${manufacturerKey}|${brandKey}|${sizeKey}`;
+}
+
+type BrandSizeFormatEntry = {
+  manufacturerKey: string;
+  allowedSizeTexts: Set<string>;
+};
+
+type BrandSizeFormatIndex = Map<string, BrandSizeFormatEntry[]>;
+
+function normalizeSizeTextStrict(raw: string): string {
+  return String(raw || '').trim();
+}
+
+function isManufacturerAliasMatch(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function buildBrandSizeFormatIndex(inventoryItems: InventoryItem[]): BrandSizeFormatIndex {
+  const index: BrandSizeFormatIndex = new Map();
+
+  inventoryItems
+    .filter(item =>
+      !item.manufacturer.startsWith('수술중FAIL_') &&
+      item.manufacturer !== '보험청구' &&
+      item.brand !== '보험임플란트'
+    )
+    .forEach(item => {
+      const fixed = fixIbsImplant(item.manufacturer, item.brand);
+      const manufacturerKey = normalizeSurgery(fixed.manufacturer);
+      const brandKey = normalizeSurgery(fixed.brand);
+      const sizeKey = getSizeMatchKey(item.size, fixed.manufacturer);
+      const sizeText = normalizeSizeTextStrict(item.size);
+      if (!manufacturerKey || !brandKey || !sizeKey || !sizeText) return;
+
+      const bsKey = `${brandKey}|${sizeKey}`;
+      const list = index.get(bsKey) || [];
+      let entry = list.find(v => v.manufacturerKey === manufacturerKey);
+      if (!entry) {
+        entry = { manufacturerKey, allowedSizeTexts: new Set<string>() };
+        list.push(entry);
+      }
+      entry.allowedSizeTexts.add(sizeText);
+      index.set(bsKey, list);
+    });
+
+  return index;
+}
+
+function hasRegisteredBrandSize(
+  formatIndex: BrandSizeFormatIndex,
+  manufacturer: string,
+  brand: string,
+  size: string
+): boolean {
+  const rowManufacturer = normalizeSurgery(manufacturer);
+  const rowBrand = normalizeSurgery(brand);
+  const rowSizeKey = getSizeMatchKey(size, manufacturer);
+  const bsKey = `${rowBrand}|${rowSizeKey}`;
+  const candidates = formatIndex.get(bsKey) || [];
+  return candidates.some(candidate => isManufacturerAliasMatch(rowManufacturer, candidate.manufacturerKey));
+}
+
+function isListBasedSurgeryInput(
+  formatIndex: BrandSizeFormatIndex,
+  manufacturer: string,
+  brand: string,
+  size: string
+): boolean {
+  const rowManufacturer = normalizeSurgery(manufacturer);
+  const rowBrand = normalizeSurgery(brand);
+  const rowSizeKey = getSizeMatchKey(size, manufacturer);
+  const rowSizeText = normalizeSizeTextStrict(size);
+  const bsKey = `${rowBrand}|${rowSizeKey}`;
+  const candidates = formatIndex.get(bsKey) || [];
+  return candidates.some(candidate =>
+    isManufacturerAliasMatch(rowManufacturer, candidate.manufacturerKey) &&
+    candidate.allowedSizeTexts.has(rowSizeText)
+  );
+}
+
+function maskPatientInfoForPreview(raw: string): string {
+  const value = String(raw || '').trim();
+  if (!value) return '-';
+  if (value.includes('*')) return value;
+
+  const nameOnly = value.replace(/\(.*$/, '').trim();
+  const maskedName = nameOnly.length <= 1
+    ? `${nameOnly || '-'}*`
+    : `${nameOnly[0]}${'*'.repeat(Math.max(1, nameOnly.length - 1))}`;
+
+  const parenMatch = value.match(/\(([^)]*)\)/);
+  if (!parenMatch) return maskedName;
+
+  const inside = String(parenMatch[1] || '').trim();
+  const maskedInside = '*'.repeat(Math.max(4, inside.length || 0));
+  return `${maskedName}(${maskedInside})`;
+}
+
+function buildUnregisteredSample(row: ExcelRow): SurgeryUnregisteredSample {
+  const date = String(row['날짜'] ?? row['수술일'] ?? '').trim() || '-';
+  const patientRaw = String(row['환자정보'] ?? row['환자명'] ?? '').trim();
+  const chartNumber = String(row['치아번호'] ?? row['차트번호'] ?? '').trim() || '-';
+  const recordId = String(row._id || '').trim() || undefined;
+  return {
+    date,
+    patientMasked: maskPatientInfoForPreview(patientRaw),
+    chartNumber,
+    recordId,
+  };
+}
+
+function appendUnregisteredSample(
+  target: SurgeryUnregisteredItem,
+  sample: SurgeryUnregisteredSample,
+  maxSamples = 3
+) {
+  const current = target.samples ?? [];
+  const dedupKey = `${sample.recordId || ''}|${sample.date}|${sample.patientMasked}|${sample.chartNumber}`;
+  const exists = current.some(v => `${v.recordId || ''}|${v.date}|${v.patientMasked}|${v.chartNumber}` === dedupKey);
+  if (exists) return;
+  target.samples = [...current, sample].slice(0, maxSamples);
 }
 
 /* ── 일시정지 상태 화면 ── */
@@ -234,6 +365,22 @@ const App: React.FC = () => {
     if (state.user) _handleLeaveHospital(state.user);
   }, [_handleLeaveHospital, state.user]);
 
+  // 회원가입 후 pending trial 자동 시작
+  const handleLoginSuccessWithTrial = useCallback(async (user: User) => {
+    await handleLoginSuccess(user);
+    const pendingTrialPlan = localStorage.getItem('denjoy_pending_trial') as PlanType | null;
+    if (pendingTrialPlan && pendingTrialPlan !== 'free' && user.hospitalId && user.role === 'master') {
+      localStorage.removeItem('denjoy_pending_trial');
+      await planService.startTrial(user.hospitalId, pendingTrialPlan);
+      // startTrial 반환값에 의존하지 않고 DB를 직접 재조회해 결과 검증
+      const ps = await planService.getHospitalPlan(user.hospitalId);
+      if (ps.isTrialActive) {
+        setState(prev => ({ ...prev, planState: ps }));
+        showAlertToast(`${PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험이 시작됐습니다!`, 'success');
+      }
+    }
+  }, [handleLoginSuccess, showAlertToast, setState]);
+
   const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
 
@@ -276,6 +423,9 @@ const App: React.FC = () => {
   const isHospitalMaster = state.user?.role === 'master'
     || (!!state.user?.id && state.user.id === state.hospitalMasterAdminId);
   const isHospitalAdmin = isHospitalMaster || isSystemAdmin;
+  const effectiveAccessRole = (isHospitalMaster || isSystemAdmin)
+    ? 'master'
+    : (state.user?.role ?? 'dental_staff');
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
@@ -308,9 +458,12 @@ const App: React.FC = () => {
 
   /* ── Hash Routing: State → URL ── */
   const skipHashSync = useRef(false);
+  // 초기 로드 시 buildHash가 URL의 해시를 덮어쓰지 않도록 첫 번째 실행을 건너뜀
+  const isFirstHashSync = useRef(true);
 
   useEffect(() => {
     if (state.isLoading) return;
+    if (isFirstHashSync.current) { isFirstHashSync.current = false; return; }
     if (skipHashSync.current) { skipHashSync.current = false; return; }
     const hash = buildHash(state.currentView, state.dashboardTab);
     if (window.location.hash !== hash) {
@@ -324,7 +477,7 @@ const App: React.FC = () => {
       const { view, tab } = parseHash(window.location.hash);
       if (view === 'dashboard' && !state.user) return;
       if (view === 'admin_panel' && state.user?.role !== 'admin') return;
-      const guardedTab = (tab !== undefined && !canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff'))
+      const guardedTab = (tab !== undefined && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
         ? 'overview' : tab;
       skipHashSync.current = true;
       setState(prev => ({
@@ -335,7 +488,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [state.user]);
+  }, [effectiveAccessRole, state.user]);
 
   /* ── Hash Routing: Initial load ── */
   useEffect(() => {
@@ -346,7 +499,7 @@ const App: React.FC = () => {
       if (view === 'dashboard' && !state.user) return;
       if (view === 'admin_panel' && state.user?.role !== 'admin') return;
       // 권한 없는 탭으로 URL 직접 접근 시 overview로 fallback
-      const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff'))
+      const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
         ? 'overview' : tab;
       if (view !== state.currentView || (resolvedTab && resolvedTab !== state.dashboardTab)) {
         skipHashSync.current = true;
@@ -356,11 +509,76 @@ const App: React.FC = () => {
       window.history.replaceState(null, '', buildHash(state.currentView, state.dashboardTab));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.isLoading]);
+  }, [effectiveAccessRole, state.isLoading]);
 
   // 문자열 정규화: 수술기록 매칭용 (normalizeSurgery), 재고 비교용 (normalizeInventory)
   // → services/normalizationService.ts 에서 import
   const normalize = normalizeSurgery;
+
+  const computeUsageByInventoryFromRecords = useCallback((records: Array<{
+    date: string | null;
+    classification: string;
+    manufacturer: string | null;
+    brand: string | null;
+    size: string | null;
+    quantity: number;
+    surgery_record: string | null;
+  }>, inventoryItems: InventoryItem[]) => {
+    type SurgeryEntry = { totalQty: number };
+    const surgeryMap = new Map<string, SurgeryEntry>();
+    const formatIndex = buildBrandSizeFormatIndex(inventoryItems);
+
+    records.forEach(row => {
+      const cls = String(row.classification || '');
+      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      const record = String(row.surgery_record || '');
+      if (record.includes('[GBR Only]')) return;
+
+       const rawManufacturer = String(row.manufacturer || '');
+       const rawBrand = String(row.brand || '');
+       const rawSize = String(row.size || '');
+       if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
+
+      const rowM = normalize(rawManufacturer);
+      const rowB = normalize(rawBrand);
+      const rowS = getSizeMatchKey(rawSize, rawManufacturer);
+      const key = `${rowM}|${rowB}|${rowS}`;
+      const qtyValue = row.quantity !== undefined ? Number(row.quantity) : 0;
+      const validQty = isNaN(qtyValue) ? 0 : qtyValue;
+      const existing = surgeryMap.get(key);
+      if (existing) {
+        existing.totalQty += validQty;
+      } else {
+        surgeryMap.set(key, { totalQty: validQty });
+      }
+    });
+
+    const usageByInventoryId: Record<string, number> = {};
+    inventoryItems.forEach(item => {
+      const isCategory = item.manufacturer.startsWith('수술중FAIL_') || item.manufacturer === '보험청구';
+      if (isCategory) return;
+
+      const targetM = normalize(item.manufacturer);
+      const targetB = normalize(item.brand);
+      const targetS = getSizeMatchKey(item.size, item.manufacturer);
+      let totalUsage = 0;
+
+      surgeryMap.forEach((entry, key) => {
+        const [rowM, rowB, rowS] = key.split('|');
+        if (
+          (rowM.includes(targetM) || targetM.includes(rowM) || rowM === targetM) &&
+          rowB === targetB &&
+          rowS === targetS
+        ) {
+          totalUsage += entry.totalQty;
+        }
+      });
+
+      usageByInventoryId[item.id] = totalUsage;
+    });
+
+    return usageByInventoryId;
+  }, [normalize]);
 
   const syncInventoryWithUsageAndOrders = useCallback(() => {
     setState(prev => {
@@ -374,6 +592,7 @@ const App: React.FC = () => {
       // key: `${normM}|${normB}|${normS}` → { totalQty, dailyQty, normM }
       type SurgeryEntry = { totalQty: number; dailyQty: Record<string, number>; normM: string };
       const surgeryMap = new Map<string, SurgeryEntry>();
+      const formatIndex = buildBrandSizeFormatIndex(prev.inventory);
 
       records.forEach(row => {
         const dateStr = row['날짜'];
@@ -393,9 +612,14 @@ const App: React.FC = () => {
         const record = String(row['수술기록'] || '');
         if (record.includes('[GBR Only]')) return;
 
-        const rowM = normalize(String(row['제조사'] || ''));
-        const rowB = normalize(String(row['브랜드'] || ''));
-        const rowS = getSizeMatchKey(String(row['규격(SIZE)'] || ''), String(row['제조사'] || ''));
+        const rawManufacturer = String(row['제조사'] || '');
+        const rawBrand = String(row['브랜드'] || '');
+        const rawSize = String(row['규격(SIZE)'] || '');
+        if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
+
+        const rowM = normalize(rawManufacturer);
+        const rowB = normalize(rawBrand);
+        const rowS = getSizeMatchKey(rawSize, rawManufacturer);
         const key = `${rowM}|${rowB}|${rowS}`;
 
         const qtyValue = row['갯수'] !== undefined ? Number(row['갯수']) : 0;
@@ -428,11 +652,27 @@ const App: React.FC = () => {
         });
       });
 
+      // 지난달 prefix: 데이터 최신 날짜의 전달 기준
+      const _lastDataDate = maxTime !== -Infinity ? new Date(maxTime) : new Date();
+      const _ldMonth = _lastDataDate.getMonth(); // 0-indexed
+      const _prevMonthYear = _ldMonth === 0 ? _lastDataDate.getFullYear() - 1 : _lastDataDate.getFullYear();
+      const _prevMonth = _ldMonth === 0 ? 12 : _ldMonth; // 1-indexed
+      const lastMonthPrefix = `${_prevMonthYear}-${String(_prevMonth).padStart(2, '0')}`;
+
       // ── inventory 매핑: lookup O(inventory × surgeryMap keys) → 실질 O(n) ──
       const updatedInventory = prev.inventory.map(item => {
         const isCategory = item.manufacturer.startsWith('수술중FAIL_') || item.manufacturer === '보험청구';
         if (isCategory) {
-          return { ...item, usageCount: 0, currentStock: item.initialStock + (item.stockAdjustment ?? 0), recommendedStock: 0, monthlyAvgUsage: 0, dailyMaxUsage: 0 };
+          return {
+            ...item,
+            usageCount: 0,
+            currentStock: item.initialStock + (item.stockAdjustment ?? 0),
+            recommendedStock: 0,
+            monthlyAvgUsage: 0,
+            dailyMaxUsage: 0,
+            predictedDailyUsage: 0,
+            forecastConfidence: 0,
+          };
         }
 
         const targetM = normalize(item.manufacturer);
@@ -459,12 +699,88 @@ const App: React.FC = () => {
 
         const dailyMax = Object.values(mergedDailyQty).length > 0 ? Math.max(...Object.values(mergedDailyQty)) : 0;
         const monthlyAvg = Number((totalUsage / periodInMonths).toFixed(1));
+        const lastMonthUsage = Object.entries(mergedDailyQty)
+          .filter(([day]) => day.startsWith(lastMonthPrefix))
+          .reduce((sum, [, qty]) => sum + qty, 0);
+
+        const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+        const datedEntries = Object.entries(mergedDailyQty)
+          .map(([day, qty]) => ({ day, qty: Number(qty) || 0, time: new Date(day).getTime() }))
+          .filter(({ day, time }) => !!day && day !== 'unknown' && Number.isFinite(time))
+          .sort((a, b) => a.time - b.time);
+
+        const dailyQtyByDate = new Map<string, number>();
+        datedEntries.forEach(entry => {
+          const key = entry.day.slice(0, 10);
+          dailyQtyByDate.set(key, (dailyQtyByDate.get(key) ?? 0) + entry.qty);
+        });
+
+        const toDateKey = (date: Date) => {
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const d = String(date.getDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        };
+
+        // "활동일 평균"이 아닌 "캘린더 평균" 기준으로 계산 (과대추정 방지)
+        const getWindowAvg = (days: number, offsetDays = 0) => {
+          if (days <= 0) return 0;
+          let total = 0;
+          for (let i = offsetDays; i < offsetDays + days; i += 1) {
+            const date = new Date(_lastDataDate);
+            date.setDate(date.getDate() - i);
+            total += dailyQtyByDate.get(toDateKey(date)) ?? 0;
+          }
+          return total / days;
+        };
+
+        const recent14Avg = getWindowAvg(14, 0);
+        const recent30Avg = getWindowAvg(30, 0);
+        const previous30Avg = getWindowAvg(30, 30);
+        const monthlyDailyAvg = monthlyAvg / DAYS_PER_MONTH;
+
+        const trendRatio = previous30Avg > 0
+          ? recent30Avg / previous30Avg
+          : recent30Avg > 0
+            ? 1.05
+            : 1;
+        const trendFactor = clamp(trendRatio, 0.8, 1.25);
+
+        const volatilityBase = Math.max(recent30Avg, monthlyDailyAvg, 0.2);
+        const volatilityRatio = dailyMax > 0 ? dailyMax / volatilityBase : 1;
+        const volatilityFactor = clamp(1 + Math.max(0, volatilityRatio - 1) * 0.05, 1, 1.15);
+
+        const baseForecastDaily = recent14Avg > 0
+          ? (recent14Avg * 0.6) + (recent30Avg * 0.3) + (monthlyDailyAvg * 0.1)
+          : recent30Avg > 0
+            ? (recent30Avg * 0.7) + (monthlyDailyAvg * 0.3)
+            : monthlyDailyAvg;
+
+        const fallbackDaily = totalUsage > 0 ? Math.max(monthlyDailyAvg, 1 / DAYS_PER_MONTH) : 0;
+        const predictedDailyUsage = Number(
+          Math.max(0, (baseForecastDaily || fallbackDaily) * trendFactor * volatilityFactor).toFixed(2)
+        );
+
+        const sampleDensityScore = clamp(datedEntries.length / 30, 0, 1);
+        const trendStabilityScore = previous30Avg > 0 && recent30Avg > 0
+          ? 1 - clamp(Math.abs(recent30Avg - previous30Avg) / Math.max(previous30Avg, 0.1), 0, 1)
+          : 0.6;
+        const forecastConfidence = Number(
+          clamp(0.35 + (sampleDensityScore * 0.45) + (trendStabilityScore * 0.2), 0.35, 0.95).toFixed(2)
+        );
 
         const exactKey = `${targetM}|${targetB}|${targetS}`;
         const totalReceived = receivedMap.get(exactKey) ?? 0;
 
         const currentStock = item.initialStock + (item.stockAdjustment ?? 0) + totalReceived - totalUsage;
-        const recommended = Math.max(dailyMax * 2, Math.ceil(monthlyAvg));
+        // 권장량은 보수적으로 유지: 예측값은 긴급도 전용으로만 사용
+        const demandBase = Math.max(monthlyAvg, lastMonthUsage);
+        const recommended = Math.max(Math.ceil(demandBase), dailyMax * 2, 1);
+
+        // 마지막 사용일: mergedDailyQty의 날짜 키 중 최신값
+        const lastUsedDate = totalUsage > 0 && datedEntries.length > 0
+          ? datedEntries[datedEntries.length - 1].day
+          : null;
 
         return {
           ...item,
@@ -473,6 +789,10 @@ const App: React.FC = () => {
           recommendedStock: recommended,
           monthlyAvgUsage: monthlyAvg,
           dailyMaxUsage: dailyMax,
+          predictedDailyUsage,
+          forecastConfidence,
+          lastMonthUsage,
+          lastUsedDate,
         };
       });
       return { ...prev, inventory: updatedInventory };
@@ -482,6 +802,237 @@ const App: React.FC = () => {
   useEffect(() => {
     syncInventoryWithUsageAndOrders();
   }, [state.surgeryMaster, state.orders, state.inventory.length, syncInventoryWithUsageAndOrders]);
+
+  const refreshLatestSurgeryUsage = useCallback(async (): Promise<Record<string, number> | null> => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return null;
+
+    try {
+      const retentionMonths = PLAN_LIMITS[effectivePlan]?.retentionMonths ?? 24;
+      const effectiveMonths = Math.min(retentionMonths, 24);
+      const fromDateObj = new Date();
+      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
+      const fromDate = fromDateObj.toISOString().split('T')[0];
+
+      const latestRecords = await surgeryService.getSurgeryUsageRecords({ fromDate });
+      const usageMap = computeUsageByInventoryFromRecords(latestRecords, state.inventory);
+      return usageMap;
+    } catch (error) {
+      console.error('[App] 최신 수술기록 재조회 실패:', error);
+      showAlertToast('최신 수술기록 조회에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      return null;
+    }
+  }, [computeUsageByInventoryFromRecords, effectivePlan, showAlertToast, state.inventory, state.user?.hospitalId]);
+
+  const resolveManualSurgeryInput = useCallback(async (params: {
+    recordIds: string[];
+    targetManufacturer: string;
+    targetBrand: string;
+    targetSize: string;
+    verifyOnly?: boolean;
+  }): Promise<{
+    checked: number;
+    found: number;
+    applicable: number;
+    alreadyFixed: number;
+    updated: number;
+    failed: number;
+    notFound: number;
+    appliedManufacturer: string;
+    appliedBrand: string;
+    appliedSize: string;
+  }> => {
+    const sheetName = '수술기록지';
+    const rows = state.surgeryMaster[sheetName] || [];
+    const idSet = Array.from(new Set((params.recordIds || []).filter(Boolean)));
+
+    const fixedTarget = fixIbsImplant(
+      String(params.targetManufacturer || '').trim(),
+      String(params.targetBrand || '').trim()
+    );
+    const canonicalTargetSize = toCanonicalSize(String(params.targetSize || '').trim(), fixedTarget.manufacturer);
+    const targetSizeKey = getSizeMatchKey(canonicalTargetSize, fixedTarget.manufacturer);
+    const targetBrandKey = normalizeSurgery(fixedTarget.brand);
+    const targetManufacturerKey = normalizeSurgery(fixedTarget.manufacturer);
+
+    // 동일 제조사-브랜드-규격 키를 가진 기존 재고 규격 표기를 우선 사용 (목록 기반 표기 통일)
+    const preferredInventoryItem = state.inventory.find(item => {
+      if (item.manufacturer.startsWith('수술중FAIL_')) return false;
+      if (item.manufacturer === '보험청구' || item.brand === '보험임플란트') return false;
+      const itemFixed = fixIbsImplant(item.manufacturer, item.brand);
+      return (
+        normalizeSurgery(itemFixed.brand) === targetBrandKey &&
+        isManufacturerAliasMatch(normalizeSurgery(itemFixed.manufacturer), targetManufacturerKey) &&
+        getSizeMatchKey(item.size, itemFixed.manufacturer) === targetSizeKey
+      );
+    });
+    const appliedSize = preferredInventoryItem?.size || canonicalTargetSize;
+
+    const formatIndex = buildBrandSizeFormatIndex(state.inventory);
+
+    let found = 0;
+    let alreadyFixed = 0;
+    let notFound = 0;
+    const applicableIds: string[] = [];
+
+    for (const id of idSet) {
+      const row = rows.find(r => String(r._id || '') === id);
+      if (!row) {
+        notFound += 1;
+        continue;
+      }
+      found += 1;
+
+      const rowManufacturer = String(row['제조사'] || '').trim();
+      const rowBrand = String(row['브랜드'] || '').trim();
+      const rowSize = String(row['규격(SIZE)'] || '').trim();
+      const rowHasRegisteredCombo = hasRegisteredBrandSize(formatIndex, rowManufacturer, rowBrand, rowSize);
+      const rowIsListBased = isListBasedSurgeryInput(formatIndex, rowManufacturer, rowBrand, rowSize);
+
+      if (rowIsListBased || !rowHasRegisteredCombo) {
+        alreadyFixed += 1;
+        continue;
+      }
+      applicableIds.push(id);
+    }
+
+    if (params.verifyOnly) {
+      return {
+        checked: idSet.length,
+        found,
+        applicable: applicableIds.length,
+        alreadyFixed,
+        updated: 0,
+        failed: 0,
+        notFound,
+        appliedManufacturer: fixedTarget.manufacturer,
+        appliedBrand: fixedTarget.brand,
+        appliedSize,
+      };
+    }
+
+    if (applicableIds.length === 0) {
+      return {
+        checked: idSet.length,
+        found,
+        applicable: 0,
+        alreadyFixed,
+        updated: 0,
+        failed: 0,
+        notFound,
+        appliedManufacturer: fixedTarget.manufacturer,
+        appliedBrand: fixedTarget.brand,
+        appliedSize,
+      };
+    }
+
+    const successIds: string[] = [];
+    let failed = 0;
+
+    if (state.user?.hospitalId) {
+      const updateResults = await Promise.all(
+        applicableIds.map(async (id) => {
+          const updated = await surgeryService.updateRecord(id, {
+            manufacturer: fixedTarget.manufacturer,
+            brand: fixedTarget.brand,
+            size: appliedSize,
+          });
+          return { id, ok: !!updated };
+        })
+      );
+
+      updateResults.forEach(result => {
+        if (result.ok) {
+          successIds.push(result.id);
+        } else {
+          failed += 1;
+        }
+      });
+    } else {
+      successIds.push(...applicableIds);
+    }
+
+    if (successIds.length > 0) {
+      const successIdSet = new Set(successIds);
+      setState(prev => {
+        const prevRows = prev.surgeryMaster[sheetName] || [];
+        const nextRows = prevRows.map(row => {
+          const rowId = String(row._id || '');
+          if (!successIdSet.has(rowId)) return row;
+          return {
+            ...row,
+            '제조사': fixedTarget.manufacturer,
+            '브랜드': fixedTarget.brand,
+            '규격(SIZE)': appliedSize,
+          };
+        });
+        return {
+          ...prev,
+          surgeryMaster: {
+            ...prev.surgeryMaster,
+            [sheetName]: nextRows,
+          },
+        };
+      });
+    }
+
+    return {
+      checked: idSet.length,
+      found,
+      applicable: applicableIds.length,
+      alreadyFixed,
+      updated: successIds.length,
+      failed,
+      notFound,
+      appliedManufacturer: fixedTarget.manufacturer,
+      appliedBrand: fixedTarget.brand,
+      appliedSize,
+    };
+  }, [state.inventory, state.surgeryMaster, state.user?.hospitalId]);
+
+  const applyBaseStockBatch = useCallback(async (changes: Array<{ id: string; initialStock: number; nextCurrentStock: number }>) => {
+    if (changes.length === 0) return;
+
+    const prevInventory = state.inventory;
+    const changeMap = new Map(changes.map(change => [change.id, change]));
+
+    setState(prev => ({
+      ...prev,
+      inventory: prev.inventory.map(item => {
+        const change = changeMap.get(item.id);
+        if (!change) return item;
+        return {
+          ...item,
+          initialStock: change.initialStock,
+          currentStock: change.nextCurrentStock,
+        };
+      }),
+    }));
+
+    try {
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < changes.length; i += BATCH_SIZE) {
+        const batch = changes.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(change => inventoryService.updateItem(change.id, { initial_stock: change.initialStock }))
+        );
+        if (results.some(result => !result)) {
+          throw new Error('batch_update_failed');
+        }
+      }
+
+      operationLogService.logOperation(
+        'base_stock_edit',
+        `기초재고 일괄 수정 (${changes.length}개)`,
+        { count: changes.length }
+      );
+    } catch (error) {
+      console.error('[App] 기초재고 일괄 저장 실패, 롤백:', error);
+      setState(prev => ({ ...prev, inventory: prevInventory }));
+      showAlertToast('기초재고 일괄 저장에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      throw error;
+    }
+  }, [setState, showAlertToast, state.inventory]);
 
   const handleFileUpload = async (file: File, type: UploadType) => {
     setState(prev => ({ ...prev, isLoading: true }));
@@ -1193,22 +1744,7 @@ const App: React.FC = () => {
     const rows = state.surgeryMaster['수술기록지'] || [];
     if (rows.length === 0) return [];
 
-    const inventoryManufacturersByBrandSize = new Map<string, string[]>();
-    state.inventory
-      .filter(item =>
-        !item.manufacturer.startsWith('수술중FAIL_') &&
-        item.manufacturer !== '보험청구' &&
-        item.brand !== '보험임플란트'
-      )
-      .forEach(item => {
-        const normM = normalizeSurgery(item.manufacturer);
-        const normB = normalizeSurgery(item.brand);
-        const normS = getSizeMatchKey(item.size, item.manufacturer);
-        const bsKey = `${normB}|${normS}`;
-        const list = inventoryManufacturersByBrandSize.get(bsKey) || [];
-        if (!list.includes(normM)) list.push(normM);
-        inventoryManufacturersByBrandSize.set(bsKey, list);
-      });
+    const formatIndex = buildBrandSizeFormatIndex(state.inventory);
 
     const missingMap = new Map<string, SurgeryUnregisteredItem>();
 
@@ -1232,28 +1768,38 @@ const App: React.FC = () => {
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;
       const qty = Number.isFinite(qtyRaw) ? qtyRaw : 1;
+      const sample = buildUnregisteredSample(row);
 
       const normM = normalizeSurgery(manufacturer);
       const normB = normalizeSurgery(brand);
       const normS = getSizeMatchKey(size, manufacturer);
-      const bsKey = `${normB}|${normS}`;
+      const hasRegisteredCombo = hasRegisteredBrandSize(formatIndex, manufacturer, brand, size);
+      const isListBased = isListBasedSurgeryInput(formatIndex, manufacturer, brand, size);
+      if (isListBased) return;
 
-      const candidateManufacturers = inventoryManufacturersByBrandSize.get(bsKey) || [];
-      const isRegistered = candidateManufacturers.some(invM =>
-        invM === normM || invM.includes(normM) || normM.includes(invM)
-      );
-      if (isRegistered) return;
-
-      const itemKey = `${normM}|${normB}|${normS}`;
+      const itemKey = hasRegisteredCombo
+        ? `${normM}|${normB}|${normS}|manual:${normalizeSizeTextStrict(size)}`
+        : `${normM}|${normB}|${normS}`;
       const existing = missingMap.get(itemKey);
+      const rowId = String(row._id || '').trim();
       if (existing) {
         existing.usageCount += qty;
+        appendUnregisteredSample(existing, sample);
+        if (rowId) {
+          const currentIds = existing.recordIds ?? [];
+          if (!currentIds.includes(rowId)) {
+            existing.recordIds = [...currentIds, rowId];
+          }
+        }
       } else {
         missingMap.set(itemKey, {
           manufacturer: manufacturer || '-',
           brand: brand || '-',
           size: size || '-',
           usageCount: qty,
+          reason: hasRegisteredCombo ? 'non_list_input' : 'not_in_inventory',
+          samples: [sample],
+          recordIds: rowId ? [rowId] : [],
         });
       }
     });
@@ -1287,7 +1833,7 @@ const App: React.FC = () => {
           activeTab={state.dashboardTab}
           onTabChange={(tab) => {
             // 권한 없는 탭은 전환 차단
-            if (!canAccessTab(tab, state.user?.permissions, state.user?.role ?? 'dental_staff')) return;
+            if (!canAccessTab(tab, state.user?.permissions, effectiveAccessRole)) return;
             setState(prev => ({ ...prev, dashboardTab: tab }));
           }}
           fixtureData={state.fixtureData}
@@ -1858,9 +2404,20 @@ const App: React.FC = () => {
                           userId={state.user?.email}
                           hospitalId={state.user?.hospitalId}
                           plan={effectivePlan}
-                          onUpdateStock={async (id, val) => {
+                          onUpdateStock={async (id, val, nextCurrentStock) => {
                             const prevInventory = state.inventory;
-                            setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === id ? { ...i, initialStock: val, currentStock: val - i.usageCount } : i) }));
+                            setState(prev => ({
+                              ...prev,
+                              inventory: prev.inventory.map(i =>
+                                i.id === id
+                                  ? {
+                                    ...i,
+                                    initialStock: val,
+                                    currentStock: typeof nextCurrentStock === 'number' ? nextCurrentStock : (val - i.usageCount),
+                                  }
+                                  : i
+                              ),
+                            }));
                             try {
                               await inventoryService.updateItem(id, { initial_stock: val });
                               operationLogService.logOperation('base_stock_edit', `기초재고 수정 (${val}개)`, { inventoryId: id, value: val });
@@ -1870,12 +2427,31 @@ const App: React.FC = () => {
                               showAlertToast('기초재고 수정에 실패했습니다.', 'error');
                             }
                           }}
+                          onBulkUpdateStocks={applyBaseStockBatch}
                           onDeleteInventoryItem={async (id) => {
                             const delItem = state.inventory.find(i => i.id === id);
                             const prevInventory = state.inventory;
-                            setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => i.id !== id) }));
+                            // 정규 품목 삭제 시 수술중FAIL_ 연동 품목도 함께 찾기
+                            // IBS Implant 계열은 fixIbsImplant 때문에 manufacturer/brand가 뒤바뀌어 있을 수 있으므로 양방향 매칭
+                            let failCounterpartId: string | null = null;
+                            if (delItem && !delItem.manufacturer.startsWith('수술중FAIL_') && delItem.manufacturer !== '보험청구') {
+                              const failCounterpart = state.inventory.find(i => {
+                                if (!i.manufacturer.startsWith('수술중FAIL_')) return false;
+                                const rawBase = i.manufacturer.slice('수술중FAIL_'.length);
+                                const sizeMatch = i.size === delItem.size;
+                                // 일반 케이스: FAIL 제조사 베이스 = 정품목 제조사
+                                if (rawBase === delItem.manufacturer && i.brand === delItem.brand && sizeMatch) return true;
+                                // IBS Implant 역방향: FAIL 품목이 교정 전 brand명을 제조사로 가진 경우
+                                if (rawBase === delItem.brand && i.brand === delItem.manufacturer && sizeMatch) return true;
+                                return false;
+                              });
+                              if (failCounterpart) failCounterpartId = failCounterpart.id;
+                            }
+                            const idsToRemove = new Set([id, ...(failCounterpartId ? [failCounterpartId] : [])]);
+                            setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => !idsToRemove.has(i.id)) }));
                             try {
                               await inventoryService.deleteItem(id);
+                              if (failCounterpartId) await inventoryService.deleteItem(failCounterpartId);
                               operationLogService.logOperation('item_delete', `품목 삭제: ${delItem?.brand || ''} ${delItem?.size || ''}`, { inventoryId: id });
                             } catch (error) {
                               console.error('[App] 품목 삭제 실패, 롤백:', error);
@@ -1895,16 +2471,17 @@ const App: React.FC = () => {
                             const alreadyExists = state.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
                             if (alreadyExists) {
                               showAlertToast('이미 등록된 제조사/브랜드/규격입니다. 중복 등록되지 않았습니다.', 'info');
-                              return;
+                              return false;
                             }
 
                             const isBillable = !normalizedItem.manufacturer.startsWith('수술중FAIL_') && normalizedItem.manufacturer !== '보험청구';
                             if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
                               const req = planService.getRequiredPlanForItems(billableItemCount + 1);
                               showAlertToast(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`, 'error');
-                              return;
+                              return false;
                             }
 
+                            let inserted = false;
                             if (state.user?.hospitalId) {
                               const result = await inventoryService.addItem({
                                 hospital_id: state.user.hospitalId,
@@ -1917,7 +2494,7 @@ const App: React.FC = () => {
 
                               if (!result) {
                                 showAlertToast('품목 추가에 실패했습니다. (중복 또는 네트워크 오류)', 'error');
-                                return;
+                                return false;
                               }
 
                               const savedItem: InventoryItem = {
@@ -1937,17 +2514,23 @@ const App: React.FC = () => {
                               setState(prev => {
                                 const dupAfterSave = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
                                 if (dupAfterSave) return prev;
+                                inserted = true;
                                 return { ...prev, inventory: [...prev.inventory, savedItem] };
                               });
                             } else {
                               setState(prev => {
                                 const dupInLocal = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
                                 if (dupInLocal) return prev;
+                                inserted = true;
                                 return { ...prev, inventory: [...prev.inventory, normalizedItem] };
                               });
                             }
 
-                            operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${normalizedItem.brand} ${normalizedItem.size}`, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size });
+                            if (inserted) {
+                              operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${normalizedItem.brand} ${normalizedItem.size}`, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size });
+                            }
+
+                            return inserted;
                           }}
                           onUpdateInventoryItem={async (ui) => {
                             const fixed = fixIbsImplant(ui.manufacturer, ui.brand);
@@ -1962,6 +2545,8 @@ const App: React.FC = () => {
                           }}
                           surgeryData={virtualSurgeryData}
                           unregisteredFromSurgery={surgeryUnregisteredItems}
+                          onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
+                          onResolveManualInput={resolveManualSurgeryInput}
                           onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: Math.max(5, item.recommendedStock - item.currentStock) }], manager: state.user?.name || '관리자', status: 'ordered' })}
                         />
                       )}
@@ -2060,8 +2645,8 @@ const App: React.FC = () => {
               <ErrorBoundary>
               <Suspense fallback={suspenseFallback}>
               {state.currentView === 'landing' && <LandingPage onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))} onAnalyze={() => setState(p => ({ ...p, currentView: 'analyze' }))} />}
-              {state.currentView === 'login' && <AuthForm type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} />}
-              {state.currentView === 'signup' && <AuthForm type="signup" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} />}
+              {state.currentView === 'login' && <AuthForm key="login" type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} />}
+              {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccessWithTrial} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} />}
               {state.currentView === 'invite' && inviteInfo && (
                 <AuthForm
                   type="invite"
@@ -2073,6 +2658,7 @@ const App: React.FC = () => {
               {state.currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
               {state.currentView === 'pricing' && (
                 <PricingPage
+                  onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
                   onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup' }))}
                   currentPlan={state.planState?.plan}
                   isLoggedIn={!!state.user}

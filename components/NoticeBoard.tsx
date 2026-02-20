@@ -1,8 +1,9 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Notice, NoticeCategory, NOTICE_CATEGORIES } from '../types';
 import NoticeEditor from './NoticeEditor';
 import { sanitizeRichHtml } from '../services/htmlSanitizer';
+import { useToast } from '../hooks/useToast';
+import { noticeService } from '../services/noticeService';
 
 interface NoticeBoardProps {
     isAdmin: boolean;
@@ -10,7 +11,10 @@ interface NoticeBoardProps {
 }
 
 const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) => {
+    const { toast, showToast } = useToast();
     const [notices, setNotices] = useState<Notice[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [isWriting, setIsWriting] = useState(false);
     const [filterCategory, setFilterCategory] = useState<NoticeCategory | 'all'>('all');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -21,21 +25,22 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
         category: '업데이트'
     });
 
-    useEffect(() => {
-        const savedNotices = localStorage.getItem('app_notices');
-        if (savedNotices) {
-            try {
-                const parsed = JSON.parse(savedNotices) as Notice[];
-                const sanitized = parsed.map((notice) => ({
-                    ...notice,
-                    content: sanitizeRichHtml(String(notice.content || '')),
-                }));
-                setNotices(sanitized);
-            } catch (e) {
-                console.error('Failed to parse notices', e);
-            }
-        }
+    const loadNotices = useCallback(async () => {
+        setIsLoading(true);
+        const list = await noticeService.listNotices();
+        setNotices(list);
+        setIsLoading(false);
     }, []);
+
+    useEffect(() => {
+        loadNotices().catch((e) => {
+            console.error('[NoticeBoard] Failed to load notices:', e);
+            if (isAdmin) {
+                showToast('업데이트 소식을 불러오지 못했습니다.', 'error');
+            }
+            setIsLoading(false);
+        });
+    }, [loadNotices, isAdmin, showToast]);
 
     const filteredNotices = useMemo(() => {
         if (filterCategory === 'all') return notices;
@@ -47,38 +52,52 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
         return notices.find(n => n.id === deleteTarget) || null;
     }, [notices, deleteTarget]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!newNotice.title.trim() || !newNotice.content.trim()) {
-            alert('제목과 내용을 모두 입력해주세요.');
+            showToast('제목과 내용을 모두 입력해주세요.', 'error');
             return;
         }
 
+        setIsSaving(true);
         const safeContent = sanitizeRichHtml(newNotice.content);
 
-        const notice: Notice = {
-            id: `notice_${Date.now()}`,
-            title: newNotice.title,
+        const created = await noticeService.createNotice({
+            title: newNotice.title.trim(),
             content: safeContent,
             isImportant: newNotice.isImportant,
             category: newNotice.category,
-            date: new Date().toISOString(),
-            author: '관리자'
-        };
+            author: '관리자',
+        });
 
-        const updatedNotices = [notice, ...notices];
-        setNotices(updatedNotices);
-        localStorage.setItem('app_notices', JSON.stringify(updatedNotices));
+        if (!created) {
+            showToast('공지 등록에 실패했습니다.', 'error');
+            setIsSaving(false);
+            return;
+        }
+
+        setNotices(prev => [created, ...prev]);
         setNewNotice({ title: '', content: '', isImportant: false, category: '업데이트' });
         setIsWriting(false);
+        setIsSaving(false);
+        showToast('공지사항이 등록되었습니다.', 'success');
     };
 
-    const confirmDelete = useCallback(() => {
+    const confirmDelete = useCallback(async () => {
         if (!deleteTarget) return;
-        const updatedNotices = notices.filter(n => n.id !== deleteTarget);
-        setNotices(updatedNotices);
-        localStorage.setItem('app_notices', JSON.stringify(updatedNotices));
+
+        setIsSaving(true);
+        const ok = await noticeService.deleteNotice(deleteTarget);
+        if (!ok) {
+            showToast('공지 삭제에 실패했습니다.', 'error');
+            setIsSaving(false);
+            return;
+        }
+
+        setNotices(prev => prev.filter(n => n.id !== deleteTarget));
         setDeleteTarget(null);
-    }, [deleteTarget, notices]);
+        setIsSaving(false);
+        showToast('공지사항이 삭제되었습니다.', 'success');
+    }, [deleteTarget, showToast]);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -168,21 +187,25 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                             <div className="flex gap-2 justify-end pt-1">
                                 <button
                                     onClick={() => setIsWriting(false)}
-                                    className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 rounded-lg"
+                                    disabled={isSaving}
+                                    className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 rounded-lg disabled:opacity-50"
                                 >
                                     취소
                                 </button>
                                 <button
                                     onClick={handleSave}
-                                    className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                                    disabled={isSaving}
+                                    className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
                                 >
-                                    등록
+                                    {isSaving ? '등록 중...' : '등록'}
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <div className="divide-y divide-slate-100">
-                            {filteredNotices.length === 0 ? (
+                            {isLoading ? (
+                                <div className="p-8 text-center text-slate-400 text-xs">불러오는 중...</div>
+                            ) : filteredNotices.length === 0 ? (
                                 <div className="p-8 text-center text-slate-400 text-xs">
                                     {filterCategory === 'all' ? '등록된 소식이 없습니다.' : `${filterCategory} 카테고리에 등록된 소식이 없습니다.`}
                                 </div>
@@ -206,7 +229,8 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                                                     {isAdmin && (
                                                         <button
                                                             onClick={() => setDeleteTarget(notice.id)}
-                                                            className="px-1.5 py-0.5 text-[10px] font-medium text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                                                            disabled={isSaving}
+                                                            className="px-1.5 py-0.5 text-[10px] font-medium text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors disabled:opacity-50"
                                                         >
                                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -228,7 +252,7 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
             {/* Delete Confirmation Modal */}
             {deleteTarget && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !isSaving && setDeleteTarget(null)} />
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="p-6 text-center">
                             <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-rose-100 flex items-center justify-center">
@@ -247,20 +271,27 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                         <div className="px-6 pb-6 flex gap-3">
                             <button
                                 onClick={() => setDeleteTarget(null)}
-                                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                                disabled={isSaving}
+                                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
                             >
                                 취소
                             </button>
                             <button
                                 onClick={confirmDelete}
-                                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors"
+                                disabled={isSaving}
+                                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50"
                             >
-                                삭제하기
+                                {isSaving ? '삭제 중...' : '삭제하기'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+        {toast && (
+            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                {toast.message}
+            </div>
+        )}
         </>
     );
 };

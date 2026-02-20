@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { DbProfile, UserRole, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, DbResetRequest } from '../types';
+import { DbProfile, UserRole, PlanType, BillingCycle, PLAN_LIMITS, DbResetRequest } from '../types';
 import { resetService } from '../services/resetService';
 import NoticeEditor from './NoticeEditor';
 import { sanitizeRichHtml } from '../services/htmlSanitizer';
@@ -18,20 +18,47 @@ interface DbHospitalRow {
     name: string;
     master_admin_id: string | null;
     phone: string | null;
+    biz_file_url: string | null;
     plan: string;
     plan_expires_at: string | null;
     plan_changed_at: string | null;
     billing_cycle: string | null;
     created_at: string;
     base_stock_edit_count: number;
+    trial_started_at: string | null;
+    trial_used: boolean;
+}
+
+const TRIAL_DAYS = 14;
+
+function getTrialInfo(h: DbHospitalRow): { status: 'unused' | 'active' | 'expired'; daysLeft?: number } {
+    if (!h.trial_started_at && !h.trial_used) return { status: 'unused' };
+    if (h.trial_used) return { status: 'expired' };
+    if (h.trial_started_at) {
+        const trialEnd = new Date(new Date(h.trial_started_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+        if (new Date() < trialEnd) {
+            const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+            return { status: 'active', daysLeft };
+        }
+        return { status: 'expired' };
+    }
+    return { status: 'unused' };
 }
 
 const ROLE_MAP: Record<string, string> = {
     admin: '운영자', master: '원장', dental_staff: '치위생사', staff: '스태프',
 };
 
+const PLAN_SHORT_LABELS: Record<PlanType, string> = {
+    free: 'Free',
+    basic: 'Base',
+    plus: 'Plus',
+    business: 'Bizs',
+    ultimate: 'Maxs',
+};
+
 const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, onToggleView }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual' | 'plan_management'>('overview');
     const [hospitals, setHospitals] = useState<DbHospitalRow[]>([]);
     const [profiles, setProfiles] = useState<DbProfile[]>([]);
     const [resetRequests, setResetRequests] = useState<DbResetRequest[]>([]);
@@ -39,10 +66,21 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [planModal, setPlanModal] = useState<{ hospitalId: string; hospitalName: string } | null>(null);
     const [planForm, setPlanForm] = useState<{ plan: PlanType; cycle: BillingCycle }>({ plan: 'free', cycle: 'monthly' });
     const [planSaving, setPlanSaving] = useState(false);
+    const [trialSaving, setTrialSaving] = useState<string | null>(null);
     const [resetActionLoading, setResetActionLoading] = useState<string | null>(null);
     const [editCountResetting, setEditCountResetting] = useState<string | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'amber' | 'indigo'; confirmLabel?: string; onConfirm: () => void } | null>(null);
+    const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const { toast, showToast } = useToast();
+
+    // 플랜 관리 state
+    interface PlanCapacity { plan: string; capacity: number; }
+    interface PlanUsage { plan: string; usage_count: number; }
+    const [planCapacities, setPlanCapacities] = useState<PlanCapacity[]>([]);
+    const [planUsages, setPlanUsages] = useState<PlanUsage[]>([]);
+    const [planCapacityEditing, setPlanCapacityEditing] = useState<Record<string, number>>({});
+    const [planCapacitySaving, setPlanCapacitySaving] = useState<string | null>(null);
 
     // 매뉴얼 관련 state
     interface ManualEntry { id: string; title: string; content: string; category: string; updated_at: string; created_at: string; }
@@ -100,13 +138,23 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
     const loadData = async () => {
         setIsLoading(true);
-        const [profileRes, hospitalRes, resetData, manualRes] = await Promise.all([
-            supabase.rpc('get_all_profiles'),
+        const [profileRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
+            supabase.rpc('get_all_profiles_with_last_login'),
             supabase.from('hospitals').select('*'),
             resetService.getAllRequests(),
             supabase.from('admin_manuals').select('*').order('created_at', { ascending: false }),
+            supabase.auth.getUser(),
         ]);
-        if (profileRes.data) setProfiles(profileRes.data as DbProfile[]);
+
+        // 새 함수 실패 시 기존 함수로 fallback
+        if (profileRes.error || !profileRes.data || (profileRes.data as DbProfile[]).length === 0) {
+            const fallback = await supabase.rpc('get_all_profiles');
+            if (fallback.data) setProfiles(fallback.data as DbProfile[]);
+        } else {
+            setProfiles(profileRes.data as DbProfile[]);
+        }
+
+        if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
         if (hospitalRes.data) setHospitals(hospitalRes.data as DbHospitalRow[]);
         setResetRequests(resetData);
         if (manualRes.data) {
@@ -116,10 +164,65 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             }));
             setManualEntries(sanitized);
         }
+
+        // 플랜 용량 및 사용 현황 로드
+        const [capRes, usageRes] = await Promise.all([
+            supabase.from('plan_capacities').select('*').order('capacity', { ascending: false }),
+            supabase.rpc('get_plan_usage_counts'),
+        ]);
+        if (capRes.data) setPlanCapacities(capRes.data as PlanCapacity[]);
+        if (usageRes.data) setPlanUsages(usageRes.data as PlanUsage[]);
+
         setIsLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
+
+    const handleSavePlanCapacity = async (plan: string) => {
+        const newCapacity = planCapacityEditing[plan];
+        if (newCapacity === undefined || newCapacity < 0) return;
+        setPlanCapacitySaving(plan);
+        const { error } = await supabase
+            .from('plan_capacities')
+            .update({ capacity: newCapacity, updated_at: new Date().toISOString() })
+            .eq('plan', plan);
+        if (!error) {
+            setPlanCapacities(prev => prev.map(p => p.plan === plan ? { ...p, capacity: newCapacity } : p));
+            setPlanCapacityEditing(prev => { const n = { ...prev }; delete n[plan]; return n; });
+            showToast(`${plan} 플랜 용량이 ${newCapacity}개로 업데이트되었습니다.`, 'success');
+        } else {
+            showToast('저장 실패. 다시 시도해 주세요.', 'error');
+        }
+        setPlanCapacitySaving(null);
+    };
+
+    const handleDeleteUser = (profile: DbProfile) => {
+        setConfirmModal({
+            title: '회원 삭제',
+            message: `"${profile.name}" (${profile.email}) 회원을 영구 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 해당 계정의 모든 데이터가 삭제됩니다.`,
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                setDeletingUserId(profile.id);
+                try {
+                    const { error } = await supabase.functions.invoke('admin-delete-user', {
+                        body: { targetUserId: profile.id },
+                    });
+                    if (error) {
+                        showToast(error.message || '삭제에 실패했습니다.', 'error');
+                    } else {
+                        showToast(`${profile.name} 회원이 삭제되었습니다.`, 'success');
+                        await loadData();
+                    }
+                } catch {
+                    showToast('삭제 중 오류가 발생했습니다.', 'error');
+                } finally {
+                    setDeletingUserId(null);
+                }
+            },
+        });
+    };
 
     const getHospitalName = (hospitalId: string | null) => {
         if (!hospitalId) return '-';
@@ -140,6 +243,143 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         return hospitals.find(h => h.id === hospitalId) || null;
     };
 
+    const getBizFileName = (hospital: DbHospitalRow): string => {
+        const fallback = `${hospital.name}-증빙파일`;
+        if (!hospital.biz_file_url) return fallback;
+        try {
+            const url = new URL(hospital.biz_file_url);
+            const last = decodeURIComponent(url.pathname.split('/').pop() || '').trim();
+            return last || fallback;
+        } catch {
+            const raw = String(hospital.biz_file_url || '').trim().replace(/^\/+/, '');
+            if (!raw) return fallback;
+            const tail = decodeURIComponent(raw.split('/').pop() || '').trim();
+            return tail || fallback;
+        }
+    };
+
+    const isSupabaseStorageObjectUrl = (value: string): boolean => /\/storage\/v1\/object\//i.test(value);
+
+    const parseBizFileRef = (rawRef: string): { bucket: string; objectPath: string } | null => {
+        const raw = rawRef.trim();
+        if (!raw) return null;
+
+        // 1) Full URL format: /storage/v1/object/{public|sign|authenticated}/{bucket}/{path...}
+        try {
+            const url = new URL(raw);
+            const parts = url.pathname.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
+            const objectIdx = parts.findIndex((p) => p === 'object');
+            if (objectIdx >= 0 && parts.length >= objectIdx + 4) {
+                const bucket = parts[objectIdx + 2];
+                const objectPath = parts.slice(objectIdx + 3).join('/');
+                if (bucket && objectPath) return { bucket, objectPath };
+            }
+            // absolute URL인데 storage object URL이 아니면 경로 파싱 대상이 아님
+            return null;
+        } catch {
+            // continue: non-URL string
+        }
+
+        // 2) "bucket/path" or plain "path" format
+        const cleaned = raw.replace(/^\/+/, '');
+        const seg = cleaned.split('/').filter(Boolean).map((p) => decodeURIComponent(p));
+        if (seg.length >= 2) {
+            return { bucket: seg[0], objectPath: seg.slice(1).join('/') };
+        }
+        if (seg.length === 1) {
+            return { bucket: 'biz-documents', objectPath: seg[0] };
+        }
+        return null;
+    };
+
+    const resolveBizFileAccessUrl = async (hospital: DbHospitalRow): Promise<string> => {
+        const rawRef = String(hospital.biz_file_url || '').trim();
+        if (!rawRef) throw new Error('NO_BIZ_FILE');
+
+        const parsed = parseBizFileRef(rawRef);
+        let lastError: any = null;
+
+        if (parsed) {
+            const attempts: Array<{ bucket: string; objectPath: string }> = [parsed];
+            const fallbackBuckets = ['biz-documents', 'biz_document', 'biz-docs'];
+            fallbackBuckets.forEach((bucket) => {
+                if (bucket !== parsed.bucket) attempts.push({ bucket, objectPath: parsed.objectPath });
+            });
+
+            for (const attempt of attempts) {
+                const { data, error } = await supabase.storage
+                    .from(attempt.bucket)
+                    .createSignedUrl(attempt.objectPath, 60 * 10);
+                if (!error && data?.signedUrl) return data.signedUrl;
+                lastError = error;
+            }
+        }
+
+        // storage URL이 아닌 외부 URL은 그대로 접근
+        if (!parsed && /^https?:\/\//i.test(rawRef)) return rawRef;
+
+        if (lastError) throw lastError;
+        throw new Error('BIZ_FILE_RESOLVE_FAILED');
+    };
+
+    const handlePreviewBizFile = (hospital: DbHospitalRow) => {
+        void (async () => {
+            try {
+                const url = await resolveBizFileAccessUrl(hospital);
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } catch (error: any) {
+                const msg = String(error?.message || '');
+                if (msg.toLowerCase().includes('bucket not found')) {
+                    showToast('스토리지 버킷 설정이 없어 파일을 열 수 없습니다. 운영자 DB에 스토리지 마이그레이션 적용이 필요합니다.', 'error');
+                    return;
+                }
+                if (msg === 'NO_BIZ_FILE') {
+                    showToast('등록된 세금계산서/증빙 파일이 없습니다.', 'error');
+                    return;
+                }
+                showToast('파일 미리보기에 실패했습니다.', 'error');
+            }
+        })();
+    };
+
+    const handleDownloadBizFile = async (hospital: DbHospitalRow) => {
+        try {
+            const accessUrl = await resolveBizFileAccessUrl(hospital);
+            const response = await fetch(accessUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = getBizFileName(hospital);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objectUrl);
+            showToast('파일 다운로드를 시작했습니다.', 'success');
+        } catch (error: any) {
+            const msg = String(error?.message || '');
+            if (msg.toLowerCase().includes('bucket not found')) {
+                showToast('스토리지 버킷 설정이 없어 다운로드할 수 없습니다. 운영자 DB에 스토리지 마이그레이션 적용이 필요합니다.', 'error');
+                return;
+            }
+            if (msg === 'NO_BIZ_FILE') {
+                showToast('등록된 세금계산서/증빙 파일이 없습니다.', 'error');
+                return;
+            }
+            if (
+                hospital.biz_file_url &&
+                /^https?:\/\//i.test(hospital.biz_file_url) &&
+                !isSupabaseStorageObjectUrl(hospital.biz_file_url)
+            ) {
+                window.open(hospital.biz_file_url, '_blank', 'noopener,noreferrer');
+                showToast('브라우저에서 파일을 열었습니다. 저장해 주세요.', 'info');
+                return;
+            }
+            showToast('파일 다운로드에 실패했습니다.', 'error');
+        }
+    };
+
     const handleResetEditCount = async (hospitalId: string) => {
         setEditCountResetting(hospitalId);
         const { error } = await supabase
@@ -153,6 +393,37 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             showToast('사용이력이 초기화됐습니다.', 'success');
         }
         setEditCountResetting(null);
+    };
+
+    const handleStartTrial = async (hospitalId: string) => {
+        setTrialSaving(hospitalId);
+        const now = new Date().toISOString();
+        const { error } = await supabase
+            .from('hospitals')
+            .update({ trial_started_at: now, trial_used: false })
+            .eq('id', hospitalId);
+        if (error) {
+            showToast('체험 시작 실패: ' + error.message, 'error');
+        } else {
+            setHospitals(prev => prev.map(h => h.id === hospitalId ? { ...h, trial_started_at: now, trial_used: false } : h));
+            showToast('14일 무료 체험이 시작됐습니다.', 'success');
+        }
+        setTrialSaving(null);
+    };
+
+    const handleResetTrial = async (hospitalId: string) => {
+        setTrialSaving(hospitalId);
+        const { error } = await supabase
+            .from('hospitals')
+            .update({ trial_started_at: null, trial_used: false })
+            .eq('id', hospitalId);
+        if (error) {
+            showToast('체험 리셋 실패: ' + error.message, 'error');
+        } else {
+            setHospitals(prev => prev.map(h => h.id === hospitalId ? { ...h, trial_started_at: null, trial_used: false } : h));
+            showToast('무료 체험이 리셋됐습니다.', 'success');
+        }
+        setTrialSaving(null);
     };
 
     const handleAssignPlan = async () => {
@@ -249,6 +520,11 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                 <span className="font-medium">전체 회원 관리</span>
                             </button>
+                            <button onClick={() => setActiveTab('plan_management')}
+                                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'plan_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                <span className="font-medium">플랜 관리</span>
+                            </button>
                             <button onClick={() => setActiveTab('reset_requests')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'reset_requests' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -304,6 +580,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                             {activeTab === 'users' && '전체 회원 관리'}
                             {activeTab === 'reset_requests' && '초기화 요청 관리'}
                             {activeTab === 'manual' && '사용자 매뉴얼'}
+                            {activeTab === 'plan_management' && '플랜 관리'}
                         </h1>
                     </div>
                     <div className="flex items-center gap-3">
@@ -357,6 +634,8 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">플랜</th>
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">변경일</th>
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">만료일</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">무료체험</th>
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">세금계산서 파일</th>
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">기초재고 편집</th>
                                             </tr>
                                         </thead>
@@ -380,7 +659,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                             const isFull = max !== Infinity && current >= max;
                                                             return (
                                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${isFull ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
-                                                                    {current}<span className="font-normal opacity-60">/{maxLabel}명</span>
+                                                                    {current}<span className="font-normal opacity-60">/{maxLabel}</span>
                                                                 </span>
                                                             );
                                                         })()}
@@ -393,7 +672,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                             }}
                                                             className={`px-2 py-0.5 rounded-full text-xs font-bold border cursor-pointer hover:opacity-75 transition-opacity ${h.plan === 'free' ? 'bg-slate-50 text-slate-600 border-slate-200' : h.plan === 'ultimate' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}
                                                         >
-                                                            {PLAN_NAMES[h.plan as PlanType] || h.plan}
+                                                            {PLAN_SHORT_LABELS[h.plan as PlanType] || h.plan}
                                                         </button>
                                                         {h.billing_cycle && (
                                                             <span className="ml-1 text-[10px] text-slate-400">{h.billing_cycle === 'yearly' ? '연간' : '월간'}</span>
@@ -404,6 +683,103 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                     </td>
                                                     <td className="px-4 py-3 text-xs text-slate-400">
                                                         {h.plan_expires_at ? new Date(h.plan_expires_at).toLocaleDateString('ko-KR') : '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {(() => {
+                                                            const trial = getTrialInfo(h);
+                                                            const isBusy = trialSaving === h.id;
+                                                            if (trial.status === 'unused') {
+                                                                return (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">미사용</span>
+                                                                        <button
+                                                                            onClick={() => setConfirmModal({
+                                                                                title: '무료 체험 시작',
+                                                                                message: `${h.name}의 14일 무료 체험을 시작하시겠습니까?`,
+                                                                                confirmColor: 'indigo',
+                                                                                confirmLabel: '시작',
+                                                                                onConfirm: async () => { setConfirmModal(null); await handleStartTrial(h.id); },
+                                                                            })}
+                                                                            disabled={isBusy}
+                                                                            className="text-[10px] font-bold px-2 py-1 rounded-lg border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 transition-colors"
+                                                                        >
+                                                                            {isBusy ? '...' : '시작'}
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            if (trial.status === 'active') {
+                                                                const color = (trial.daysLeft ?? 0) <= 3 ? 'text-rose-600 bg-rose-50 border-rose-200' : (trial.daysLeft ?? 0) <= 7 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200';
+                                                                return (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${color}`}>
+                                                                            D-{trial.daysLeft}
+                                                                        </span>
+                                                                        <button
+                                                                            onClick={() => setConfirmModal({
+                                                                                title: '체험 리셋',
+                                                                                message: `${h.name}의 무료 체험 기록을 초기화하시겠습니까?\n재시작 가능 상태로 변경됩니다.`,
+                                                                                confirmColor: 'amber',
+                                                                                confirmLabel: '리셋',
+                                                                                onConfirm: async () => { setConfirmModal(null); await handleResetTrial(h.id); },
+                                                                            })}
+                                                                            disabled={isBusy}
+                                                                            className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                                                                        >
+                                                                            {isBusy ? '...' : '리셋'}
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            // expired
+                                                            return (
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] font-bold text-rose-500 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">종료</span>
+                                                                    <button
+                                                                        onClick={() => setConfirmModal({
+                                                                            title: '체험 리셋',
+                                                                            message: `${h.name}의 무료 체험 기록을 초기화하시겠습니까?\n재시작 가능 상태로 변경됩니다.`,
+                                                                            confirmColor: 'amber',
+                                                                            confirmLabel: '리셋',
+                                                                            onConfirm: async () => { setConfirmModal(null); await handleResetTrial(h.id); },
+                                                                        })}
+                                                                        disabled={isBusy}
+                                                                        className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                                                                    >
+                                                                        {isBusy ? '...' : '리셋'}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {h.biz_file_url ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => handlePreviewBizFile(h)}
+                                                                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                                                    title="미리보기"
+                                                                    aria-label="세금계산서 파일 미리보기"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDownloadBizFile(h)}
+                                                                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-colors"
+                                                                    title={getBizFileName(h)}
+                                                                    aria-label="세금계산서 파일 다운로드"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs font-semibold text-slate-300">없음</span>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {(() => {
@@ -436,7 +812,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                 </tr>
                                             ))}
                                             {hospitals.length === 0 && (
-                                                <tr><td colSpan={7} className="p-12 text-center text-slate-400">등록된 병원이 없습니다.</td></tr>
+                                                <tr><td colSpan={9} className="p-12 text-center text-slate-400">등록된 병원이 없습니다.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -565,92 +941,112 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
                             {activeTab === 'users' && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <table className="w-full">
+                                    <table className="w-full text-xs">
                                         <thead className="bg-slate-50 border-b border-slate-100">
                                             <tr>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">이름</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">이메일</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">연락처</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">소속 병원</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">플랜</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">역할</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">상태</th>
-                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">가입일</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">이름</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">이메일</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">연락처</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">소속 병원</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">플랜</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">역할</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">상태</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">가입일</th>
+                                                <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">마지막 접속</th>
+                                                <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">관리</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {profiles.map(p => (
                                                 <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${p.role === 'admin' ? 'bg-rose-100 text-rose-600' : p.role === 'master' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-600'}`}>
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${p.role === 'admin' ? 'bg-rose-100 text-rose-600' : p.role === 'master' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-600'}`}>
                                                                 {p.name.charAt(0) || '?'}
                                                             </div>
-                                                            <span className="font-bold text-slate-800">{p.name}</span>
+                                                            <span className="font-bold text-slate-800 text-xs">{p.name}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-slate-500 text-sm">{p.email}</td>
-                                                    <td className="px-6 py-4 text-slate-500 text-sm">{p.phone || '-'}</td>
-                                                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{getHospitalName(p.hospital_id)}</td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-3 py-3 text-slate-500 whitespace-nowrap">{p.email}</td>
+                                                    <td className="px-3 py-3 text-slate-500 whitespace-nowrap">{p.phone || '-'}</td>
+                                                    <td className="px-3 py-3 text-slate-600 font-medium whitespace-nowrap">
                                                         {(() => {
-                                                            if (p.role === 'admin') return <span className="text-xs text-slate-400">-</span>;
+                                                            const name = getHospitalName(p.hospital_id);
+                                                            if (name === '-' || name.includes('워크스페이스')) return <span className="text-slate-300">-</span>;
+                                                            return name;
+                                                        })()}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                        {(() => {
+                                                            if (p.role === 'admin') return <span className="text-slate-300">-</span>;
                                                             const hp = getHospitalPlan(p.hospital_id);
                                                             if (!hp) return (
-                                                                <span className="px-2 py-0.5 rounded-full text-xs font-bold border bg-slate-50 text-slate-600 border-slate-200">Free</span>
+                                                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-slate-50 text-slate-600 border-slate-200">Free</span>
                                                             );
-                                                            const planName = PLAN_NAMES[hp.plan as PlanType] || hp.plan;
-                                                            const isMaster = p.role === 'master';
+                                                            const planName = PLAN_SHORT_LABELS[hp.plan as PlanType] || hp.plan;
                                                             return (
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${hp.plan === 'free' ? 'bg-slate-50 text-slate-600 border-slate-200' : hp.plan === 'ultimate' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
-                                                                        {planName}
-                                                                    </span>
-                                                                    {!isMaster && (
-                                                                        <span className="text-[10px] text-slate-400">소속</span>
-                                                                    )}
-                                                                </div>
+                                                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${hp.plan === 'free' ? 'bg-slate-50 text-slate-600 border-slate-200' : hp.plan === 'ultimate' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
+                                                                    {planName}
+                                                                </span>
                                                             );
                                                         })()}
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-3 py-3 whitespace-nowrap">
                                                         {(() => {
                                                             if (p.role === 'admin') return (
-                                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-rose-50 text-rose-700 border-rose-100">운영자</span>
+                                                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-rose-50 text-rose-700 border-rose-100">운영자</span>
                                                             );
                                                             if (p.role === 'master') return (
-                                                                <div className="flex flex-col gap-0.5">
-                                                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-purple-50 text-purple-700 border-purple-100 w-fit">치과회원</span>
-                                                                    <span className="text-[10px] text-slate-400 pl-1">원장</span>
-                                                                </div>
+                                                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-100">원장</span>
                                                             );
                                                             if (p.hospital_id) return (
-                                                                <div className="flex flex-col gap-0.5">
-                                                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-indigo-50 text-indigo-700 border-indigo-100 w-fit">치과회원</span>
-                                                                    <span className="text-[10px] text-slate-400 pl-1">스태프</span>
-                                                                </div>
+                                                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-indigo-50 text-indigo-700 border-indigo-100">스태프</span>
                                                             );
                                                             return (
-                                                                <div className="flex flex-col gap-0.5">
-                                                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-teal-50 text-teal-700 border-teal-100 w-fit">개인회원</span>
-                                                                    <span className="text-[10px] text-slate-400 pl-1">담당자</span>
-                                                                </div>
+                                                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-teal-50 text-teal-700 border-teal-100">개인</span>
                                                             );
                                                         })()}
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border flex w-fit items-center gap-1 ${
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
                                                             p.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
                                                         }`}>
-                                                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                                                            <span className={`w-1 h-1 rounded-full ${p.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
                                                             {p.status === 'active' ? '활성' : '대기'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString('ko-KR')}</td>
+                                                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap tabular-nums">
+                                                        {new Date(p.created_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap tabular-nums">
+                                                        {p.last_sign_in_at
+                                                            ? new Date(p.last_sign_in_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })
+                                                            : <span className="text-slate-300">-</span>
+                                                        }
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                                                        {p.role !== 'admin' && p.id !== currentUserId ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteUser(p)}
+                                                                disabled={deletingUserId === p.id}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {deletingUserId === p.id ? (
+                                                                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                                                                ) : (
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                )}
+                                                                삭제
+                                                            </button>
+                                                        ) : (
+                                                            <span className="text-slate-300">-</span>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                             {profiles.length === 0 && (
-                                                <tr><td colSpan={8} className="p-12 text-center text-slate-400">등록된 회원이 없습니다.</td></tr>
+                                                <tr><td colSpan={10} className="p-12 text-center text-slate-400">등록된 회원이 없습니다.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -658,6 +1054,160 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                             )}
 
                             {/* 사용자 매뉴얼 탭 */}
+                            {activeTab === 'plan_management' && (() => {
+                                const PLAN_DISPLAY: { key: string; label: string; color: string; bgColor: string; borderColor: string }[] = [
+                                    { key: 'free',     label: 'Free',     color: 'text-slate-600',  bgColor: 'bg-slate-50',   borderColor: 'border-slate-200' },
+                                    { key: 'basic',    label: 'Basic',    color: 'text-violet-600', bgColor: 'bg-violet-50',  borderColor: 'border-violet-200' },
+                                    { key: 'plus',     label: 'Plus',     color: 'text-indigo-600', bgColor: 'bg-indigo-50',  borderColor: 'border-indigo-200' },
+                                    { key: 'business', label: 'Business', color: 'text-emerald-600',bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200' },
+                                ];
+                                return (
+                                    <div className="space-y-6">
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                                            <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            <p className="text-xs text-amber-700 leading-relaxed">
+                                                각 플랜의 <strong>최대 수용 가능 워크스페이스 수</strong>를 설정합니다. 사용 카운트는 무료체험 중인 워크스페이스를 포함합니다.<br />
+                                                한도가 가득 찬 플랜은 가입 화면에서 <strong>품절</strong>로 표시되며 신규 가입이 제한됩니다.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {PLAN_DISPLAY.map(({ key, label, color, bgColor, borderColor }) => {
+                                                const cap = planCapacities.find(p => p.plan === key);
+                                                const usage = planUsages.find(p => p.plan === key);
+                                                const capacity = cap?.capacity ?? 0;
+                                                const usageCount = Number(usage?.usage_count ?? 0);
+                                                const pct = capacity > 0 ? Math.min(100, Math.round(usageCount / capacity * 100)) : 0;
+                                                const isFull = usageCount >= capacity && capacity > 0;
+                                                const isEditing = key in planCapacityEditing;
+                                                const editVal = planCapacityEditing[key] ?? capacity;
+
+                                                return (
+                                                    <div key={key} className={`rounded-2xl border-2 ${borderColor} ${bgColor} p-5 flex flex-col gap-4`}>
+                                                        {/* 헤더 */}
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-base font-bold ${color}`}>{label}</span>
+                                                                {isFull && (
+                                                                    <span className="text-[10px] font-bold bg-rose-500 text-white px-2 py-0.5 rounded-full">품절</span>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-xs text-slate-400">
+                                                                {usageCount} / {capacity}개
+                                                            </span>
+                                                        </div>
+
+                                                        {/* 프로그레스바 */}
+                                                        <div className="space-y-1">
+                                                            <div className="w-full bg-white rounded-full h-2.5 overflow-hidden border border-slate-100">
+                                                                <div
+                                                                    className={`h-2.5 rounded-full transition-all duration-500 ${
+                                                                        pct >= 100 ? 'bg-rose-500' :
+                                                                        pct >= 80  ? 'bg-amber-400' :
+                                                                                     'bg-indigo-500'
+                                                                    }`}
+                                                                    style={{ width: `${pct}%` }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex justify-between text-[10px] text-slate-400">
+                                                                <span>사용 {pct}%</span>
+                                                                <span>{capacity - usageCount > 0 ? `잔여 ${capacity - usageCount}개` : '잔여 없음'}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 한도 편집 */}
+                                                        <div className="flex items-center gap-2 pt-1 border-t border-slate-200/70">
+                                                            <span className="text-xs text-slate-500 flex-shrink-0">최대 한도</span>
+                                                            {isEditing ? (
+                                                                <>
+                                                                    <input
+                                                                        type="number"
+                                                                        min={usageCount}
+                                                                        value={editVal}
+                                                                        onChange={e => setPlanCapacityEditing(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                                                                        className="flex-1 min-w-0 border border-indigo-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => handleSavePlanCapacity(key)}
+                                                                        disabled={planCapacitySaving === key}
+                                                                        className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                                                    >
+                                                                        {planCapacitySaving === key ? '저장중…' : '저장'}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setPlanCapacityEditing(prev => { const n = { ...prev }; delete n[key]; return n; })}
+                                                                        className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                                                                    >
+                                                                        취소
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="flex-1 text-xs font-bold text-slate-800">{capacity}개</span>
+                                                                    <button
+                                                                        onClick={() => setPlanCapacityEditing(prev => ({ ...prev, [key]: capacity }))}
+                                                                        className="text-xs font-medium text-indigo-500 hover:text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors flex-shrink-0 flex items-center gap-1"
+                                                                    >
+                                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                                        수정
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* 전체 요약 */}
+                                        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                                            <h3 className="text-sm font-bold text-slate-700 mb-3">전체 요약</h3>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs">
+                                                    <thead>
+                                                        <tr className="text-left text-slate-400 border-b border-slate-100">
+                                                            <th className="pb-2 font-bold">플랜</th>
+                                                            <th className="pb-2 font-bold text-center">한도</th>
+                                                            <th className="pb-2 font-bold text-center">사용</th>
+                                                            <th className="pb-2 font-bold text-center">잔여</th>
+                                                            <th className="pb-2 font-bold text-center">점유율</th>
+                                                            <th className="pb-2 font-bold text-center">상태</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {PLAN_DISPLAY.map(({ key, label }) => {
+                                                            const cap = planCapacities.find(p => p.plan === key);
+                                                            const usage = planUsages.find(p => p.plan === key);
+                                                            const capacity = cap?.capacity ?? 0;
+                                                            const usageCount = Number(usage?.usage_count ?? 0);
+                                                            const pct = capacity > 0 ? Math.min(100, Math.round(usageCount / capacity * 100)) : 0;
+                                                            const isFull = usageCount >= capacity && capacity > 0;
+                                                            return (
+                                                                <tr key={key} className="text-slate-600">
+                                                                    <td className="py-2.5 font-bold">{label}</td>
+                                                                    <td className="py-2.5 text-center">{capacity}</td>
+                                                                    <td className="py-2.5 text-center">{usageCount}</td>
+                                                                    <td className="py-2.5 text-center">{Math.max(0, capacity - usageCount)}</td>
+                                                                    <td className="py-2.5 text-center">
+                                                                        <span className={`font-bold ${pct >= 100 ? 'text-rose-500' : pct >= 80 ? 'text-amber-500' : 'text-emerald-600'}`}>{pct}%</span>
+                                                                    </td>
+                                                                    <td className="py-2.5 text-center">
+                                                                        {isFull
+                                                                            ? <span className="text-[10px] font-bold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full">품절</span>
+                                                                            : <span className="text-[10px] font-bold bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full">가입 가능</span>
+                                                                        }
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {activeTab === 'manual' && (
                                 <div className="flex gap-6 h-[calc(100vh-8rem)]">
                                     {/* 좌측: 문서 목록 */}
@@ -816,7 +1366,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                 <option value="basic">Basic</option>
                                 <option value="plus">Plus</option>
                                 <option value="business">Business</option>
-                                <option value="ultimate">Ultimate</option>
+                                <option value="ultimate">Maxs</option>
                             </select>
                         </div>
                         {planForm.plan !== 'free' && planForm.plan !== 'ultimate' && (
@@ -849,6 +1399,76 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                             {planSaving ? '적용 중...' : '적용'}
                         </button>
                     </div>
+
+                    {/* 무료 체험 관리 섹션 */}
+                    {(() => {
+                        const h = hospitals.find(x => x.id === planModal.hospitalId);
+                        if (!h) return null;
+                        const trial = getTrialInfo(h);
+                        const isBusy = trialSaving === h.id;
+                        return (
+                            <div className="mt-5 pt-5 border-t border-slate-100">
+                                <p className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">무료 체험 관리</p>
+                                <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                                    <div>
+                                        {trial.status === 'unused' && (
+                                            <>
+                                                <p className="text-xs font-bold text-slate-600">미사용</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">14일 체험 시작 가능</p>
+                                            </>
+                                        )}
+                                        {trial.status === 'active' && (
+                                            <>
+                                                <p className="text-xs font-bold text-emerald-600">체험 중</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                                    {new Date(h.trial_started_at!).toLocaleDateString('ko-KR')} 시작 ·{' '}
+                                                    <span className={`font-bold ${(trial.daysLeft ?? 0) <= 3 ? 'text-rose-500' : 'text-slate-600'}`}>D-{trial.daysLeft}</span>
+                                                </p>
+                                            </>
+                                        )}
+                                        {trial.status === 'expired' && (
+                                            <>
+                                                <p className="text-xs font-bold text-rose-500">체험 종료</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">사용 완료됨</p>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {trial.status === 'unused' && (
+                                            <button
+                                                onClick={() => setConfirmModal({
+                                                    title: '무료 체험 시작',
+                                                    message: `${h.name}의 14일 무료 체험을 시작하시겠습니까?`,
+                                                    confirmColor: 'indigo',
+                                                    confirmLabel: '시작',
+                                                    onConfirm: async () => { setConfirmModal(null); await handleStartTrial(h.id); },
+                                                })}
+                                                disabled={isBusy}
+                                                className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                            >
+                                                {isBusy ? '...' : '체험 시작'}
+                                            </button>
+                                        )}
+                                        {(trial.status === 'active' || trial.status === 'expired') && (
+                                            <button
+                                                onClick={() => setConfirmModal({
+                                                    title: '체험 리셋',
+                                                    message: `${h.name}의 무료 체험 기록을 초기화하시겠습니까?\n재시작 가능 상태로 변경됩니다.`,
+                                                    confirmColor: 'amber',
+                                                    confirmLabel: '리셋',
+                                                    onConfirm: async () => { setConfirmModal(null); await handleResetTrial(h.id); },
+                                                })}
+                                                disabled={isBusy}
+                                                className="px-3 py-1.5 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                                            >
+                                                {isBusy ? '...' : '체험 리셋'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
         )}

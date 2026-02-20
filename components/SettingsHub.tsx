@@ -4,6 +4,8 @@ import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
 import { WorkDaySelector } from './WorkDaySelector';
+import { useToast } from '../hooks/useToast';
+import ConfirmModal from './ConfirmModal';
 
 interface SettingsHubProps {
   onNavigate: (tab: DashboardTab) => void;
@@ -41,6 +43,8 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [resetReason, setResetReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resetLoaded, setResetLoaded] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const { toast, showToast } = useToast();
 
   // 진료 요일 설정 상태
   const [localWorkDays, setLocalWorkDays] = useState<number[]>(hospitalWorkDays ?? DEFAULT_WORK_DAYS);
@@ -61,7 +65,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       setWorkDaysSaved(true);
       setTimeout(() => setWorkDaysSaved(false), 3000);
     } catch (err) {
-      alert('진료 요일 저장에 실패했습니다. 다시 시도해주세요.');
+      showToast('진료 요일 저장에 실패했습니다. 다시 시도해주세요.', 'error');
     } finally {
       setIsSavingWorkDays(false);
     }
@@ -87,20 +91,25 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       setShowResetModal(false);
       setResetReason('');
     } else {
-      alert('초기화 요청에 실패했습니다.');
+      showToast('초기화 요청에 실패했습니다.', 'error');
     }
     setIsSubmitting(false);
   };
 
   const handleCancelReset = async () => {
     if (!resetRequest) return;
-    if (!window.confirm('초기화 예약을 취소하시겠습니까?')) return;
-    const ok = await resetService.cancelRequest(resetRequest.id);
-    if (ok) {
-      setResetRequest(null);
-    } else {
-      alert('취소에 실패했습니다.');
-    }
+    setConfirmModal({
+      message: '초기화 예약을 취소하시겠습니까?',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const ok = await resetService.cancelRequest(resetRequest.id);
+        if (ok) {
+          setResetRequest(null);
+        } else {
+          showToast('취소에 실패했습니다.', 'error');
+        }
+      },
+    });
   };
 
   const cards: SettingsCard[] = [
@@ -157,6 +166,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   };
 
   return (
+    <>
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-3xl font-black text-slate-900 tracking-tight">설정</h2>
@@ -166,7 +176,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {cards.map(card => {
           const isPlanLocked = card.feature ? !planService.canAccess(plan, card.feature) : false;
-          const isRoleLocked = card.requireMaster ? !isMaster : false;
+          const isRoleLocked = card.requireMaster ? (!isMaster || !!isStaff) : false;
           const isLocked = isPlanLocked || isRoleLocked;
           const minPlan = card.feature ? getMinPlanForFeature(card.feature) : null;
           const minPlanLabel = minPlan ? PLAN_NAMES[minPlan] : '';
@@ -213,7 +223,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
                       )}
                       {isRoleLocked && (
                         <p className="text-[11px] font-bold text-amber-600">
-                          병원 관리자 권한이 필요합니다
+                          {isStaff ? '클리닉 워크스페이스 전용 기능입니다' : '병원 관리자 권한이 필요합니다'}
                         </p>
                       )}
                     </div>
@@ -439,6 +449,22 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         </div>
       )}
     </div>
+
+    {confirmModal && (
+      <ConfirmModal
+        title="확인"
+        message={confirmModal.message}
+        confirmColor="rose"
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(null)}
+      />
+    )}
+    {toast && (
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        {toast.message}
+      </div>
+    )}
+    </>
   );
 };
 

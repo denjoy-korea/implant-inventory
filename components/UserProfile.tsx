@@ -3,6 +3,9 @@ import React, { useState } from 'react';
 import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING } from '../types';
 import { authService } from '../services/authService';
 import PlanBadge from './PlanBadge';
+import { UNLIMITED_DAYS } from '../constants';
+import { useToast } from '../hooks/useToast';
+import ConfirmModal from './ConfirmModal';
 
 interface UserProfileProps {
     user: User;
@@ -22,20 +25,25 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(user.name);
     const [editPhone, setEditPhone] = useState(user.phone || '');
+    const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'indigo'; onConfirm: () => void } | null>(null);
+    const { toast, showToast } = useToast();
 
     const planName = isUltimatePlan ? 'Ultimate' : (planState ? PLAN_NAMES[planState.plan] : 'Free');
     const billingLabel = planState?.billingCycle === 'yearly' ? '연간' : planState?.billingCycle === 'monthly' ? '월간' : null;
     const pricing = planState ? PLAN_PRICING[planState.plan] : { monthlyPrice: 0, yearlyPrice: 0 };
     const pricePerMonth = billingLabel === '연간' ? pricing.yearlyPrice : pricing.monthlyPrice;
     const priceDisplay = pricePerMonth.toLocaleString('ko-KR');
-    const remainingDays = isUltimatePlan ? 9999 : (planState?.daysUntilExpiry ?? 9999);
+    const remainingDays = isUltimatePlan ? UNLIMITED_DAYS : (planState?.daysUntilExpiry ?? UNLIMITED_DAYS);
     const totalBillingDays = planState?.billingCycle === 'yearly' ? 365 : 30;
-    const progressPercent = remainingDays >= 9999 ? 100 : Math.min(100, Math.round(((totalBillingDays - remainingDays) / totalBillingDays) * 100));
+    const progressPercent = remainingDays >= UNLIMITED_DAYS ? 100 : Math.min(100, Math.round(((totalBillingDays - remainingDays) / totalBillingDays) * 100));
 
     const handleLeave = () => {
-        if (window.confirm('정말 이 병원을 떠나시겠습니까?\n이직 시 현재 병원에서의 모든 설정과 권한이 초기화됩니다.')) {
-            onLeaveHospital();
-        }
+        setConfirmModal({
+            title: '병원 탈퇴',
+            message: '정말 이 병원을 떠나시겠습니까?\n이직 시 현재 병원에서의 모든 설정과 권한이 초기화됩니다.',
+            confirmColor: 'rose',
+            onConfirm: () => { setConfirmModal(null); onLeaveHospital(); },
+        });
     };
 
     const formatPhone = (value: string) => {
@@ -58,7 +66,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
             });
             setIsEditing(false);
         } catch (error) {
-            alert('프로필 저장에 실패했습니다.');
+            showToast('프로필 저장에 실패했습니다.', 'error');
         } finally {
             setIsSaving(false);
         }
@@ -83,6 +91,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const currentPlanStyle = planStyles[planName] || planStyles['Free'];
 
     return (
+        <>
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl w-full max-w-[480px] shadow-2xl h-[640px] flex flex-col overflow-hidden">
 
@@ -283,7 +292,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                             <>
                                                 <div className="flex items-center justify-between text-[11px] mb-2">
                                                     <span className="text-slate-400">이용 기간</span>
-                                                    <span className="text-white font-bold">{remainingDays >= 9999 ? '무기한' : `${remainingDays}일 남음`}</span>
+                                                    <span className="text-white font-bold">{remainingDays >= UNLIMITED_DAYS ? '무기한' : `${remainingDays}일 남음`}</span>
                                                 </div>
                                                 <div className="w-full bg-white/10 rounded-full h-1.5">
                                                     <div className="rounded-full h-1.5 transition-all duration-500" style={{
@@ -358,9 +367,9 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                             onClick={async () => {
                                                 const result = await authService.resetPassword(user.email);
                                                 if (result.success) {
-                                                    alert('비밀번호 재설정 이메일이 전송되었습니다.');
+                                                    showToast('비밀번호 재설정 이메일이 전송되었습니다.', 'success');
                                                 } else {
-                                                    alert('이메일 전송에 실패했습니다.');
+                                                    showToast('이메일 전송에 실패했습니다.', 'error');
                                                 }
                                             }}
                                             className="text-xs font-bold px-3 py-1.5 rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
@@ -393,9 +402,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                             <div className="pt-2">
                                 <button
                                     onClick={() => {
-                                        if (window.confirm('정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다.')) {
-                                            onDeleteAccount?.();
-                                        }
+                                        setConfirmModal({
+                                            title: '회원 탈퇴',
+                                            message: '정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다.',
+                                            confirmColor: 'rose',
+                                            onConfirm: () => { setConfirmModal(null); onDeleteAccount?.(); },
+                                        });
                                     }}
                                     className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-400 font-bold text-xs hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 transition-colors"
                                 >
@@ -410,6 +422,23 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                 </div>
             </div>
         </div>
+
+        {confirmModal && (
+            <ConfirmModal
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmColor={confirmModal.confirmColor ?? 'indigo'}
+                confirmLabel="확인"
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(null)}
+            />
+        )}
+        {toast && (
+            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                {toast.message}
+            </div>
+        )}
+        </>
     );
 };
 

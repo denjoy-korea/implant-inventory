@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { DbSurgeryRecord, ExcelRow } from '../types';
 import { excelRowToDbSurgery } from './mappers';
 import { hashPatientInfo, decryptPatientInfo } from './cryptoUtils';
+import { getSizeMatchKey } from './sizeNormalizer';
 
 export const surgeryService = {
   /** 수술기록 목록 조회 — 날짜 범위 필터 지원 (서버사이드) */
@@ -29,10 +30,34 @@ export const surgeryService = {
     return data as DbSurgeryRecord[];
   },
 
+  /** 수술 사용량 계산용 경량 조회 (환자정보 제외) */
+  async getSurgeryUsageRecords(opts?: {
+    fromDate?: string; // 'YYYY-MM-DD'
+    toDate?: string;   // 'YYYY-MM-DD'
+    limit?: number;
+  }): Promise<Array<Pick<DbSurgeryRecord, 'date' | 'classification' | 'manufacturer' | 'brand' | 'size' | 'quantity' | 'surgery_record'>>> {
+    let query = supabase
+      .from('surgery_records')
+      .select('date, classification, manufacturer, brand, size, quantity, surgery_record')
+      .order('date', { ascending: false });
+
+    if (opts?.fromDate) query = query.gte('date', opts.fromDate);
+    if (opts?.toDate)   query = query.lte('date', opts.toDate);
+    if (opts?.limit)    query = query.limit(opts.limit);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[surgeryService] Usage fetch failed:', error);
+      return [];
+    }
+    return (data || []) as Array<Pick<DbSurgeryRecord, 'date' | 'classification' | 'manufacturer' | 'brand' | 'size' | 'quantity' | 'surgery_record'>>;
+  },
+
   /**
    * 엑셀 파싱 후 수술기록 일괄 저장 — 중복 방지 포함
    *
-   * 중복 판별 기준: date | patient_info_hash | classification | brand | size | tooth_number
+   * 중복 판별 기준: date | patient_info_hash | classification | brand | size(match key) | tooth_number
    * - patient_info_hash가 없는 레코드(028 마이그레이션 전)는 patient_info를 즉석 복호화 후 해시 생성
    * → 이미 같은 레코드가 존재하면 skip, 없는 것만 insert
    * → 반환값: { inserted, skipped } 건수
@@ -44,6 +69,18 @@ export const surgeryService = {
     if (parsedRows.length === 0) return { records: [], inserted: 0, skipped: 0 };
 
     const dbRows = await Promise.all(parsedRows.map(row => excelRowToDbSurgery(row, hospitalId)));
+    const buildDedupKey = (r: {
+      date: string | null;
+      patient_info_hash?: string | null;
+      classification?: string | null;
+      brand?: string | null;
+      size?: string | null;
+      tooth_number?: string | null;
+      manufacturer?: string | null;
+    }, hashOverride?: string) => {
+      const sizeKey = getSizeMatchKey(r.size || '', r.manufacturer || '');
+      return `${r.date}|${hashOverride ?? r.patient_info_hash ?? ''}|${r.classification ?? ''}|${r.brand ?? ''}|${sizeKey}|${r.tooth_number ?? ''}`;
+    };
 
     // ── 서버에서 같은 날짜 범위 기존 레코드 조회 (중복 체크용)
     // date=null 레코드는 dedup 비교 불가 → 유효 날짜만 범위 산출
@@ -62,7 +99,7 @@ export const surgeryService = {
       // patient_info_hash가 null인 레코드(백필 전)를 위해 patient_info도 함께 조회
       const { data: existing } = await supabase
         .from('surgery_records')
-        .select('date, patient_info, patient_info_hash, classification, brand, size, tooth_number')
+        .select('date, patient_info, patient_info_hash, classification, manufacturer, brand, size, tooth_number')
         .eq('hospital_id', hospitalId)
         .gte('date', minDate)
         .lte('date', maxDate);
@@ -70,7 +107,7 @@ export const surgeryService = {
       if (existing) {
         // hash가 없는 레코드는 patient_info를 복호화 후 즉석 해시 생성
         const keys = await Promise.all(
-          (existing as Pick<DbSurgeryRecord, 'date' | 'patient_info' | 'patient_info_hash' | 'classification' | 'brand' | 'size' | 'tooth_number'>[])
+          (existing as Pick<DbSurgeryRecord, 'date' | 'patient_info' | 'patient_info_hash' | 'classification' | 'manufacturer' | 'brand' | 'size' | 'tooth_number'>[])
             .map(async r => {
               let hash = r.patient_info_hash ?? '';
               if (!hash && r.patient_info) {
@@ -82,7 +119,7 @@ export const surgeryService = {
                   hash = '';
                 }
               }
-              return `${r.date}|${hash}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+              return buildDedupKey(r, hash);
             })
         );
         existingKeys = new Set(keys);
@@ -94,7 +131,7 @@ export const surgeryService = {
     const datedNewRows = dbRows
       .filter(r => !!r.date)
       .filter(r => {
-        const key = `${r.date}|${r.patient_info_hash ?? ''}|${r.classification}|${r.brand ?? ''}|${r.size ?? ''}|${r.tooth_number ?? ''}`;
+        const key = buildDedupKey(r);
         return !existingKeys.has(key);
       });
     const newRows = [...datedNewRows, ...nullDateRows];

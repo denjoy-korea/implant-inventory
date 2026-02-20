@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS } from '../types';
+import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem } from '../types';
 import { useCountUp } from './surgery-dashboard/shared';
 import { useSurgeryStats } from './surgery-dashboard/useSurgeryStats';
 import KPIStrip from './surgery-dashboard/KPIStrip';
@@ -19,13 +19,23 @@ interface SurgeryDashboardProps {
   rows: ExcelRow[];
   onUpload: () => void;
   isLoading: boolean;
+  unregisteredFromSurgery?: SurgeryUnregisteredItem[];
+  onGoInventoryMaster?: () => void;
   /** 병원 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
   hospitalWorkDays?: number[];
   /** 플랜 상태 — 날짜 범위 슬라이더 잠금 기준 */
   planState?: HospitalPlanState | null;
 }
 
-const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isLoading, hospitalWorkDays = DEFAULT_WORK_DAYS, planState }) => {
+const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
+  rows,
+  onUpload,
+  isLoading,
+  unregisteredFromSurgery = [],
+  onGoInventoryMaster,
+  hospitalWorkDays = DEFAULT_WORK_DAYS,
+  planState,
+}) => {
   const [mounted, setMounted] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
   useEffect(() => {
@@ -143,6 +153,11 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
   // =====================================================
   // RENDER
   // =====================================================
+  const unregisteredUsageTotal = useMemo(
+    () => unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0),
+    [unregisteredFromSurgery]
+  );
+
   return (
     <div className="space-y-6" style={{ animationDuration: '0s' }}>
       {/* Sticky header + KPI + Range slider wrapper */}
@@ -206,6 +221,48 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({ rows, onUpload, isL
           />
         )}
       </div>{/* end sticky wrapper */}
+
+      {unregisteredFromSurgery.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black text-amber-800 tracking-tight">
+                수술기록에 재고 미등록 품목 {unregisteredFromSurgery.length}종
+              </h3>
+              <p className="text-xs text-amber-700 mt-1">
+                수술기록지 기준 누적 {unregisteredUsageTotal.toLocaleString()}개가 재고 마스터에 없습니다.
+              </p>
+            </div>
+            {onGoInventoryMaster && (
+              <button
+                onClick={onGoInventoryMaster}
+                className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+              >
+                재고 마스터에서 확인
+              </button>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {unregisteredFromSurgery.slice(0, 6).map((item) => {
+              const label = `${item.manufacturer} / ${item.brand} ${item.size}`;
+              return (
+                <span
+                  key={label}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-semibold text-amber-800"
+                  title={label}
+                >
+                  {item.brand} {item.size} · {item.usageCount}개
+                </span>
+              );
+            })}
+            {unregisteredFromSurgery.length > 6 && (
+              <span className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-semibold text-amber-700">
+                +{unregisteredFromSurgery.length - 6}종 더 있음
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* D. Charts 2x2 grid (filtered by range slider) */}
       <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">

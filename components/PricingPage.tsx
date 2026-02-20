@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { PlanType, BillingCycle, DbBillingHistory, PLAN_NAMES, PLAN_PRICING } from '../types';
+import { useToast } from '../hooks/useToast';
+import { planService } from '../services/planService';
 
 interface PricingPageProps {
   onGetStarted: () => void;
@@ -14,6 +16,7 @@ interface PricingPageProps {
   pendingPayment?: DbBillingHistory | null;
   onCancelPayment?: (billingId: string) => void;
   daysUntilExpiry?: number;
+  onContact?: () => void;
 }
 
 interface Plan {
@@ -38,7 +41,7 @@ const plans: Plan[] = [
     cta: '무료로 시작하기',
     limit: 100,
     features: [
-      '재고 품목 최대 60개',
+      '재고 품목 최대 100개',
       '수술 기록 3개월 보관',
       '수술기록 월 1회 업로드',
       '기본 재고 현황 대시보드',
@@ -48,27 +51,27 @@ const plans: Plan[] = [
   },
   {
     name: 'Basic',
-    description: '임플란트 담당자를 위한 합리적 플랜',
-    monthlyPrice: 19000,
-    yearlyPrice: 15000,
+    description: '소규모 팀을 위한 합리적 플랜',
+    monthlyPrice: 29000,
+    yearlyPrice: 23000,
     highlight: false,
     cta: '14일 무료 체험',
     limit: 80,
-    tag: '개인용',
+    tag: '팀용',
     features: [
       '재고 품목 최대 200개',
       '수술 기록 6개월 보관',
-      '수술기록 주 1회 업로드',
+      '수술기록 상시 업로드',
       '기본 재고 현황 대시보드',
       '브랜드별 소모량 분석',
-      '1명 사용자',
+      '최대 3명 사용자',
     ],
   },
   {
     name: 'Plus',
     description: '성장하는 치과를 위한 추천 플랜',
-    monthlyPrice: 49000,
-    yearlyPrice: 39000,
+    monthlyPrice: 69000,
+    yearlyPrice: 55000,
     highlight: true,
     cta: '14일 무료 체험',
     limit: 50,
@@ -87,8 +90,8 @@ const plans: Plan[] = [
   {
     name: 'Business',
     description: '대형 치과 및 네트워크를 위한 플랜',
-    monthlyPrice: 99000,
-    yearlyPrice: 79000,
+    monthlyPrice: 129000,
+    yearlyPrice: 103000,
     highlight: false,
     cta: '14일 무료 체험',
     limit: 20,
@@ -110,9 +113,9 @@ const comparisonCategories = [
   {
     name: '기본 기능',
     features: [
-      { label: '재고 품목 수', values: ['60개', '200개', '500개', '무제한'] },
+      { label: '재고 품목 수', values: ['100개', '200개', '500개', '무제한'] },
       { label: '수술 기록 보관', values: ['3개월', '6개월', '12개월', '24개월'] },
-      { label: '수술기록 업로드', desc: '수술기록 엑셀 업로드 빈도 제한', values: ['월 1회', '주 1회', '상시', '상시'] },
+      { label: '수술기록 업로드', desc: '수술기록 엑셀 업로드 빈도 제한', values: ['월 1회', '상시', '상시', '상시'] },
       { label: '엑셀 업로드/다운로드', values: [true, true, true, true] },
       { label: '대시보드', values: ['기본', '기본', '고급', '고급'] },
     ],
@@ -130,7 +133,7 @@ const comparisonCategories = [
   {
     name: '데이터 분석',
     features: [
-      { label: '브랜드별 소모량 분석', values: [false, true, true, true] },
+      { label: '브랜드별 소모량 분석', values: [true, true, true, true] },
       { label: '월간 리포트', values: [false, false, true, true] },
       { label: '연간 리포트', values: [false, false, false, true] },
     ],
@@ -138,7 +141,7 @@ const comparisonCategories = [
   {
     name: '협업',
     features: [
-      { label: '사용자 수', values: ['1명', '1명', '5명', '무제한'] },
+      { label: '사용자 수', values: ['1명', '3명', '5명', '무제한'] },
       { label: '역할별 권한 관리', desc: '원장/매니저/스탭 등 역할에 따라 메뉴 접근 및 데이터 수정 권한을 구분', values: [false, false, true, true] },
     ],
   },
@@ -170,11 +173,11 @@ const faqs = [
   },
   {
     q: '연간 결제 시 할인 혜택이 있나요?',
-    a: '네, 연간 결제 시 월 결제 대비 약 20% 할인된 가격으로 이용 가능합니다. Plus 플랜 기준 월 49,000원에서 39,000원으로 할인됩니다.',
+    a: '네, 연간 결제 시 월 결제 대비 약 20% 할인된 가격으로 이용 가능합니다. Plus 플랜 기준 월 69,000원에서 55,000원으로 할인됩니다.',
   },
   {
-    q: '개인용과 기업용의 차이는 무엇인가요?',
-    a: '개인용(Basic)은 임플란트 담당자를 위한 플랜으로, 기본 대시보드와 브랜드별 분석을 제공합니다. 기업용(Plus/Business)은 다중 사용자, 고급 분석 대시보드, 자동 재고 알림, 이메일 지원 등 팀 협업 기능이 포함됩니다.',
+    q: '팀용과 기업용의 차이는 무엇인가요?',
+    a: '팀용(Basic)은 3명까지 사용 가능한 소규모 팀 플랜으로, 기본 대시보드와 브랜드별 분석, 상시 업로드를 제공합니다. 기업용(Plus/Business)은 고급 분석 대시보드, 자동 재고 알림, 역할별 권한 관리 등 확장된 협업 기능이 포함됩니다.',
   },
   {
     q: '어떤 청구 프로그램을 지원하나요?',
@@ -182,11 +185,11 @@ const faqs = [
   },
   {
     q: '환불 정책은 어떻게 되나요?',
-    a: '사용 일수를 비례하여 환불 처리됩니다. 연간 결제의 경우에도 잔여 일수에 비례하여 환불해 드립니다. 환불 시 기존 데이터는 모두 삭제되며 복구가 불가하오니 신중하게 결정해 주세요.',
+    a: '사용 일수에 비례하여 환불 처리됩니다. 연간 결제의 경우에도 잔여 일수에 비례하여 환불해 드립니다. 환불 시 기존 데이터는 모두 삭제되며 복구가 불가하오니 신중하게 결정해 주세요.',
   },
   {
     q: '결제 기간이 만료되어 갱신하지 못하면 어떻게 되나요?',
-    a: '결제 만료 시 즉시 Free 플랜으로 전환됩니다. 기존 데이터는 모두 보존되지만, Free 한도(60개)를 초과하는 재고 데이터는 읽기 전용이 됩니다. 언제든 재결제하시면 모든 기능이 즉시 복원됩니다.',
+    a: '결제 만료 시 즉시 Free 플랜으로 전환됩니다. 기존 데이터는 모두 보존되지만, Free 한도(100개)를 초과하는 재고 데이터는 읽기 전용이 됩니다. 언제든 재결제하시면 모든 기능이 즉시 복원됩니다.',
   },
   {
     q: '데이터 보안과 개인정보는 어떻게 관리되나요?',
@@ -218,7 +221,7 @@ const XIcon = () => (
   </svg>
 );
 
-const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, isLoggedIn, hospitalName, userName, userPhone, onSelectPlan, onRequestPayment, pendingPayment, onCancelPayment, daysUntilExpiry }) => {
+const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, isLoggedIn, hospitalName, userName, userPhone, onSelectPlan, onRequestPayment, pendingPayment, onCancelPayment, daysUntilExpiry, onContact }) => {
   const [isYearly, setIsYearly] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
@@ -227,8 +230,17 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer'>('card');
   const [receiptType, setReceiptType] = useState<'cash_receipt' | 'tax_invoice'>('cash_receipt');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast, showToast } = useToast();
+
+  // 비로그인 14일 무료 체험 동의 모달
+  const [trialConsentPlan, setTrialConsentPlan] = useState<{ key: PlanType; name: string; features: string[] } | null>(null);
+  const [trialConsented, setTrialConsented] = useState(false);
+  const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
+  useEffect(() => {
+    planService.getPlanAvailability().then(av => setPlanAvailability(av)).catch(() => {});
+  }, []);
 
   const planNames = ['Free', 'Basic', 'Plus', 'Business'];
 
@@ -318,23 +330,34 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch">
           {plans.map((plan) => {
             const price = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
+            const planKey = plan.name.toLowerCase() as PlanType;
+            const isSoldOut = planAvailability[planKey] === false;
             return (
               <div
                 key={plan.name}
                 className={`relative rounded-2xl p-7 flex flex-col h-full transition-all duration-300 ${
-                  plan.highlight
-                    ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-200 scale-[1.02] ring-2 ring-indigo-600 hover:scale-[1.05] hover:shadow-3xl'
-                    : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-300 hover:ring-1 hover:ring-indigo-200'
+                  isSoldOut
+                    ? 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
+                    : plan.highlight
+                      ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-200 scale-[1.02] ring-2 ring-indigo-600 hover:scale-[1.05] hover:shadow-3xl'
+                      : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-300 hover:ring-1 hover:ring-indigo-200'
                 }`}
               >
-                {plan.highlight && (
+                {isSoldOut && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="bg-rose-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
+                      품절
+                    </span>
+                  </div>
+                )}
+                {!isSoldOut && plan.highlight && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
                     <span className="bg-amber-400 text-amber-900 text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
                       추천
                     </span>
                   </div>
                 )}
-                {currentPlan === plan.name.toLowerCase() && (
+                {isLoggedIn && currentPlan === plan.name.toLowerCase() && (
                   <div className="absolute -top-3.5 right-4">
                     <span className="bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-lg">
                       현재
@@ -393,37 +416,53 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   )}
                 </div>
 
-                <button
-                  onClick={() => {
-                    const planKey = plan.name.toLowerCase() as PlanType;
-                    if (currentPlan === planKey) return;
-                    if (isLoggedIn) {
-                      if (planKey === 'free' && onSelectPlan) {
-                        onSelectPlan(planKey, 'monthly');
+                {isSoldOut ? (
+                  <div className="mb-6 space-y-2">
+                    <div className="w-full py-3 rounded-xl font-bold text-sm bg-slate-100 text-slate-400 cursor-not-allowed text-center">
+                      현재 가입 불가
+                    </div>
+                    <p className="text-xs text-slate-500 text-center leading-relaxed">
+                      해당 플랜은 현재 수용 한도에 도달했습니다.<br />
+                      <button type="button" onClick={() => onContact ? onContact() : undefined} className="text-indigo-500 font-bold hover:underline">문의하기</button>를 통해 대기 신청해 주세요.
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (isLoggedIn && currentPlan === planKey) return;
+                      if (isLoggedIn) {
+                        if (planKey === 'free' && onSelectPlan) {
+                          onSelectPlan(planKey, 'monthly');
+                        } else {
+                          setSelectedPlan(planKey);
+                        }
                       } else {
-                        setSelectedPlan(planKey);
+                        if (plan.cta === '14일 무료 체험') {
+                          setTrialConsented(false);
+                          setTrialConsentPlan({ key: planKey, name: plan.name, features: plan.features });
+                        } else {
+                          onGetStarted();
+                        }
                       }
-                    } else {
-                      onGetStarted();
-                    }
-                  }}
-                  disabled={currentPlan === plan.name.toLowerCase() || pendingPayment?.plan === plan.name.toLowerCase()}
-                  className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 mb-6 ${
-                    currentPlan === plan.name.toLowerCase() || pendingPayment?.plan === plan.name.toLowerCase()
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : plan.highlight
-                        ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
-                        : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md'
-                  }`}
-                >
-                  {currentPlan === plan.name.toLowerCase()
-                    ? '현재 플랜'
-                    : pendingPayment?.plan === plan.name.toLowerCase()
-                      ? '결제 대기 중...'
-                      : currentPlan && currentPlan !== 'free' && plan.name.toLowerCase() === 'free'
-                        ? '다운그레이드'
-                        : plan.cta}
-                </button>
+                    }}
+                    disabled={(isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey}
+                    className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 mb-6 ${
+                      (isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : plan.highlight
+                          ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
+                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md'
+                    }`}
+                  >
+                    {isLoggedIn && currentPlan === planKey
+                      ? '현재 플랜'
+                      : pendingPayment?.plan === planKey
+                        ? '결제 대기 중...'
+                        : isLoggedIn && currentPlan && currentPlan !== 'free' && planKey === 'free'
+                          ? '다운그레이드'
+                          : plan.cta}
+                  </button>
+                )}
 
                 <ul className="space-y-2.5 flex-1">
                   {plan.features.map((f, i) => (
@@ -472,7 +511,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                       <div className="flex flex-col items-center gap-1">
                         <span>{name}</span>
                         {i === 1 && (
-                          <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-200">개인용</span>
+                          <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-200">팀용</span>
                         )}
                         {i === 2 && (
                           <span className="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">추천</span>
@@ -598,6 +637,94 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           </div>
         </div>
       </footer>
+
+      {/* 14일 무료 체험 동의 모달 */}
+      {trialConsentPlan && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setTrialConsentPlan(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{trialConsentPlan.name}</span>
+                <span className="text-indigo-200 text-xs">플랜</span>
+              </div>
+              <h3 className="text-lg font-bold">14일 무료 체험 시작</h3>
+              <p className="text-indigo-200 text-sm mt-0.5">카드 정보 없이 바로 체험할 수 있습니다</p>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* 선택 플랜 기능 목록 */}
+              <div className="bg-indigo-50 rounded-xl p-4">
+                <p className="text-xs font-bold text-indigo-700 mb-2.5 uppercase tracking-wider">체험 기간 중 이용 가능한 기능</p>
+                <ul className="space-y-1.5">
+                  {trialConsentPlan.features.map((f, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                      <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 데이터 삭제 경고 */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-amber-700">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <span className="text-sm font-bold">체험 종료 후 안내</span>
+                </div>
+                <ul className="space-y-1 text-xs text-amber-700 pl-6 list-disc">
+                  <li>14일 무료 체험이 종료됩니다.</li>
+                  <li>종료 후 <strong>15일 이내에 유료 구독을 시작하지 않으면</strong>, 업로드하신 모든 데이터(재고, 수술기록 등)가 자동으로 삭제됩니다.</li>
+                  <li>구독 시작 시 데이터는 그대로 유지됩니다.</li>
+                </ul>
+              </div>
+
+              {/* 동의 체크박스 */}
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={trialConsented}
+                  onChange={e => setTrialConsented(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                />
+                <span className="text-sm text-slate-700 leading-relaxed">
+                  위 내용을 확인하였으며, 체험 종료 후 미구독 시 데이터가 삭제될 수 있음에 동의합니다.
+                </span>
+              </label>
+
+              {/* 버튼 */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setTrialConsentPlan(null)}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  disabled={!trialConsented}
+                  onClick={() => {
+                    if (!trialConsented) return;
+                    localStorage.setItem('denjoy_pending_trial', trialConsentPlan.key);
+                    setTrialConsentPlan(null);
+                    onGetStarted();
+                  }}
+                  className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+                    trialConsented
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  동의하고 가입하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Confirmation Modal */}
       {selectedPlan && selectedPlan !== 'free' && (
@@ -757,7 +884,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                 <button
                   onClick={async () => {
                     if (!contactName.trim() || !contactPhone.trim()) {
-                      alert('담당자 이름과 연락처를 모두 입력해주세요.');
+                      showToast('담당자 이름과 연락처를 모두 입력해주세요.', 'error');
                       return;
                     }
                     setIsSubmitting(true);
@@ -787,7 +914,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                         setReceiptType('cash_receipt');
                       }
                     } catch {
-                      alert('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.');
+                      showToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
                     } finally {
                       setIsSubmitting(false);
                     }
@@ -800,6 +927,11 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
         </div>
       )}
     </div>

@@ -14,6 +14,41 @@ function fmtNum(n: number): string {
   return n % 1 === 0 ? String(n) : String(n);
 }
 
+function normalizeCuffToken(cuffRaw: string | null): string | null {
+  if (!cuffRaw) return null;
+  const cleaned = String(cuffRaw)
+    .trim()
+    .toUpperCase()
+    .replace(/^CUFF[:\s]*/i, '')
+    .replace(/^C/i, '')
+    .trim();
+  if (!cleaned) return null;
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) return null;
+  return fmtNum(num);
+}
+
+function buildMatchKey(diameter: number, length: number, cuff: string | null): string {
+  const normalizedCuff = normalizeCuffToken(cuff);
+  return `d${fmtNum(diameter)}_l${fmtNum(length)}${normalizedCuff ? `_c${normalizedCuff}` : ''}`;
+}
+
+function formatIbsDiameter(n: number): string {
+  if (Number.isInteger(n)) return n.toFixed(1);
+  return fmtNum(n);
+}
+
+function formatIbsLength(n: number): string {
+  return fmtNum(n);
+}
+
+export function isIbsImplantManufacturer(manufacturer?: string): boolean {
+  const normalized = String(manufacturer || '')
+    .toLowerCase()
+    .replace(/[\s\-_]/g, '');
+  return normalized === 'ibs' || normalized.includes('ibsimplant');
+}
+
 // A. Dentium 숫자코드 디코딩 (4자리: 3507 → D3.5 L7, 6자리: 483410 → D4.8/3.4 L10)
 function parseDentiumCode(raw: string): ParsedSize | null {
   const cleaned = raw.replace(/[^0-9a-zA-Z]/g, '');
@@ -63,14 +98,14 @@ function parsePhiFormat(raw: string): ParsedSize | null {
   if (!m) return null;
   const diameter = parseFloat(m[1]);
   const length = parseFloat(m[2]);
-  const cuff = m[3] ? m[3] : null;
+  const cuff = normalizeCuffToken(m[3] ? m[3] : null);
   return {
     diameter,
     length,
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
+    matchKey: buildMatchKey(diameter, length, cuff)
   };
 }
 
@@ -95,9 +130,9 @@ function parseOslashFormat(raw: string): ParsedSize | null {
 
 // D. Cuff 접두 + Phi형 (Magicore)
 function parseCuffPhiFormat(raw: string): ParsedSize | null {
-  const m = raw.match(/^(C\d+)\s*[Φφ]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)/i);
+  const m = raw.match(/^C\s*(\d+\.?\d*)\s*[Φφ]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)/i);
   if (!m) return null;
-  const cuff = m[1].toUpperCase();
+  const cuff = normalizeCuffToken(m[1]);
   const diameter = parseFloat(m[2]);
   const length = parseFloat(m[3]);
   return {
@@ -106,7 +141,7 @@ function parseCuffPhiFormat(raw: string): ParsedSize | null {
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
+    matchKey: buildMatchKey(diameter, length, cuff)
   };
 }
 
@@ -136,14 +171,14 @@ function parseDLCuffFormat(raw: string): ParsedSize | null {
   const diameter = parseFloat(m[1]);
   const length = parseFloat(m[2]);
   const cuffMatch = raw.match(/Cuff[:\s]*(\d+\.?\d*)/i);
-  const cuff = cuffMatch ? cuffMatch[1] : null;
+  const cuff = normalizeCuffToken(cuffMatch ? cuffMatch[1] : null);
   return {
     diameter,
     length,
     cuff,
     suffix: null,
     raw,
-    matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}${cuff ? '_c' + cuff : ''}`
+    matchKey: buildMatchKey(diameter, length, cuff)
   };
 }
 
@@ -217,4 +252,34 @@ export function parseSize(raw: string, manufacturer?: string): ParsedSize {
 
 export function getSizeMatchKey(raw: string, manufacturer?: string): string {
   return parseSize(raw, manufacturer).matchKey;
+}
+
+/**
+ * IBS Implant 표기를 신 표준 형식으로 통일한다.
+ * - 구 표기: D:3.5 L:11 Cuff:4
+ * - 신 표기: C4 Φ3.5 X 11
+ */
+export function toCanonicalSize(raw: string, manufacturer?: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  if (!isIbsImplantManufacturer(manufacturer)) return trimmed;
+
+  // IBS 변환 대상 표기만 보정 (불필요한 숫자코드 변환 방지)
+  const isConvertible =
+    (/D[:\s]*\d+\.?\d*/i.test(trimmed) && /L[:\s]*\d+\.?\d*/i.test(trimmed)) ||
+    /Cuff[:\s]*\d+\.?\d*/i.test(trimmed) ||
+    /^C\s*\d+\.?\d*\s*[Φφ]/i.test(trimmed);
+  if (!isConvertible) return trimmed;
+
+  const parsed = parseSize(trimmed, manufacturer);
+  if (parsed.diameter === null || parsed.length === null) return trimmed;
+
+  const diameter = formatIbsDiameter(parsed.diameter);
+  const length = formatIbsLength(parsed.length);
+  const cuff = normalizeCuffToken(parsed.cuff);
+
+  if (cuff) {
+    return `C${cuff} Φ${diameter} X ${length}`;
+  }
+  return `Φ${diameter} X ${length}`;
 }

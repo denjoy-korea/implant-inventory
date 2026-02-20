@@ -49,21 +49,21 @@ const STEPS = [
   },
   {
     num: 6,
-    title: '재고 마스터 반영',
-    desc: '정리된 품목을 재고 마스터로 전송',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-    ),
-    color: 'indigo',
-  },
-  {
-    num: 7,
     title: '덴트웹 반영',
     desc: '엑셀 다운로드 후 덴트웹 픽스처 설정에 등록',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
     ),
     color: 'amber',
+  },
+  {
+    num: 7,
+    title: '재고 마스터 반영',
+    desc: '정리된 품목을 재고 마스터로 전송',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+    ),
+    color: 'emerald',
   },
 ];
 
@@ -76,8 +76,13 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; ligh
   amber: { bg: 'bg-amber-600', text: 'text-amber-600', border: 'border-amber-200', lightBg: 'bg-amber-50' },
 };
 
-const FixtureWorkflowGuide: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
+interface FixtureWorkflowGuideProps {
+  /** 완료된 스텝 번호 배열 (예: [1, 2, 5]) */
+  completedSteps?: number[];
+}
+
+const FixtureWorkflowGuide: React.FC<FixtureWorkflowGuideProps> = ({ completedSteps = [] }) => {
+  const [isOpen, setIsOpen] = useState(true);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -103,17 +108,20 @@ const FixtureWorkflowGuide: React.FC = () => {
           <div className="flex items-center gap-0 overflow-x-auto pb-2 scrollbar-hide">
             {STEPS.map((step, i) => {
               const c = COLOR_MAP[step.color];
+              const done = completedSteps.includes(step.num);
               return (
                 <div key={step.num} className="flex items-center flex-shrink-0">
                   <div className={`flex flex-col items-center gap-1.5 px-2 min-w-[90px]`}>
-                    <div className={`w-9 h-9 rounded-xl ${c.lightBg} ${c.text} flex items-center justify-center`}>
-                      {step.icon}
+                    <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center ${done ? `${c.bg} text-white` : `${c.lightBg} ${c.text}`}`}>
+                      {done ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                      ) : step.icon}
                     </div>
-                    <span className={`text-[10px] font-bold ${c.text}`}>STEP {step.num}</span>
-                    <span className="text-[11px] font-bold text-slate-700 text-center leading-tight">{step.title}</span>
+                    <span className={`text-[10px] font-bold ${done ? c.text : 'text-slate-400'}`}>STEP {step.num}</span>
+                    <span className={`text-[11px] font-bold text-center leading-tight ${done ? 'text-slate-700' : 'text-slate-500'}`}>{step.title}</span>
                   </div>
                   {i < STEPS.length - 1 && (
-                    <svg className="w-5 h-5 text-slate-300 flex-shrink-0 -mx-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    <svg className={`w-5 h-5 flex-shrink-0 -mx-0.5 ${done && completedSteps.includes(STEPS[i + 1]?.num) ? c.text : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   )}
                 </div>
               );
@@ -124,13 +132,14 @@ const FixtureWorkflowGuide: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {STEPS.map(step => {
               const c = COLOR_MAP[step.color];
+              const done = completedSteps.includes(step.num);
               return (
-                <div key={step.num} className={`flex items-start gap-3 p-3 rounded-xl border ${c.border} ${c.lightBg}/30`}>
-                  <div className={`w-6 h-6 rounded-lg ${c.bg} text-white flex items-center justify-center flex-shrink-0 text-[11px] font-black`}>
-                    {step.num}
+                <div key={step.num} className={`flex items-start gap-3 p-3 rounded-xl border ${done ? 'border-emerald-200 bg-emerald-50/30' : `${c.border} ${c.lightBg}/30`}`}>
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 text-[11px] font-black ${done ? 'bg-emerald-500 text-white' : `${c.bg} text-white`}`}>
+                    {done ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg> : step.num}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-700">{step.title}</p>
+                    <p className={`text-xs font-bold ${done ? 'text-emerald-700' : 'text-slate-700'}`}>{step.title}</p>
                     <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{step.desc}</p>
                   </div>
                 </div>
@@ -155,7 +164,7 @@ const FixtureWorkflowGuide: React.FC = () => {
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
                 <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">덴트웹</span>
-                상단의 <span className="font-bold text-slate-600">엑셀 다운로드</span> 후, 덴트웹 <span className="font-bold text-slate-600">환경설정 &gt; 진료와 관련된 덴트웹 설정 &gt; 임플란트 픽스처 설정</span> 메뉴에서 팝업이 뜨면 <span className="font-bold text-slate-600">파일로 저장</span>을 눌러 다운로드 받은 파일을 등록하고 저장합니다.
+                하단의 <span className="font-bold text-slate-600">엑셀 다운로드</span> 후, 덴트웹 <span className="font-bold text-slate-600">환경설정 &gt; 진료와 관련된 덴트웹 설정 &gt; 임플란트 픽스처 설정</span> 메뉴에서 팝업이 뜨면 <span className="font-bold text-slate-600">파일로 저장</span>을 눌러 다운로드 받은 파일을 등록하고 저장합니다.
               </p>
             </div>
           </div>

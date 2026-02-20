@@ -1,5 +1,6 @@
 
 import React, { useEffect } from 'react';
+import { useToast } from '../hooks/useToast';
 
 interface ContactPageProps {
   onGetStarted: () => void;
@@ -7,8 +8,10 @@ interface ContactPageProps {
 
 const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
   useEffect(() => { window.scrollTo(0, 0); }, []);
+  const { toast, showToast } = useToast();
 
   return (
+    <>
     <div className="flex flex-col min-h-screen bg-white font-sans selection:bg-indigo-500 selection:text-white">
       {/* Main Content - 2 Column */}
       <section className="py-20 lg:py-28">
@@ -59,7 +62,7 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
             <div>
               <div className="bg-white rounded-2xl p-8 lg:p-10 shadow-xl shadow-slate-200/50 border border-slate-200">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">문의 양식</h2>
-                <form onSubmit={(e) => { e.preventDefault(); alert('문의가 접수되었습니다. 빠른 시일 내에 답변 드리겠습니다.'); }} className="space-y-5">
+                <form onSubmit={(e) => { e.preventDefault(); showToast('문의가 접수되었습니다. 빠른 시일 내에 답변 드리겠습니다.', 'success'); }} className="space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">병원명 <span className="text-rose-500">*</span></label>
@@ -172,6 +175,12 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted }) => {
         </div>
       </footer>
     </div>
+    {toast && (
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+        {toast.message}
+      </div>
+    )}
+    </>
   );
 };
 

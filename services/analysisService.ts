@@ -1,20 +1,20 @@
-import { AnalysisReport, DiagnosticItem, UnmatchedItem, ExcelRow } from '../types';
+import { AnalysisReport, DiagnosticItem, UnmatchedItem, ExcelRow, SurgeryRow } from '../types';
 import { parseExcelFile } from './excelService';
-import { getSizeMatchKey } from './sizeNormalizer';
-
-// Reuse normalize logic from App.tsx
-function normalize(str: string): string {
-  return String(str || "")
-    .trim()
-    .toLowerCase()
-    .replace(/보험임플란트/g, '')
-    .replace(/수술중fail/g, '')
-    .replace(/[\s\-\_\.\(\)]/g, '')
-    .replace(/[Φφ]/g, 'd');
-}
+import { getSizeMatchKey, toCanonicalSize } from './sizeNormalizer';
+import { fixIbsImplant } from './mappers';
+import { normalizeSurgery as normalize } from './normalizationService';
+import { DAYS_PER_MONTH } from '../constants';
+import {
+  getSurgeryClassification,
+  getSurgeryQuantity,
+  getSurgeryManufacturer,
+  getSurgeryBrand,
+  getSurgerySize,
+  parseSurgeryDate,
+} from './surgeryParser';
 
 // Parse surgery records (extracted from App.tsx handleFileUpload)
-function parseSurgeryRows(rows: ExcelRow[]): ExcelRow[] {
+function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
   return rows.filter(row => {
     const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
     const contentCount = Object.values(row).filter(val => val !== null && val !== undefined && String(val).trim() !== "").length;
@@ -73,13 +73,14 @@ function parseSurgeryRows(rows: ExcelRow[]): ExcelRow[] {
       manufacturer = desc.replace('보험임플란트', '').replace('수술중FAIL_', '').trim();
     }
 
+    const fixed = fixIbsImplant(manufacturer, brand);
     return {
       ...row,
       '구분': classification,
       '갯수': quantity,
-      '제조사': manufacturer,
-      '브랜드': brand,
-      '규격(SIZE)': size
+      '제조사': fixed.manufacturer,
+      '브랜드': fixed.brand,
+      '규격(SIZE)': toCanonicalSize(size, fixed.manufacturer)
     };
   });
 }
@@ -134,7 +135,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   const fixtureRows = fixtureSheet?.rows || [];
 
   // 2. Parse surgery files
-  let allSurgeryRows: ExcelRow[] = [];
+  let allSurgeryRows: SurgeryRow[] = [];
   for (const file of surgeryFiles) {
     const surgeryData = await parseExcelFile(file);
     const targetSheet = surgeryData.sheets['수술기록지'];
@@ -150,27 +151,35 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     const mfr = String(row['제조사'] || row['Manufacturer'] || '').toLowerCase();
     return mfr.includes('수술중fail') || mfr.includes('fail_');
   };
-  const fixtureItems = fixtureRows.map(row => ({
-    manufacturer: String(row['제조사'] || row['Manufacturer'] || ''),
-    brand: String(row['브랜드'] || row['Brand'] || ''),
-    size: String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || ''),
-    isActive: row['사용안함'] !== true,
-    isInsurance: isInsuranceRow(row),
-    isFail: isFailRow(row),
-    raw: row,
-  }));
+  const fixtureItems = fixtureRows.map(row => {
+    const fixedMfr = fixIbsImplant(
+      String(row['제조사'] || row['Manufacturer'] || ''),
+      String(row['브랜드'] || row['Brand'] || '')
+    );
+    return {
+      manufacturer: fixedMfr.manufacturer,
+      brand: fixedMfr.brand,
+      size: String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || ''),
+      isActive: row['사용안함'] !== true,
+      isInsurance: isInsuranceRow(row),
+      isFail: isFailRow(row),
+      raw: row,
+    };
+  });
 
   // 4. Build surgery item usage map
   const surgeryUsageMap = new Map<string, { manufacturer: string; brand: string; size: string; count: number }>();
   allSurgeryRows.forEach(row => {
-    if (row['구분'] === '골이식만') return;
-    if (row['구분'] === '청구') return; // 보험임플란트는 매칭 분석에서 제외 (진단 #2에서 별도 확인)
+    const classification = getSurgeryClassification(row);
+    if (classification === '골이식만') return;
+    if (classification === '청구') return; // 보험임플란트는 매칭 분석에서 제외 (진단 #2에서 별도 확인)
     const rawDesc = Object.values(row).some(v => String(v).includes('보험임플란트'));
     if (rawDesc) return;
-    const m = String(row['제조사'] || '');
-    const b = String(row['브랜드'] || '');
-    const s = String(row['규격(SIZE)'] || '');
-    const qty = Number(row['갯수']) || 0;
+    const fixedSurgery = fixIbsImplant(getSurgeryManufacturer(row), getSurgeryBrand(row));
+    const m = fixedSurgery.manufacturer;
+    const b = fixedSurgery.brand;
+    const s = getSurgerySize(row);
+    const qty = getSurgeryQuantity(row);
     const key = `${normalize(m)}|${normalize(b)}|${getSizeMatchKey(s, m)}`;
     const existing = surgeryUsageMap.get(key);
     if (existing) {
@@ -207,7 +216,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     return Object.values(row).some(v => String(v).includes('보험임플란트'));
   });
   const hasInsuranceInSurgery = allSurgeryRows.some(row => {
-    return row['구분'] === '청구' || Object.values(row).some(v => String(v).includes('보험임플란트'));
+    return getSurgeryClassification(row) === '청구' || Object.values(row).some(v => String(v).includes('보험임플란트'));
   });
   const bothHaveInsurance = hasInsuranceInFixture && hasInsuranceInSurgery;
   const eitherHasInsurance = hasInsuranceInFixture || hasInsuranceInSurgery;
@@ -332,8 +341,9 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     return !m.includes('수술중fail') && !m.includes('fail_') && !m.includes('보험임플란트');
   });
   const filteredSurgeryRows = allSurgeryRows.filter(row => {
-    if (row['구분'] === '골이식만' || row['구분'] === '청구' || row['구분'] === '수술중 FAIL') return false;
-    const m = String(row['제조사'] || '').toLowerCase();
+    const cls = getSurgeryClassification(row);
+    if (cls === '골이식만' || cls === '청구' || cls === '수술중 FAIL') return false;
+    const m = getSurgeryManufacturer(row).toLowerCase();
     return !m.includes('수술중fail') && !m.includes('fail_') && !m.includes('보험임플란트');
   });
   const allItems = [...filteredFixtureRows, ...filteredSurgeryRows];
@@ -417,18 +427,15 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   let minTime = Infinity;
   let maxTime = -Infinity;
   allSurgeryRows.forEach(row => {
-    const dateStr = row['날짜'];
-    if (dateStr) {
-      const t = new Date(dateStr).getTime();
-      if (!isNaN(t)) {
-        if (t < minTime) minTime = t;
-        if (t > maxTime) maxTime = t;
-      }
-    }
+    const parsedDate = parseSurgeryDate(row);
+    if (!parsedDate) return;
+    const t = parsedDate.getTime();
+    if (t < minTime) minTime = t;
+    if (t > maxTime) maxTime = t;
   });
   const periodMonths = (minTime === Infinity || maxTime === -Infinity || minTime === maxTime)
     ? 1
-    : Math.max(1, (maxTime - minTime) / (1000 * 60 * 60 * 24 * 30.44));
+    : Math.max(1, (maxTime - minTime) / (1000 * 60 * 60 * 24 * DAYS_PER_MONTH));
 
   const totalSurgeries = allSurgeryRows.filter(r => r['구분'] !== '골이식만').length;
   const primarySurgeries = allSurgeryRows.filter(r => r['구분'] === '식립').length;
