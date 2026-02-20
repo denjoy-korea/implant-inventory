@@ -18,6 +18,8 @@ import ConfirmModal from './components/ConfirmModal';
 import InventoryCompareModal, { CompareItem } from './components/InventoryCompareModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import PausedAccountScreen from './components/PausedAccountScreen';
+import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
+import DashboardOperationalTabs from './components/dashboard/DashboardOperationalTabs';
 
 /* ── Lazy imports (route-level code splitting) ── */
 const LandingPage = lazy(() => import('./components/LandingPage'));
@@ -29,19 +31,13 @@ const AnalyzePage = lazy(() => import('./components/AnalyzePage'));
 const NoticeBoard = lazy(() => import('./components/NoticeBoard'));
 const DashboardOverview = lazy(() => import('./components/DashboardOverview'));
 const InventoryManager = lazy(() => import('./components/InventoryManager'));
-const InventoryAudit = lazy(() => import('./components/InventoryAudit'));
 const RawDataUploadGuide = lazy(() => import('./components/RawDataUploadGuide'));
-const SurgeryDashboard = lazy(() => import('./components/SurgeryDashboard'));
-const FailManager = lazy(() => import('./components/FailManager'));
-const OrderManager = lazy(() => import('./components/OrderManager'));
 const MemberManager = lazy(() => import('./components/MemberManager'));
-const SettingsHub = lazy(() => import('./components/SettingsHub'));
-const AuditLogViewer = lazy(() => import('./components/AuditLogViewer'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const StaffWaitingRoom = lazy(() => import('./components/StaffWaitingRoom'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
-import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, canAccessTab } from './types';
+import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, DbOrder, DbOrderItem, canAccessTab } from './types';
 import { parseExcelFile, downloadExcelFile } from './services/excelService';
 import { extractLengthFromSize } from './services/sizeUtils';
 import { normalizeLength } from './components/LengthFilter';
@@ -85,6 +81,38 @@ type BrandSizeFormatEntry = {
 
 type BrandSizeFormatIndex = Map<string, BrandSizeFormatEntry[]>;
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1360;
+const MOBILE_VIEWPORT_MAX_WIDTH = 767;
+
+function getDashboardTabTitle(tab: DashboardTab): string {
+  switch (tab) {
+    case 'overview':
+      return 'Overview';
+    case 'fixture_upload':
+      return '로우데이터 업로드';
+    case 'fixture_edit':
+      return '데이터 설정/가공';
+    case 'inventory_master':
+      return '재고 마스터';
+    case 'inventory_audit':
+      return '재고 실사';
+    case 'surgery_database':
+      return '수술기록 DB';
+    case 'surgery_upload':
+      return '수술기록 업로드';
+    case 'fail_management':
+      return 'FAIL 관리';
+    case 'order_management':
+      return '주문 관리';
+    case 'member_management':
+      return '구성원 관리';
+    case 'settings':
+      return '설정';
+    case 'audit_log':
+      return '감사 로그';
+    default:
+      return '대시보드';
+  }
+}
 
 function normalizeSizeTextStrict(raw: string): string {
   return String(raw || '').trim();
@@ -243,7 +271,12 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
   const [isFinePointer, setIsFinePointer] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [dashboardHeaderHeight, setDashboardHeaderHeight] = useState(44);
+  const [isOffline, setIsOffline] = useState<boolean>(() => (
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  ));
 
   // 초대 토큰 상태
   const [inviteInfo, setInviteInfo] = React.useState<{
@@ -292,6 +325,10 @@ const App: React.FC = () => {
   const isReadOnly = state.user?.status === 'readonly';
   const showDashboardSidebar = state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user');
   const showStandardDashboardHeader = state.currentView === 'dashboard' && !(isSystemAdmin && state.adminViewMode !== 'user');
+  const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isMobileViewport;
+  const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management', 'fail_management'];
+  const mobileMoreTabs: DashboardTab[] = ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'];
+  const isMoreTabActive = mobileMoreTabs.includes(state.dashboardTab);
 
   // Dev convenience: expose maintenance helpers for one-off operations.
   useEffect(() => {
@@ -336,6 +373,48 @@ const App: React.FC = () => {
       observer?.disconnect();
     };
   }, [showStandardDashboardHeader, state.dashboardTab]);
+
+  useEffect(() => {
+    if (!showDashboardSidebar) {
+      setIsMobileViewport(false);
+      setIsMobileMenuOpen(false);
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`);
+    const syncViewport = () => {
+      const isMobile = mediaQuery.matches;
+      setIsMobileViewport(isMobile);
+      if (!isMobile) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener('change', syncViewport);
+    return () => mediaQuery.removeEventListener('change', syncViewport);
+  }, [showDashboardSidebar]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncNetworkStatus = () => setIsOffline(!window.navigator.onLine);
+    syncNetworkStatus();
+    window.addEventListener('online', syncNetworkStatus);
+    window.addEventListener('offline', syncNetworkStatus);
+    return () => {
+      window.removeEventListener('online', syncNetworkStatus);
+      window.removeEventListener('offline', syncNetworkStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showMobileDashboardNav || !isMobileMenuOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showMobileDashboardNav, isMobileMenuOpen]);
 
   // 터치 환경에서는 hover가 없으므로 사이드바 열기 버튼을 항상 노출
   useEffect(() => {
@@ -1158,21 +1237,133 @@ const App: React.FC = () => {
     }
   };
 
+  const refreshOrdersFromServer = useCallback(async () => {
+    if (!state.user?.hospitalId) return false;
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('hospital_id', state.user.hospitalId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) {
+      console.error('[App] 주문 목록 재동기화 실패:', error);
+      return false;
+    }
+
+    const mappedOrders = (data as (DbOrder & { order_items: DbOrderItem[] })[]).map(dbToOrder);
+    setState(prev => ({ ...prev, orders: mappedOrders }));
+    return true;
+  }, [setState, state.user?.hospitalId]);
+
   const handleUpdateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
-    const prevOrders = state.orders;
+    const currentOrder = state.orders.find(o => o.id === orderId);
+    if (!currentOrder) {
+      showAlertToast('주문을 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'error');
+      return;
+    }
+
+    const nextReceivedDate = status === 'received'
+      ? new Date().toISOString().split('T')[0]
+      : undefined;
+
     setState(prev => ({
       ...prev,
-      orders: prev.orders.map(o => o.id === orderId ? { ...o, status, receivedDate: status === 'received' ? new Date().toISOString() : undefined } : o)
+      orders: prev.orders.map(o =>
+        o.id === orderId
+          ? { ...o, status, receivedDate: nextReceivedDate }
+          : o
+      )
     }));
-    try {
-      await orderService.updateStatus(orderId, status);
+
+    const result = await orderService.updateStatus(orderId, status, {
+      expectedCurrentStatus: currentOrder.status,
+      receivedDate: nextReceivedDate,
+    });
+
+    if (result.ok) {
       operationLogService.logOperation('order_status_update', `주문 상태 변경: ${status}`, { orderId, status });
-    } catch (error) {
-      console.error('[App] 주문 상태 변경 실패, 롤백:', error);
-      setState(prev => ({ ...prev, orders: prevOrders }));
-      showAlertToast('주문 상태 변경에 실패했습니다.', 'error');
+      return;
     }
-  }, [state.orders]);
+
+    setState(prev => ({
+      ...prev,
+      orders: prev.orders.map(o =>
+        o.id === orderId
+          ? { ...o, status: currentOrder.status, receivedDate: currentOrder.receivedDate }
+          : o
+      )
+    }));
+
+    if (result.reason === 'conflict') {
+      const latestStatusText = result.currentStatus === 'received' ? '입고완료' : '입고대기';
+      showAlertToast(`다른 사용자가 이미 ${latestStatusText}로 변경했습니다. 최신 주문 목록을 다시 불러옵니다.`, 'info');
+      const synced = await refreshOrdersFromServer();
+      if (!synced) {
+        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      }
+      return;
+    }
+
+    if (result.reason === 'not_found') {
+      showAlertToast('주문이 이미 삭제되어 상태를 변경할 수 없습니다. 최신 주문 목록을 다시 불러옵니다.', 'info');
+      const synced = await refreshOrdersFromServer();
+      if (!synced) {
+        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      }
+      return;
+    }
+
+    showAlertToast('주문 상태 변경에 실패했습니다.', 'error');
+  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
+
+  const handleDeleteOrder = useCallback(async (orderId: string) => {
+    const currentOrder = state.orders.find(o => o.id === orderId);
+    if (!currentOrder) {
+      showAlertToast('주문을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.', 'info');
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      orders: prev.orders.filter(o => o.id !== orderId)
+    }));
+
+    const result = await orderService.deleteOrder(orderId, {
+      expectedCurrentStatus: currentOrder.status,
+    });
+
+    if (result.ok) {
+      operationLogService.logOperation('order_delete', '주문 삭제', { orderId });
+      return;
+    }
+
+    if (result.reason === 'not_found') {
+      showAlertToast('주문이 이미 삭제되어 목록에서 제거되었습니다.', 'info');
+      const synced = await refreshOrdersFromServer();
+      if (!synced) {
+        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      }
+      return;
+    }
+
+    setState(prev => {
+      if (prev.orders.some(o => o.id === currentOrder.id)) return prev;
+      return { ...prev, orders: [currentOrder, ...prev.orders] };
+    });
+
+    if (result.reason === 'conflict') {
+      const latestStatusText = result.currentStatus === 'received' ? '입고완료' : '입고대기';
+      showAlertToast(`다른 사용자가 주문 상태를 ${latestStatusText}로 변경하여 삭제가 취소되었습니다. 최신 주문 목록을 다시 불러옵니다.`, 'info');
+      const synced = await refreshOrdersFromServer();
+      if (!synced) {
+        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      }
+      return;
+    }
+
+    showAlertToast('주문 삭제에 실패했습니다.', 'error');
+  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
 
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update
@@ -1771,7 +1962,13 @@ const App: React.FC = () => {
       className="min-h-screen bg-slate-50 flex"
       style={{ ['--dashboard-header-height' as string]: `${dashboardHeaderHeight}px` } as React.CSSProperties}
     >
-      {showDashboardSidebar && isSidebarCollapsed && (
+      {isOffline && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[240] px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-black shadow-lg">
+          오프라인 모드: 연결 후 자동 동기화됩니다.
+        </div>
+      )}
+
+      {showDashboardSidebar && isSidebarCollapsed && !showMobileDashboardNav && (
         <div
           className="fixed left-0 top-0 z-[260] h-20 w-20"
           onMouseEnter={() => {
@@ -1810,12 +2007,21 @@ const App: React.FC = () => {
             // 권한 없는 탭은 전환 차단
             if (!canAccessTab(tab, state.user?.permissions, effectiveAccessRole)) return;
             setState(prev => ({ ...prev, dashboardTab: tab }));
+            if (showMobileDashboardNav) {
+              setIsMobileMenuOpen(false);
+            }
           }}
-          isCollapsed={isSidebarCollapsed}
+          isCollapsed={showMobileDashboardNav ? !isMobileMenuOpen : isSidebarCollapsed}
           onToggleCollapse={() => {
-            setIsSidebarCollapsed(prev => !prev);
-            setIsSidebarToggleVisible(false);
+            if (showMobileDashboardNav) {
+              setIsMobileMenuOpen(false);
+            } else {
+              setIsSidebarCollapsed(prev => !prev);
+              setIsSidebarToggleVisible(false);
+            }
           }}
+          isMobile={showMobileDashboardNav}
+          onRequestClose={() => setIsMobileMenuOpen(false)}
           fixtureData={state.fixtureData}
           surgeryData={state.surgeryData}
           surgeryUnregisteredCount={surgeryUnregisteredItems.length}
@@ -1826,6 +2032,15 @@ const App: React.FC = () => {
           userRole={state.user?.role}
           userPermissions={state.user?.permissions}
           onReturnToAdmin={isSystemAdmin ? () => setState(prev => ({ ...prev, adminViewMode: 'admin' })) : undefined}
+        />
+      )}
+
+      {showMobileDashboardNav && isMobileMenuOpen && (
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 z-[270] bg-slate-900/35 backdrop-blur-[1px]"
+          aria-label="메뉴 닫기"
         />
       )}
 
@@ -1845,31 +2060,33 @@ const App: React.FC = () => {
           ) : (
             /* Standard Dashboard with Header */
             <>
-              <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-6 py-2.5 sticky top-0 z-[100] flex items-center justify-between">
+              <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] flex items-center justify-between gap-2 overflow-x-hidden">
                 {/* Hidden file inputs */}
                 <input type="file" ref={fixtureFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'fixture'); e.target.value = ''; }} />
                 <input type="file" ref={surgeryFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'surgery'); e.target.value = ''; }} />
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-slate-400 font-medium">{new Date().getFullYear()}. {new Date().getMonth() + 1}. {new Date().getDate()}. {['일', '월', '화', '수', '목', '금', '토'][new Date().getDay()]}요일</span>
-                  <div className="h-4 w-px bg-slate-200" />
-                  <h1 className="text-sm font-bold text-slate-700">
-                    {state.dashboardTab === 'overview' ? 'Overview' :
-                      state.dashboardTab === 'fixture_upload' ? '로우데이터 업로드' :
-                        state.dashboardTab === 'fixture_edit' ? '데이터 설정/가공' :
-                          state.dashboardTab === 'inventory_master' ? '재고 마스터' :
-                            state.dashboardTab === 'inventory_audit' ? '재고 실사' :
-                              state.dashboardTab === 'surgery_database' ? '수술기록 DB' :
-                                state.dashboardTab === 'fail_management' ? 'FAIL 관리' :
-                                  state.dashboardTab === 'order_management' ? '주문 관리' :
-                                    state.dashboardTab === 'member_management' ? '구성원 관리' :
-                                      state.dashboardTab === 'settings' ? '설정' :
-                                        state.dashboardTab === 'audit_log' ? '감사 로그' : '대시보드'}
+                <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                  {showMobileDashboardNav && (
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileMenuOpen(true)}
+                      className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 active:scale-[0.98] transition-all"
+                      aria-label="메뉴 열기"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                      </svg>
+                    </button>
+                  )}
+                  <span className="hidden lg:inline text-xs text-slate-400 font-medium">{new Date().getFullYear()}. {new Date().getMonth() + 1}. {new Date().getDate()}. {['일', '월', '화', '수', '목', '금', '토'][new Date().getDay()]}요일</span>
+                  <div className="hidden lg:block h-4 w-px bg-slate-200" />
+                  <h1 className="text-xs sm:text-sm font-bold text-slate-700 truncate whitespace-nowrap leading-tight max-w-[42vw] sm:max-w-none">
+                    {getDashboardTabTitle(state.dashboardTab)}
                   </h1>
                   {/* Upload button for fixture_upload / surgery_database */}
                   {(state.dashboardTab === 'fixture_upload' || state.dashboardTab === 'surgery_database') && (
                     <button
                       onClick={() => (state.dashboardTab === 'fixture_upload' ? fixtureFileRef : surgeryFileRef).current?.click()}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+                      className="hidden sm:flex w-9 h-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
                       title=".xlsx 파일 업로드"
                       aria-label=".xlsx 파일 업로드"
                     >
@@ -1882,7 +2099,7 @@ const App: React.FC = () => {
                   {state.dashboardTab === 'inventory_audit' && (
                     <button
                       onClick={() => setShowAuditHistory(true)}
-                      className="px-3 py-1.5 text-[11px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all flex items-center gap-1"
+                      className="hidden sm:flex px-3 py-1.5 text-[11px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all items-center gap-1"
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       실사 이력
@@ -1890,7 +2107,7 @@ const App: React.FC = () => {
                   )}
                   {/* Overview action buttons */}
                   {state.dashboardTab === 'overview' && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="hidden sm:flex items-center gap-1.5">
                       <button onClick={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_upload' }))} className="px-3 py-1.5 text-[11px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all flex items-center gap-1">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                         업로드
@@ -1905,7 +2122,7 @@ const App: React.FC = () => {
 
                 {/* Action Buttons for Fixture Edit */}
                 {state.dashboardTab === 'fixture_edit' && state.fixtureData && (
-                  <div className="flex items-center gap-2 absolute left-1/2 transform -translate-x-1/2">
+                  <div className="hidden md:flex items-center gap-2 absolute left-1/2 transform -translate-x-1/2">
                     <button onClick={() => {
                       setConfirmModal({
                         title: '데이터 초기화',
@@ -1932,7 +2149,7 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-3">
                   {state.user && (
                     <div className="flex items-center gap-2.5">
                       {(() => {
@@ -1999,6 +2216,37 @@ const App: React.FC = () => {
                     로그아웃
                   </button>
                 </div>
+                <div className="md:hidden flex items-center gap-1.5 shrink-0">
+                  {state.dashboardTab === 'inventory_audit' && (
+                    <button
+                      onClick={() => setShowAuditHistory(true)}
+                      className="h-11 w-11 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center active:scale-[0.98]"
+                      aria-label="실사 이력"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                  )}
+                  {state.user && (
+                    <button
+                      onClick={() => setState(prev => ({ ...prev, showProfile: true }))}
+                      className="h-11 w-11 rounded-xl border border-slate-200 bg-white text-indigo-600 flex items-center justify-center font-bold text-xs"
+                      aria-label="내 정보"
+                    >
+                      {state.user.name.charAt(0)}
+                    </button>
+                  )}
+                  <button
+                    onClick={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
+                    className="h-11 w-11 rounded-xl border border-rose-100 bg-rose-50 text-rose-500 flex items-center justify-center active:scale-[0.98]"
+                    aria-label="로그아웃"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
+                </div>
               </header>
 
               <main className="flex-1" style={{ overflowX: 'clip' }}>
@@ -2038,7 +2286,7 @@ const App: React.FC = () => {
                       onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
                     />
                   ) : (
-                    <div className="p-6 max-w-7xl mx-auto space-y-6">
+                    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6 pb-24 sm:pb-6">
                       {/* Migration Banner */}
                       {state.user && state.user.hospitalId && (
                         <MigrationBanner
@@ -2533,79 +2781,53 @@ const App: React.FC = () => {
                           onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
                         />
                       )}
-                      {state.dashboardTab === 'inventory_audit' && (
-                        <InventoryAudit
-                          inventory={state.inventory}
-                          hospitalId={state.user?.hospitalId || ''}
-                          onApplied={() => { if (state.user) loadHospitalData(state.user); }}
-                          showHistory={showAuditHistory}
-                          onCloseHistory={() => setShowAuditHistory(false)}
-                        />
-                      )}
-                      {state.dashboardTab === 'surgery_database' && (
-                        <SurgeryDashboard
-                          rows={state.surgeryMaster['수술기록지'] || []}
-                          onUpload={() => surgeryFileRef.current?.click()}
-                          isLoading={state.isLoading}
-                          unregisteredFromSurgery={surgeryUnregisteredItems}
-                          onGoInventoryMaster={() => setState(prev => ({ ...prev, dashboardTab: 'inventory_master' }))}
-                          hospitalWorkDays={state.hospitalWorkDays}
-                          planState={state.planState}
-                        />
-                      )}
-                      {state.dashboardTab === 'fail_management' && (
-                        <FailManager
-                          surgeryMaster={state.surgeryMaster}
-                          inventory={state.inventory}
-                          failOrders={state.orders.filter(o => o.type === 'fail_exchange')}
-                          onAddFailOrder={handleAddOrder}
-                          currentUserName={state.user?.name || '관리자'}
-                          isReadOnly={isReadOnly}
-                        />
-                      )}
-                      {state.dashboardTab === 'order_management' && (
-                        <FeatureGate feature="one_click_order" plan={effectivePlan}>
-                          <OrderManager
-                            orders={state.orders}
-                            inventory={state.inventory}
-                            onUpdateOrderStatus={handleUpdateOrderStatus}
-                            onDeleteOrder={async (id) => {
-                              const prevOrders = state.orders;
-                              setState(prev => ({ ...prev, orders: prev.orders.filter(o => o.id !== id) }));
-                              try {
-                                await orderService.deleteOrder(id);
-                              } catch (error) {
-                                console.error('[App] 주문 삭제 실패, 롤백:', error);
-                                setState(prev => ({ ...prev, orders: prevOrders }));
-                                showAlertToast('주문 삭제에 실패했습니다.', 'error');
-                              }
-                            }}
-                            onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
-                            isReadOnly={isReadOnly}
-                          />
-                        </FeatureGate>
-                      )}
-                      {state.dashboardTab === 'settings' && (
-                        <SettingsHub
-                          onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
-                          isMaster={isHospitalMaster || isSystemAdmin}
-                          isStaff={state.user?.role === 'staff'}
-                          plan={effectivePlan}
-                          hospitalId={state.user?.hospitalId}
-                          hospitalWorkDays={state.hospitalWorkDays}
-                          onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
-                        />
-                      )}
-                      {state.dashboardTab === 'audit_log' && state.user?.hospitalId && (
-                        <FeatureGate feature="audit_log" plan={effectivePlan}>
-                          <AuditLogViewer hospitalId={state.user.hospitalId} />
-                        </FeatureGate>
-                      )}
+                      <DashboardOperationalTabs
+                        dashboardTab={state.dashboardTab}
+                        user={state.user}
+                        inventory={state.inventory}
+                        surgeryMaster={state.surgeryMaster}
+                        orders={state.orders}
+                        isReadOnly={isReadOnly}
+                        effectivePlan={effectivePlan}
+                        isHospitalMaster={isHospitalMaster}
+                        isSystemAdmin={isSystemAdmin}
+                        hospitalWorkDays={state.hospitalWorkDays}
+                        planState={state.planState}
+                        isLoading={state.isLoading}
+                        surgeryUnregisteredItems={surgeryUnregisteredItems}
+                        showAuditHistory={showAuditHistory}
+                        onCloseAuditHistory={() => setShowAuditHistory(false)}
+                        onLoadHospitalData={loadHospitalData}
+                        onTabChange={(tab) => {
+                          if (tab === 'surgery_upload') {
+                            surgeryFileRef.current?.click();
+                            return;
+                          }
+                          setState(prev => ({ ...prev, dashboardTab: tab }));
+                        }}
+                        onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
+                        onAddFailOrder={handleAddOrder}
+                        onUpdateOrderStatus={handleUpdateOrderStatus}
+                        onDeleteOrder={handleDeleteOrder}
+                        onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
+                      />
                     </div>
                   )}
                 </Suspense>
                 </ErrorBoundary>
               </main>
+              {showMobileDashboardNav && (
+                <MobileDashboardNav
+                  mobilePrimaryTabs={mobilePrimaryTabs}
+                  dashboardTab={state.dashboardTab}
+                  userPermissions={state.user?.permissions}
+                  effectiveAccessRole={effectiveAccessRole}
+                  isMoreTabActive={isMoreTabActive}
+                  onOpenMoreMenu={() => setIsMobileMenuOpen(true)}
+                  onTabChange={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
+                  getDashboardTabTitle={getDashboardTabTitle}
+                />
+              )}
             </>
           )
 
@@ -2627,7 +2849,22 @@ const App: React.FC = () => {
             <main className="flex-1 overflow-x-hidden">
               <ErrorBoundary>
               <Suspense fallback={suspenseFallback}>
-              {state.currentView === 'landing' && <LandingPage onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))} onAnalyze={() => setState(p => ({ ...p, currentView: 'analyze' }))} />}
+              {state.currentView === 'landing' && (
+                <LandingPage
+                  onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))}
+                  onAnalyze={() => {
+                    if (window.matchMedia('(max-width: 1023px)').matches) {
+                      showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
+                      return;
+                    }
+                    setState(p => ({ ...p, currentView: 'analyze' }));
+                  }}
+                  onGoToValue={() => setState(p => ({ ...p, currentView: 'value' }))}
+                  onGoToPricing={() => setState(p => ({ ...p, currentView: 'pricing' }))}
+                  onGoToNotices={() => setState(p => ({ ...p, currentView: 'notices' }))}
+                  onGoToContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
+                />
+              )}
               {state.currentView === 'login' && <AuthForm key="login" type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} />}
               {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccessWithTrial} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} />}
               {state.currentView === 'invite' && inviteInfo && (
@@ -2810,9 +3047,12 @@ const App: React.FC = () => {
 
       {/* Alert Toast */}
       {alertToast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${
+        <div
+          style={showMobileDashboardNav ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${
           alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-        }`}>
+        }`}
+        >
           {alertToast.type === 'success' ? (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
           ) : (

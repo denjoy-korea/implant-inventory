@@ -35,6 +35,12 @@ interface FailManagerProps {
   isReadOnly?: boolean;
 }
 
+interface MonthlyFailDatum {
+  month: string;
+  total: number;
+  byManufacturer: Record<string, number>;
+}
+
 // ============================================================
 // COMPONENT
 // ============================================================
@@ -93,7 +99,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   // 월별 FAIL 추세 데이터
   // ============================================================
-  const monthlyFailData = useMemo(() => {
+  const monthlyFailData = useMemo<MonthlyFailDatum[]>(() => {
     const monthMap: Record<string, Record<string, number>> = {};
     historyFailList.forEach(f => {
       const dateStr = String(f['날짜'] || '');
@@ -105,7 +111,11 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     });
     return Object.entries(monthMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, byMfr]) => ({ month, ...byMfr, total: Object.values(byMfr).reduce((s, v) => s + v, 0) }));
+      .map(([month, byManufacturer]) => ({
+        month,
+        byManufacturer,
+        total: Object.values(byManufacturer).reduce((s, v) => s + v, 0),
+      }));
   }, [historyFailList]);
 
   // KPI용 sparkline 데이터 (월별 총 FAIL)
@@ -373,8 +383,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // 월별 차트 상수 (grouped bar용)
   const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
   const CHART_AREA_H = 280;
+  const getMonthlyFailValue = (datum: MonthlyFailDatum, manufacturer: string): number => datum.byManufacturer[manufacturer] ?? 0;
   const maxBarVal = Math.max(
-    ...monthlyFailData.flatMap(d => manufacturers.map(m => (d as any)[m] as number || 0)),
+    ...monthlyFailData.flatMap(d => manufacturers.map(m => getMonthlyFailValue(d, m))),
     1
   );
   const chartTickStep = Math.ceil(maxBarVal / 4) || 1;
@@ -390,7 +401,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* STICKY HEADER + KPI + FILTER              */}
       {/* ========================================= */}
       <div
-        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
+        className="md:sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
       >
 
@@ -537,7 +548,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           </div>
 
           <div>
-            <label htmlFor="mobile-fail-manufacturer" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">제조사 선택</label>
+            <label htmlFor="mobile-fail-manufacturer" className="text-xs font-bold text-slate-500 uppercase tracking-widest">제조사 선택</label>
             <select
               id="mobile-fail-manufacturer"
               value={activeM}
@@ -734,7 +745,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                             )}
                             {/* Bars */}
                             {manufacturers.map((m, mi) => {
-                              const val = (d as any)[m] as number || 0;
+                              const val = getMonthlyFailValue(d, m);
                               const barH = chartYMax > 0 ? (val / chartYMax) * CHART_AREA_H : 0;
                               const bx = groupX + mi * (BAR_W + BAR_GAP);
                               const by = CHART_PAD.t + CHART_AREA_H - barH;
@@ -803,7 +814,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                             </text>
                             {/* Data rows */}
                             {manufacturers.map((m, mi) => {
-                              const val = (d as any)[m] as number || 0;
+                              const val = getMonthlyFailValue(d, m);
                               const ry = TY + T_PAD + 16 + mi * T_ROW_H;
                               return (
                                 <g key={m}>
@@ -889,9 +900,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                   교환 주문 이력
                 </h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Exchange Order History · {activeM}</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium mt-0.5">Exchange Order History · {activeM}</p>
               </div>
-              <span className="text-[10px] font-bold text-slate-400">{activeOrders.length}건</span>
+              <span className="text-[10px] font-bold text-slate-500">{activeOrders.length}건</span>
             </div>
             {activeOrders.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
@@ -912,7 +923,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       ))}
                     </div>
                     <div className="pt-2 border-t border-slate-50 flex justify-end">
-                      <span className="text-[10px] font-bold text-slate-400">담당: {order.manager}</span>
+                      <span className="text-[10px] font-bold text-slate-500">담당: {order.manager}</span>
                     </div>
                   </div>
                 ))}
@@ -920,7 +931,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             ) : (
               <div className="py-12 text-center">
                 <svg className="w-12 h-12 text-slate-100 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                <p className="text-sm text-slate-400 font-medium">아직 교환 주문 이력이 없습니다.</p>
+                <p className="text-sm text-slate-500 font-medium">아직 교환 주문 이력이 없습니다.</p>
                 <p className="text-[11px] text-slate-300 mt-1">반품/교환 주문 버튼으로 첫 주문을 등록하세요.</p>
               </div>
             )}
@@ -929,7 +940,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       ) : (
         <div className="py-40 text-center bg-white rounded-[32px] border border-slate-200 shadow-sm">
           <svg className="w-16 h-16 text-slate-100 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-          <p className="text-slate-400 font-medium italic">데이터가 로드되면 제조사를 선택하여 관리를 시작하세요.</p>
+          <p className="text-slate-500 font-medium italic">데이터가 로드되면 제조사를 선택하여 관리를 시작하세요.</p>
         </div>
       )}
 

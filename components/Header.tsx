@@ -33,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({
   const isPublicView = publicViews.includes(currentView);
 
   return (
-    <header className={`bg-white border-b border-slate-200 py-3 sticky top-0 z-[100] shadow-sm ${showLogo ? 'px-6' : 'px-8'}`}>
+    <header className={`bg-white border-b border-slate-200 py-3 md:sticky md:top-0 z-[100] shadow-sm ${showLogo ? 'px-6' : 'px-8'}`}>
       <div className={`mx-auto flex items-center justify-between ${showLogo ? 'max-w-7xl' : 'w-full'}`}>
         <div className="flex items-center flex-shrink-0 w-[220px]">
           {showLogo && (
@@ -166,7 +166,7 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={onLogout}
-                  className="text-sm font-medium text-slate-400 hover:text-slate-600 px-2 py-2 transition-colors"
+                  className="text-sm font-medium text-slate-500 hover:text-slate-700 px-2 py-2 transition-colors"
                 >
                   로그아웃
                 </button>
@@ -187,6 +187,7 @@ const Header: React.FC<HeaderProps> = ({
                 <div className="h-5 w-px bg-slate-200" />
                 <button
                   onClick={onHomeClick}
+                  aria-label="홈으로 이동"
                   className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all flex items-center gap-1"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
@@ -194,7 +195,7 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={onLogout}
-                  className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                  className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                 >
                   로그아웃
                 </button>

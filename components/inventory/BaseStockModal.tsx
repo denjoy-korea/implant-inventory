@@ -227,7 +227,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+              <thead className="md:sticky md:top-0 z-10 bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[64px] text-center">No</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">제조사</th>

@@ -80,7 +80,7 @@ const InventoryCompareModal: React.FC<InventoryCompareModalProps> = ({
         <div className="flex-1 overflow-y-auto px-6 pb-2 min-h-0">
           {tab === 'new' && newItems.length > 0 && (
             <div className="space-y-1">
-              <div className="sticky top-0 bg-white py-2 border-b border-slate-100">
+              <div className="md:sticky md:top-0 bg-white py-2 border-b border-slate-100">
                 <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3">
                   <span>제조사</span>
                   <span>브랜드</span>
@@ -107,7 +107,7 @@ const InventoryCompareModal: React.FC<InventoryCompareModalProps> = ({
           )}
           {tab === 'dup' && duplicates.length > 0 && (
             <div className="space-y-1">
-              <div className="sticky top-0 bg-white py-2 border-b border-slate-100">
+              <div className="md:sticky md:top-0 bg-white py-2 border-b border-slate-100">
                 <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3">
                   <span>제조사</span>
                   <span>브랜드</span>

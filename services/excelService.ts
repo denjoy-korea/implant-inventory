@@ -1,56 +1,44 @@
-import * as XLSX from 'xlsx';
 import { ExcelData } from '../types';
+import { supabase } from './supabaseClient';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
+
+async function toBase64(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (const b of bytes) {
+    binary += String.fromCharCode(b);
+  }
+  return btoa(binary);
+}
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
   if (file.size > MAX_FILE_SIZE) {
     throw new Error('파일 크기가 2MB를 초과합니다.');
   }
 
-  const arrayBuffer = await file.arrayBuffer();
-
-  let workbook: XLSX.WorkBook;
-  try {
-    workbook = XLSX.read(arrayBuffer, { type: 'array' });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`엑셀 파싱 실패: ${msg}`);
-  }
-
-  const sheets: ExcelData['sheets'] = {};
-
-  workbook.SheetNames.forEach((sheetName) => {
-    const worksheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
-
-    const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
-    const columns: string[] = [];
-    if (range) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const address = XLSX.utils.encode_col(C) + '1';
-        const cell = worksheet[address];
-        if (cell && cell.v !== undefined && cell.v !== null) {
-          columns.push(String(cell.v));
-        }
-      }
-    }
-
-    const cleanedRows = rows.map((row) => {
-      if (row['사용안함'] !== undefined) {
-        const val = row['사용안함'];
-        row['사용안함'] = val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v';
-      }
-      return row;
-    });
-
-    sheets[sheetName] = { name: sheetName, columns, rows: cleanedRows };
+  const fileBase64 = await toBase64(file);
+  const { data, error } = await supabase.functions.invoke('xlsx-parse', {
+    body: {
+      fileBase64,
+      filename: file.name,
+    },
   });
 
-  return {
-    sheets,
-    activeSheetName: workbook.SheetNames[0],
-  };
+  if (error) {
+    const raw = error.message || '';
+    const detail = raw.includes('Failed to send a request to the Edge Function')
+      ? 'Edge Function 연결 실패 (xlsx-parse 배포/프로젝트 URL/네트워크 확인 필요)'
+      : raw || '서버에서 상세 오류를 반환하지 않았습니다.';
+    throw new Error(`엑셀 파싱 실패: ${detail}`);
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('엑셀 파싱 실패: 서버 응답 형식이 올바르지 않습니다.');
+  }
+
+  return data as ExcelData;
 };
 
 export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {
@@ -59,12 +47,60 @@ export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<nu
     return;
   }
 
-  const selectedRows = activeSheet.rows.filter((_, i) => selectedIndices.has(i));
-  const rowsToExport = selectedRows.length > 0 ? selectedRows : activeSheet.rows;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('엑셀 생성 실패: Supabase 환경변수가 설정되지 않았습니다.');
+  }
 
-  const worksheet = XLSX.utils.json_to_sheet(rowsToExport, { header: activeSheet.columns });
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, activeSheet.name);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token ?? supabaseAnonKey;
+  const endpoint = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/xlsx-generate`;
 
-  XLSX.writeFile(workbook, fileName || 'export.xlsx');
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: supabaseAnonKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      activeSheet,
+      selectedIndices: Array.from(selectedIndices),
+      fileName,
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const errBody = await response.json();
+      if (errBody && typeof errBody === 'object' && 'error' in errBody && typeof errBody.error === 'string') {
+        detail = errBody.error;
+      }
+    } catch {}
+    throw new Error(`엑셀 생성 실패: ${detail}`);
+  }
+
+  const binaryData = await response.arrayBuffer();
+  if (!(binaryData instanceof ArrayBuffer)) {
+    throw new Error('엑셀 생성 실패: 서버 응답 형식이 올바르지 않습니다.');
+  }
+
+  const blob = new Blob([binaryData], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+  const safeFileName = fileName?.trim() ? fileName : 'export.xlsx';
+  const downloadUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = safeFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } finally {
+    URL.revokeObjectURL(downloadUrl);
+  }
 };

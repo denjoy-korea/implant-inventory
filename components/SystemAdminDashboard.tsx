@@ -57,8 +57,12 @@ const PLAN_SHORT_LABELS: Record<PlanType, string> = {
     ultimate: 'Maxs',
 };
 
+type AdminTab = 'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual' | 'plan_management';
+
 const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, onToggleView }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual' | 'plan_management'>('overview');
+    const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [hospitals, setHospitals] = useState<DbHospitalRow[]>([]);
     const [profiles, setProfiles] = useState<DbProfile[]>([]);
     const [resetRequests, setResetRequests] = useState<DbResetRequest[]>([]);
@@ -177,6 +181,34 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     };
 
     useEffect(() => { loadData(); }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mediaQuery = window.matchMedia('(max-width: 1023px)');
+
+        const syncViewport = () => {
+            const isMobile = mediaQuery.matches;
+            setIsMobileViewport(isMobile);
+            if (!isMobile) {
+                setIsMobileSidebarOpen(false);
+            }
+        };
+
+        syncViewport();
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', syncViewport);
+            return () => mediaQuery.removeEventListener('change', syncViewport);
+        }
+        mediaQuery.addListener(syncViewport);
+        return () => mediaQuery.removeListener(syncViewport);
+    }, []);
+
+    const handleTabChange = (tab: AdminTab) => {
+        setActiveTab(tab);
+        if (isMobileViewport) {
+            setIsMobileSidebarOpen(false);
+        }
+    };
 
     const handleSavePlanCapacity = async (plan: string) => {
         const newCapacity = planCapacityEditing[plan];
@@ -456,13 +488,13 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             label: '등록 병원', value: hospitals.length,
             sub: `플랜: Free ${hospitals.filter(h => h.plan === 'free').length} / 유료 ${hospitals.filter(h => h.plan !== 'free').length}`,
             icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>),
-            color: 'indigo', onClick: () => setActiveTab('hospitals'), active: activeTab === 'hospitals',
+            color: 'indigo', onClick: () => handleTabChange('hospitals'), active: activeTab === 'hospitals',
         },
         {
             label: '전체 회원', value: profiles.length,
             sub: `활성 ${activeCount}명 / 대기 ${pendingCount}명`,
             icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>),
-            color: 'purple', onClick: () => setActiveTab('users'), active: activeTab === 'users',
+            color: 'purple', onClick: () => handleTabChange('users'), active: activeTab === 'users',
         },
         {
             label: '시스템 상태', value: 'OK',
@@ -481,18 +513,46 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     return (
         <>
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+            {isMobileViewport && isMobileSidebarOpen && (
+                <button
+                    type="button"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                    className="fixed inset-0 z-[210] bg-slate-900/40 backdrop-blur-[1px] lg:hidden"
+                    aria-label="운영자 메뉴 닫기"
+                />
+            )}
             {/* 사이드바 */}
-            <aside className="w-64 bg-slate-900 flex flex-col flex-shrink-0 shadow-2xl relative z-20">
+            <aside className={`bg-slate-900 flex flex-col shadow-2xl ${
+                isMobileViewport
+                    ? `fixed inset-y-0 left-0 w-72 max-w-[88vw] z-[220] transition-transform duration-200 ${
+                        isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`
+                    : 'w-64 flex-shrink-0 relative z-20'
+            }`}>
                 <div className="p-6 pb-2">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">S</div>
-                        <div>
-                            <h1 className="text-white font-bold tracking-tight text-lg">시스템 관리</h1>
-                            <div className="flex items-center gap-1.5 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity" onClick={onToggleView} title="사용자 뷰로 전환">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">운영자 모드</span>
+                    <div className="flex items-start justify-between gap-3 mb-6">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">S</div>
+                            <div>
+                                <h1 className="text-white font-bold tracking-tight text-lg">시스템 관리</h1>
+                                <div className="flex items-center gap-1.5 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity" onClick={onToggleView} title="사용자 뷰로 전환">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">운영자 모드</span>
+                                </div>
                             </div>
                         </div>
+                        {isMobileViewport && (
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileSidebarOpen(false)}
+                                className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 active:scale-[0.98] transition-all lg:hidden"
+                                aria-label="운영자 메뉴 닫기"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -500,7 +560,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     {[
                         { id: 'overview' as const, label: '대시보드 개요', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /> },
                     ].map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">{tab.icon}</svg>
                             <span className="font-medium">{tab.label}</span>
@@ -510,22 +570,22 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     <div className="pt-6 pb-2 px-2">
                         <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">플랫폼 관리</div>
                         <div className="space-y-1">
-                            <button onClick={() => setActiveTab('hospitals')}
+                            <button onClick={() => handleTabChange('hospitals')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'hospitals' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                                 <span className="font-medium">병원 관리</span>
                             </button>
-                            <button onClick={() => setActiveTab('users')}
+                            <button onClick={() => handleTabChange('users')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                 <span className="font-medium">전체 회원 관리</span>
                             </button>
-                            <button onClick={() => setActiveTab('plan_management')}
+                            <button onClick={() => handleTabChange('plan_management')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'plan_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                 <span className="font-medium">플랜 관리</span>
                             </button>
-                            <button onClick={() => setActiveTab('reset_requests')}
+                            <button onClick={() => handleTabChange('reset_requests')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'reset_requests' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 <span className="font-medium">초기화 요청</span>
@@ -541,7 +601,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     <div className="pt-6 pb-2 px-2">
                         <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">문서</div>
                         <div className="space-y-1">
-                            <button onClick={() => setActiveTab('manual')}
+                            <button onClick={() => handleTabChange('manual')}
                                 className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${activeTab === 'manual' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                                 <span className="font-medium">사용자 매뉴얼</span>
@@ -570,11 +630,23 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="bg-white border-b border-slate-200 px-6 py-2.5 sticky top-0 z-[100] flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs text-slate-400 font-medium">{dateStr} {dayStr}</span>
-                        <div className="h-4 w-px bg-slate-200" />
-                        <h1 className="text-sm font-bold text-slate-700">
+                <header className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] flex items-center justify-between gap-2 overflow-x-hidden">
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                        {isMobileViewport && (
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileSidebarOpen(true)}
+                                className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 active:scale-[0.98] transition-all lg:hidden"
+                                aria-label="운영자 메뉴 열기"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 7h16M4 12h16M4 17h16" />
+                                </svg>
+                            </button>
+                        )}
+                        <span className="hidden sm:inline text-xs text-slate-400 font-medium">{dateStr} {dayStr}</span>
+                        <div className="hidden sm:block h-4 w-px bg-slate-200" />
+                        <h1 className="text-xs sm:text-sm font-bold text-slate-700 truncate whitespace-nowrap leading-tight max-w-[42vw] sm:max-w-none">
                             {activeTab === 'overview' && '시스템 개요'}
                             {activeTab === 'hospitals' && '병원 관리'}
                             {activeTab === 'users' && '전체 회원 관리'}
@@ -583,19 +655,20 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                             {activeTab === 'plan_management' && '플랜 관리'}
                         </h1>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <button onClick={loadData} className="text-xs text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <button onClick={loadData} className="h-9 sm:h-auto px-2 sm:px-0 text-xs text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1 rounded-lg hover:bg-slate-50">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            새로고침
+                            <span className="hidden sm:inline">새로고침</span>
                         </button>
-                        <div className="bg-slate-900 text-white text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-2">
+                        <div className="bg-slate-900 text-white text-[10px] sm:text-xs font-bold py-1.5 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 sm:gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            시스템 정상
+                            <span className="hidden sm:inline">시스템 정상</span>
+                            <span className="sm:hidden">정상</span>
                         </div>
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-x-hidden p-6 max-w-7xl mx-auto w-full space-y-6">
+                <main className="flex-1 overflow-x-hidden p-3 sm:p-6 max-w-7xl mx-auto w-full space-y-6">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-20 text-slate-400">불러오는 중...</div>
                     ) : (

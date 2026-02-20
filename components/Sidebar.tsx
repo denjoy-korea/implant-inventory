@@ -142,7 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* 그룹 0: 대시보드 오버뷰 */}
         <div className="space-y-4">
-          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Overview</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Overview</h3>
           <nav className="space-y-1">
             <button
               onClick={() => handleTabClick('overview')}
@@ -161,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* 그룹 1: 재고 및 수술 통계 */}
         <div className="space-y-4">
-          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Master Management</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Master Management</h3>
           <nav className="space-y-1">
             <button
               onClick={() => handleTabClick('inventory_master')}
@@ -264,7 +264,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Settings */}
         <div className="pt-6 border-t border-slate-800">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">SETTINGS</div>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">SETTINGS</div>
           <nav className="space-y-1">
             <button
               onClick={() => {

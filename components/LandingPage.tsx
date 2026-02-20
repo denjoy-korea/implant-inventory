@@ -1,10 +1,14 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 
 
 interface LandingPageProps {
   onGetStarted: () => void;
   onAnalyze?: () => void;
+  onGoToValue?: () => void;
+  onGoToPricing?: () => void;
+  onGoToNotices?: () => void;
+  onGoToContact?: () => void;
 }
 
 /* ───── Counter Animation Hook (목표 그라데이션: 숫자가 차오르는 모습) ───── */
@@ -37,16 +41,60 @@ const useCountUp = (end: number, duration = 2000) => {
   return { count, ref };
 };
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) => {
+const LandingPage: React.FC<LandingPageProps> = ({
+  onGetStarted,
+  onAnalyze,
+  onGoToValue,
+  onGoToPricing,
+  onGoToNotices,
+  onGoToContact,
+}) => {
   const stat1 = useCountUp(104, 800);
   const stat2 = useCountUp(14, 600);
   const stat3 = useCountUp(5, 600);
   const stat4 = useCountUp(0, 400);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileNotice, setMobileNotice] = useState<string | null>(null);
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const handleAnalyzeClick = useCallback(() => {
+    if (!onAnalyze) return;
+    if (isMobileViewport) {
+      setMobileNotice('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.');
+      return;
+    }
+    onAnalyze();
+  }, [isMobileViewport, onAnalyze]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+    syncViewport();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncViewport);
+      return () => mediaQuery.removeEventListener('change', syncViewport);
+    }
+    mediaQuery.addListener(syncViewport);
+    return () => mediaQuery.removeListener(syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileNotice) return;
+    const timer = window.setTimeout(() => setMobileNotice(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [mobileNotice]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white overflow-x-hidden">
+    <div className={`flex flex-col min-h-screen bg-slate-50 font-sans break-keep selection:bg-indigo-500 selection:text-white overflow-x-hidden ${isMobileViewport ? 'pb-24' : ''}`}>
 
       {/* ═══════════════════════════════════════════
           Hero Section
@@ -55,39 +103,39 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 손실 암시 ("매주 2시간을 낭비")
           - 결핍: 얼리어답터 한정 모집
          ═══════════════════════════════════════════ */}
-      <section className="relative flex flex-col justify-center items-center pt-32 pb-20 lg:pt-44 lg:pb-28 overflow-hidden">
+      <section className="relative flex flex-col justify-center items-center pt-20 pb-12 sm:pt-28 sm:pb-16 lg:pt-44 lg:pb-28 overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-indigo-50/50 via-white to-white"></div>
 
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10 text-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
           {/* 결핍 효과: 얼리어답터 한정 모집 */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/50 backdrop-blur-md border border-white/60 shadow-sm mb-8 animate-fade-in-up">
+          <div className="inline-flex max-w-[min(92vw,680px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/50 backdrop-blur-md border border-white/60 shadow-sm mb-5 sm:mb-8 animate-fade-in-up">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
             </span>
-            <span className="text-sm font-bold text-slate-800 tracking-wide">베타 테스터 10곳 한정 모집 중 &middot; 1개월 무료 + 후기 작성 시 2개월 추가</span>
+            <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">베타 테스터 10곳 한정 모집 중 &middot; 1개월 무료 + 후기 작성 시 2개월 추가</span>
           </div>
 
           {/* 프레이밍: 구체적 수치로 가치 제시 */}
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-6 leading-tight animate-fade-in-up animation-delay-200">
-            임플란트 재고관리,<br className="hidden md:block" />
+          <h1 className="text-[2rem] sm:text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-4 sm:mb-6 leading-[1.14] sm:leading-tight text-balance animate-fade-in-up animation-delay-200">
+            임플란트 재고관리,<br className="sm:hidden" /><br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">
               연 104시간을 돌려드립니다
             </span>
           </h1>
 
           {/* 손실 회피: 현재 낭비를 암시 */}
-          <p className="mt-4 text-xl md:text-2xl leading-relaxed text-slate-600 font-medium max-w-3xl mx-auto text-balance animate-fade-in-up animation-delay-400">
+          <p className="mt-3 sm:mt-4 text-[15px] sm:text-lg md:text-2xl leading-relaxed text-slate-600 font-medium max-w-3xl mx-auto text-balance animate-fade-in-up animation-delay-400">
             매주 <strong className="text-rose-500">2시간</strong>씩 엑셀 정리에 쓰는 시간,{' '}
             <strong className="text-slate-900">5분</strong>으로 바꾸세요.<br className="hidden md:block" />
             덴트웹 데이터를 업로드하면 나머지는 자동입니다.
           </p>
 
           {/* 힉스의 법칙: 선택지를 줄여 명확한 행동 유도 */}
-          <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-5 animate-fade-in-up animation-delay-400">
+          <div className="mt-7 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 animate-fade-in-up animation-delay-400">
             <button
               onClick={onGetStarted}
-              className="group relative px-8 py-4 bg-slate-900 text-white text-lg font-bold rounded-2xl shadow-2xl shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+              className="group relative px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-900 text-white text-base sm:text-lg font-bold rounded-2xl shadow-2xl shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
             >
               <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
               <span className="relative flex items-center gap-3">
@@ -97,11 +145,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
                 </svg>
               </span>
             </button>
-            <span className="text-sm text-slate-400">카드 정보 불필요 &middot; 1분 가입</span>
+            <span className="text-xs sm:text-sm text-slate-400">카드 정보 불필요 &middot; 1분 가입</span>
           </div>
 
           {/* 피드포워드: 가입 후 얻을 결과 미리보기 */}
-          <div className="mt-8 flex items-center justify-center gap-6 text-sm text-slate-500 animate-fade-in-up animation-delay-400">
+          <div className="mt-5 sm:mt-8 flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 sm:gap-y-2 text-[12px] sm:text-sm text-slate-500 animate-fade-in-up animation-delay-400">
             <span className="flex items-center gap-1.5">
               <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               실시간 재고 현황
@@ -118,16 +166,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
         </div>
 
         {/* Dashboard Mockup */}
-        <div className="mt-20 relative z-10 w-full max-w-6xl mx-auto px-4 perspective-1000 animate-fade-in-up animation-delay-400">
-          <div className="relative rounded-2xl bg-slate-900/5 p-2 backdrop-blur-xl ring-1 ring-slate-900/10 shadow-2xl transform rotate-x-12 hover:rotate-x-0 transition-transform duration-700 ease-out-back origin-center">
+        <div className="mt-10 sm:mt-20 relative z-10 w-full max-w-4xl sm:max-w-6xl mx-auto px-3 sm:px-4 perspective-1000 animate-fade-in-up animation-delay-400">
+          <div className="relative rounded-2xl bg-slate-900/5 p-1.5 sm:p-2 backdrop-blur-xl ring-1 ring-slate-900/10 shadow-2xl transform rotate-x-6 sm:rotate-x-12 hover:rotate-x-0 transition-transform duration-700 ease-out-back origin-center">
             <div className="rounded-xl bg-white shadow-inner overflow-hidden border border-slate-200/50 aspect-[16/9] flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
               <div className="text-center">
-                <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-10 h-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-14 h-14 sm:w-20 sm:h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-4">
+                  <svg className="w-7 h-7 sm:w-10 sm:h-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <span className="text-slate-400 font-medium">Dashboard Preview</span>
+                <span className="text-slate-400 text-xs sm:text-sm font-medium">Dashboard Preview</span>
               </div>
             </div>
           </div>
@@ -140,12 +188,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           심리효과: 권위 편향 + 프레이밍
           - 연동 가능한 시스템/지원 브랜드로 신뢰 확보
          ═══════════════════════════════════════════ */}
-      <section className="py-8 bg-white border-y border-slate-100">
-        <div className="max-w-7xl mx-auto px-6">
-          <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+      <section className="py-5 sm:py-8 bg-white border-y border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <p className="text-center text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 sm:mb-3">
             덴트웹 기본셋팅 전 제조사 데이터 적용
           </p>
-          <p className="text-center text-slate-300 font-black text-base md:text-lg tracking-tight">
+          <p className="text-center text-slate-300 font-black text-sm sm:text-base md:text-lg tracking-tight leading-relaxed max-w-5xl mx-auto">
             OSSTEM · Dentium · Megagen · Neobiotech · DIO · Warantec · Dentis · Straumann · Magicore · 신흥 · 탑플란 · 포인트임플란트 등
           </p>
         </div>
@@ -157,16 +205,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 현재 방식의 구체적 손실을 생생하게 묘사
           - 인지적 불일치: "나도 이러고 있나?" 자각 유도
          ═══════════════════════════════════════════ */}
-      <section className="py-20 bg-slate-50">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
+      <section className="py-14 sm:py-20 bg-slate-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-14">
             <p className="text-sm font-bold text-rose-500 uppercase tracking-widest mb-3">Hidden Costs</p>
-            <h2 className="text-3xl md:text-4xl font-black text-slate-900">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 text-balance">
               혹시 이런 경험, 있으신가요?
             </h2>
-            <p className="text-slate-500 mt-3 text-lg">하나라도 해당된다면, 지금이 바꿀 때입니다</p>
+            <p className="text-slate-500 mt-3 text-base sm:text-lg text-balance">하나라도 해당된다면, 지금이 바꿀 때입니다</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {[
               {
                 emoji: '1',
@@ -187,12 +235,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
                 tag: '비생산적 반복 업무',
               },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-black text-sm mb-5">
+              <div key={i} className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-black text-sm mb-4 sm:mb-5">
                   {item.emoji}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-3">{item.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-4">{item.desc}</p>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 text-balance">{item.title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed mb-4 text-balance">{item.desc}</p>
                 <span className="text-xs font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full">{item.tag}</span>
               </div>
             ))}
@@ -206,13 +254,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 제품의 핵심 가치를 한 눈에 인식
           - Before/After 대비로 변화의 크기 체감
          ═══════════════════════════════════════════ */}
-      <section className="py-20 bg-white">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
+      <section className="py-14 sm:py-20 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-14">
             <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-3">Transformation</p>
-            <h2 className="text-3xl md:text-4xl font-black text-slate-900">DenJOY가 바꾸는 일상</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 text-balance">DenJOY가 바꾸는 일상</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
             {[
               {
                 before: '재고 파악 30분~1시간',
@@ -246,17 +294,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
               },
             ].map((item, i) => (
               <div key={i} className="text-center">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-5">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-4 sm:mb-5">
                   {item.icon}
                 </div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">{item.label}</p>
-                <div className="bg-slate-100 rounded-xl px-5 py-3 mb-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 sm:mb-4">{item.label}</p>
+                <div className="bg-slate-100 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 mb-2.5 sm:mb-3">
                   <p className="text-sm text-slate-400 line-through">{item.before}</p>
                 </div>
-                <svg className="w-5 h-5 text-indigo-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 mx-auto mb-2.5 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
-                <div className="bg-indigo-50 rounded-xl px-5 py-3 border border-indigo-100">
+                <div className="bg-indigo-50 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 border border-indigo-100">
                   <p className="text-sm text-indigo-700 font-bold">{item.after}</p>
                 </div>
               </div>
@@ -271,20 +319,20 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 가장 인상적인 기능을 먼저 배치 (앵커링)
           - 핵심 기능 카드를 시각적으로 차별화 (폰 레스토르프)
          ═══════════════════════════════════════════ */}
-      <section id="features" className="py-24 bg-slate-50 relative">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="text-center mb-16">
+      <section id="features" className="py-16 sm:py-24 bg-slate-50 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 sm:mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase">Key Features</h2>
-            <p className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">병원 운영의 품격을 높이는 기능</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 sm:text-4xl text-balance">병원 운영의 품격을 높이는 기능</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
             {/* Feature 1 - 폰 레스토르프: 핵심 기능을 시각적으로 차별화 */}
-            <div className="group relative p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden">
+            <div className="group relative p-5 sm:p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[2rem] -mr-8 -mt-8"></div>
               <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
               <div className="relative z-10">
-                <div className="h-14 w-14 flex items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm mb-6">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
                   <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
@@ -293,8 +341,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
                   <span className="w-1.5 h-1.5 bg-amber-300 rounded-full"></span>
                   가장 인기 있는 기능
                 </div>
-                <h3 className="text-xl font-bold mb-3">실시간 재고 & 자동 차감</h3>
-                <p className="text-indigo-100 leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold mb-3 text-balance">실시간 재고 & 자동 차감</h3>
+                <p className="text-indigo-100 leading-relaxed text-balance">
                   수술 기록을 업로드하면 재고가 자동으로 차감됩니다. 브랜드/사이즈별 현재고를 한눈에 파악하고,
                   부족 시 즉시 알림을 받으세요.
                 </p>
@@ -302,16 +350,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
             </div>
 
             {/* Feature 2 */}
-            <div className="group relative p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
+            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-purple-100"></div>
               <div className="relative z-10">
-                <div className="h-14 w-14 flex items-center justify-center rounded-2xl bg-purple-50 shadow-sm mb-6 text-purple-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-purple-50 shadow-sm mb-4 sm:mb-6 text-purple-600 group-hover:scale-110 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">스마트 데이터 정규화</h3>
-                <p className="text-slate-500 leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">스마트 데이터 정규화</h3>
+                <p className="text-slate-500 leading-relaxed text-balance">
                   다양한 제조사와 브랜드의 파편화된 이름을 표준 규격으로 자동 변환합니다. 오타 자동 수정으로
                   데이터 정확도 99.9%.
                 </p>
@@ -319,16 +367,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
             </div>
 
             {/* Feature 3 */}
-            <div className="group relative p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
+            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-blue-100"></div>
               <div className="relative z-10">
-                <div className="h-14 w-14 flex items-center justify-center rounded-2xl bg-blue-50 shadow-sm mb-6 text-blue-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-blue-50 shadow-sm mb-4 sm:mb-6 text-blue-600 group-hover:scale-110 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">FAIL 관리 & 발주 추적</h3>
-                <p className="text-slate-500 leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">FAIL 관리 & 발주 추적</h3>
+                <p className="text-slate-500 leading-relaxed text-balance">
                   수술 중 FAIL부터 교환 접수, 입고 확인까지 전 과정을 추적합니다. 소모 패턴 기반 스마트 발주 추천으로
                   발주 실수를 크게 줄이세요.
                 </p>
@@ -344,24 +392,24 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 무료 가치를 먼저 제공하여 관심 유도
          ═══════════════════════════════════════════ */}
       {onAnalyze && (
-        <section className="py-16 bg-gradient-to-r from-emerald-600 to-teal-600 relative overflow-hidden">
+        <section className="py-12 sm:py-16 bg-gradient-to-r from-emerald-600 to-teal-600 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
-          <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm mb-6">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10">
+            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              <span className="text-sm font-bold text-white">회원가입 없이 무료</span>
+              <span className="text-xs sm:text-sm font-bold text-white">회원가입 없이 무료</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-black text-white mb-4">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white mb-4 text-balance">
               먼저 우리 병원 데이터 품질을 확인해보세요
             </h2>
-            <p className="text-emerald-100 text-lg mb-8 max-w-2xl mx-auto">
+            <p className="text-emerald-100 text-base sm:text-lg mb-8 max-w-2xl mx-auto text-balance">
               픽스쳐 재고 파일과 수술기록지를 업로드하면, FAIL 관리·보험청구 구분·매칭률 등 6가지 항목을 즉시 진단합니다.
             </p>
             <button
-              onClick={onAnalyze}
-              className="group px-8 py-4 bg-white text-emerald-700 text-lg font-black rounded-2xl shadow-2xl shadow-emerald-900/30 hover:shadow-emerald-900/50 hover:-translate-y-1 transition-all duration-300"
+              onClick={handleAnalyzeClick}
+              className="group px-6 sm:px-8 py-3 sm:py-4 bg-white text-emerald-700 text-base sm:text-lg font-black rounded-2xl shadow-2xl shadow-emerald-900/30 hover:shadow-emerald-900/50 hover:-translate-y-1 transition-all duration-300"
             >
               <span className="flex items-center gap-3">
                 무료 분석하기
@@ -381,37 +429,37 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 숫자를 시각적으로 고정시켜 기억에 남김
           - 카운트업 애니메이션으로 목표 그라데이션 효과
          ═══════════════════════════════════════════ */}
-      <section className="py-20 bg-slate-900 text-white relative overflow-hidden">
+      <section className="py-14 sm:py-20 bg-slate-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
-            <div ref={stat1.ref} className="p-6">
-              <div className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
-                {stat1.count}<span className="text-2xl lg:text-3xl">시간</span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8 text-center">
+            <div ref={stat1.ref} className="p-4 sm:p-6">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
+                {stat1.count}<span className="text-xl sm:text-2xl lg:text-3xl">시간</span>
               </div>
-              <div className="text-white font-bold text-sm mb-1">연간 절약 시간</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">연간 절약 시간</div>
               <div className="text-slate-500 text-xs">주 2시간 x 52주</div>
             </div>
-            <div ref={stat2.ref} className="p-6">
-              <div className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
-                {stat2.count}<span className="text-2xl lg:text-3xl">개</span>
+            <div ref={stat2.ref} className="p-4 sm:p-6">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
+                {stat2.count}<span className="text-xl sm:text-2xl lg:text-3xl">개</span>
               </div>
-              <div className="text-white font-bold text-sm mb-1">적용 브랜드</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">적용 브랜드</div>
               <div className="text-slate-500 text-xs">덴트웹 기본셋팅 전 제조사</div>
             </div>
-            <div ref={stat3.ref} className="p-6">
-              <div className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
-                {stat3.count}<span className="text-2xl lg:text-3xl">분</span>
+            <div ref={stat3.ref} className="p-4 sm:p-6">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
+                {stat3.count}<span className="text-xl sm:text-2xl lg:text-3xl">분</span>
               </div>
-              <div className="text-white font-bold text-sm mb-1">재고 확인 시간</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">재고 확인 시간</div>
               <div className="text-slate-500 text-xs">클릭 한 번이면 끝</div>
             </div>
-            <div ref={stat4.ref} className="p-6">
-              <div className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
-                {stat4.count}<span className="text-2xl lg:text-3xl">원</span>
+            <div ref={stat4.ref} className="p-4 sm:p-6">
+              <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
+                {stat4.count}<span className="text-xl sm:text-2xl lg:text-3xl">원</span>
               </div>
-              <div className="text-white font-bold text-sm mb-1">도입 비용</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">도입 비용</div>
               <div className="text-slate-500 text-xs">무료 플랜으로 바로 시작</div>
             </div>
           </div>
@@ -425,14 +473,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 각 단계 후 결과를 미리 제시 (피드포워드)
           - 실수 방지 설계 (포카요케): 자동 변환/분류
          ═══════════════════════════════════════════ */}
-      <section className="py-24 bg-white">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-16">
+      <section className="py-16 sm:py-24 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase">How It Works</h2>
-            <p className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">3단계로 바로 시작</p>
-            <p className="text-slate-500 mt-3">복잡한 설치나 교육 없이, 하루면 충분합니다</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 sm:text-4xl text-balance">3단계로 바로 시작</p>
+            <p className="text-slate-500 mt-3 text-balance">복잡한 설치나 교육 없이, 하루면 충분합니다</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-10 relative">
             <div className="hidden md:block absolute top-12 left-[20%] right-[20%] h-0.5 bg-gradient-to-r from-indigo-200 via-indigo-400 to-indigo-200"></div>
             {[
               {
@@ -455,11 +503,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
               },
             ].map((item, i) => (
               <div key={i} className="text-center relative">
-                <div className="w-12 h-12 rounded-full bg-indigo-600 text-white flex items-center justify-center mx-auto mb-5 font-black text-sm shadow-lg shadow-indigo-200 relative z-10">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-600 text-white flex items-center justify-center mx-auto mb-4 sm:mb-5 font-black text-xs sm:text-sm shadow-lg shadow-indigo-200 relative z-10">
                   {item.step}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">{item.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-3">{item.desc}</p>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-2 text-balance">{item.title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed mb-3 text-balance">{item.desc}</p>
                 <span className="text-xs font-bold text-indigo-600">{item.result}</span>
               </div>
             ))}
@@ -474,13 +522,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 구체적 수치 포함 → 가용성 휴리스틱
           - 직함 표시 → 권위 편향
          ═══════════════════════════════════════════ */}
-      <section id="testimonials" className="py-24 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="text-center mb-16">
+      <section id="testimonials" className="py-16 sm:py-24 bg-slate-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 sm:mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase">Early Adopters</h2>
-            <p className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">베타 테스터 후기</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 sm:text-4xl text-balance">베타 테스터 후기</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
             {[
               {
                 name: '김OO 원장',
@@ -504,23 +552,23 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
                 metric: '업무 시간 대폭 단축',
               },
             ].map((t, i) => (
-              <div key={i} className="bg-white rounded-2xl p-8 border border-slate-100 flex flex-col hover:shadow-lg transition-shadow">
-                <div className="flex gap-1 mb-4">
+              <div key={i} className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-100 flex flex-col hover:shadow-lg transition-shadow">
+                <div className="flex gap-1 mb-3 sm:mb-4">
                   {[...Array(5)].map((_, si) => (
-                    <svg key={si} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                    <svg key={si} className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
                   ))}
                 </div>
-                <p className="text-slate-600 leading-relaxed flex-1 mb-6">"{t.text}"</p>
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
+                <p className="text-slate-600 text-sm sm:text-base leading-relaxed flex-1 mb-4 sm:mb-6 text-balance">"{t.text}"</p>
+                <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
                       {t.name.charAt(0)}
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{t.name}</p>
-                      <p className="text-xs text-slate-400">{t.clinic} &middot; {t.role}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{t.name}</p>
+                      <p className="text-[11px] sm:text-xs text-slate-400 truncate">{t.clinic} &middot; {t.role}</p>
                     </div>
                   </div>
                   <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full hidden sm:inline-block">
@@ -540,32 +588,89 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onAnalyze }) =>
           - 피크엔드: 페이지의 마지막을 강렬하게
           - 앵커링: "0원"을 먼저 보여주고 가치를 인식
          ═══════════════════════════════════════════ */}
-      <section className="py-20 bg-slate-900 text-white relative overflow-hidden">
+      <section className="py-14 sm:py-20 bg-slate-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-        <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 mb-8">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative z-10">
+          <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-amber-500/10 border border-amber-500/20 mb-5 sm:mb-8">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-sm font-bold text-amber-300">10곳 한정 · 1개월 무료 체험 후 후기 작성 시 +2개월</span>
+            <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">10곳 한정 · 1개월 무료 체험 후 후기 작성 시 +2개월</span>
           </div>
-          <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-5xl font-black mb-5 sm:mb-6 leading-tight text-balance">
             지금 시작하면<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">최대 3개월 무료</span>
           </h2>
-          <p className="text-slate-400 text-lg mb-4">
+          <p className="text-slate-400 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance">
             엑셀에 쓰는 시간을 환자에게 쓰세요.
           </p>
-          <p className="text-sm text-slate-500 mb-10">
+          <p className="text-sm text-slate-500 mb-7 sm:mb-10 text-balance">
             1개월 무료 체험 + 후기 작성 시 2개월 추가 &middot; 카드 불필요
           </p>
           <button
             onClick={onGetStarted}
-            className="px-10 py-4 bg-white text-slate-900 text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
+            className="px-7 sm:px-10 py-3 sm:py-4 bg-white text-slate-900 text-base sm:text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
           >
             무료로 시작하기
           </button>
         </div>
       </section>
+
+      {isMobileViewport && (
+        <>
+          {mobileNotice && (
+            <div className="fixed left-1/2 -translate-x-1/2 bottom-[6.75rem] z-[170] rounded-xl bg-slate-900 text-white text-xs font-bold px-4 py-2 shadow-xl">
+              {mobileNotice}
+            </div>
+          )}
+          <nav className="fixed inset-x-0 bottom-0 z-[160] border-t border-slate-200 bg-white/96 backdrop-blur pb-[max(env(safe-area-inset-bottom),0px)]">
+            <div className="grid grid-cols-3 gap-1 px-2 py-2">
+              <button
+                type="button"
+                onClick={() => (onGoToValue ? onGoToValue() : scrollToSection('features'))}
+                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
+              >
+                도입효과
+              </button>
+              <button
+                type="button"
+                onClick={() => (onGoToPricing ? onGoToPricing() : onGetStarted())}
+                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
+              >
+                요금제
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('testimonials')}
+                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
+              >
+                고객후기
+              </button>
+              <button
+                type="button"
+                onClick={() => (onGoToNotices ? onGoToNotices() : null)}
+                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
+              >
+                업데이트 소식
+              </button>
+              <button
+                type="button"
+                onClick={() => (onGoToContact ? onGoToContact() : null)}
+                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
+              >
+                문의하기
+              </button>
+              <button
+                type="button"
+                onClick={handleAnalyzeClick}
+                className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 active:scale-[0.98] flex items-center justify-center gap-1"
+              >
+                <span>무료분석</span>
+                <span className="text-[9px] font-black text-amber-600">PC</span>
+              </button>
+            </div>
+          </nav>
+        </>
+      )}
 
       {/* Footer - 약관 링크 + 기업정보 */}
       <footer className="border-t border-slate-200 bg-slate-50">

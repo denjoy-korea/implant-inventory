@@ -8,6 +8,7 @@ export type OperationAction =
   | 'inventory_audit'
   | 'order_create'
   | 'order_status_update'
+  | 'order_delete'
   | 'item_delete'
   | 'member_approve'
   | 'member_reject'

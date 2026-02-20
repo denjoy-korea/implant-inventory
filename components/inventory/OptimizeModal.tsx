@@ -92,7 +92,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
             <div className="py-16 text-center text-slate-400 text-sm">해당하는 품목이 없습니다.</div>
           ) : (
             <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
+              <thead className="bg-slate-50 border-b border-slate-100 md:sticky md:top-0">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer" />

@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const REPO_ROOT = process.cwd();
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', 'coverage']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', 'coverage', '.claude']);
 const failures = [];
 
 function toUnixPath(filePath) {
@@ -206,11 +206,33 @@ function checkPlanLimitConsistency() {
   }
 }
 
+function checkTypeSafetyGuardrails() {
+  const sourceFiles = walk(REPO_ROOT).filter((filePath) => {
+    return /\.(ts|tsx)$/.test(filePath);
+  });
+
+  const forbiddenPatterns = [
+    { label: 'as any', regex: /\bas\s+any\b/ },
+    { label: '@ts-ignore', regex: /@ts-ignore/ },
+    { label: '@ts-expect-error', regex: /@ts-expect-error/ },
+  ];
+
+  for (const filePath of sourceFiles) {
+    const content = readFileSync(filePath, 'utf8');
+    for (const pattern of forbiddenPatterns) {
+      if (pattern.regex.test(content)) {
+        failures.push(`${rel(filePath)}: forbidden type-safety suppression detected (${pattern.label})`);
+      }
+    }
+  }
+}
+
 checkDangerouslySetInnerHTML();
 checkInnerHtmlAssignments();
 checkSecurityMigrationGuards();
 checkPlanLimitConsistency();
 checkMaintenanceServiceWiring();
+checkTypeSafetyGuardrails();
 
 if (failures.length > 0) {
   console.error('Custom lint failed with the following issues:');

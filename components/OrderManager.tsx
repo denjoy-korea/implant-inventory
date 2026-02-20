@@ -47,6 +47,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
 
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+  const displayMfr = (name: string) => name === 'IBS' ? 'IBS Implant' : name;
   const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
     `${simpleNormalize(manufacturer)}|${simpleNormalize(brand)}|${getSizeMatchKey(size, manufacturer)}`;
 
@@ -113,7 +114,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     fail_exchange: orders.filter(o => o.type === 'fail_exchange').length,
   }), [orders]);
 
-  // ── 월별 주문 추세 데이터 ──
+  // ── 월별 주문 추세 데이터 (건수 → 총 수량 합계) ──
   const monthlyOrderData = useMemo(() => {
     const monthMap: Record<string, { replenishment: number; fail_exchange: number; total: number }> = {};
     orders.forEach(o => {
@@ -121,9 +122,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       if (!d || d.length < 7) return;
       const month = d.substring(0, 7);
       if (!monthMap[month]) monthMap[month] = { replenishment: 0, fail_exchange: 0, total: 0 };
-      if (o.type === 'replenishment') monthMap[month].replenishment++;
-      else monthMap[month].fail_exchange++;
-      monthMap[month].total++;
+      const qty = o.items.reduce((s, item) => s + Number(item.quantity || 0), 0);
+      if (o.type === 'replenishment') monthMap[month].replenishment += qty;
+      else monthMap[month].fail_exchange += qty;
+      monthMap[month].total += qty;
     });
     return Object.entries(monthMap)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -211,16 +213,16 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* STICKY HEADER + KPI + FILTERS           */}
       {/* ═══════════════════════════════════════ */}
       <div
-        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
+        className="md:sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
       >
 
         {/* A. KPI Strip */}
         <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
-          <div className="grid grid-cols-4 divide-x divide-slate-100/50">
+          <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100/50 divide-y lg:divide-y-0">
             {/* 전체 주문 */}
-            <div className="p-6 relative overflow-hidden group">
+            <div className="p-4 sm:p-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               <h4 className="text-sm font-black text-slate-800 relative z-10">전체 주문</h4>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Total Orders</p>
@@ -239,7 +241,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               )}
             </div>
             {/* 입고 대기 */}
-            <div className="p-6 relative overflow-hidden group">
+            <div className="p-4 sm:p-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-rose-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               <h4 className="text-sm font-black text-slate-800 relative z-10">입고 대기</h4>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Pending</p>
@@ -247,7 +249,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className={`text-[11px] font-bold mt-1.5 relative z-10 ${animPending > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{stats.pendingQty}개</p>
             </div>
             {/* 처리 완료 */}
-            <div className="p-6 relative overflow-hidden group">
+            <div className="p-4 sm:p-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               <h4 className="text-sm font-black text-slate-800 relative z-10">처리 완료</h4>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Received</p>
@@ -255,7 +257,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className="text-[11px] font-bold text-emerald-400 mt-1.5 relative z-10">{stats.receivedQty}개</p>
             </div>
             {/* 발주 권장 */}
-            <div className="p-6 relative overflow-hidden group">
+            <div className="p-4 sm:p-6 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               <h4 className="text-sm font-black text-rose-600 relative z-10">발주 권장</h4>
               <p className="text-[10px] text-rose-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Low Stock</p>
@@ -267,8 +269,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         </div>
 
         {/* B. Type Tabs + Status Filter */}
-        <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 px-5 py-3 shadow-sm relative z-10">
-          <div className="flex gap-1.5 bg-indigo-50/40 p-1.5 rounded-xl border border-indigo-100/50 shadow-inner">
+        <div className="flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-between bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 px-3 sm:px-5 py-3 shadow-sm relative z-10">
+          <div className="flex flex-wrap gap-1.5 bg-indigo-50/40 p-1.5 rounded-xl border border-indigo-100/50 shadow-inner w-full lg:w-auto">
             {TYPE_TABS.map(({ key, label }) => {
               const isActive = filterType === key;
               return (
@@ -283,7 +285,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               );
             })}
           </div>
-          <div className="flex items-center gap-0.5 p-1 bg-slate-100 rounded-xl">
+          <div className="hidden sm:flex flex-wrap items-center gap-0.5 p-1 bg-slate-100 rounded-xl w-full lg:w-auto">
             {STATUS_FILTERS.map(({ key, label }) => {
               const isActive = filterStatus === key;
               const activeColor = key === 'ordered' ? 'text-rose-600' : key === 'received' ? 'text-emerald-600' : 'text-indigo-600';
@@ -298,6 +300,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               );
             })}
           </div>
+          <div className="sm:hidden px-1 text-[11px] font-semibold text-slate-500">
+            상태 필터는 기본값(전체)로 적용됩니다.
+          </div>
         </div>
       </div>{/* end sticky */}
 
@@ -305,8 +310,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* 발주 권장 품목 (제조사별 그룹핑)          */}
       {/* ═══════════════════════════════════════ */}
       {groupedLowStock.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
               <h3 className="text-sm font-black text-slate-800 tracking-tight">발주 권장 품목 {lowStockItems.length}종</h3>
@@ -321,7 +326,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             {groupedLowStock.map(([manufacturer, entries]) => (
               <div key={manufacturer} className="bg-slate-50 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{manufacturer}</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{displayMfr(manufacturer)}</span>
                   <span className="text-[9px] font-bold text-rose-400 bg-rose-50 px-1.5 py-0.5 rounded">{entries.length}종 · {entries.reduce((s, e) => s + e.remainingDeficit, 0)}개 부족</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -350,23 +355,46 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* 주문 분석 차트                            */}
       {/* ═══════════════════════════════════════ */}
       {orders.length > 0 && (
-        <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
+        <>
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <h3 className="text-sm font-black text-slate-800">모바일 주문 요약</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">최근 월 주문량</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">
+                {(monthlyOrderData[monthlyOrderData.length - 1]?.total ?? 0).toLocaleString()}개
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">입고 대기</p>
+              <p className="text-base font-black text-rose-600 tabular-nums">{stats.pendingCount}건</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 col-span-2">
+              <p className="text-[10px] font-bold text-slate-400">주요 제조사</p>
+              <p className="text-sm font-black text-slate-800 truncate">
+                {manufacturerDonut[0]?.name ? `${displayMfr(manufacturerDonut[0].name)} (${manufacturerDonut[0].percent}%)` : '데이터 없음'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-4 sm:gap-6">
           {/* LEFT: 월별 추세 */}
-          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-7 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-4 sm:p-7 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
-            <div className="flex justify-between items-center mb-6 relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
               <div>
                 <h3 className="text-base font-black text-slate-800 tracking-tight">월별 주문 추세</h3>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">Monthly Order Trend</p>
               </div>
-              <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-white shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-white/50 backdrop-blur-sm px-2.5 sm:px-3 py-1.5 rounded-xl border border-white shadow-sm">
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">재고 발주</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">FAIL 교환</span></div>
               </div>
             </div>
             {monthlyOrderData.length > 0 ? (
               <div className="overflow-x-auto relative z-10">
-                <svg viewBox={`0 0 ${Math.max(chartW, monthlyOrderData.length * 60)} ${chartH + 30}`} className="w-full min-w-[400px]" preserveAspectRatio="xMinYMid meet">
+                <svg viewBox={`0 0 ${Math.max(chartW, monthlyOrderData.length * 60)} ${chartH + 30}`} className="w-full min-w-[340px] sm:min-w-[400px]" preserveAspectRatio="xMinYMid meet">
                   <defs>
                     <linearGradient id="barIndigoGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#818cf8" />
@@ -394,18 +422,38 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   {monthlyOrderData.map((d, i) => {
                     const barWidth = Math.max(20, Math.min(40, (Math.max(chartW, monthlyOrderData.length * 60) - 60) / monthlyOrderData.length - barPad));
                     const x = 50 + i * (barWidth + barPad);
-                    const hRep = (d.replenishment / maxBarVal) * chartH;
-                    const hFail = (d.fail_exchange / maxBarVal) * chartH;
+
+                    // Add 15% top padding room in the visual representation so labels above bars aren't clipped
+                    const visualChartH = chartH * 0.85;
+                    const hRep = (d.replenishment / maxBarVal) * visualChartH;
+                    const hFail = (d.fail_exchange / maxBarVal) * visualChartH;
+                    const startY = chartH - hRep - hFail;
+
                     return (
                       <g key={d.month} className="group cursor-pointer">
                         {/* 툴팁 효과를 뒷받침할 배경 하이라이트 */}
                         <rect x={x - barPad / 2} y={0} width={barWidth + barPad} height={chartH} fill="#f8fafc" opacity="0" className="group-hover:opacity-100 transition-opacity" rx="4" />
 
-                        {hFail > 0 && <rect x={x} y={chartH - hRep - hFail} width={barWidth} height={hFail} rx="4" fill="url(#barRoseGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
+                        {hFail > 0 && <rect x={x} y={startY} width={barWidth} height={hFail} rx="4" fill="url(#barRoseGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
                         {hRep > 0 && <rect x={x} y={chartH - hRep} width={barWidth} height={hRep} rx="4" fill="url(#barIndigoGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
+
+                        {/* FAIL 교환 수량 (hFail >= 14 이면 바 내부 중앙, 작으면 바 위) */}
+                        {hFail > 0 && hFail >= 14 ? (
+                          <text x={x + barWidth / 2} y={startY + (hFail / 2) + 3} textAnchor="middle" fontSize="9" fill="#ffffff" fontWeight="800" className="pointer-events-none drop-shadow-sm">{d.fail_exchange}</text>
+                        ) : hFail > 0 ? (
+                          <text x={x + barWidth / 2} y={startY - 6} textAnchor="middle" fontSize="9" fill="#e11d48" fontWeight="800" className="pointer-events-none">{d.fail_exchange}</text>
+                        ) : null}
+
+                        {/* 재고 발주 수량 (hRep >= 14 이면 바 내부 상단) */}
+                        {hRep > 0 && hRep >= 14 ? (
+                          <text x={x + barWidth / 2} y={chartH - hRep + 14} textAnchor="middle" fontSize="9" fill="#ffffff" fontWeight="800" className="pointer-events-none drop-shadow-sm opacity-90">{d.replenishment}</text>
+                        ) : hRep > 0 && hFail === 0 ? (
+                          <text x={x + barWidth / 2} y={chartH - hRep - 6} textAnchor="middle" fontSize="9" fill="#4f46e5" fontWeight="800" className="pointer-events-none">{d.replenishment}</text>
+                        ) : null}
+
                         <text x={x + barWidth / 2} y={chartH + 18} textAnchor="middle" fontSize="9" fill="#64748b" fontWeight="800" className="transition-colors group-hover:fill-indigo-600">{d.month.slice(2)}</text>
-                        {/* Hover Quantity Text */}
-                        <text x={x + barWidth / 2} y={chartH - hRep - hFail - 8} textAnchor="middle" fontSize="10" fill="#1e293b" fontWeight="900" opacity="0" className="group-hover:opacity-100 transition-opacity drop-shadow-sm">{d.total}</text>
+                        {/* Hover Quantity Text - Total */}
+                        <text x={x + barWidth / 2} y={startY - (hFail > 0 && hFail < 14 ? 18 : 8)} textAnchor="middle" fontSize="10" fill="#1e293b" fontWeight="900" opacity="0" className="group-hover:opacity-100 transition-opacity drop-shadow-sm bg-white/50 backdrop-blur-sm px-1 rounded">{d.total}개</text>
                       </g>
                     );
                   })}
@@ -416,14 +464,14 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             )}
           </div>
           {/* RIGHT: 제조사 도넛 */}
-          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-7 relative overflow-hidden flex flex-col" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+          <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-4 sm:p-7 relative overflow-hidden flex flex-col" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
             <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
             <div>
               <h3 className="text-base font-black text-slate-800 tracking-tight">제조사별 주문 비율</h3>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">By Manufacturer</p>
             </div>
-            <div className="flex items-center gap-6 mt-6 flex-1 relative z-10">
-              <div className="relative w-32 h-32 shrink-0">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 mt-4 sm:mt-6 flex-1 relative z-10">
+              <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0">
                 <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-sm">
                   <defs>
                     <filter id="donutShadow" x="-10%" y="-10%" width="120%" height="120%">
@@ -438,16 +486,15 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   <text x="60" y="73" textAnchor="middle" fontSize="8" fontWeight="800" fill="#64748b" letterSpacing="0.15em">ORDERS</text>
                 </svg>
               </div>
-              <div className="flex-1 space-y-2.5">
+              <div className="w-full flex-1 space-y-2 max-h-56 overflow-y-auto pr-1">
                 {manufacturerDonut.map(seg => (
                   <div key={seg.name} className="flex items-center justify-between group p-1.5 -mx-1.5 rounded-lg hover:bg-slate-50/80 transition-colors">
                     <div className="flex items-center gap-2.5">
                       <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: seg.color }} />
-                      <span className="text-[13px] font-black text-slate-700">{seg.name}</span>
+                      <span className="text-[12px] sm:text-[13px] font-black text-slate-700">{displayMfr(seg.name)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-black text-slate-800 tabular-nums">{seg.count}</span>
-                      <span className="text-[10px] font-bold text-slate-400 w-6 text-right">{seg.percent}%</span>
+                      <span className="text-[12px] sm:text-[13px] font-bold text-slate-400 tabular-nums">{seg.percent}%</span>
                     </div>
                   </div>
                 ))}
@@ -455,6 +502,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* ═══════════════════════════════════════ */}
@@ -462,7 +510,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* ═══════════════════════════════════════ */}
       <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
         <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
-        <div className="px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
+        <div className="px-4 sm:px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
           <div>
             <h3 className="text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" />
@@ -472,34 +520,101 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           </div>
           <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{filteredOrders.length}건</span>
         </div>
-        <div className="overflow-x-auto relative z-10">
+        <div className="md:hidden px-3 pb-3 space-y-2.5 relative z-10">
+          {filteredOrders.length > 0 ? filteredOrders.map((order) => {
+            const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
+            const typeBadgeClass = order.type === 'replenishment'
+              ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
+              : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
+            return (
+              <article
+                key={`mobile-order-${order.id}`}
+                className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-500">{order.date}</p>
+                    <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(order.manufacturer)}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
+                    {order.type === 'replenishment' ? '재고 발주' : 'FAIL 교환'}
+                  </span>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+                  <p className="text-xs font-black text-slate-700">{item.brand}</p>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-500">{item.size}</span>
+                    <span className="text-sm font-black text-slate-900 tabular-nums">{item.quantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {order.manager}</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => !isReadOnly && onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
+                      disabled={isReadOnly}
+                      className={`px-3 py-2 rounded-xl text-[11px] font-black transition-all active:scale-95 ${
+                        isReadOnly
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          : order.status === 'received'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-white border border-slate-200 text-rose-600'
+                      }`}
+                    >
+                      {order.status === 'received' ? '입고완료' : '입고확인'}
+                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => onDeleteOrder(order.id)}
+                        className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-500"
+                        title="주문 삭제"
+                        aria-label="주문 삭제"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          }) : (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm font-semibold text-slate-500">표시할 주문 내역이 없습니다.</p>
+            </div>
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto relative z-10">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50/50 border-b border-slate-100/50 backdrop-blur-sm">
               <tr>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">주문일자<br /><span className="text-[8px] tracking-widest">DATE</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">유형<br /><span className="text-[8px] tracking-widest">TYPE</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">제조사<br /><span className="text-[8px] tracking-widest">MFR</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">품목 내역<br /><span className="text-[8px] tracking-widest">ITEM</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">수량<br /><span className="text-[8px] tracking-widest">QTY</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">담당자<br /><span className="text-[8px] tracking-widest">MANAGER</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">상태<br /><span className="text-[8px] tracking-widest">STATUS</span></th>
-                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">관리<br /><span className="text-[8px] tracking-widest">ACTION</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">주문일자<br /><span className="text-[8px] tracking-widest">DATE</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">유형<br /><span className="text-[8px] tracking-widest">TYPE</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">제조사<br /><span className="text-[8px] tracking-widest">MFR</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">품목 내역<br /><span className="text-[8px] tracking-widest">ITEM</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">수량<br /><span className="text-[8px] tracking-widest">QTY</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">담당자<br /><span className="text-[8px] tracking-widest">MANAGER</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">상태<br /><span className="text-[8px] tracking-widest">STATUS</span></th>
+                <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">관리<br /><span className="text-[8px] tracking-widest">ACTION</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
-                const accentColor = order.type === 'replenishment' ? 'border-l-indigo-500' : 'border-l-rose-500';
+                const accentHoverClass = order.type === 'replenishment' ? 'hover:border-l-indigo-500' : 'hover:border-l-rose-500';
                 const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
                 const isEven = idx % 2 === 1;
                 return (
-                  <tr key={order.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent hover:${accentColor} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
+                  <tr key={order.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
                     <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{order.date}</span></td>
                     <td className="px-6 py-3">
                       <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
                         {order.type === 'replenishment' ? '재고 발주' : 'FAIL 교환'}
                       </span>
                     </td>
-                    <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{order.manufacturer}</span></td>
+                    <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(order.manufacturer)}</span></td>
                     <td className="px-6 py-3">
                       <div className="flex bg-white/60 border border-slate-100 items-center justify-between px-3 py-1.5 rounded-xl shadow-sm w-fit group-hover:border-indigo-100 group-hover:bg-white transition-colors">
                         <span className="text-xs font-black text-slate-800 mr-4">{item.brand}</span>
@@ -519,7 +634,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     </td>
                     <td className="px-6 py-3 text-right">
                       {!isReadOnly && (
-                        <button onClick={() => onDeleteOrder(order.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-xl transition-all" title="주문 삭제">
+                        <button onClick={() => onDeleteOrder(order.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-xl transition-all" title="주문 삭제" aria-label="주문 삭제">
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       )}

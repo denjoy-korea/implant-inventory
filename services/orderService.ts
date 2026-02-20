@@ -3,6 +3,37 @@ import { supabase } from './supabaseClient';
 import { DbOrder, DbOrderItem, OrderStatus } from '../types';
 import { toCanonicalSize } from './sizeNormalizer';
 
+export type OrderMutationResult =
+  | { ok: true }
+  | { ok: false; reason: 'conflict' | 'not_found' | 'error'; currentStatus?: OrderStatus };
+
+interface UpdateOrderStatusOptions {
+  expectedCurrentStatus?: OrderStatus;
+  receivedDate?: string;
+}
+
+interface DeleteOrderOptions {
+  expectedCurrentStatus?: OrderStatus;
+}
+
+async function getOrderStatusById(orderId: string): Promise<{ status: OrderStatus | null; errored: boolean }> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('status')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[orderService] Status lookup failed:', error);
+    return { status: null, errored: true };
+  }
+
+  return {
+    status: (data?.status as OrderStatus | undefined) ?? null,
+    errored: false,
+  };
+}
+
 export const orderService = {
   /** 주문 목록 조회 (order_items JOIN) */
   async getOrders(): Promise<(DbOrder & { order_items: DbOrderItem[] })[]> {
@@ -91,37 +122,92 @@ export const orderService = {
   async updateStatus(
     orderId: string,
     status: OrderStatus,
-    receivedDate?: string
-  ): Promise<boolean> {
-    const updates: Record<string, any> = { status };
-    if (status === 'received') {
-      updates.received_date = receivedDate || new Date().toISOString().split('T')[0];
-    }
+    options?: UpdateOrderStatusOptions
+  ): Promise<OrderMutationResult> {
+    const expectedCurrentStatus = options?.expectedCurrentStatus;
+    const updates: Record<string, string | null> = {
+      status,
+      received_date: status === 'received'
+        ? (options?.receivedDate || new Date().toISOString().split('T')[0])
+        : null,
+    };
 
-    const { error } = await supabase
+    let query = supabase
       .from('orders')
       .update(updates)
       .eq('id', orderId);
 
+    if (expectedCurrentStatus) {
+      query = query.eq('status', expectedCurrentStatus);
+    }
+
+    const { data, error } = await query
+      .select('id')
+      .maybeSingle();
+
     if (error) {
       console.error('[orderService] Status update failed:', error);
-      return false;
+      return { ok: false, reason: 'error' };
     }
-    return true;
+
+    if (data) {
+      return { ok: true };
+    }
+
+    if (!expectedCurrentStatus) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    const { status: currentStatus, errored } = await getOrderStatusById(orderId);
+    if (errored) {
+      return { ok: false, reason: 'error' };
+    }
+    if (!currentStatus) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    return { ok: false, reason: 'conflict', currentStatus };
   },
 
   /** 주문 삭제 (CASCADE로 items도 삭제) */
-  async deleteOrder(orderId: string): Promise<boolean> {
-    const { error } = await supabase
+  async deleteOrder(orderId: string, options?: DeleteOrderOptions): Promise<OrderMutationResult> {
+    const expectedCurrentStatus = options?.expectedCurrentStatus;
+
+    let query = supabase
       .from('orders')
       .delete()
       .eq('id', orderId);
 
+    if (expectedCurrentStatus) {
+      query = query.eq('status', expectedCurrentStatus);
+    }
+
+    const { data, error } = await query
+      .select('id')
+      .maybeSingle();
+
     if (error) {
       console.error('[orderService] Delete failed:', error);
-      return false;
+      return { ok: false, reason: 'error' };
     }
-    return true;
+
+    if (data) {
+      return { ok: true };
+    }
+
+    if (!expectedCurrentStatus) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    const { status: currentStatus, errored } = await getOrderStatusById(orderId);
+    if (errored) {
+      return { ok: false, reason: 'error' };
+    }
+    if (!currentStatus) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    return { ok: false, reason: 'conflict', currentStatus };
   },
 
   /** Realtime 구독 */

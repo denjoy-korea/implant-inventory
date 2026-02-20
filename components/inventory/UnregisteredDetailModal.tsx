@@ -851,7 +851,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
             ) : (
               isManualOnlyUnregisteredView ? (
                 <table className="w-full text-left border-collapse table-fixed">
-                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
+                  <thead className="md:sticky md:top-0 bg-slate-50 border-b border-slate-200 z-10">
                     <tr>
                       <th className="w-[80px] px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap">No</th>
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">수정 대상 기록</th>
@@ -905,7 +905,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
                 </table>
               ) : (
                 <table className="w-full text-left border-collapse table-fixed text-[12px]">
-                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
+                  <thead className="md:sticky md:top-0 bg-slate-50 border-b border-slate-200 z-10">
                     <tr>
                       <th className="w-[56px] px-3 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap">No</th>
                       <th className="w-[92px] px-3 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">제조사</th>

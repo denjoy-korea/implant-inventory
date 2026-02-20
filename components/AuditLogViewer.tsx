@@ -13,6 +13,7 @@ const ACTION_LABELS: Record<OperationAction, { label: string; color: string; bg:
   inventory_audit: { label: '재고 실사', color: 'text-cyan-700', bg: 'bg-cyan-100' },
   order_create: { label: '주문 생성', color: 'text-amber-700', bg: 'bg-amber-100' },
   order_status_update: { label: '주문 상태변경', color: 'text-orange-700', bg: 'bg-orange-100' },
+  order_delete: { label: '주문 삭제', color: 'text-rose-700', bg: 'bg-rose-100' },
   item_delete: { label: '품목 삭제', color: 'text-rose-700', bg: 'bg-rose-100' },
   member_approve: { label: '멤버 승인', color: 'text-green-700', bg: 'bg-green-100' },
   member_reject: { label: '멤버 거절', color: 'text-red-700', bg: 'bg-red-100' },
@@ -70,30 +71,30 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ hospitalId }) => {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <select
           value={filterAction}
           onChange={(e) => { setFilterAction(e.target.value as OperationAction | ''); setPage(0); }}
-          className="px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400 cursor-pointer"
+          className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400 cursor-pointer"
         >
           <option value="">전체 작업</option>
           {Object.entries(ACTION_LABELS).map(([key, { label }]) => (
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <input
             type="date"
             value={startDate}
             onChange={(e) => { setStartDate(e.target.value); setPage(0); }}
-            className="px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
+            className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
           />
           <span className="text-xs text-slate-400">~</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); setPage(0); }}
-            className="px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
+            className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-400"
           />
         </div>
         {(filterAction || startDate || endDate) && (
@@ -104,12 +105,46 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ hospitalId }) => {
             필터 초기화
           </button>
         )}
-        <span className="text-xs text-slate-400 ml-auto">총 {total}건</span>
+        <span className="text-xs text-slate-400 sm:ml-auto">총 {total}건</span>
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden p-3 space-y-2.5">
+          {isLoading ? (
+            <div className="py-10 text-center">
+              <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400 italic">
+              {filterAction || startDate || endDate ? '필터 조건에 맞는 로그가 없습니다.' : '감사 로그가 없습니다.'}
+            </div>
+          ) : (
+            logs.map(log => {
+              const actionInfo = ACTION_LABELS[log.action] || { label: log.action, color: 'text-slate-700', bg: 'bg-slate-100' };
+              return (
+                <article key={`mobile-log-${log.id}`} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-[0_2px_10px_rgba(15,23,42,0.05)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500 tabular-nums">{formatDate(log.createdAt)}</span>
+                    <span className={`inline-flex px-2 py-1 text-[10px] font-bold rounded-lg ${actionInfo.bg} ${actionInfo.color}`}>
+                      {actionInfo.label}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                      {(log.userName || log.userEmail || '?').charAt(0)}
+                    </div>
+                    <span className="text-xs font-bold text-slate-700 truncate">
+                      {log.userName || log.userEmail}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600 break-words">{log.description}</p>
+                </article>
+              );
+            })
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>

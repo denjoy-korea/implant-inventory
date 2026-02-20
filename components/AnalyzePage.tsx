@@ -352,6 +352,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 loop
                 muted
                 playsInline
+                preload="metadata"
+                poster="/denjoy_logo_full.png"
                 className="w-full"
               />
             </div>
