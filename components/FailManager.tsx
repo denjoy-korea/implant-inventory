@@ -306,7 +306,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   // 월별 차트 상수 (grouped bar용)
   const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
-  const CHART_AREA_H = 160;
+  const CHART_AREA_H = 280;
   const maxBarVal = Math.max(
     ...monthlyFailData.flatMap(d => manufacturers.map(m => (d as any)[m] as number || 0)),
     1
@@ -538,7 +538,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 2: 월별 FAIL 추세 + TOP FAIL 규격       */}
           {/* ========================================= */}
-          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 월별 추세 차트 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <div className="flex justify-between items-center mb-4">
