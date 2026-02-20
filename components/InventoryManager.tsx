@@ -5,6 +5,7 @@ import { planService } from '../services/planService';
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey, toCanonicalSize } from '../services/sizeNormalizer';
 import { normalizeSurgery } from '../services/normalizationService';
+import { manufacturerAliasKey } from '../services/appUtils';
 import AddItemModal from './AddItemModal';
 interface InventoryManagerProps {
   inventory: InventoryItem[];
@@ -124,9 +125,7 @@ function pickDominantPattern(patterns: SizePattern[]): SizePattern {
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]?.[0] ?? 'other';
 }
 
-function manufacturerAliasKey(raw: string): string {
-  return normalizeSurgery(raw).replace(/implant/g, '');
-}
+
 
 function isSameManufacturerAlias(a: string, b: string): boolean {
   const aa = manufacturerAliasKey(a);

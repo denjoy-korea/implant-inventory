@@ -58,6 +58,7 @@ import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { resetService } from './services/resetService';
 import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
+import { manufacturerAliasKey } from './services/appUtils';
 import { useToast } from './hooks/useToast';
 import { UNLIMITED_DAYS, DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 
@@ -100,18 +101,7 @@ function parseHash(hash: string): { view: View; tab?: DashboardTab } {
   return { view: HASH_TO_VIEW[first] || 'landing' };
 }
 
-function manufacturerAliasKey(raw: string): string {
-  const value = String(raw || '').trim();
-  if (!value) return '';
 
-  // FAIL 카테고리는 일반 제조사와 중복키가 섞이지 않도록 별도 네임스페이스 유지
-  const compact = value.toLowerCase().replace(/\s+/g, '');
-  if (compact.startsWith('수술중fail')) {
-    return `fail:${normalizeInventory(value)}`;
-  }
-
-  return normalizeSurgery(value).replace(/implant/g, '');
-}
 
 function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>): string {
   const fixed = fixIbsImplant(String(item.manufacturer || ''), String(item.brand || ''));
