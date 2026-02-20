@@ -63,6 +63,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [activeM, setActiveM] = useState<string>(manufacturers[0] || '');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
+  const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
 
   // 제조사별 통계
   const mStats = useMemo(() => {
@@ -563,6 +564,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 const BAR_W = Math.max(6, Math.floor((GROUP_W - BAR_GAP * (nMfr - 1)) / nMfr));
                 const SVG_W = CHART_PAD.l + monthlyFailData.length * MONTH_W + CHART_PAD.r;
                 const SVG_H = CHART_PAD.t + CHART_AREA_H + CHART_PAD.b;
+                // 툴팁 크기
+                const TW = 148;
+                const T_ROW_H = 20;
+                const T_PAD = 10;
+                const TH = T_PAD + 14 + nMfr * T_ROW_H + T_PAD;
+
                 return (
                   <div className="overflow-x-auto">
                     <svg
@@ -570,6 +577,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       className="w-full"
                       style={{ minWidth: Math.max(400, SVG_W) }}
                       preserveAspectRatio="xMinYMid meet"
+                      onMouseLeave={() => setHoveredChartIdx(null)}
                     >
                       {/* Horizontal grid lines + Y labels */}
                       {chartTicks.map(tick => {
@@ -583,12 +591,27 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       })}
                       {/* Baseline */}
                       <line x1={CHART_PAD.l} y1={CHART_PAD.t + CHART_AREA_H} x2={SVG_W - CHART_PAD.r} y2={CHART_PAD.t + CHART_AREA_H} stroke="#e2e8f0" strokeWidth="1.5" />
-                      {/* Grouped bars */}
+
+                      {/* Grouped bars per month */}
                       {monthlyFailData.map((d, i) => {
                         const barGroupW = BAR_W * nMfr + BAR_GAP * (nMfr - 1);
                         const groupX = CHART_PAD.l + i * MONTH_W + (MONTH_W - barGroupW) / 2;
+                        const groupCenterX = CHART_PAD.l + i * MONTH_W + MONTH_W / 2;
+                        const isHov = hoveredChartIdx === i;
                         return (
                           <g key={d.month}>
+                            {/* Hover background */}
+                            {isHov && (
+                              <rect
+                                x={CHART_PAD.l + i * MONTH_W + 1}
+                                y={CHART_PAD.t}
+                                width={MONTH_W - 2}
+                                height={CHART_AREA_H}
+                                rx="4"
+                                fill="#f1f5f9"
+                              />
+                            )}
+                            {/* Bars */}
                             {manufacturers.map((m, mi) => {
                               const val = (d as any)[m] as number || 0;
                               const barH = chartYMax > 0 ? (val / chartYMax) * CHART_AREA_H : 0;
@@ -601,24 +624,76 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                                   width={BAR_W} height={Math.max(0, barH)}
                                   rx="3"
                                   fill={DONUT_COLORS[mi % DONUT_COLORS.length]}
-                                  opacity="0.85"
-                                  className="hover:opacity-100 transition-opacity"
+                                  opacity={isHov ? 1 : 0.82}
                                 />
                               );
                             })}
+                            {/* X-axis label */}
                             <text
-                              x={CHART_PAD.l + i * MONTH_W + MONTH_W / 2}
+                              x={groupCenterX}
                               y={CHART_PAD.t + CHART_AREA_H + 14}
                               textAnchor="middle"
                               fontSize="8"
-                              fill="#94a3b8"
-                              fontWeight="600"
+                              fill={isHov ? '#1e293b' : '#94a3b8'}
+                              fontWeight={isHov ? '800' : '600'}
                             >
                               {d.month.slice(2)}
                             </text>
+                            {/* Invisible hover capture rect */}
+                            <rect
+                              x={CHART_PAD.l + i * MONTH_W}
+                              y={CHART_PAD.t}
+                              width={MONTH_W}
+                              height={CHART_AREA_H + CHART_PAD.b}
+                              fill="transparent"
+                              onMouseEnter={() => setHoveredChartIdx(i)}
+                              style={{ cursor: 'crosshair' }}
+                            />
                           </g>
                         );
                       })}
+
+                      {/* Tooltip overlay */}
+                      {hoveredChartIdx !== null && (() => {
+                        const d = monthlyFailData[hoveredChartIdx];
+                        const groupCenterX = CHART_PAD.l + hoveredChartIdx * MONTH_W + MONTH_W / 2;
+                        let TX = groupCenterX - TW / 2;
+                        TX = Math.max(CHART_PAD.l, Math.min(SVG_W - CHART_PAD.r - TW, TX));
+                        const TY = CHART_PAD.t + 8;
+                        return (
+                          <g style={{ pointerEvents: 'none' }}>
+                            {/* Dashed center line */}
+                            <line
+                              x1={groupCenterX} y1={CHART_PAD.t}
+                              x2={groupCenterX} y2={CHART_PAD.t + CHART_AREA_H}
+                              stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3"
+                            />
+                            {/* Tooltip box shadow (fake) */}
+                            <rect x={TX + 2} y={TY + 3} width={TW} height={TH} rx="8" fill="#0f172a" opacity="0.15" />
+                            {/* Tooltip box */}
+                            <rect x={TX} y={TY} width={TW} height={TH} rx="8" fill="#1e293b" />
+                            {/* Month header */}
+                            <text
+                              x={TX + TW / 2} y={TY + T_PAD + 8}
+                              textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="700"
+                            >
+                              {d.month}
+                            </text>
+                            {/* Data rows */}
+                            {manufacturers.map((m, mi) => {
+                              const val = (d as any)[m] as number || 0;
+                              const ry = TY + T_PAD + 16 + mi * T_ROW_H;
+                              return (
+                                <g key={m}>
+                                  <rect x={TX + T_PAD} y={ry + 2} width="8" height="8" rx="2" fill={DONUT_COLORS[mi % DONUT_COLORS.length]} />
+                                  <text x={TX + T_PAD + 13} y={ry + 9} fontSize="10" fill="#e2e8f0" fontWeight="600">{m}</text>
+                                  <text x={TX + TW - T_PAD} y={ry + 9} textAnchor="end" fontSize="10" fill="white" fontWeight="800">{val}건</text>
+                                </g>
+                              );
+                            })}
+                          </g>
+                        );
+                      })()}
                     </svg>
                   </div>
                 );
