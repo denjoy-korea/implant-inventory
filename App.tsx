@@ -2555,7 +2555,6 @@ const App: React.FC = () => {
                         <InventoryAudit
                           inventory={state.inventory}
                           hospitalId={state.user?.hospitalId || ''}
-                          userName={state.user?.name}
                           onApplied={() => { if (state.user) loadHospitalData(state.user); }}
                           showHistory={showAuditHistory}
                           onCloseHistory={() => setShowAuditHistory(false)}
