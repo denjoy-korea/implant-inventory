@@ -88,7 +88,7 @@ P1 보안 및 리팩토링 개선 3개 항목 검증.
 ✔ create_order_with_items hotfix verification query exists
 ✔ patient info encryption report query exists
 ✔ maintenance service is wired for dev operations
-✔ free plan max item limit is 80
+✔ free plan max item limit is 100
 tests 10 / pass 10 / fail 0
 ```
 

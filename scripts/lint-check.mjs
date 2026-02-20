@@ -198,11 +198,11 @@ function checkPlanLimitConsistency() {
   const typesTs = read('types.ts');
   if (!typesTs) return;
 
-  const freePlanMaxItems80 = /free:\s*\{[\s\S]*?maxItems:\s*80[\s\S]*?\}/m.test(
+  const freePlanMaxItems100 = /free:\s*\{[\s\S]*?maxItems:\s*100[\s\S]*?\}/m.test(
     typesTs,
   );
-  if (!freePlanMaxItems80) {
-    failures.push('types.ts: PLAN_LIMITS.free.maxItems must be 80');
+  if (!freePlanMaxItems100) {
+    failures.push('types.ts: PLAN_LIMITS.free.maxItems must be 100');
   }
 }
 

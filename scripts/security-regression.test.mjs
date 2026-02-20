@@ -130,9 +130,9 @@ test('maintenance service is wired for dev operations', () => {
   assert.match(service, /startsWith\('ENCv2:'\)/);
 });
 
-test('free plan max item limit is 80', () => {
+test('free plan max item limit is 100', () => {
   const typesTs = read('types.ts');
-  assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*80[\s\S]*?\}/m);
+  assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*100[\s\S]*?\}/m);
 });
 
 test('crypto utils throw in production when encryption key is missing', () => {
@@ -146,4 +146,54 @@ test('gemini api key is not injected into client bundle via vite define', () => 
   const cfg = read('vite.config.ts');
   assert.doesNotMatch(cfg, /GEMINI_API_KEY/);
   assert.doesNotMatch(cfg, /process\.env\.API_KEY/);
+});
+
+test('payment request uses edge proxy instead of client webhook url', () => {
+  const src = read('services/makePaymentService.ts');
+  assert.doesNotMatch(src, /VITE_MAKE_WEBHOOK_URL/);
+  assert.match(src, /PAYMENT_PROXY_FUNCTION = 'payment-request-proxy'/);
+  assert.match(src, /functions\.invoke\(PAYMENT_PROXY_FUNCTION/);
+});
+
+test('payment proxy validates auth scope before forwarding webhook', () => {
+  const fn = read('supabase/functions/payment-request-proxy/index.ts');
+  assert.match(fn, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(fn, /authClient\.auth\.getUser\(\)/);
+  assert.match(fn, /\.from\("profiles"\)/);
+  assert.match(fn, /\.from\("billing_history"\)/);
+  assert.match(fn, /MAKE_WEBHOOK_URL/);
+  assert.match(fn, /buildCallbackUrl/);
+  assert.match(fn, /callback_url:/);
+  assert.match(fn, /PAYMENT_CALLBACK_SECRET/);
+});
+
+test('payment callback function validates token and updates billing via rpc', () => {
+  const fn = read('supabase/functions/payment-callback/index.ts');
+  assert.match(fn, /PAYMENT_CALLBACK_SECRET/);
+  assert.match(fn, /Invalid callback token/);
+  assert.match(fn, /normalizeStatus/);
+  assert.match(fn, /createClient\(supabaseUrl, serviceRoleKey/);
+  assert.match(fn, /rpc\(\"process_payment_callback\"/);
+  assert.match(fn, /p_billing_id/);
+  assert.match(fn, /p_status/);
+});
+
+test('notice board uses Supabase-backed notices instead of localStorage cache', () => {
+  const board = read('components/NoticeBoard.tsx');
+  const service = read('services/noticeService.ts');
+  const sql = read('supabase/032_public_notices.sql');
+
+  assert.match(board, /noticeService\.listNotices\(/);
+  assert.match(board, /noticeService\.createNotice\(/);
+  assert.match(board, /noticeService\.deleteNotice\(/);
+  assert.doesNotMatch(board, /localStorage\.getItem\('app_notices'\)/);
+  assert.doesNotMatch(board, /localStorage\.setItem\('app_notices'/);
+
+  assert.match(service, /from\('public_notices'\)/);
+  assert.match(service, /order\('created_at'/);
+
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public_notices/);
+  assert.match(sql, /CREATE POLICY \"public_notices_select_all\"/);
+  assert.match(sql, /CREATE POLICY \"public_notices_insert_admin\"/);
+  assert.match(sql, /GRANT SELECT ON public_notices TO anon, authenticated;/);
 });
