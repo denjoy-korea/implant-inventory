@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast';
 interface InventoryAuditProps {
   inventory: InventoryItem[];
   hospitalId: string;
+  userName?: string;
   onApplied: () => void;
   showHistory?: boolean;
   onCloseHistory?: () => void;
@@ -15,14 +16,15 @@ interface InventoryAuditProps {
 
 const MISMATCH_REASONS = ['기록 누락', '수술기록 오입력', '분실', '입고 수량 오류', '기타'] as const;
 
-const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, onApplied, showHistory, onCloseHistory }) => {
+const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, onApplied, showHistory, onCloseHistory }) => {
   const [activeBrand, setActiveBrand] = useState<string | null>(null);
   const [auditResults, setAuditResults] = useState<Record<string, { matched: boolean; actualCount?: number; reason?: string }>>({});
   const [showAuditSummary, setShowAuditSummary] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [isAuditActive, setIsAuditActive] = useState(false);
   const [customReasonMode, setCustomReasonMode] = useState<Record<string, boolean>>({});
-  const [confirmedItems, setConfirmedItems] = useState<string[]>([]); // 확정 순서 추적 (되돌리기용)
+  const [confirmedItems, setConfirmedItems] = useState<string[]>([]);
+  const [expandedAuditKeys, setExpandedAuditKeys] = useState<Set<string>>(new Set());
   const { toast, showToast } = useToast();
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
 
@@ -35,6 +37,26 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  // 이력을 실사일+담당자 기준으로 그룹핑
+  const groupedHistory = useMemo(() => {
+    const groups: Record<string, { date: string; performedBy: string | null; items: AuditHistoryItem[] }> = {};
+    auditHistory.forEach(h => {
+      const key = `${h.auditDate}__${h.performedBy || ''}`;
+      if (!groups[key]) groups[key] = { date: h.auditDate, performedBy: h.performedBy, items: [] };
+      groups[key].items.push(h);
+    });
+    return Object.entries(groups).sort(([, a], [, b]) => b.date.localeCompare(a.date));
+  }, [auditHistory]);
+
+  const toggleExpand = (key: string) => {
+    setExpandedAuditKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
@@ -110,16 +132,19 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     return stats;
   }, [visibleInventory, auditResults]);
 
-  const auditedCount = Object.keys(auditResults).length; // 전체 기준 (버튼 활성화용)
+  const auditedCount = Object.keys(auditResults).length;
 
-  // 브랜드 진행률 100% 시 자동으로 다음 브랜드로 이동 (모든 브랜드 완료 시 중단)
+  // 브랜드 진행률 100% 시 자동으로 다음 브랜드로 이동 (모든 브랜드 완료 시 전체 탭)
   useEffect(() => {
     if (!isAuditActive || progressPct < 100 || activeBrand === null) return;
     const allBrandsDone = brandsList.every(b => {
       const s = brandStats[b];
       return s && s.total > 0 && s.audited === s.total;
     });
-    if (allBrandsDone) return;
+    if (allBrandsDone) {
+      const timer = setTimeout(() => setActiveBrand(null), 600);
+      return () => clearTimeout(timer);
+    }
     const currentIdx = brandsList.indexOf(activeBrand);
     const nextBrand = brandsList[currentIdx + 1];
     if (!nextBrand) return;
@@ -131,25 +156,31 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
   const handleAuditClose = () => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); };
 
   const handleApply = async () => {
-    if (mismatchItems.length === 0) { handleAuditClose(); return; }
     setIsApplying(true);
     try {
-      const entries: AuditEntry[] = mismatchItems
-        .map(({ id, result }) => {
-          const item = inventory.find(i => i.id === id);
-          if (!item) return null;
+      // 일치 포함 전체 실사 항목을 저장 (오차 없어도 실사 기록 남김)
+      const entries: AuditEntry[] = visibleInventory
+        .map((item): AuditEntry | null => {
+          const result = auditResults[item.id];
+          if (!result) return null;
+          const actualStock = result.matched
+            ? item.currentStock
+            : (result.actualCount ?? item.currentStock);
           return {
-            inventoryId: id,
+            inventoryId: item.id,
             systemStock: item.currentStock,
-            actualStock: result.actualCount ?? 0,
-            difference: (result.actualCount ?? 0) - item.currentStock,
-            reason: result.reason || MISMATCH_REASONS[0],
+            actualStock,
+            difference: actualStock - item.currentStock,
+            reason: result.matched ? null : (result.reason || MISMATCH_REASONS[0]),
+            performedBy: userName,
           };
         })
         .filter((e): e is AuditEntry => e !== null);
+      const mismatchCount = entries.filter(e => e.difference !== 0).length;
       const { success, error } = await auditService.applyAudit(hospitalId, entries);
       if (success) {
-        operationLogService.logOperation('inventory_audit', `재고 실사 적용: 불일치 ${entries.length}건`, { mismatchCount: entries.length });
+        operationLogService.logOperation('inventory_audit', `재고 실사 적용: 불일치 ${mismatchCount}건`, { mismatchCount });
+        showToast(mismatchCount > 0 ? `실사 완료: 불일치 ${mismatchCount}건 반영` : '실사 완료: 전 품목 일치', 'success');
         handleAuditClose();
         loadHistory();
         onApplied();
@@ -273,7 +304,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         </div>
       )}
 
-      {/* 브랜드 탭 + 진행 표시 */}
+      {/* 브랜드 탭 + 버튼 */}
       {brandsList.length > 0 && (
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex flex-wrap gap-1.5">
@@ -282,7 +313,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
               className={`px-3.5 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeBrand === null ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
             >
               전체
-              <span className={`text-[10px] font-black ${activeBrand === null ? 'text-slate-300' : 'text-slate-400'}`}>{totalItems}</span>
+              <span className={`text-[10px] font-black ${activeBrand === null ? 'text-slate-300' : 'text-slate-400'}`}>{visibleInventory.length}</span>
             </button>
             {brandsList.map(b => {
               const s = brandStats[b] || { total: 0, audited: 0, mismatch: 0 };
@@ -338,8 +369,8 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                 )}
                 <button
                   onClick={handleAuditComplete}
-                  disabled={auditedCount === 0}
-                  className={`px-5 py-2 text-xs font-black rounded-xl shadow-lg transition-all flex items-center gap-1.5 ${auditedCount > 0 ? 'bg-slate-800 text-white hover:bg-slate-700 active:scale-95' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+                  disabled={auditedCount < visibleInventory.length}
+                  className={`px-5 py-2 text-xs font-black rounded-xl shadow-lg transition-all flex items-center gap-1.5 ${auditedCount >= visibleInventory.length ? 'bg-slate-800 text-white hover:bg-slate-700 active:scale-95' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   실사 완료
@@ -352,7 +383,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
       {/* 테이블 */}
       <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
-        <div style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', overflowX: 'auto' }}>
+        <div className="hide-scrollbar" style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', overflowX: 'auto' }}>
           <table className="w-full text-left border-collapse table-fixed">
             <colgroup>
               <col className="w-[10%]" />
@@ -388,13 +419,11 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                 const confirmItem = (id: string) => setConfirmedItems(prev => prev.includes(id) ? prev : [...prev, id]);
                 const toggleCheck = (matched: boolean) => {
                   if (result?.matched === matched) {
-                    // 이미 선택된 것 다시 클릭 → 해제 (입력값·사유 모두 초기화)
                     setAuditResults(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                     setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                   } else {
                     setAuditResults(prev => ({ ...prev, [item.id]: { matched, actualCount: matched ? undefined : item.currentStock, reason: matched ? undefined : MISMATCH_REASONS[0] } }));
                     if (matched) {
-                      // 일치: 즉시 숨김
                       setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                       confirmItem(item.id);
                     }
@@ -545,47 +574,96 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
       {showHistory && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            {/* 헤더 */}
             <div className="p-6 bg-slate-800 text-white flex justify-between items-center flex-shrink-0">
               <div>
                 <h3 className="text-lg font-black">실사 이력 조회</h3>
-                <p className="text-slate-400 text-xs mt-0.5">{auditHistory.length}건의 이력</p>
+                <p className="text-slate-400 text-xs mt-0.5">{groupedHistory.length}회의 실사 이력</p>
               </div>
               <button onClick={onCloseHistory} aria-label="닫기" className="p-2 hover:bg-white/10 rounded-full transition-all">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
+
+            {/* 목록 */}
             <div className="flex-1 overflow-y-auto">
-              {auditHistory.length > 0 ? (
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
-                    <tr>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400">실사일</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400">브랜드</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400">규격</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400 text-center">시스템</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400 text-center">실제</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400 text-center">오차</th>
-                      <th className="px-5 py-3.5 text-[11px] font-bold text-slate-400">사유</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {auditHistory.map(h => (
-                      <tr key={h.id} className="hover:bg-slate-50/40 transition-colors">
-                        <td className="px-5 py-3 text-[11px] font-medium text-slate-500">{h.auditDate}</td>
-                        <td className="px-5 py-3 text-xs font-bold text-slate-800">{h.brand}</td>
-                        <td className="px-5 py-3 text-xs font-medium text-slate-600">{h.size}</td>
-                        <td className="px-5 py-3 text-xs font-bold text-slate-600 text-center tabular-nums">{h.systemStock}</td>
-                        <td className="px-5 py-3 text-xs font-bold text-slate-900 text-center tabular-nums">{h.actualStock}</td>
-                        <td className="px-5 py-3 text-center">
-                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${h.difference < 0 ? 'bg-rose-100 text-rose-600' : h.difference > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                            {h.difference > 0 ? '+' : ''}{h.difference}
+              {groupedHistory.length > 0 ? (
+                <div className="divide-y divide-slate-100">
+                  {/* 컬럼 헤더 */}
+                  <div className="grid grid-cols-[1fr_64px_64px_64px_100px_64px] gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200 sticky top-0">
+                    <span className="text-[11px] font-bold text-slate-400">실사일</span>
+                    <span className="text-[11px] font-bold text-slate-400 text-center">시스템</span>
+                    <span className="text-[11px] font-bold text-slate-400 text-center">실제</span>
+                    <span className="text-[11px] font-bold text-slate-400 text-center">오차</span>
+                    <span className="text-[11px] font-bold text-slate-400 text-center">담당자</span>
+                    <span className="text-[11px] font-bold text-slate-400 text-center">상세</span>
+                  </div>
+
+                  {groupedHistory.map(([key, group]) => {
+                    const isExpanded = expandedAuditKeys.has(key);
+                    const totalSys = group.items.reduce((s, h) => s + h.systemStock, 0);
+                    const totalAct = group.items.reduce((s, h) => s + h.actualStock, 0);
+                    const totalDiff = group.items.reduce((s, h) => s + h.difference, 0);
+                    return (
+                      <div key={key}>
+                        {/* 요약 행 */}
+                        <div className="grid grid-cols-[1fr_64px_64px_64px_100px_64px] gap-2 px-5 py-3.5 items-center hover:bg-slate-50/60 transition-colors">
+                          <span className="text-xs font-bold text-slate-700">{group.date}</span>
+                          <span className="text-xs font-bold text-slate-600 text-center tabular-nums">{totalSys}</span>
+                          <span className="text-xs font-bold text-slate-800 text-center tabular-nums">{totalAct}</span>
+                          <span className="text-center">
+                            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${totalDiff < 0 ? 'bg-rose-100 text-rose-600' : totalDiff > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                              {totalDiff > 0 ? '+' : ''}{totalDiff}
+                            </span>
                           </span>
-                        </td>
-                        <td className="px-5 py-3 text-[11px] text-slate-500">{h.reason || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className="text-[11px] font-medium text-slate-500 text-center truncate">{group.performedBy || '-'}</span>
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => toggleExpand(key)}
+                              className="px-2 py-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                              {isExpanded ? '접기' : '보기'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 상세 행 (토글) */}
+                        {isExpanded && (
+                          <div className="bg-slate-50/80 border-t border-slate-100 px-5 pb-3">
+                            <table className="w-full text-left border-collapse mt-2">
+                              <thead>
+                                <tr className="border-b border-slate-200">
+                                  <th className="py-2 text-[10px] font-bold text-slate-400">브랜드</th>
+                                  <th className="py-2 text-[10px] font-bold text-slate-400">규격</th>
+                                  <th className="py-2 text-[10px] font-bold text-slate-400 text-center">시스템</th>
+                                  <th className="py-2 text-[10px] font-bold text-slate-400 text-center">실제</th>
+                                  <th className="py-2 text-[10px] font-bold text-slate-400 text-center">오차</th>
+                                  <th className="py-2 text-[10px] font-bold text-slate-400">사유</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {group.items.map(h => (
+                                  <tr key={h.id}>
+                                    <td className="py-2 pr-3 text-xs font-bold text-slate-700">{h.brand}</td>
+                                    <td className="py-2 pr-3 text-xs text-slate-500">{h.size}</td>
+                                    <td className="py-2 text-xs font-bold text-slate-600 text-center tabular-nums">{h.systemStock}</td>
+                                    <td className="py-2 text-xs font-bold text-slate-800 text-center tabular-nums">{h.actualStock}</td>
+                                    <td className="py-2 text-center">
+                                      <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${h.difference < 0 ? 'bg-rose-100 text-rose-600' : h.difference > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                        {h.difference > 0 ? '+' : ''}{h.difference}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 text-[11px] text-slate-500">{h.reason || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="py-20 text-center">
                   <p className="text-sm text-slate-400 italic">실사 이력이 없습니다.</p>
