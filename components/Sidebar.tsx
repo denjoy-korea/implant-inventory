@@ -20,6 +20,8 @@ interface SidebarProps {
   userRole?: UserRole;
   userPermissions?: MemberPermissions | null;
   onReturnToAdmin?: () => void;
+  userName?: string;
+  onProfileClick?: () => void;
 }
 
 /** 탭에 매핑되는 기능 식별자 (해당 기능이 없으면 잠금 아이콘 표시) */
@@ -54,6 +56,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   userPermissions,
   onReturnToAdmin,
+  userName,
+  onProfileClick,
 }) => {
   const unregisteredBadgeText = surgeryUnregisteredCount > 99 ? '99+' : String(surgeryUnregisteredCount);
 
@@ -87,35 +91,41 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       aria-hidden={isCollapsed}
-      className={`bg-slate-900 flex flex-col overflow-hidden transition-all duration-300 shadow-xl ${
-        isMobile
-          ? (isCollapsed
-            ? 'fixed inset-y-0 left-0 w-72 max-w-[86vw] -translate-x-full pointer-events-none z-[280]'
-            : 'fixed inset-y-0 left-0 w-72 max-w-[86vw] translate-x-0 pointer-events-auto z-[280] border-r border-slate-800')
-          : (isCollapsed
-            ? 'sticky top-0 h-screen shrink-0 z-[200] w-0 -translate-x-full opacity-0 pointer-events-none border-r-0'
-            : 'sticky top-0 h-screen shrink-0 z-[200] w-64 translate-x-0 opacity-100 border-r border-slate-800')
-      }`}
+      className={`bg-slate-900 flex flex-col overflow-hidden transition-all duration-300 shadow-xl ${isMobile
+        ? (isCollapsed
+          ? 'fixed inset-y-0 left-0 w-72 max-w-[86vw] -translate-x-full pointer-events-none z-[280]'
+          : 'fixed inset-y-0 left-0 w-72 max-w-[86vw] translate-x-0 pointer-events-auto z-[280] border-r border-slate-800')
+        : (isCollapsed
+          ? 'sticky top-0 h-screen shrink-0 z-[200] w-0 -translate-x-full opacity-0 pointer-events-none border-r-0'
+          : 'sticky top-0 h-screen shrink-0 z-[200] w-64 translate-x-0 opacity-100 border-r border-slate-800')
+        }`}
     >
       <div className="p-6 pb-2 relative">
         {(onToggleCollapse || (isMobile && onRequestClose)) && (
-          <button
-            type="button"
-            onClick={handleSidebarDismiss}
-            className="absolute right-4 top-4 h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
-            title={isMobile ? '메뉴 닫기' : '사이드바 닫기 (Ctrl/Cmd + \\)'}
-            aria-label="사이드바 닫기"
-          >
-            {isMobile ? (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l-5 5 5 5M16 7l-5 5 5 5" />
-              </svg>
+          <div className="absolute right-4 top-4 group/collapse">
+            <button
+              type="button"
+              onClick={handleSidebarDismiss}
+              className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+              title={isMobile ? '메뉴 닫기' : undefined}
+              aria-label="사이드바 닫기"
+            >
+              {isMobile ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 7l-5 5 5 5M16 7l-5 5 5 5" />
+                </svg>
+              )}
+            </button>
+            {!isMobile && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2.5 py-1.5 bg-slate-800 text-white text-xs rounded-lg whitespace-nowrap shadow-xl opacity-0 transition-all duration-100 delay-75 group-hover/collapse:opacity-100 group-hover/collapse:translate-y-1 pointer-events-none z-50 border border-slate-700">
+                사이드바 닫기 (Ctrl/Cmd + \)
+              </div>
             )}
-          </button>
+          </div>
         )}
 
         <div className="mb-6">
@@ -133,7 +143,29 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-white font-bold text-sm truncate leading-tight">{hospitalName || '워크스페이스'}</p>
-              {userRole === 'staff' && <p className="text-[10px] text-slate-400 font-medium">개인 워크스페이스</p>}
+              {isAdmin && onReturnToAdmin ? (
+                <button
+                  type="button"
+                  onClick={onReturnToAdmin}
+                  className="flex items-center gap-1 mt-0.5 group/admin"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider group-hover/admin:text-rose-300 transition-colors">운영자 모드</span>
+                </button>
+              ) : userName ? (
+                <button
+                  type="button"
+                  onClick={onProfileClick}
+                  className="flex items-center gap-1 mt-0.5 group/profile"
+                >
+                  <span className="text-[10px] font-medium text-slate-400 group-hover/profile:text-slate-200 transition-colors truncate max-w-[120px]">{userName}</span>
+                  <svg className="w-2.5 h-2.5 text-slate-500 group-hover/profile:text-slate-300 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ) : userRole === 'staff' ? (
+                <p className="text-[10px] text-slate-400 font-medium">개인 워크스페이스</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -141,17 +173,15 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 overflow-y-auto custom-sidebar-scrollbar px-6 pb-6 space-y-8">
 
         {/* 그룹 0: 대시보드 오버뷰 */}
-        <div className="space-y-4">
-          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Overview</h3>
+        <div className="space-y-1">
           <nav className="space-y-1">
             <button
               onClick={() => handleTabClick('overview')}
               disabled={isPermBlocked('overview')}
               title={isPermBlocked('overview') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('overview') ? 'opacity-30 cursor-not-allowed text-slate-500'
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('overview') ? 'opacity-30 cursor-not-allowed text-slate-500'
                 : activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
               {isPermBlocked('overview') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>}
               대시보드 홈
@@ -161,73 +191,22 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* 그룹 1: 재고 및 수술 통계 */}
         <div className="space-y-4">
-          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Master Management</h3>
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">마스터 관리</h3>
           <nav className="space-y-1">
-            <button
-              onClick={() => handleTabClick('inventory_master')}
-              disabled={isPermBlocked('inventory_master')}
-              title={isPermBlocked('inventory_master') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('inventory_master') ? 'opacity-30 cursor-not-allowed text-slate-500'
-                : activeTab === 'inventory_master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-            >
-              {isPermBlocked('inventory_master') ? (
-                <LockMenuIcon />
-              ) : surgeryUnregisteredCount > 0 ? (
-                <span
-                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${
-                    activeTab === 'inventory_master' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  {unregisteredBadgeText}
-                </span>
-              ) : (
-                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-              )}
-              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">재고 관리 마스터</span>
-            </button>
-            <button
-              onClick={() => handleTabClick('inventory_audit')}
-              disabled={isPermBlocked('inventory_audit')}
-              title={isPermBlocked('inventory_audit') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('inventory_audit') ? 'opacity-30 cursor-not-allowed text-slate-500'
-                : activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-            >
-              {isPermBlocked('inventory_audit') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
-              재고 실사
-            </button>
-            <button
-              onClick={() => handleTabClick('order_management')}
-              disabled={isPermBlocked('order_management')}
-              title={isPermBlocked('order_management') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('order_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
-                : isLocked('order_management') ? LOCKED_STYLE
-                : activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-            >
-              {(isPermBlocked('order_management') || isLocked('order_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
-              주문 관리 마스터
-            </button>
             <button
               onClick={() => handleTabClick('surgery_database')}
               disabled={isPermBlocked('surgery_database')}
               title={isPermBlocked('surgery_database') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('surgery_database') ? 'opacity-30 cursor-not-allowed text-slate-500'
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('surgery_database') ? 'opacity-30 cursor-not-allowed text-slate-500'
                 : activeTab === 'surgery_database' ? 'bg-slate-800 text-white shadow-md border border-slate-700'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
               {isPermBlocked('surgery_database') ? (
                 <LockMenuIcon />
               ) : surgeryUnregisteredCount > 0 ? (
                 <span
-                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${
-                    activeTab === 'surgery_database' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
-                  }`}
+                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${activeTab === 'surgery_database' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+                    }`}
                 >
                   {unregisteredBadgeText}
                 </span>
@@ -237,45 +216,77 @@ const Sidebar: React.FC<SidebarProps> = ({
               <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">수술 기록 데이터베이스</span>
             </button>
             <button
+              onClick={() => handleTabClick('inventory_master')}
+              disabled={isPermBlocked('inventory_master')}
+              title={isPermBlocked('inventory_master') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('inventory_master') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'inventory_master' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              {isPermBlocked('inventory_master') ? (
+                <LockMenuIcon />
+              ) : surgeryUnregisteredCount > 0 ? (
+                <span
+                  className={`w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-full text-[10px] font-black ${activeTab === 'inventory_master' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'
+                    }`}
+                >
+                  {unregisteredBadgeText}
+                </span>
+              ) : (
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+              )}
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">재고 관리 마스터</span>
+            </button>
+            <button
+              onClick={() => handleTabClick('order_management')}
+              disabled={isPermBlocked('order_management')}
+              title={isPermBlocked('order_management') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('order_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : isLocked('order_management') ? LOCKED_STYLE
+                  : activeTab === 'order_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              {(isPermBlocked('order_management') || isLocked('order_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
+              주문 관리 마스터
+            </button>
+            <button
               onClick={() => handleTabClick('fail_management')}
               disabled={isPermBlocked('fail_management')}
               title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : undefined}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                isPermBlocked('fail_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('fail_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
                 : activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
               {isPermBlocked('fail_management') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
               식립 FAIL 관리
             </button>
+            <button
+              onClick={() => handleTabClick('inventory_audit')}
+              disabled={isPermBlocked('inventory_audit')}
+              title={isPermBlocked('inventory_audit') ? '접근 권한이 없습니다' : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('inventory_audit') ? 'opacity-30 cursor-not-allowed text-slate-500'
+                : activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            >
+              {isPermBlocked('inventory_audit') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
+              재고 실사
+            </button>
           </nav>
-        </div>
-
-        <div className="mt-8 p-4 bg-slate-800/50 rounded-2xl border border-slate-700 backdrop-blur-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">System Online</p>
-          </div>
-          <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-            All systems operational.<br />
-            Real-time sync active.
-          </p>
         </div>
 
         {/* Settings */}
         <div className="pt-6 border-t border-slate-800">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">SETTINGS</div>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">설정</div>
           <nav className="space-y-1">
             <button
               onClick={() => {
                 onTabChange('settings');
                 if (isMobile) onRequestClose?.();
               }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${
-                ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'].includes(activeTab)
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'].includes(activeTab)
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -286,23 +297,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* Return to Admin Button for System Admins simulating User View */}
-        {isAdmin && onReturnToAdmin && (
-          <div className="mt-auto pt-4 border-t border-slate-800">
-            <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-              <div className="text-xs text-slate-400 mb-2 text-center">Simulating User View</div>
-              <button
-                onClick={onReturnToAdmin}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-colors shadow-lg shadow-indigo-900/20"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
-                </svg>
-                Return to Admin
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Bottom logo area */}

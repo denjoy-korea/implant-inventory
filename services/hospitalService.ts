@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
-import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole } from '../types';
+import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact } from '../types';
 import { dbToHospital } from './mappers';
 
 export const hospitalService = {
@@ -112,9 +112,9 @@ export const hospitalService = {
   },
 
   /** 이메일로 구성원 초대 (Supabase Edge Function 호출) */
-  async inviteMember(email: string, name: string, hospitalId: string): Promise<{ inviteUrl: string; token: string }> {
+  async inviteMember(email: string, name: string, hospitalId: string, clinicRole: ClinicRole): Promise<{ inviteUrl: string; token: string }> {
     const { data, error } = await supabase.functions.invoke('invite-member', {
-      body: { email, name, hospitalId, siteUrl: window.location.origin },
+      body: { email, name, hospitalId, clinicRole, siteUrl: window.location.origin },
     });
 
     if (error) {
@@ -132,10 +132,10 @@ export const hospitalService = {
   },
 
   /** 초대 대기 중인 초대 목록 조회 */
-  async getInvitedMembers(hospitalId: string): Promise<{ id: string; email: string; name: string; created_at: string; expires_at: string }[]> {
+  async getInvitedMembers(hospitalId: string): Promise<{ id: string; email: string; name: string; clinic_role: ClinicRole | null; created_at: string; expires_at: string }[]> {
     const { data, error } = await supabase
       .from('member_invitations')
-      .select('id, email, name, created_at, expires_at')
+      .select('id, email, name, clinic_role, created_at, expires_at')
       .eq('hospital_id', hospitalId)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
@@ -284,5 +284,79 @@ export const hospitalService = {
       console.error('[hospitalService] updateWorkDays failed:', error);
       throw new Error('진료 요일 저장에 실패했습니다.');
     }
+  },
+
+  /** 재고에 사용된 제조사 목록 (중복 제거, 정렬)
+   * 보험임플란트, 수술중FAIL_ 말머리 제조사는 제외 */
+  async getDistinctManufacturers(hospitalId: string): Promise<string[]> {
+    const { data } = await supabase
+      .from('inventory')
+      .select('manufacturer')
+      .eq('hospital_id', hospitalId);
+    const all = (data || []).map((d: any) => d.manufacturer as string);
+    return [...new Set(all)]
+      .filter(m => m !== '보험임플란트' && !m.startsWith('수술중FAIL_'))
+      .sort();
+  },
+
+  /** 거래처 연락처 전체 조회 */
+  async getVendorContacts(hospitalId: string): Promise<VendorContact[]> {
+    const { data, error } = await supabase
+      .from('vendor_contacts')
+      .select('*')
+      .eq('hospital_id', hospitalId)
+      .order('manufacturer');
+    if (error) return [];
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      hospitalId: row.hospital_id,
+      manufacturer: row.manufacturer,
+      repName: row.rep_name,
+      phone: row.phone,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  },
+
+  /** 거래처 연락처 등록/수정 (upsert) */
+  async upsertVendorContact(
+    hospitalId: string,
+    manufacturer: string,
+    repName: string,
+    phone: string
+  ): Promise<VendorContact | null> {
+    const { data, error } = await supabase
+      .from('vendor_contacts')
+      .upsert(
+        {
+          hospital_id: hospitalId,
+          manufacturer,
+          rep_name: repName || null,
+          phone: phone || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'hospital_id,manufacturer' }
+      )
+      .select()
+      .single();
+    if (error) {
+      console.error('[hospitalService] upsertVendorContact failed:', error);
+      return null;
+    }
+    return {
+      id: data.id,
+      hospitalId: data.hospital_id,
+      manufacturer: data.manufacturer,
+      repName: data.rep_name,
+      phone: data.phone,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  },
+
+  /** 거래처 연락처 삭제 */
+  async deleteVendorContact(id: string): Promise<void> {
+    const { error } = await supabase.from('vendor_contacts').delete().eq('id', id);
+    if (error) throw new Error('삭제에 실패했습니다.');
   },
 };

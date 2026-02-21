@@ -29,7 +29,7 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const isSystemAdmin = user?.role === 'admin';
   const isHospitalAdmin = user?.role === 'master' || isSystemAdmin;
-  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices'];
+  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
   const isPublicView = publicViews.includes(currentView);
 
   return (
@@ -60,7 +60,7 @@ const Header: React.FC<HeaderProps> = ({
           )}
         </div>
         {(!user || isPublicView) && (
-          <nav className="hidden md:flex items-center justify-center gap-10 flex-1">
+          <nav className="hidden xl:flex items-center justify-center gap-10 flex-1">
             <button
               onClick={() => onNavigate('value')}
               className={`text-sm font-bold ${currentView === 'value' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
@@ -83,11 +83,8 @@ const Header: React.FC<HeaderProps> = ({
               요금제
             </button>
             <button
-              onClick={() => {
-                if (currentView !== 'landing') onNavigate('landing' as View);
-                setTimeout(() => document.getElementById('testimonials')?.scrollIntoView({ behavior: 'smooth' }), currentView !== 'landing' ? 100 : 0);
-              }}
-              className="text-sm font-bold text-slate-500 hover:text-slate-800"
+              onClick={() => onNavigate('reviews' as View)}
+              className={`text-sm font-bold ${currentView === 'reviews' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
             >
               고객후기
             </button>
@@ -112,7 +109,7 @@ const Header: React.FC<HeaderProps> = ({
           </nav>
         )}
         {user && !isPublicView && (
-          <nav className="hidden md:flex items-center justify-center gap-8 flex-1">
+          <nav className="hidden xl:flex items-center justify-center gap-8 flex-1">
             <button
               onClick={() => onNavigate('dashboard')}
               className={`text-sm font-bold ${currentView === 'dashboard' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}

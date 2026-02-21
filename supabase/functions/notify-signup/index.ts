@@ -1,0 +1,96 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  master: "🏥 치과 원장",
+  dental_staff: "👩‍⚕️ 치과 직원",
+  staff: "👤 개인 회원",
+};
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const webhookUrl = Deno.env.get("SLACK_MEMBER_WEBHOOK_URL");
+    if (!webhookUrl) {
+      console.error("[notify-signup] SLACK_WEBHOOK_URL not configured");
+      return new Response(JSON.stringify({ success: false, reason: "not configured" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { name, email, role, hospitalName, signupSource } = await req.json();
+
+    const now = new Date().toLocaleString("ko-KR", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const fields: { type: string; text: string }[] = [
+      { type: "mrkdwn", text: `*이름*\n${name || "—"}` },
+      { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
+      { type: "mrkdwn", text: `*역할*\n${ROLE_LABELS[role] || role}` },
+    ];
+
+    if (hospitalName) {
+      fields.push({ type: "mrkdwn", text: `*병원명*\n${hospitalName}` });
+    }
+    if (signupSource) {
+      fields.push({ type: "mrkdwn", text: `*가입경로*\n${signupSource}` });
+    }
+
+    const slackBody = {
+      blocks: [
+        {
+          type: "header",
+          text: { type: "plain_text", text: "🎉 새 회원이 가입했습니다!" },
+        },
+        {
+          type: "section",
+          fields,
+        },
+        {
+          type: "context",
+          elements: [
+            { type: "mrkdwn", text: `⏰ ${now} (KST)` },
+          ],
+        },
+      ],
+    };
+
+    const slackRes = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(slackBody),
+    });
+
+    if (!slackRes.ok) {
+      const text = await slackRes.text();
+      console.error("[notify-signup] Slack webhook failed:", slackRes.status, text);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error("[notify-signup] error:", err);
+    // 항상 200 반환 → 클라이언트 회원가입 흐름에 영향 없음
+    return new Response(JSON.stringify({ success: false }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

@@ -120,6 +120,7 @@ export function dbToUser(db: DbProfile): User {
     hospitalId: db.hospital_id || '',
     status: db.status,
     permissions: db.permissions ?? null,
+    mfaEnabled: db.mfa_enabled ?? false,
   };
 }
 

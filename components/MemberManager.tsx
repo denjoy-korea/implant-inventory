@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   User, UserRole, Hospital, HospitalPlanState, PLAN_LIMITS, PLAN_NAMES,
   MemberPermissions, PermissionLevel, DEFAULT_STAFF_PERMISSIONS, READONLY_PERMISSIONS, PERMISSION_LABELS,
+  ClinicRole, CLINIC_ROLE_LABELS,
 } from '../types';
 import { hospitalService } from '../services/hospitalService';
 import { dbToHospital } from '../services/mappers';
@@ -18,7 +19,7 @@ interface MemberManagerProps {
 }
 
 type MemberWithId = User & { _id: string; permissions: MemberPermissions | null };
-type InvitedMember = { id: string; email: string; name: string; created_at: string; expires_at: string };
+type InvitedMember = { id: string; email: string; name: string; clinic_role: ClinicRole | null; created_at: string; expires_at: string };
 
 // ─── Permission Modal ────────────────────────────────────────────────────────
 
@@ -212,6 +213,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
     const [isAdding, setIsAdding] = useState(false);
     const [inviteName, setInviteName] = useState('');
     const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteClinicRole, setInviteClinicRole] = useState<ClinicRole>('staff');
     const [isInviting, setIsInviting] = useState(false);
     const [currentHospital, setCurrentHospital] = useState<Hospital | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmColor?: 'rose' | 'indigo'; confirmLabel?: string; onConfirm: () => void } | null>(null);
@@ -241,7 +243,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             hospitalService.getMyHospital(),
         ]);
 
-        const mapProfile = (p: typeof activeData[0]) => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, hospitalId: p.hospital_id || '', status: p.status, permissions: p.permissions ?? null });
+        const mapProfile = (p: typeof activeData[0]) => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, clinicRole: p.clinic_role ?? null, hospitalId: p.hospital_id || '', status: p.status, permissions: p.permissions ?? null });
         setMembers(activeData.map(mapProfile));
         setPendingMembers(pendingData.map(mapProfile));
         setReadonlyMembers(readonlyData.map(mapProfile));
@@ -309,10 +311,11 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
 
         setIsInviting(true);
         try {
-            const { inviteUrl } = await hospitalService.inviteMember(inviteEmail, inviteName, currentUser.hospitalId);
-            operationLogService.logOperation('member_invite', `구성원 초대: ${inviteName} (${inviteEmail})`, { email: inviteEmail, name: inviteName });
+            const { inviteUrl } = await hospitalService.inviteMember(inviteEmail, inviteName, currentUser.hospitalId, inviteClinicRole);
+            operationLogService.logOperation('member_invite', `구성원 초대: ${inviteName} (${inviteEmail}) [${CLINIC_ROLE_LABELS[inviteClinicRole]}]`, { email: inviteEmail, name: inviteName, clinicRole: inviteClinicRole });
             setInviteName('');
             setInviteEmail('');
+            setInviteClinicRole('staff');
             setIsAdding(false);
             await loadData();
             // 초대 URL 복사 모달 표시
@@ -334,7 +337,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                 setConfirmModal(null);
                 try {
                     await hospitalService.cancelInvitation(inv.id);
-                    const { inviteUrl } = await hospitalService.inviteMember(inv.email, inv.name, currentUser.hospitalId!);
+                    const { inviteUrl } = await hospitalService.inviteMember(inv.email, inv.name, currentUser.hospitalId!, inv.clinic_role ?? 'staff');
                     operationLogService.logOperation('member_invite', `초대 재발송: ${inv.name} (${inv.email})`, { email: inv.email });
                     await loadData();
                     setInviteUrlModal({ url: inviteUrl, name: inv.name, email: inv.email });
@@ -477,12 +480,19 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 hidden sm:table-cell">
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-600">
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                        </svg>
-                                                        초대 발송됨
-                                                    </span>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        {inv.clinic_role && (
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                                                                {CLINIC_ROLE_LABELS[inv.clinic_role]}
+                                                            </span>
+                                                        )}
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                            </svg>
+                                                            초대 발송됨
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-1">
@@ -581,21 +591,31 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                         <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in slide-in-from-top-4">
                             <h4 className="font-bold text-slate-800 mb-1">이메일로 구성원 초대</h4>
                             <p className="text-sm text-slate-500 mb-4">초대받은 구성원이 이메일에서 승인 후 비밀번호를 설정하면 등록됩니다.</p>
-                            <form onSubmit={handleInvite} className="flex gap-3">
+                            <form onSubmit={handleInvite} className="flex gap-3 flex-wrap sm:flex-nowrap">
                                 <input
                                     type="text"
                                     placeholder="이름"
                                     value={inviteName}
                                     onChange={e => setInviteName(e.target.value)}
-                                    className="w-32 px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
+                                    className="w-28 px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
                                     required
                                 />
+                                <select
+                                    value={inviteClinicRole}
+                                    onChange={e => setInviteClinicRole(e.target.value as ClinicRole)}
+                                    className="w-28 px-3 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm bg-white text-slate-700"
+                                    required
+                                >
+                                    {(Object.entries(CLINIC_ROLE_LABELS) as [ClinicRole, string][]).map(([value, label]) => (
+                                        <option key={value} value={value}>{label}</option>
+                                    ))}
+                                </select>
                                 <input
                                     type="email"
                                     placeholder="이메일 주소"
                                     value={inviteEmail}
                                     onChange={e => setInviteEmail(e.target.value)}
-                                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
+                                    className="flex-1 min-w-0 px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm"
                                     required
                                 />
                                 <button
@@ -635,14 +655,24 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{member.email}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${member.role === 'master'
-                                                ? 'bg-purple-100 text-purple-800'
-                                                : member.role === 'dental_staff'
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-green-100 text-green-800'
-                                                }`}>
-                                                {member.role === 'master' ? '마스터 관리자' : (member.role === 'dental_staff' ? '치과 스태프' : '개인 스태프')}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                {member.role === 'master' ? (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                                        마스터 관리자
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        {member.clinicRole && (
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 w-fit">
+                                                                {CLINIC_ROLE_LABELS[member.clinicRole]}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[11px] text-slate-400">
+                                                            {member.role === 'dental_staff' ? '치과 스태프' : '개인 스태프'}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
@@ -689,12 +719,16 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{member.email}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${member.role === 'dental_staff'
-                                                ? 'bg-blue-50 text-blue-600'
-                                                : 'bg-green-50 text-green-600'
-                                                }`}>
-                                                {member.role === 'dental_staff' ? '치과 스태프' : '개인 스태프'}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                {member.clinicRole && (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-500 w-fit">
+                                                        {CLINIC_ROLE_LABELS[member.clinicRole]}
+                                                    </span>
+                                                )}
+                                                <span className="text-[11px] text-slate-400">
+                                                    {member.role === 'dental_staff' ? '치과 스태프' : '개인 스태프'}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">

@@ -11,6 +11,7 @@ import EditNoticeModal from './inventory/EditNoticeModal';
 import BaseStockModal from './inventory/BaseStockModal';
 import OptimizeModal from './inventory/OptimizeModal';
 import UnregisteredDetailModal from './inventory/UnregisteredDetailModal';
+import { InventoryDetailColumnKey, InventoryDetailColumnVisibility, InventoryDetailToolbarState } from './inventory/inventoryTypes';
 interface InventoryManagerProps {
   inventory: InventoryItem[];
   onUpdateStock: (id: string, initialStock: number, nextCurrentStock?: number) => void | Promise<void>;
@@ -71,17 +72,6 @@ function toMonthKey(value: unknown): string | null {
 
 
 
-type InventoryDetailColumnKey =
-  | 'manufacturer'
-  | 'brand'
-  | 'size'
-  | 'initialStock'
-  | 'usageCount'
-  | 'monthlyAvgUsage'
-  | 'dailyMaxUsage'
-  | 'currentStock'
-  | 'recommendedStock';
-
 const INVENTORY_DETAIL_COLUMNS: Array<{ key: InventoryDetailColumnKey; label: string }> = [
   { key: 'manufacturer', label: '제조사' },
   { key: 'brand', label: '브랜드' },
@@ -94,7 +84,7 @@ const INVENTORY_DETAIL_COLUMNS: Array<{ key: InventoryDetailColumnKey; label: st
   { key: 'recommendedStock', label: '권장량' },
 ];
 
-const DEFAULT_INVENTORY_DETAIL_COLUMN_VISIBILITY: Record<InventoryDetailColumnKey, boolean> = {
+const DEFAULT_INVENTORY_DETAIL_COLUMN_VISIBILITY: InventoryDetailColumnVisibility = {
   manufacturer: true,
   brand: true,
   size: true,
@@ -131,12 +121,42 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [showBaseStockModal, setShowBaseStockModal] = useState(false);
   const [showUnregisteredDetailModal, setShowUnregisteredDetailModal] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
-  const [showOnlyOrderNeededRows, setShowOnlyOrderNeededRows] = useState(false);
-  const [showInventoryDetailColumnFilter, setShowInventoryDetailColumnFilter] = useState(false);
-  const [inventoryDetailColumnVisibility, setInventoryDetailColumnVisibility] = useState<Record<InventoryDetailColumnKey, boolean>>(
-    DEFAULT_INVENTORY_DETAIL_COLUMN_VISIBILITY
-  );
+  const [inventoryDetailToolbarState, setInventoryDetailToolbarState] = useState<InventoryDetailToolbarState>({
+    showOnlyOrderNeededRows: false,
+    showColumnFilter: false,
+    columnVisibility: DEFAULT_INVENTORY_DETAIL_COLUMN_VISIBILITY,
+  });
   const inventoryDetailColumnFilterRef = useRef<HTMLDivElement | null>(null);
+  const showOnlyOrderNeededRows = inventoryDetailToolbarState.showOnlyOrderNeededRows;
+  const showInventoryDetailColumnFilter = inventoryDetailToolbarState.showColumnFilter;
+  const inventoryDetailColumnVisibility = inventoryDetailToolbarState.columnVisibility;
+
+  const setShowOnlyOrderNeededRows = (next: boolean | ((prev: boolean) => boolean)) => {
+    setInventoryDetailToolbarState(prev => ({
+      ...prev,
+      showOnlyOrderNeededRows: typeof next === 'function' ? (next as (value: boolean) => boolean)(prev.showOnlyOrderNeededRows) : next,
+    }));
+  };
+
+  const setShowInventoryDetailColumnFilter = (next: boolean | ((prev: boolean) => boolean)) => {
+    setInventoryDetailToolbarState(prev => ({
+      ...prev,
+      showColumnFilter: typeof next === 'function' ? (next as (value: boolean) => boolean)(prev.showColumnFilter) : next,
+    }));
+  };
+
+  const setInventoryDetailColumnVisibility = (
+    next:
+      | InventoryDetailColumnVisibility
+      | ((prev: InventoryDetailColumnVisibility) => InventoryDetailColumnVisibility)
+  ) => {
+    setInventoryDetailToolbarState(prev => ({
+      ...prev,
+      columnVisibility: typeof next === 'function'
+        ? (next as (value: InventoryDetailColumnVisibility) => InventoryDetailColumnVisibility)(prev.columnVisibility)
+        : next,
+    }));
+  };
 
   const maxEdits = PLAN_LIMITS[plan].maxBaseStockEdits;
   const isUnlimited = maxEdits === Infinity;

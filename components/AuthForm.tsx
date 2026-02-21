@@ -20,6 +20,8 @@ interface AuthFormProps {
   onContact?: () => void;
   /** invite 모드에서 사전 로드된 초대 정보 */
   inviteInfo?: InviteInfo;
+  /** MFA 필요 시 호출 (email 전달) */
+  onMfaRequired?: (email: string) => void;
 }
 
 type SignupStep = 'role_selection' | 'plan_select' | 'form_input';
@@ -44,7 +46,7 @@ const formatPhone = (value: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 };
 
-const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContact, inviteInfo }) => {
+const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContact, inviteInfo, onMfaRequired }) => {
   const [step, setStep] = useState<SignupStep>('plan_select');
   const [userType, setUserType] = useState<UserType | null>(null);
 
@@ -53,6 +55,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [name, setName] = useState('');
   const [hospitalName, setHospitalName] = useState('');
   const [phone, setPhone] = useState('');
+  const [signupSource, setSignupSource] = useState('');
   const [bizFile, setBizFile] = useState<File | null>(null);
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [errorStatus, setErrorStatus] = useState<{ message: string } | null>(null);
@@ -178,6 +181,20 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast, showToast } = useToast();
 
+  const maybeStartTrialForSignup = async (user: User): Promise<void> => {
+    if (type !== 'signup') return;
+    if (!pendingTrialPlan || pendingTrialPlan === 'free') return;
+    if (user.role !== 'master' || !user.hospitalId) return;
+
+    const started = await planService.startTrial(user.hospitalId, pendingTrialPlan);
+    if (started) {
+      showToast(`${PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험이 시작되었습니다.`, 'success');
+      return;
+    }
+
+    showToast('무료 체험 시작에 실패했습니다. 다시 시도해 주세요.', 'error');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorStatus(null);
@@ -202,6 +219,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       if (userType === 'dentist' && !hospitalName) { showToast('병원명을 입력해주세요.', 'error'); return; }
       if (userType === 'dentist' && !phone) { showToast('연락처를 입력해주세요.', 'error'); return; }
       if (userType === 'dentist' && !bizFile) { showToast('사업자등록증을 첨부해주세요.', 'error'); return; }
+      if (!signupSource) { showToast('가입경로를 선택해주세요.', 'error'); return; }
 
       setIsSubmitting(true);
       const result = await authService.signUp({
@@ -212,6 +230,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         hospitalName: userType === 'dentist' ? hospitalName : undefined,
         phone: phone || undefined,
         bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
+        signupSource: signupSource || undefined,
       });
       setIsSubmitting(false);
 
@@ -221,12 +240,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       }
 
       if (result.profile) {
-        onSuccess(dbToUser(result.profile));
+        const signedUpUser = dbToUser(result.profile);
+        await maybeStartTrialForSignup(signedUpUser);
+        onSuccess(signedUpUser);
       } else {
         // profile 없으면 가입 정보로 자동 로그인 시도
         const loginResult = await authService.signIn(email, password);
         if (loginResult.success && loginResult.profile) {
-          onSuccess(dbToUser(loginResult.profile));
+          const signedInUser = dbToUser(loginResult.profile);
+          await maybeStartTrialForSignup(signedInUser);
+          onSuccess(signedInUser);
         } else {
           showToast('회원가입 완료! 로그인해주세요.', 'success');
           onSwitch();
@@ -242,13 +265,34 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
 
       setIsSubmitting(true);
       const result = await authService.signIn(email, password);
-      setIsSubmitting(false);
 
       if (!result.success) {
+        setIsSubmitting(false);
         setErrorStatus({ message: result.error || '로그인에 실패했습니다.' });
         return;
       }
 
+      // MFA 활성화 여부 확인
+      try {
+        const profile = await authService.getProfileById();
+        if (profile?.mfa_enabled) {
+          const isTrusted = await authService.checkTrustedDevice();
+          if (!isTrusted) {
+            setIsSubmitting(false);
+            if (onMfaRequired) {
+              onMfaRequired(email);
+            } else {
+              // fallback: onMfaRequired prop 없을 때 새로고침 (initSession에서 MFA 체크)
+              window.location.reload();
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[AuthForm] MFA check failed, proceeding normally:', e);
+      }
+
+      setIsSubmitting(false);
       // 로그인 성공 → 새로고침으로 initSession이 세션 감지 후 대시보드 진입
       window.location.reload();
     }
@@ -316,7 +360,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                     key={plan.key}
                     onClick={() => {
                       if (!plan.trial) {
-                        localStorage.removeItem('denjoy_pending_trial');
                         setStep('role_selection');
                       } else {
                         setPendingTrialPlan(plan.key);
@@ -378,7 +421,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                   disabled={!trialConsented}
                   onClick={() => {
                     if (!trialConsented || !pendingTrialPlan) return;
-                    localStorage.setItem('denjoy_pending_trial', pendingTrialPlan);
                     setStep('role_selection');
                   }}
                   className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${trialConsented ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
@@ -936,6 +978,21 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                 </div>
               </div>
               {renderPwHints()}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">가입경로 <span className="text-rose-400">*</span></label>
+                <select value={signupSource} onChange={(e) => setSignupSource(e.target.value)} className={inputClass}>
+                  <option value="">선택 안 함</option>
+                  <option value="지인 소개">지인 소개</option>
+                  <option value="인스타그램">인스타그램</option>
+                  <option value="스레드">스레드</option>
+                  <option value="유튜브">유튜브</option>
+                  <option value="네이버 검색">네이버 검색</option>
+                  <option value="네이버 카페">네이버 카페</option>
+                  <option value="구글 검색">구글 검색</option>
+                  <option value="학회/세미나">학회/세미나</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
               <button type="submit" disabled={isSubmitting} className="w-full h-12 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSubmitting ? '처리 중...' : '가입완료'}
               </button>
@@ -1065,6 +1122,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">가입경로 <span className="text-rose-400">*</span></label>
+              <select value={signupSource} onChange={(e) => setSignupSource(e.target.value)} className={inputClass}>
+                <option value="">선택 안 함</option>
+                <option value="지인 소개">지인 소개</option>
+                <option value="인스타그램">인스타그램</option>
+                <option value="유튜브">유튜브</option>
+                <option value="네이버 검색">네이버 검색</option>
+                <option value="구글 검색">구글 검색</option>
+                <option value="학회/세미나">학회/세미나</option>
+                <option value="기타">기타</option>
+              </select>
+            </div>
             <button type="submit" disabled={isSubmitting} className="w-full h-12 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-[0.98] mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
               {isSubmitting ? '처리 중...' : '가입완료'}
             </button>

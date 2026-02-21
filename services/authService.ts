@@ -1,5 +1,7 @@
 import { supabase } from './supabaseClient';
-import { DbProfile, UserRole } from '../types';
+import { DbProfile, TrustedDevice, UserRole } from '../types';
+
+const TRUSTED_DEVICE_TOKEN_KEY = 'dentweb_trusted_device_token';
 
 interface SignupParams {
   email: string;
@@ -9,6 +11,7 @@ interface SignupParams {
   hospitalName?: string;
   phone?: string;
   bizFile?: File;
+  signupSource?: string;
 }
 
 interface AuthResult {
@@ -20,7 +23,7 @@ interface AuthResult {
 export const authService = {
   /** 이메일/비밀번호 회원가입 */
   async signUp(params: SignupParams): Promise<AuthResult> {
-    const { email, password, name, role, hospitalName, phone, bizFile } = params;
+    const { email, password, name, role, hospitalName, phone, bizFile, signupSource } = params;
     if (role === 'admin') {
       return { success: false, error: '운영자 계정은 직접 가입할 수 없습니다.' };
     }
@@ -54,12 +57,12 @@ export const authService = {
 
     const userId = authData.user.id;
 
-    // 2. 전화번호 profiles에 저장
-    if (phone) {
-      await supabase
-        .from('profiles')
-        .update({ phone })
-        .eq('id', userId);
+    // 2. 전화번호 / 가입경로 profiles에 저장
+    const profileUpdates: Record<string, any> = {};
+    if (phone) profileUpdates.phone = phone;
+    if (signupSource) profileUpdates.signup_source = signupSource;
+    if (Object.keys(profileUpdates).length > 0) {
+      await supabase.from('profiles').update(profileUpdates).eq('id', userId);
     }
 
     // 3. Master(치과 회원) - 병원 생성
@@ -136,7 +139,24 @@ export const authService = {
       }
     }
 
-    // 5. 프로필 조회 (userId로 직접 조회 + 재시도)
+    // 5. 슬랙 가입 알림 (fire-and-forget)
+    (async () => {
+      try {
+        await supabase.functions.invoke('notify-signup', {
+          body: {
+            name,
+            email,
+            role: signupRole,
+            hospitalName: signupRole === 'master' ? hospitalName : undefined,
+            signupSource: signupSource || undefined,
+          },
+        });
+      } catch {
+        // 알림 실패는 무시
+      }
+    })();
+
+    // 6. 프로필 조회 (userId로 직접 조회 + 재시도)
     for (let i = 0; i < 3; i++) {
       const { data: profileData } = await supabase
         .from('profiles')
@@ -190,11 +210,21 @@ export const authService = {
       return { success: false, error: error.message };
     }
 
+    // 세션 토큰 발급 및 저장 (중복 로그인 차단용)
+    try {
+      const token = crypto.randomUUID();
+      await supabase.rpc('set_session_token', { p_token: token });
+      localStorage.setItem('dentweb_session_token', token);
+    } catch (tokenError) {
+      console.warn('[authService] session token setup failed:', tokenError);
+    }
+
     return { success: true };
   },
 
   /** 로그아웃 */
   async signOut(): Promise<void> {
+    localStorage.removeItem('dentweb_session_token');
     await supabase.auth.signOut();
   },
 
@@ -259,6 +289,26 @@ export const authService = {
     return data as DbProfile;
   },
 
+  /** 탈퇴 사유 저장 + 슬랙 알림 (fire-and-forget, 계정 삭제 전 호출) */
+  async saveWithdrawalReason(reason: string, reasonDetail?: string): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from('withdrawal_reasons').insert({
+        user_id: user.id,
+        email: user.email || '',
+        reason,
+        reason_detail: reasonDetail || null,
+      });
+      // 슬랙 알림 (fire-and-forget)
+      supabase.functions.invoke('notify-withdrawal', {
+        body: { email: user.email || '', reasons: reason, reasonDetail },
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('[authService] saveWithdrawalReason failed:', err);
+    }
+  },
+
   /** 회원 탈퇴 (DB 함수로 auth.users 완전 삭제) */
   async deleteAccount(): Promise<{ success: boolean; error?: string }> {
     try {
@@ -286,5 +336,84 @@ export const authService = {
   /** Auth 상태 변경 리스너 */
   onAuthStateChange(callback: (event: string, session: any) => void) {
     return supabase.auth.onAuthStateChange(callback);
+  },
+
+  // ── MFA (이메일 OTP 2차 인증) ──────────────────────────────
+
+  /** OTP 이메일 발송 */
+  async sendMfaOtp(email: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** OTP 검증 + 세션 토큰 재발급 */
+  async verifyMfaOtp(email: string, token: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+    if (error) return { success: false, error: error.message };
+    // verifyOtp이 Supabase 세션을 교체하므로 중복 로그인 차단 토큰도 재발급
+    try {
+      const newToken = crypto.randomUUID();
+      await supabase.rpc('set_session_token', { p_token: newToken });
+      localStorage.setItem('dentweb_session_token', newToken);
+    } catch (e) {
+      console.warn('[authService] session token reissue after OTP failed:', e);
+    }
+    return { success: true };
+  },
+
+  /** 현재 기기가 신뢰 기기인지 확인 */
+  async checkTrustedDevice(): Promise<boolean> {
+    const token = localStorage.getItem(TRUSTED_DEVICE_TOKEN_KEY);
+    if (!token) return false;
+    try {
+      const { data, error } = await supabase.rpc('check_trusted_device', { p_token: token });
+      if (error || !data) {
+        localStorage.removeItem(TRUSTED_DEVICE_TOKEN_KEY);
+        return false;
+      }
+      return !!data;
+    } catch {
+      return false;
+    }
+  },
+
+  /** 현재 기기를 신뢰 기기로 등록 (30일) */
+  async registerTrustedDevice(deviceName?: string): Promise<void> {
+    const token = crypto.randomUUID();
+    const name = deviceName
+      || `${navigator.platform} · ${new Date().toLocaleDateString('ko-KR')}`;
+    try {
+      await supabase.rpc('register_trusted_device', { p_token: token, p_device_name: name });
+      localStorage.setItem(TRUSTED_DEVICE_TOKEN_KEY, token);
+    } catch (error) {
+      console.warn('[authService] registerTrustedDevice failed:', error);
+    }
+  },
+
+  /** MFA 활성화/비활성화 토글 */
+  async toggleMfa(enabled: boolean): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.rpc('toggle_mfa_enabled', { p_enabled: enabled });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 신뢰 기기 목록 조회 */
+  async getTrustedDevices(): Promise<TrustedDevice[]> {
+    const { data, error } = await supabase.rpc('get_trusted_devices');
+    if (error || !data) return [];
+    return (data as { id: string; device_name: string | null; created_at: string; expires_at: string }[]).map(d => ({
+      id: d.id,
+      deviceName: d.device_name,
+      createdAt: d.created_at,
+      expiresAt: d.expires_at,
+    }));
+  },
+
+  /** 신뢰 기기 제거 */
+  async removeTrustedDevice(id: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.rpc('remove_trusted_device', { p_id: id });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 };

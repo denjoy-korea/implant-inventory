@@ -47,3 +47,22 @@ export interface ManualFixDraft {
   brand: string;
   size: string;
 }
+
+export type InventoryDetailColumnKey =
+  | 'manufacturer'
+  | 'brand'
+  | 'size'
+  | 'initialStock'
+  | 'usageCount'
+  | 'monthlyAvgUsage'
+  | 'dailyMaxUsage'
+  | 'currentStock'
+  | 'recommendedStock';
+
+export type InventoryDetailColumnVisibility = Record<InventoryDetailColumnKey, boolean>;
+
+export interface InventoryDetailToolbarState {
+  showOnlyOrderNeededRows: boolean;
+  showColumnFilter: boolean;
+  columnVisibility: InventoryDetailColumnVisibility;
+}

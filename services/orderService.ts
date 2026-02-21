@@ -77,7 +77,12 @@ export const orderService = {
         if (!fullOrderError && fullOrder) {
           return fullOrder as DbOrder & { order_items: DbOrderItem[] };
         }
+        // RPC가 주문을 생성했지만 full fetch 실패 → 순차 삽입으로 폴백하면 중복 주문 발생
+        // Realtime INSERT 이벤트가 결국 상태에 반영하므로 null 반환
+        console.warn('[orderService] Full order fetch failed after RPC success; Realtime will sync:', fullOrderError);
+        return null;
       }
+      // RPC가 빈 결과 반환 → 순차 삽입으로 폴백
     } else if (rpcError.code !== 'PGRST202') {
       console.error('[orderService] create_order_with_items failed:', rpcError);
       return null;

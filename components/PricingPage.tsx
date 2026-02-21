@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { PlanType, BillingCycle, DbBillingHistory, PLAN_NAMES, PLAN_PRICING } from '../types';
 import { useToast } from '../hooks/useToast';
 import { planService } from '../services/planService';
+import { supabase } from '../services/supabaseClient';
 
 interface PricingPageProps {
   onGetStarted: () => void;
@@ -17,6 +18,7 @@ interface PricingPageProps {
   onCancelPayment?: (billingId: string) => void;
   daysUntilExpiry?: number;
   onContact?: () => void;
+  onGoToValue?: () => void;
 }
 
 interface Plan {
@@ -221,7 +223,7 @@ const XIcon = () => (
   </svg>
 );
 
-const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, isLoggedIn, hospitalName, userName, userPhone, onSelectPlan, onRequestPayment, pendingPayment, onCancelPayment, daysUntilExpiry, onContact }) => {
+const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, isLoggedIn, hospitalName, userName, userPhone, onSelectPlan, onRequestPayment, pendingPayment, onCancelPayment, daysUntilExpiry, onContact, onGoToValue }) => {
   const [isYearly, setIsYearly] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
@@ -237,9 +239,83 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   const [trialConsented, setTrialConsented] = useState(false);
   const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
 
+  const [hospitalCount, setHospitalCount] = useState<number | null>(null);
+
+  // 요금제 추천 퀴즈
+  const [showFinder, setShowFinder] = useState(false);
+  const [finderStep, setFinderStep] = useState(0);
+  const [finderAnswers, setFinderAnswers] = useState<string[]>([]);
+  const [finderResult, setFinderResult] = useState<string | null>(null);
+
+  const finderQuestions = [
+    {
+      q: '주간 임플란트 수술 건수는?',
+      options: [
+        { label: '주 5건 미만', value: 'under5', sub: '소규모 치과' },
+        { label: '주 5~15건', value: '5to15', sub: '일반 규모' },
+        { label: '주 15~30건', value: '15to30', sub: '활발한 치과' },
+        { label: '주 30건 이상', value: 'over30', sub: '대형 치과' },
+      ],
+    },
+    {
+      q: '함께 사용하는 팀 규모는?',
+      options: [
+        { label: '나 혼자', value: '1', sub: '개인 사용' },
+        { label: '2~3명', value: '2to3', sub: '소규모 팀' },
+        { label: '4~5명', value: '4to5', sub: '중규모 팀' },
+        { label: '6명 이상', value: '6plus', sub: '대규모 팀' },
+      ],
+    },
+    {
+      q: '가장 필요한 기능은?',
+      options: [
+        { label: '기본 재고 관리', value: 'basic', sub: '품목 등록·조회' },
+        { label: '브랜드별 분석', value: 'analysis', sub: '소모 패턴 파악' },
+        { label: '자동 재고 알림', value: 'alert', sub: '부족 알림·월간 리포트' },
+        { label: 'AI 발주 자동화', value: 'ai', sub: '원클릭 발주·AI 예측' },
+      ],
+    },
+  ];
+
+  const getFinderRecommendation = (answers: string[]): string => {
+    const [surgeries, team, feature] = answers;
+    if (surgeries === 'over30' || team === '6plus' || feature === 'ai') return 'Business';
+    if (surgeries === '15to30' || team === '4to5' || feature === 'alert') return 'Plus';
+    if (surgeries === '5to15' || team === '2to3' || feature === 'analysis') return 'Basic';
+    return 'Free';
+  };
+
+  const handleFinderAnswer = (value: string) => {
+    const next = [...finderAnswers, value];
+    if (finderStep < 2) {
+      setFinderAnswers(next);
+      setFinderStep(finderStep + 1);
+    } else {
+      setFinderAnswers(next);
+      setFinderResult(getFinderRecommendation(next));
+    }
+  };
+
+  const resetFinder = () => {
+    setFinderStep(0);
+    setFinderAnswers([]);
+    setFinderResult(null);
+  };
+
+  const planResultColors: Record<string, { bg: string; border: string; badge: string; text: string }> = {
+    Free:     { bg: 'bg-slate-50',   border: 'border-slate-200', badge: 'bg-slate-100 text-slate-700',   text: 'text-slate-700' },
+    Basic:    { bg: 'bg-blue-50',    border: 'border-blue-200',  badge: 'bg-blue-100 text-blue-700',     text: 'text-blue-700' },
+    Plus:     { bg: 'bg-indigo-50',  border: 'border-indigo-300',badge: 'bg-indigo-600 text-white',      text: 'text-indigo-700' },
+    Business: { bg: 'bg-purple-50',  border: 'border-purple-300',badge: 'bg-purple-600 text-white',      text: 'text-purple-700' },
+  };
+
   useEffect(() => { window.scrollTo(0, 0); }, []);
   useEffect(() => {
     planService.getPlanAvailability().then(av => setPlanAvailability(av)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    supabase.from('hospitals').select('id', { count: 'exact', head: true })
+      .then(({ count }) => { if (count !== null) setHospitalCount(count); }, () => {});
   }, []);
 
   const planNames = ['Free', 'Basic', 'Plus', 'Business'];
@@ -285,26 +361,197 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </div>
       )}
 
-      {/* Hero */}
-      <section className="pt-24 pb-12 text-center relative overflow-hidden">
+      {/* Hero — 손실 회피 + 앵커링 */}
+      <section className="pt-24 pb-10 text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-100 rounded-full mix-blend-multiply filter blur-[100px] opacity-50"></div>
           <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-100 rounded-full mix-blend-multiply filter blur-[100px] opacity-50"></div>
         </div>
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 border border-indigo-100 mb-6">
-            <span className="text-sm font-bold text-indigo-600">Pricing</span>
+        <div className="max-w-3xl mx-auto px-6">
+          <div className="flex flex-col items-center gap-4 mb-6">
+            {/* 사회적 증명 배지 — 30곳 이상일 때만 표시 */}
+            {hospitalCount !== null && hospitalCount >= 30 && (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span className="text-sm font-bold text-emerald-700">{hospitalCount}곳의 치과에서 사용 중</span>
+              </div>
+            )}
+
+            {/* 손실 회피: 지금 손해를 먼저 보여주기 */}
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl px-6 py-4">
+              <p className="text-sm font-bold text-rose-700">
+                💸 엑셀 재고 관리를 계속하면 매달 <span className="text-rose-600 text-base">최소 12만원</span> 이상 손해보고 계신 겁니다
+              </p>
+              <p className="text-xs text-rose-400 mt-1">직원 시급 15,000원 × 월 8시간 엑셀 작업 기준</p>
+            </div>
           </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-slate-900 mb-6 leading-tight">
-            모든 치과를 위한<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">하나의 도구</span>
+
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900 mb-5 leading-tight">
+            그 비용의 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">4분의 1</span>로<br />
+            전부 해결하세요
           </h1>
-          <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed">
-            치과 규모에 맞는 요금제를 선택하세요.<br />
-            모든 플랜은 핵심 기능을 포함하며, 언제든 업그레이드할 수 있습니다.
+          <p className="text-base md:text-lg text-slate-500 max-w-xl mx-auto leading-relaxed mb-3">
+            월 29,000원 — <strong className="text-slate-700">하루 967원</strong>이면 충분합니다.
           </p>
+          {/* 앵커링: 일 단위 프레이밍 */}
+          <p className="text-xs text-slate-400 mb-8">자판기 음료 한 캔보다 저렴한 금액으로 재고 관리의 모든 고민을 해결하세요</p>
+
+          {/* 도입효과 보기 버튼 */}
+          <button
+            onClick={() => onGoToValue?.()}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-md hover:-translate-y-0.5"
+          >
+            도입효과 보기
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       </section>
+
+      {/* 사회적 증명 + 제로 리스크 배너 */}
+      <section className="max-w-3xl mx-auto px-6 pb-10 w-full">
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: '🛡️', title: '14일 무료 체험', desc: '카드 등록 없이\n체험 후 결정' },
+            { icon: '🔓', title: '언제든 해지', desc: '약정·위약금 없음\n즉시 해지 가능' },
+            { icon: '💾', title: '데이터 100% 보존', desc: '해지 후에도\n기존 데이터 유지' },
+          ].map((item, i) => (
+            <div key={i} className="bg-white border border-slate-100 rounded-xl p-4 text-center shadow-sm">
+              <div className="text-xl mb-1.5">{item.icon}</div>
+              <p className="text-xs font-black text-slate-800 mb-1">{item.title}</p>
+              <p className="text-xs text-slate-400 whitespace-pre-line leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Plan Finder */}
+      <div className="max-w-2xl mx-auto px-6 pb-10 w-full">
+        {!showFinder ? (
+          <button
+            onClick={() => setShowFinder(true)}
+            className="w-full relative overflow-hidden rounded-2xl group transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-200"
+          >
+            {/* 그라디언트 배경 */}
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700" />
+            {/* 반짝이는 shine 효과 */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-100%] group-hover:translate-x-[200%] transition-transform duration-700" />
+
+            <div className="relative px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  🎯
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-base font-black text-white">나에게 맞는 요금제 찾기</p>
+                    <span className="text-[10px] font-bold bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full">30초</span>
+                  </div>
+                  <p className="text-xs text-indigo-200">3가지 질문만 답하면 딱 맞는 플랜을 추천해드려요</p>
+                  {/* 플랜 미리보기 도트 */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    {['Free', 'Basic', 'Plus', 'Business'].map((p) => (
+                      <span key={p} className="text-[10px] text-white/60 bg-white/10 px-2 py-0.5 rounded-full">{p}</span>
+                    ))}
+                    <span className="text-[10px] text-indigo-300">중 추천</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                <svg className="w-4 h-4 text-white group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          </button>
+        ) : (
+          <div className="bg-white border border-indigo-100 rounded-2xl p-6 shadow-lg shadow-indigo-50">
+            {finderResult ? (
+              // 결과 화면
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">✨</span>
+                  <p className="text-sm font-black text-slate-800">추천 플랜이 나왔어요!</p>
+                </div>
+                {(() => {
+                  const c = planResultColors[finderResult];
+                  const plan = plans.find(p => p.name === finderResult)!;
+                  const price = plan.monthlyPrice;
+                  return (
+                    <div className={`${c.bg} ${c.border} border rounded-xl p-5 mb-4`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-full ${c.badge}`}>{finderResult}</span>
+                          <span className={`text-sm font-bold ${c.text}`}>{plan.description}</span>
+                        </div>
+                        <span className="text-lg font-black text-slate-900">
+                          {price === 0 ? '무료' : `${formatPrice(price!)}원/월`}
+                        </span>
+                      </div>
+                      <ul className="space-y-1.5">
+                        {plan.features.slice(0, 4).map((f, i) => (
+                          <li key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                            <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      resetFinder();
+                      setShowFinder(false);
+                      // 해당 플랜으로 스크롤
+                      setTimeout(() => {
+                        document.getElementById(`plan-${finderResult.toLowerCase()}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm"
+                  >
+                    {finderResult} 플랜 자세히 보기
+                  </button>
+                  <button onClick={resetFinder} className="px-4 py-2.5 text-sm text-slate-400 hover:text-slate-600 border border-slate-200 rounded-xl transition-colors">
+                    다시 하기
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 질문 화면
+              <div>
+                {/* 진행 표시 */}
+                <div className="flex items-center gap-2 mb-5">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= finderStep ? 'bg-indigo-500' : 'bg-slate-100'}`} />
+                  ))}
+                  <span className="text-xs text-slate-400 ml-1">{finderStep + 1}/3</span>
+                </div>
+                <p className="text-sm font-black text-slate-800 mb-4">{finderQuestions[finderStep].q}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {finderQuestions[finderStep].options.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleFinderAnswer(opt.value)}
+                      className="flex flex-col items-start p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
+                    >
+                      <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">{opt.label}</span>
+                      <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => { resetFinder(); setShowFinder(false); }} className="mt-4 w-full text-xs text-slate-300 hover:text-slate-500 transition-colors">
+                  닫기
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Billing Toggle */}
       <div className="flex justify-center items-center gap-4 pb-12">
@@ -335,12 +582,15 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
             return (
               <div
                 key={plan.name}
+                id={`plan-${planKey}`}
                 className={`relative rounded-2xl p-7 flex flex-col h-full transition-all duration-300 ${
                   isSoldOut
                     ? 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
                     : plan.highlight
                       ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-200 scale-[1.02] ring-2 ring-indigo-600 hover:scale-[1.05] hover:shadow-3xl'
-                      : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-300 hover:ring-1 hover:ring-indigo-200'
+                      : finderResult === plan.name
+                        ? 'bg-white border-2 border-indigo-400 shadow-xl ring-2 ring-indigo-200'
+                        : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-300 hover:ring-1 hover:ring-indigo-200'
                 }`}
               >
                 {isSoldOut && (
@@ -412,6 +662,11 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   {isYearly && plan.monthlyPrice !== null && plan.monthlyPrice > 0 && (
                     <p className={`text-xs mt-1 ${plan.highlight ? 'text-indigo-200' : 'text-slate-400'}`}>
                       월간 결제 시 {formatPrice(plan.monthlyPrice)}원/월
+                    </p>
+                  )}
+                  {price !== null && price > 0 && (
+                    <p className={`text-xs mt-0.5 ${plan.highlight ? 'text-indigo-300' : 'text-slate-400'}`}>
+                      VAT 별도
                     </p>
                   )}
                 </div>
@@ -564,6 +819,41 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </div>
       </section>
 
+      {/* 실제 후기 — 사회적 증명 */}
+      <section className="py-16 bg-white border-t border-slate-100">
+        <div className="max-w-4xl mx-auto px-6">
+          <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">도입한 치과들의 실제 반응</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {[
+              { quote: '"덴트웹 데이터 정리에 매주 2시간씩 쓰던 게 사라졌어요. 재고 파악이 한눈에 되니까 발주 실수도 확 줄었습니다."', name: '김OO 원장', loc: '서울 · 치과의원', plan: 'Plus 사용 중' },
+              { quote: '"여러 브랜드 재고를 한 곳에서 보니까 너무 편해요. 브랜드별로 소모 패턴이 달라서 발주 타이밍도 훨씬 정확해졌어요."', name: '이OO 실장', loc: '부산 · 치과의원', plan: 'Basic 사용 중' },
+              { quote: '"솔직히 이 금액에 이 기능이면 안 쓸 이유가 없어요. 엑셀로 하루 걸리던 게 3초면 끝나거든요."', name: '최OO 원장', loc: '인천 · 치과의원', plan: 'Plus 사용 중' },
+            ].map((t, i) => (
+              <div key={i} className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                <div className="flex gap-0.5 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <svg key={j} className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed mb-5">{t.quote}</p>
+                <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">{t.name.charAt(0)}</div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">{t.name}</p>
+                      <p className="text-xs text-slate-400">{t.loc}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs bg-indigo-50 text-indigo-600 font-bold px-2.5 py-1 rounded-full">{t.plan}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* FAQ Section */}
       <section className="py-24 bg-slate-50">
         <div className="max-w-3xl mx-auto px-6">
@@ -708,7 +998,6 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   disabled={!trialConsented}
                   onClick={() => {
                     if (!trialConsented) return;
-                    localStorage.setItem('denjoy_pending_trial', trialConsentPlan.key);
                     setTrialConsentPlan(null);
                     onGetStarted();
                   }}
@@ -754,19 +1043,33 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                     {formatPrice(isYearly ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice)}원/월
                   </span>
                 </div>
-                <div className="border-t border-slate-200 pt-2 flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-700">결제 금액</span>
-                  <span className="text-lg font-black text-indigo-600">
-                    {formatPrice(
-                      isYearly
-                        ? PLAN_PRICING[selectedPlan].yearlyPrice * 12
-                        : PLAN_PRICING[selectedPlan].monthlyPrice
-                    )}원
-                  </span>
+                <div className="border-t border-slate-200 pt-2 space-y-1">
+                  {(() => {
+                    const base = isYearly
+                      ? PLAN_PRICING[selectedPlan].yearlyPrice * 12
+                      : PLAN_PRICING[selectedPlan].monthlyPrice;
+                    const vat = Math.round(base * 0.1);
+                    return (
+                      <>
+                        <div className="flex justify-between items-center text-xs text-slate-400">
+                          <span>공급가액</span>
+                          <span>{formatPrice(base)}원</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-slate-400">
+                          <span>부가세 (10%)</span>
+                          <span>{formatPrice(vat)}원</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                          <span className="text-sm font-bold text-slate-700">합계 (VAT 포함)</span>
+                          <span className="text-lg font-black text-indigo-600">{formatPrice(base + vat)}원</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
                 {isYearly && (
                   <p className="text-xs text-emerald-600 text-right">
-                    월간 대비 {formatPrice((PLAN_PRICING[selectedPlan].monthlyPrice - PLAN_PRICING[selectedPlan].yearlyPrice) * 12)}원 절약
+                    월간 대비 {formatPrice((PLAN_PRICING[selectedPlan].monthlyPrice - PLAN_PRICING[selectedPlan].yearlyPrice) * 12)}원 절약 (VAT 별도)
                   </p>
                 )}
               </div>

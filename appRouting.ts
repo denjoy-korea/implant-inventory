@@ -4,7 +4,7 @@ import { View, DashboardTab } from './types';
 export const VIEW_HASH: Record<View, string> = {
   landing: '', login: 'login', signup: 'signup', invite: 'invite', dashboard: 'dashboard',
   admin_panel: 'admin', pricing: 'pricing', contact: 'contact',
-  value: 'value', analyze: 'analyze', notices: 'notices',
+  value: 'value', analyze: 'analyze', notices: 'notices', mfa_otp: 'mfa', reviews: 'reviews',
 };
 
 export const TAB_HASH: Record<DashboardTab, string> = {

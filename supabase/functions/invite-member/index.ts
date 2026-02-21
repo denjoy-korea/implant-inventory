@@ -37,10 +37,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { email, name, hospitalId, siteUrl } = await req.json();
-    if (!email || !name || !hospitalId) {
+    const VALID_CLINIC_ROLES = ['director', 'manager', 'team_lead', 'staff'];
+    const { email, name, hospitalId, clinicRole, siteUrl } = await req.json();
+    if (!email || !name || !hospitalId || !clinicRole) {
       return new Response(
-        JSON.stringify({ error: "email, name, hospitalId는 필수입니다." }),
+        JSON.stringify({ error: "email, name, hospitalId, clinicRole는 필수입니다." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!VALID_CLINIC_ROLES.includes(clinicRole)) {
+      return new Response(
+        JSON.stringify({ error: "유효하지 않은 역할입니다." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -124,6 +131,7 @@ Deno.serve(async (req: Request) => {
         hospital_id: hospitalId,
         email,
         name,
+        clinic_role: clinicRole,
         token,
         invited_by: user.id,
         status: "pending",

@@ -52,6 +52,19 @@ function TrendBadge({ value, prevValue, suffix = '건', label = '전월대비' }
   );
 }
 
+interface ProgressAwareDeltas {
+  placementDelta: number;
+  failDelta: number;
+  claimDelta: number;
+  prevMonthPlacement: number;
+  prevMonthFail: number;
+  prevMonthClaim: number;
+  prevCutoffDay: number;
+  progressPct: number;
+  isReady: boolean;
+  isPartialMonth: boolean;
+}
+
 interface KPIStripProps {
   animPlacement: number;
   animMonthlyAvg: number;
@@ -62,9 +75,11 @@ interface KPIStripProps {
   sparkline: SparklineData;
   /** 월 평균 진료일수 (공휴일 반영 후). 미전달 시 25일 표시 */
   avgWorkDaysPerMonth?: number;
+  /** 진행율 기반 전월 대비 델타 */
+  progressAwareDeltas?: ProgressAwareDeltas;
 }
 
-export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline, avgWorkDaysPerMonth }: KPIStripProps) {
+export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline, avgWorkDaysPerMonth, progressAwareDeltas }: KPIStripProps) {
   // 최근 1개월 vs 전체 일평균 차이 (소수점 1자리 기준)
   const recentRaw = animRecentDailyAvg / 10;
   const dailyRaw = animDailyAvg / 10;
@@ -72,11 +87,16 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
   const displayWorkDays = avgWorkDaysPerMonth ?? 25;
   const dailyBasisLabel = `월 ${displayWorkDays}일 기준`;
 
+  const useProgress = progressAwareDeltas?.isReady ?? false;
+  const compLabel = useProgress && progressAwareDeltas!.isPartialMonth
+    ? `전월 1~${progressAwareDeltas!.prevCutoffDay}일 기준`
+    : '전월대비';
+
   const metrics = [
     { ko: '총 식립', en: 'Total Placement', value: animPlacement.toLocaleString(), unit: '개', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'placement', delta: 0, prevValue: 0, badgeLabel: '전월대비', badgeSuffix: '개' },
-    { ko: '월 평균', en: 'Avg Monthly', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: sparkline.placementDelta, prevValue: sparkline.placementPrev, badgeLabel: '전월대비', badgeSuffix: '개' },
-    { ko: 'FAIL률', en: 'Failure Rate', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: sparkline.failDelta, prevValue: sparkline.failPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
-    { ko: '보험청구', en: 'Insurance Claim', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: sparkline.claimDelta, prevValue: sparkline.claimPrev, badgeLabel: '전월대비', badgeSuffix: '건' },
+    { ko: '월 평균', en: 'Avg Monthly', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: useProgress ? progressAwareDeltas!.placementDelta : sparkline.placementDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthPlacement : sparkline.placementPrev, badgeLabel: compLabel, badgeSuffix: '개' },
+    { ko: 'FAIL률', en: 'Failure Rate', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: useProgress ? progressAwareDeltas!.failDelta : sparkline.failDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthFail : sparkline.failPrev, badgeLabel: compLabel, badgeSuffix: '건' },
+    { ko: '보험청구', en: 'Insurance Claim', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: useProgress ? progressAwareDeltas!.claimDelta : sparkline.claimDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthClaim : sparkline.claimPrev, badgeLabel: compLabel, badgeSuffix: '건' },
     { ko: '일 평균', en: 'Avg Daily', value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
   ];
 
@@ -94,6 +114,18 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
           <div className="mt-3">
             <MiniSparkline data={m.sparkData} color={m.sparkColor} id={m.sparkId} height={24} width={80} />
           </div>
+          {i >= 1 && i <= 3 && useProgress && progressAwareDeltas!.isPartialMonth && (
+            <div className="relative group/kpitip mt-1.5">
+              <p className="text-[9px] text-slate-400 cursor-help underline decoration-dashed decoration-slate-300 underline-offset-2 inline-block">
+                진행율 {progressAwareDeltas!.progressPct}% 기준 ⓘ
+              </p>
+              <div className="absolute bottom-full left-0 mb-2 w-60 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/kpitip:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                <p>이번달 진행율 {progressAwareDeltas!.progressPct}% 기준</p>
+                <p className="mt-1">전월 1~{progressAwareDeltas!.prevCutoffDay}일 누계와 비교합니다.</p>
+                <p className="mt-1 text-slate-400">진료요일 설정 및 대한민국 공휴일을 반영합니다.</p>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -283,4 +283,125 @@ export const surgeryService = {
     console.log(`[backfill] patient_info_hash: ${patched}/${data.length} records patched`);
     return patched;
   },
+
+  /**
+   * FAIL 재고 일괄 초기화
+   * 수기 장부로 관리하던 FAIL 픽스쳐를 디지털로 등록합니다.
+   * 제조사별 count개의 '수술중 FAIL' 레코드를 생성합니다.
+   */
+  async bulkInsertFailRecords(
+    items: { manufacturer: string; count: number; date: string }[],
+    hospitalId: string
+  ): Promise<{ success: boolean; totalInserted: number }> {
+    const rows: Omit<DbSurgeryRecord, 'id' | 'created_at'>[] = [];
+    for (const item of items) {
+      for (let i = 0; i < item.count; i++) {
+        rows.push({
+          hospital_id: hospitalId,
+          date: item.date,
+          patient_info: null,
+          patient_info_hash: null,
+          tooth_number: null,
+          quantity: 1,
+          surgery_record: '[일괄등록]',
+          classification: '수술중 FAIL',
+          manufacturer: item.manufacturer,
+          brand: item.manufacturer,
+          size: '기타',
+          bone_quality: null,
+          initial_fixation: null,
+        });
+      }
+    }
+    if (rows.length === 0) return { success: true, totalInserted: 0 };
+
+    const BATCH_SIZE = 500;
+    let totalInserted = 0;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const { data, error } = await supabase
+        .from('surgery_records')
+        .insert(rows.slice(i, i + BATCH_SIZE))
+        .select('id');
+      if (error) {
+        console.error('[surgeryService] bulkInsertFailRecords failed:', error);
+        return { success: false, totalInserted };
+      }
+      totalInserted += data?.length || 0;
+    }
+    return { success: true, totalInserted };
+  },
+
+  /**
+   * FAIL 재고 정리 (기존 데이터 → 실제 재고에 맞게 조정)
+   * actual < system → 오래된 것부터 차이만큼 'FAIL 교환완료' 처리
+   * actual > system → 차이만큼 신규 '수술중 FAIL' 레코드 생성
+   */
+  async bulkReconcileFails(
+    reconciles: { manufacturer: string; targetCount: number }[],
+    hospitalId: string,
+    insertDate: string
+  ): Promise<{ success: boolean; totalUpdated: number; totalInserted: number }> {
+    let totalUpdated = 0;
+    let totalInserted = 0;
+
+    for (const { manufacturer, targetCount } of reconciles) {
+      const { data: pending, error: fetchError } = await supabase
+        .from('surgery_records')
+        .select('id')
+        .eq('hospital_id', hospitalId)
+        .eq('classification', '수술중 FAIL')
+        .eq('manufacturer', manufacturer)
+        .order('date', { ascending: true });
+
+      if (fetchError) {
+        console.error('[surgeryService] bulkReconcileFails fetch failed:', fetchError);
+        return { success: false, totalUpdated, totalInserted };
+      }
+
+      const pendingCount = pending?.length || 0;
+      const gap = pendingCount - targetCount;
+
+      if (gap > 0) {
+        // 실제 < 시스템: 오래된 것부터 gap개 교환완료 처리
+        const ids = (pending || []).slice(0, gap).map(r => r.id);
+        const { error } = await supabase
+          .from('surgery_records')
+          .update({ classification: 'FAIL 교환완료' })
+          .in('id', ids);
+        if (error) {
+          console.error('[surgeryService] bulkReconcileFails update failed:', error);
+          return { success: false, totalUpdated, totalInserted };
+        }
+        totalUpdated += ids.length;
+      } else if (gap < 0) {
+        // 실제 > 시스템: 부족분 신규 등록
+        const toAdd = Math.abs(gap);
+        const newRows = Array.from({ length: toAdd }, () => ({
+          hospital_id: hospitalId,
+          date: insertDate,
+          patient_info: null,
+          patient_info_hash: null,
+          tooth_number: null,
+          quantity: 1,
+          surgery_record: '[일괄등록]',
+          classification: '수술중 FAIL',
+          manufacturer,
+          brand: manufacturer,
+          size: '기타',
+          bone_quality: null,
+          initial_fixation: null,
+        }));
+        const { data, error } = await supabase
+          .from('surgery_records')
+          .insert(newRows)
+          .select('id');
+        if (error) {
+          console.error('[surgeryService] bulkReconcileFails insert failed:', error);
+          return { success: false, totalUpdated, totalInserted };
+        }
+        totalInserted += data?.length || 0;
+      }
+    }
+    return { success: true, totalUpdated, totalInserted };
+  },
 };

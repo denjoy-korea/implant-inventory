@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
     // 유효한 초대 조회
     const { data: invitation, error: inviteError } = await supabase
       .from("member_invitations")
-      .select("id, hospital_id, email, name, status, expires_at")
+      .select("id, hospital_id, email, name, clinic_role, status, expires_at")
       .eq("token", token)
       .eq("status", "pending")
       .gt("expires_at", new Date().toISOString())
@@ -63,6 +63,7 @@ Deno.serve(async (req: Request) => {
       .update({
         hospital_id: invitation.hospital_id,
         role: "dental_staff",
+        clinic_role: invitation.clinic_role ?? "staff",
         status: "active",
         name: invitation.name,
       })

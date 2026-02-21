@@ -6,6 +6,8 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
+  errorMessage?: string;
+  errorStack?: string;
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -13,12 +15,12 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, errorMessage: undefined, errorStack: undefined };
     this.handleRetry = this.handleRetry.bind(this);
   }
 
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMessage: error?.message, errorStack: error?.stack };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -26,11 +28,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   handleRetry() {
-    (this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>).setState({ hasError: false });
+    (this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>).setState({ hasError: false, errorMessage: undefined, errorStack: undefined });
   }
 
   render(): React.ReactNode {
-    const { hasError } = (this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>).state;
+    const { hasError, errorMessage, errorStack } = (this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>).state;
     if (hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[200px] p-8">
@@ -46,6 +48,16 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           <p className="text-sm text-slate-500 mb-4">
             네트워크 연결을 확인하고 다시 시도해 주세요.
           </p>
+          {errorMessage && (
+            <details className="w-full max-w-xl mb-4 text-left">
+              <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 select-none">
+                오류 상세 보기
+              </summary>
+              <pre className="mt-2 p-3 bg-slate-100 rounded text-xs text-red-700 overflow-auto whitespace-pre-wrap break-all">
+                {errorMessage}{errorStack ? `\n\n${errorStack}` : ''}
+              </pre>
+            </details>
+          )}
           <button
             onClick={this.handleRetry}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"

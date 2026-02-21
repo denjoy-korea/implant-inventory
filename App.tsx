@@ -10,6 +10,7 @@ import BrandChart from './components/BrandChart';
 import LengthFilter from './components/LengthFilter';
 import FixtureWorkflowGuide from './components/FixtureWorkflowGuide';
 import MigrationBanner from './components/MigrationBanner';
+import UpgradeNudge, { NudgeType } from './components/UpgradeNudge';
 import PlanBadge from './components/PlanBadge';
 import ReadOnlyBanner from './components/ReadOnlyBanner';
 import FeatureGate from './components/FeatureGate';
@@ -20,8 +21,10 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PausedAccountScreen from './components/PausedAccountScreen';
 import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
 import DashboardOperationalTabs from './components/dashboard/DashboardOperationalTabs';
+import { PublicMobileNav } from './components/PublicMobileNav';
 
 /* ── Lazy imports (route-level code splitting) ── */
+const OnboardingWizard = lazy(() => import('./components/OnboardingWizard'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const AuthForm = lazy(() => import('./components/AuthForm'));
 const PricingPage = lazy(() => import('./components/PricingPage'));
@@ -37,7 +40,10 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const StaffWaitingRoom = lazy(() => import('./components/StaffWaitingRoom'));
 const UserProfile = lazy(() => import('./components/UserProfile'));
-import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, DbOrder, DbOrderItem, canAccessTab } from './types';
+const MfaOtpScreen = lazy(() => import('./components/MfaOtpScreen'));
+const ReviewPopup = lazy(() => import('./components/ReviewPopup'));
+const ReviewsPage = lazy(() => import('./components/ReviewsPage'));
+import { AppState, ExcelData, ExcelRow, User, View, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_NAMES, PLAN_LIMITS, SurgeryUnregisteredItem, SurgeryUnregisteredSample, DbOrder, DbOrderItem, canAccessTab, CLINIC_ROLE_LABELS } from './types';
 import { parseExcelFile, downloadExcelFile } from './services/excelService';
 import { extractLengthFromSize } from './services/sizeUtils';
 import { normalizeLength } from './components/LengthFilter';
@@ -54,11 +60,13 @@ import { dbToExcelRow, dbToOrder, fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { resetService } from './services/resetService';
+import { onboardingService } from './services/onboardingService';
 import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
 import { manufacturerAliasKey } from './services/appUtils';
 import { useToast } from './hooks/useToast';
 import { UNLIMITED_DAYS, DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 import { buildHash, parseHash, VIEW_HASH, TAB_HASH, HASH_TO_VIEW, HASH_TO_TAB } from './appRouting';
+import { reviewService, ReviewType } from './services/reviewService';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -86,7 +94,7 @@ const MOBILE_VIEWPORT_MAX_WIDTH = 767;
 function getDashboardTabTitle(tab: DashboardTab): string {
   switch (tab) {
     case 'overview':
-      return 'Overview';
+      return '대시보드 홈';
     case 'fixture_upload':
       return '로우데이터 업로드';
     case 'fixture_edit':
@@ -245,26 +253,33 @@ const App: React.FC = () => {
     handleDeleteAccount,
   } = useAppState(showAlertToast);
 
+  // 후기 팝업 state
+  const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  // 대시보드 진입 시 후기 팝업 여부 확인
+  useEffect(() => {
+    const user = state.user;
+    if (!user || state.currentView !== 'dashboard' || reviewPopupType) return;
+    if (user.role === 'admin') return;
+
+    supabase.auth.getUser().then(({ data }) => {
+      const accountCreatedAt = data.user?.created_at;
+      if (!accountCreatedAt) return;
+      reviewService.checkWritable(user.id, accountCreatedAt).then(status => {
+        if (status.canInitial && !reviewService.isSnoozed(user.id, 'initial')) {
+          setReviewPopupType('initial');
+        } else if (status.can6Month && !reviewService.isSnoozed(user.id, '6month')) {
+          setReviewPopupType('6month');
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [state.user, state.currentView, reviewPopupType]);
+
   // UserProfile expects () => void; hook expects (user: User) so wrap with current user
   const handleLeaveHospital = useCallback(() => {
     if (state.user) _handleLeaveHospital(state.user);
   }, [_handleLeaveHospital, state.user]);
-
-  // 회원가입 후 pending trial 자동 시작
-  const handleLoginSuccessWithTrial = useCallback(async (user: User) => {
-    await handleLoginSuccess(user);
-    const pendingTrialPlan = localStorage.getItem('denjoy_pending_trial') as PlanType | null;
-    if (pendingTrialPlan && pendingTrialPlan !== 'free' && user.hospitalId && user.role === 'master') {
-      localStorage.removeItem('denjoy_pending_trial');
-      await planService.startTrial(user.hospitalId, pendingTrialPlan);
-      // startTrial 반환값에 의존하지 않고 DB를 직접 재조회해 결과 검증
-      const ps = await planService.getHospitalPlan(user.hospitalId);
-      if (ps.isTrialActive) {
-        setState(prev => ({ ...prev, planState: ps }));
-        showAlertToast(`${PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험이 시작됐습니다!`, 'success');
-      }
-    }
-  }, [handleLoginSuccess, showAlertToast, setState]);
 
   const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
@@ -272,6 +287,7 @@ const App: React.FC = () => {
   const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
   const [isFinePointer, setIsFinePointer] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [dashboardHeaderHeight, setDashboardHeaderHeight] = useState(44);
   const [isOffline, setIsOffline] = useState<boolean>(() => (
@@ -309,7 +325,7 @@ const App: React.FC = () => {
         url.searchParams.delete('invite');
         window.history.replaceState(null, '', url.toString());
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isSystemAdmin = state.user?.role === 'admin';
@@ -325,7 +341,7 @@ const App: React.FC = () => {
   const isReadOnly = state.user?.status === 'readonly';
   const showDashboardSidebar = state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user');
   const showStandardDashboardHeader = state.currentView === 'dashboard' && !(isSystemAdmin && state.adminViewMode !== 'user');
-  const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isMobileViewport;
+  const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isNarrowViewport;
   const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management', 'fail_management'];
   const mobileMoreTabs: DashboardTab[] = ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'];
   const isMoreTabActive = mobileMoreTabs.includes(state.dashboardTab);
@@ -344,6 +360,12 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, currentView: prev.user ? 'dashboard' : 'landing' }));
     }
   }, [state.currentView, isSystemAdmin]);
+
+  useEffect(() => {
+    if (state.user && (state.currentView === 'login' || state.currentView === 'signup')) {
+      setState(prev => ({ ...prev, currentView: 'dashboard' }));
+    }
+  }, [state.user, state.currentView]);
 
   // sticky 섹션들이 참조할 대시보드 헤더 높이 동기화
   useEffect(() => {
@@ -431,11 +453,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!showDashboardSidebar) {
       setIsSidebarToggleVisible(false);
+      setIsNarrowViewport(false);
       return;
     }
 
     const syncSidebarForViewport = () => {
-      if (window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH) {
+      const isNarrow = window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH;
+      setIsNarrowViewport(isNarrow);
+      if (isNarrow) {
         setIsSidebarCollapsed(true);
       }
     };
@@ -469,6 +494,42 @@ const App: React.FC = () => {
   }, []);
 
   const billableItemCount = useMemo(() => countBillableItems(state.inventory), [state.inventory, countBillableItems]);
+
+  const activeNudge = useMemo<NudgeType | null>(() => {
+    const ps = state.planState;
+    if (!ps) return null;
+    // 체험 만료 (Free로 복귀, 체험 사용됨)
+    if (ps.plan === 'free' && ps.trialUsed && !ps.isTrialActive) return 'trial_expired';
+    // 체험 D-3 이하 (아직 체험 중)
+    if (ps.isTrialActive && ps.trialDaysRemaining <= 3) return 'trial_ending';
+    // Free 플랜 재고 품목 90% 이상
+    if (ps.plan === 'free' && !ps.isTrialActive && billableItemCount >= PLAN_LIMITS.free.maxItems * 0.9) return 'item_limit_warning';
+    return null;
+  }, [state.planState, billableItemCount]);
+
+  const onboardingStep = (() => {
+    if (onboardingDismissed) return null;
+    if (!isHospitalAdmin) return null;
+    if (state.currentView !== 'dashboard') return null;
+    if (state.user?.status !== 'active') return null;
+    if (state.isLoading) return null;
+    if (
+      state.dashboardTab === 'fixture_upload' ||
+      state.dashboardTab === 'fixture_edit' ||
+      state.dashboardTab === 'surgery_database' ||
+      state.dashboardTab === 'fail_management' ||
+      state.dashboardTab === 'inventory_audit'
+    ) return null;
+    const hid = state.user?.hospitalId ?? '';
+    if (state.inventory.length === 0) {
+      return onboardingService.isWelcomeSeen(hid) ? 2 : 1;
+    }
+    const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
+    if (!hasSurgery) return 3;
+    if (!onboardingService.isFailAuditDone(hid)) return 4;
+    return null;
+  })();
+  const shouldShowOnboarding = onboardingStep !== null;
 
   // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
@@ -524,7 +585,7 @@ const App: React.FC = () => {
     } else {
       window.history.replaceState(null, '', buildHash(state.currentView, state.dashboardTab));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveAccessRole, state.isLoading]);
 
   // 문자열 정규화: 수술기록 매칭용 (normalizeSurgery), 재고 비교용 (normalizeInventory)
@@ -550,10 +611,10 @@ const App: React.FC = () => {
       const record = String(row.surgery_record || '');
       if (record.includes('[GBR Only]')) return;
 
-       const rawManufacturer = String(row.manufacturer || '');
-       const rawBrand = String(row.brand || '');
-       const rawSize = String(row.size || '');
-       if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
+      const rawManufacturer = String(row.manufacturer || '');
+      const rawBrand = String(row.brand || '');
+      const rawSize = String(row.size || '');
+      if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
 
       const rowM = normalize(rawManufacturer);
       const rowB = normalize(rawBrand);
@@ -1218,7 +1279,6 @@ const App: React.FC = () => {
                 '제조사': fixed.manufacturer,
                 '브랜드': fixed.brand,
                 '규격(SIZE)': toCanonicalSize(rawSize, fixed.manufacturer),
-                '사용안함': true
               };
             }),
           };
@@ -1974,9 +2034,7 @@ const App: React.FC = () => {
           onMouseEnter={() => {
             if (isFinePointer) setIsSidebarToggleVisible(true);
           }}
-          onMouseLeave={() => {
-            if (isFinePointer) setIsSidebarToggleVisible(false);
-          }}
+          onMouseLeave={() => setIsSidebarToggleVisible(false)}
         >
           <button
             type="button"
@@ -1984,11 +2042,10 @@ const App: React.FC = () => {
               setIsSidebarCollapsed(false);
               setIsSidebarToggleVisible(false);
             }}
-            className={`absolute left-3 top-3 h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-lg shadow-slate-300/40 transition-all duration-200 hover:border-indigo-300 hover:text-indigo-600 ${
-              (!isFinePointer || isSidebarToggleVisible)
-                ? 'opacity-100 translate-x-0 pointer-events-auto'
-                : 'opacity-0 -translate-x-2 pointer-events-none'
-            }`}
+            className={`absolute left-3 top-3 h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-lg shadow-slate-300/40 transition-all duration-200 hover:border-indigo-300 hover:text-indigo-600 ${(!isFinePointer || isSidebarToggleVisible)
+              ? 'opacity-100 translate-x-0 pointer-events-auto'
+              : 'opacity-0 -translate-x-2 pointer-events-none'
+              }`}
             title="사이드바 열기 (Ctrl/Cmd + \\)"
             aria-label="사이드바 열기"
           >
@@ -2032,6 +2089,8 @@ const App: React.FC = () => {
           userRole={state.user?.role}
           userPermissions={state.user?.permissions}
           onReturnToAdmin={isSystemAdmin ? () => setState(prev => ({ ...prev, adminViewMode: 'admin' })) : undefined}
+          userName={state.user?.name}
+          onProfileClick={() => setState(prev => ({ ...prev, showProfile: true }))}
         />
       )}
 
@@ -2054,13 +2113,14 @@ const App: React.FC = () => {
                 <SystemAdminDashboard
                   onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
                   onToggleView={() => setState(prev => ({ ...prev, adminViewMode: 'user' }))}
+                  onGoHome={() => setState(prev => ({ ...prev, currentView: 'landing' }))}
                 />
               </Suspense>
             </ErrorBoundary>
           ) : (
             /* Standard Dashboard with Header */
             <>
-              <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] flex items-center justify-between gap-2 overflow-x-hidden">
+              <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] shadow-sm flex items-center justify-between gap-2 overflow-x-hidden">
                 {/* Hidden file inputs */}
                 <input type="file" ref={fixtureFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'fixture'); e.target.value = ''; }} />
                 <input type="file" ref={surgeryFileRef} accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'surgery'); e.target.value = ''; }} />
@@ -2104,19 +2164,6 @@ const App: React.FC = () => {
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       실사 이력
                     </button>
-                  )}
-                  {/* Overview action buttons */}
-                  {state.dashboardTab === 'overview' && (
-                    <div className="hidden sm:flex items-center gap-1.5">
-                      <button onClick={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_upload' }))} className="px-3 py-1.5 text-[11px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                        업로드
-                      </button>
-                      <button onClick={() => setState(prev => ({ ...prev, dashboardTab: 'inventory_master' }))} className="px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-all flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                        재고 현황
-                      </button>
-                    </div>
                   )}
                 </div>
 
@@ -2201,6 +2248,11 @@ const App: React.FC = () => {
                       </div>
                     </div>
                   )}
+                  <div className="bg-slate-900 text-white text-[10px] sm:text-xs font-bold py-1.5 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 sm:gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="hidden sm:inline">시스템 정상</span>
+                    <span className="sm:hidden">정상</span>
+                  </div>
                   <div className="h-4 w-px bg-slate-200" />
                   <button
                     onClick={() => setState(p => ({ ...p, currentView: 'landing' }))}
@@ -2251,569 +2303,577 @@ const App: React.FC = () => {
 
               <main className="flex-1" style={{ overflowX: 'clip' }}>
                 <ErrorBoundary>
-                <Suspense fallback={suspenseFallback}>
-                {/* Dashboard routing based on Approval Status */
-                  state.user?.status === 'paused' ? (
-                    <PausedAccountScreen
-                      userName={state.user.name}
-                      planName={state.planState ? PLAN_NAMES[state.planState.plan] : 'Free'}
-                      onResume={async () => {
-                        const { data: { user: authUser } } = await supabase.auth.getUser();
-                        if (!authUser) return;
-                        const ok = await resetService.resumeAccount(authUser.id);
-                        if (ok && state.user) {
-                          const updated = { ...state.user, status: 'active' as const };
-                          setState(prev => ({ ...prev, user: updated, isLoading: true }));
-                          await loadHospitalData(updated);
-                        }
-                      }}
-                      onCancelPlan={async () => {
-                        const { data: { user: authUser } } = await supabase.auth.getUser();
-                        if (!authUser || !state.user?.hospitalId) return;
-                        const ok = await resetService.cancelPlanAndResume(authUser.id, state.user.hospitalId);
-                        if (ok && state.user) {
-                          const updated = { ...state.user, status: 'active' as const };
-                          setState(prev => ({ ...prev, user: updated, isLoading: true }));
-                          await loadHospitalData(updated);
-                        }
-                      }}
-                      onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
-                    />
-                  ) : state.user?.role === 'dental_staff' && state.user?.status !== 'active' && state.user?.status !== 'readonly' && !isSystemAdmin ? (
-                    <StaffWaitingRoom
-                      currentUser={state.user}
-                      onUpdateUser={(updatedUser) => setState(prev => ({ ...prev, user: updatedUser }))}
-                      onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
-                    />
-                  ) : (
-                    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6 pb-24 sm:pb-6">
-                      {/* Migration Banner */}
-                      {state.user && state.user.hospitalId && (
-                        <MigrationBanner
-                          user={state.user}
-                          onMigrationComplete={async () => { if (state.user) await loadHospitalData(state.user); }}
-                        />
-                      )}
-                      {/* Readonly User Banner */}
-                      {state.user?.status === 'readonly' && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-bold text-amber-800">읽기 전용 모드</p>
-                              <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                플랜 다운그레이드로 인해 읽기 전용 상태입니다. 데이터 조회는 가능하지만 추가/수정/삭제가 제한됩니다. 관리자에게 문의하세요.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {/* Read-Only Banner (Free plan item limit) */}
-                      {state.planState && state.planState.plan === 'free' && billableItemCount > PLAN_LIMITS.free.maxItems && (
-                        <ReadOnlyBanner
-                          currentItemCount={billableItemCount}
-                          maxItems={PLAN_LIMITS.free.maxItems}
-                          onUpgrade={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
-                        />
-                      )}
-                      {/* Dashboard Content */}
-                      {state.dashboardTab === 'overview' && (
-                        <DashboardOverview
-                          inventory={state.inventory}
-                          orders={state.orders}
-                          surgeryMaster={state.surgeryMaster}
-                          fixtureData={state.fixtureData}
-                          surgeryUnregisteredItems={surgeryUnregisteredItems}
-                          hospitalId={state.user?.hospitalId}
-                          hospitalWorkDays={state.hospitalWorkDays}
-                          onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
-                          isAdmin={isHospitalAdmin}
-                          planState={state.planState}
-                          isMaster={isHospitalMaster || isSystemAdmin}
-                          onStartTrial={async () => {
-                            if (state.user?.hospitalId) {
-                              const ok = await planService.startTrial(state.user.hospitalId);
-                              if (ok) {
-                                const ps = await planService.getHospitalPlan(state.user.hospitalId);
-                                setState(prev => ({ ...prev, planState: ps }));
-                              }
+                  <Suspense fallback={suspenseFallback}>
+                    {/* Dashboard routing based on Approval Status */
+                      state.user?.status === 'paused' ? (
+                        <PausedAccountScreen
+                          userName={state.user.name}
+                          planName={state.planState ? PLAN_NAMES[state.planState.plan] : 'Free'}
+                          onResume={async () => {
+                            const { data: { user: authUser } } = await supabase.auth.getUser();
+                            if (!authUser) return;
+                            const ok = await resetService.resumeAccount(authUser.id);
+                            if (ok && state.user) {
+                              const updated = { ...state.user, status: 'active' as const };
+                              setState(prev => ({ ...prev, user: updated, isLoading: true }));
+                              await loadHospitalData(updated);
                             }
                           }}
-                          onGoToPricing={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                          onCancelPlan={async () => {
+                            const { data: { user: authUser } } = await supabase.auth.getUser();
+                            if (!authUser || !state.user?.hospitalId) return;
+                            const ok = await resetService.cancelPlanAndResume(authUser.id, state.user.hospitalId);
+                            if (ok && state.user) {
+                              const updated = { ...state.user, status: 'active' as const };
+                              setState(prev => ({ ...prev, user: updated, isLoading: true }));
+                              await loadHospitalData(updated);
+                            }
+                          }}
+                          onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
                         />
-                      )}
-                      {state.dashboardTab === 'member_management' && state.user && (
-                        <FeatureGate feature="role_management" plan={effectivePlan}>
-                          <MemberManager
-                            currentUser={state.user}
-                            onClose={() => setState(prev => ({ ...prev, dashboardTab: 'overview' }))}
-                            planState={state.planState}
-                            onGoToPricing={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
-                          />
-                        </FeatureGate>
-                      )}
-                      {state.dashboardTab === 'fixture_upload' && (
-                        <RawDataUploadGuide
-                          onUploadClick={() => fixtureFileRef.current?.click()}
-                          hasExistingData={!!state.fixtureData}
-                          onGoToEdit={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_edit' }))}
+                      ) : state.user?.role === 'dental_staff' && state.user?.status !== 'active' && state.user?.status !== 'readonly' && !isSystemAdmin ? (
+                        <StaffWaitingRoom
+                          currentUser={state.user}
+                          onUpdateUser={(updatedUser) => setState(prev => ({ ...prev, user: updatedUser }))}
+                          onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
                         />
-                      )}
-                      {state.dashboardTab === 'fixture_edit' && (
-                        (state.fixtureData && state.fixtureData.sheets && state.fixtureData.activeSheetName && state.fixtureData.sheets[state.fixtureData.activeSheetName]) ? (
-                          <div className="space-y-6">
-                            {/* ── 워크플로우 가이드 ── */}
-                            <FixtureWorkflowGuide completedSteps={(() => {
-                              const sheet = state.fixtureData!.sheets[state.fixtureData!.activeSheetName];
-                              const rows = sheet.rows;
-                              const steps: number[] = [];
-                              // STEP 1: 제조사 선택 — 사용안함 처리된 제조사가 1개 이상
-                              const mfrs = new Set(rows.map(r => String(r['제조사'] || '')));
-                              const disabledMfrs = new Set(rows.filter(r => r['사용안함'] === true).map(r => String(r['제조사'] || '')));
-                              if (disabledMfrs.size > 0 || enabledManufacturers.length < mfrs.size) steps.push(1);
-                              // STEP 2: 브랜드 필터링 — 사용안함 처리된 브랜드가 존재
-                              const unusedBrands = rows.some(r => r['사용안함'] === true);
-                              if (unusedBrands) steps.push(2);
-                              // STEP 3: 길이 필터링 — (STEP2와 동일 조건, 길이 기반 사용안함 존재 시)
-                              if (unusedBrands) steps.push(3);
-                              // STEP 5: FAIL/청구 확장
-                              const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중FAIL_'));
-                              if (hasFailRows) steps.push(5);
-                              // STEP 7: 재고 마스터 반영 — inventory에 fixture 데이터 존재
-                              const hasInvFromFixture = state.inventory.length > 0;
-                              if (hasInvFromFixture) steps.push(7);
-                              return steps;
-                            })()} />
-
-                            {/* ── 제조사별 일괄 처리 ── */}
-                            <ManufacturerToggle sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggle={handleManufacturerToggle} />
-
-                            {/* ── 브랜드별 사용 설정 ── */}
-                            <FeatureGate feature="brand_analytics" plan={effectivePlan}>
-                              <BrandChart data={state.fixtureData.sheets[state.fixtureData.activeSheetName]} enabledManufacturers={enabledManufacturers} onToggleBrand={(m, b, u) => handleBulkToggle({ '제조사': m, '브랜드': b }, u)} onToggleAllBrands={(m, u) => handleBulkToggle({ '제조사': m }, u)} />
+                      ) : (
+                        <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6 pb-24 sm:pb-6">
+                          {/* Migration Banner */}
+                          {state.user && state.user.hospitalId && (
+                            <MigrationBanner
+                              user={state.user}
+                              onMigrationComplete={async () => { if (state.user) await loadHospitalData(state.user); }}
+                            />
+                          )}
+                          {/* Upgrade Nudge */}
+                          {activeNudge && (
+                            <UpgradeNudge
+                              type={activeNudge}
+                              daysLeft={state.planState?.trialDaysRemaining}
+                              currentCount={billableItemCount}
+                              maxCount={PLAN_LIMITS.free.maxItems}
+                              onUpgrade={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                            />
+                          )}
+                          {/* Readonly User Banner */}
+                          {state.user?.status === 'readonly' && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+                              <div className="flex items-start gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-bold text-amber-800">읽기 전용 모드</p>
+                                  <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                    플랜 다운그레이드로 인해 읽기 전용 상태입니다. 데이터 조회는 가능하지만 추가/수정/삭제가 제한됩니다. 관리자에게 문의하세요.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {/* Read-Only Banner (Free plan item limit) */}
+                          {state.planState && state.planState.plan === 'free' && billableItemCount > PLAN_LIMITS.free.maxItems && (
+                            <ReadOnlyBanner
+                              currentItemCount={billableItemCount}
+                              maxItems={PLAN_LIMITS.free.maxItems}
+                              onUpgrade={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                            />
+                          )}
+                          {/* Dashboard Content */}
+                          {state.dashboardTab === 'overview' && (
+                            <DashboardOverview
+                              inventory={state.inventory}
+                              orders={state.orders}
+                              surgeryMaster={state.surgeryMaster}
+                              fixtureData={state.fixtureData}
+                              surgeryUnregisteredItems={surgeryUnregisteredItems}
+                              hospitalId={state.user?.hospitalId}
+                              hospitalWorkDays={state.hospitalWorkDays}
+                              onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
+                              isAdmin={isHospitalAdmin}
+                              planState={state.planState}
+                              isMaster={isHospitalMaster || isSystemAdmin}
+                              onStartTrial={async () => {
+                                if (state.user?.hospitalId) {
+                                  const ok = await planService.startTrial(state.user.hospitalId);
+                                  if (ok) {
+                                    const ps = await planService.getHospitalPlan(state.user.hospitalId);
+                                    setState(prev => ({ ...prev, planState: ps }));
+                                  }
+                                }
+                              }}
+                              onGoToPricing={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                            />
+                          )}
+                          {state.dashboardTab === 'member_management' && state.user && (
+                            <FeatureGate feature="role_management" plan={effectivePlan}>
+                              <MemberManager
+                                currentUser={state.user}
+                                onClose={() => setState(prev => ({ ...prev, dashboardTab: 'overview' }))}
+                                planState={state.planState}
+                                onGoToPricing={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                              />
                             </FeatureGate>
+                          )}
+                          {state.dashboardTab === 'fixture_upload' && (
+                            <RawDataUploadGuide
+                              onUploadClick={() => fixtureFileRef.current?.click()}
+                              hasExistingData={!!state.fixtureData}
+                              onGoToEdit={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_edit' }))}
+                            />
+                          )}
+                          {state.dashboardTab === 'fixture_edit' && (
+                            (state.fixtureData && state.fixtureData.sheets && state.fixtureData.activeSheetName && state.fixtureData.sheets[state.fixtureData.activeSheetName]) ? (
+                              <div className="space-y-6">
+                                {/* ── 워크플로우 가이드 ── */}
+                                <FixtureWorkflowGuide completedSteps={(() => {
+                                  const sheet = state.fixtureData!.sheets[state.fixtureData!.activeSheetName];
+                                  const rows = sheet.rows;
+                                  const steps: number[] = [];
+                                  // STEP 1: 제조사 선택 — 사용안함 처리된 제조사가 1개 이상
+                                  const mfrs = new Set(rows.map(r => String(r['제조사'] || '')));
+                                  const disabledMfrs = new Set(rows.filter(r => r['사용안함'] === true).map(r => String(r['제조사'] || '')));
+                                  if (disabledMfrs.size > 0 || enabledManufacturers.length < mfrs.size) steps.push(1);
+                                  // STEP 2: 브랜드 필터링 — 사용안함 처리된 브랜드가 존재
+                                  const unusedBrands = rows.some(r => r['사용안함'] === true);
+                                  if (unusedBrands) steps.push(2);
+                                  // STEP 3: 길이 필터링 — (STEP2와 동일 조건, 길이 기반 사용안함 존재 시)
+                                  if (unusedBrands) steps.push(3);
+                                  // STEP 5: FAIL/청구 확장
+                                  const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중FAIL_'));
+                                  if (hasFailRows) steps.push(5);
+                                  // STEP 7: 재고 마스터 반영 — inventory에 fixture 데이터 존재
+                                  const hasInvFromFixture = state.inventory.length > 0;
+                                  if (hasInvFromFixture) steps.push(7);
+                                  return steps;
+                                })()} />
 
-                            {/* ── 길이별 필터 ── */}
-                            <LengthFilter sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggleLength={handleLengthToggle} />
+                                {/* ── 제조사별 일괄 처리 ── */}
+                                <ManufacturerToggle sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggle={handleManufacturerToggle} />
 
-                            {/* ── 설정 저장 / 복구 패널 ── */}
-                            <div ref={restorePanelRef}>
-                            {(() => {
-                              // 저장 지점과 현재 상태의 사용안함 차이 개수
-                              const diffCount = (() => {
-                                if (!hasSavedPoint || !state.fixtureData) return 0;
-                                try {
-                                  const raw = localStorage.getItem(FIXTURE_SETTINGS_KEY);
-                                  if (!raw) return 0;
-                                  const savedPayload = JSON.parse(raw) as { unusedKeys: string[] };
-                                  const savedSet = new Set(savedPayload.unusedKeys);
-                                  const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
-                                  let diff = 0;
-                                  activeSheet.rows.forEach(row => {
-                                    const key = [
-                                      String(row['제조사'] || ''),
-                                      String(row['브랜드'] || ''),
-                                      String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
-                                    ].join('\x00');
-                                    const savedUnused = savedSet.has(key);
-                                    const currentUnused = row['사용안함'] === true;
-                                    if (savedUnused !== currentUnused) diff++;
-                                  });
-                                  return diff;
-                                } catch { return 0; }
-                              })();
+                                {/* ── 브랜드별 사용 설정 ── */}
+                                <FeatureGate feature="brand_analytics" plan={effectivePlan}>
+                                  <BrandChart data={state.fixtureData.sheets[state.fixtureData.activeSheetName]} enabledManufacturers={enabledManufacturers} onToggleBrand={(m, b, u) => handleBulkToggle({ '제조사': m, '브랜드': b }, u)} onToggleAllBrands={(m, u) => handleBulkToggle({ '제조사': m }, u)} />
+                                </FeatureGate>
 
-                              const formattedSavedAt = savedAt
-                                ? (() => {
-                                    try {
-                                      const d = new Date(savedAt);
-                                      const pad = (n: number) => String(n).padStart(2, '0');
-                                      return `${d.getMonth() + 1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                                    } catch { return null; }
-                                  })()
-                                : null;
+                                {/* ── 길이별 필터 ── */}
+                                <LengthFilter sheet={state.fixtureData.sheets[state.fixtureData.activeSheetName]} onToggleLength={handleLengthToggle} />
 
-                              return (
-                                <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                                  {/* 상태 표시 헤더 */}
-                                  <div className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 ${isDirtyAfterSave && hasSavedPoint ? 'bg-amber-50' : 'bg-slate-50'}`}>
-                                    <div className="flex items-center gap-2">
-                                      <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                      </svg>
-                                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">복구 지점</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {formattedSavedAt && (
-                                        <span className="text-[11px] text-slate-400 font-medium">
-                                          {formattedSavedAt} 저장
-                                        </span>
-                                      )}
-                                      {isDirtyAfterSave && hasSavedPoint && diffCount > 0 && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
-                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                                          {diffCount}개 변경됨
-                                        </span>
-                                      )}
-                                      {!isDirtyAfterSave && hasSavedPoint && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold">
-                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                          저장 상태와 동일
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                                {/* ── 설정 저장 / 복구 패널 ── */}
+                                <div ref={restorePanelRef}>
+                                  {(() => {
+                                    // 저장 지점과 현재 상태의 사용안함 차이 개수
+                                    const diffCount = (() => {
+                                      if (!hasSavedPoint || !state.fixtureData) return 0;
+                                      try {
+                                        const raw = localStorage.getItem(FIXTURE_SETTINGS_KEY);
+                                        if (!raw) return 0;
+                                        const savedPayload = JSON.parse(raw) as { unusedKeys: string[] };
+                                        const savedSet = new Set(savedPayload.unusedKeys);
+                                        const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
+                                        let diff = 0;
+                                        activeSheet.rows.forEach(row => {
+                                          const key = [
+                                            String(row['제조사'] || ''),
+                                            String(row['브랜드'] || ''),
+                                            String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || ''),
+                                          ].join('\x00');
+                                          const savedUnused = savedSet.has(key);
+                                          const currentUnused = row['사용안함'] === true;
+                                          if (savedUnused !== currentUnused) diff++;
+                                        });
+                                        return diff;
+                                      } catch { return 0; }
+                                    })();
 
-                                  {/* 버튼 영역 */}
-                                  <div className="flex gap-3 p-4">
-                                    {/* 복구 버튼 */}
-                                    {hasSavedPoint && (
-                                      <button
-                                        type="button"
-                                        onClick={handleRestoreToSavedPoint}
-                                        disabled={!isDirtyAfterSave || diffCount === 0}
-                                        title={!isDirtyAfterSave || diffCount === 0 ? '저장 지점과 동일한 상태입니다' : `${diffCount}개 항목을 저장 지점으로 복구합니다`}
-                                        className={`flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 whitespace-nowrap ${
-                                          restoreToast === 'restored'
-                                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
-                                            : isDirtyAfterSave && diffCount > 0
-                                            ? 'border-slate-300 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 active:scale-[0.99] shadow-sm cursor-pointer'
-                                            : 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
-                                        }`}
-                                      >
-                                        {restoreToast === 'restored' ? (
-                                          <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                    const formattedSavedAt = savedAt
+                                      ? (() => {
+                                        try {
+                                          const d = new Date(savedAt);
+                                          const pad = (n: number) => String(n).padStart(2, '0');
+                                          return `${d.getMonth() + 1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                                        } catch { return null; }
+                                      })()
+                                      : null;
+
+                                    return (
+                                      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                                        {/* 상태 표시 헤더 */}
+                                        <div className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 ${isDirtyAfterSave && hasSavedPoint ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                                          <div className="flex items-center gap-2">
+                                            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                                             </svg>
-                                            복구 완료
-                                          </>
-                                        ) : (
-                                          <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                            {diffCount > 0 ? `저장 지점으로 복구 (${diffCount}개)` : '복구'}
-                                          </>
-                                        )}
-                                      </button>
-                                    )}
+                                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">복구 지점</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {formattedSavedAt && (
+                                              <span className="text-[11px] text-slate-400 font-medium">
+                                                {formattedSavedAt} 저장
+                                              </span>
+                                            )}
+                                            {isDirtyAfterSave && hasSavedPoint && diffCount > 0 && (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                                {diffCount}개 변경됨
+                                              </span>
+                                            )}
+                                            {!isDirtyAfterSave && hasSavedPoint && (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold">
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                저장 상태와 동일
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
 
-                                    {/* 저장 버튼 */}
+                                        {/* 버튼 영역 */}
+                                        <div className="flex gap-3 p-4">
+                                          {/* 복구 버튼 */}
+                                          {hasSavedPoint && (
+                                            <button
+                                              type="button"
+                                              onClick={handleRestoreToSavedPoint}
+                                              disabled={!isDirtyAfterSave || diffCount === 0}
+                                              title={!isDirtyAfterSave || diffCount === 0 ? '저장 지점과 동일한 상태입니다' : `${diffCount}개 항목을 저장 지점으로 복구합니다`}
+                                              className={`flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 whitespace-nowrap ${restoreToast === 'restored'
+                                                ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
+                                                : isDirtyAfterSave && diffCount > 0
+                                                  ? 'border-slate-300 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 active:scale-[0.99] shadow-sm cursor-pointer'
+                                                  : 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                                }`}
+                                            >
+                                              {restoreToast === 'restored' ? (
+                                                <>
+                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                  </svg>
+                                                  복구 완료
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                  </svg>
+                                                  {diffCount > 0 ? `저장 지점으로 복구 (${diffCount}개)` : '복구'}
+                                                </>
+                                              )}
+                                            </button>
+                                          )}
+
+                                          {/* 저장 버튼 */}
+                                          <button
+                                            type="button"
+                                            onClick={handleSaveSettings}
+                                            className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 ${saveToast === 'saved'
+                                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
+                                              : isDirtyAfterSave || !hasSavedPoint
+                                                ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700 hover:border-indigo-700 active:scale-[0.99] shadow-md shadow-indigo-100'
+                                                : 'bg-slate-100 border-slate-100 text-slate-400 hover:bg-slate-200 hover:border-slate-200 active:scale-[0.99]'
+                                              }`}
+                                          >
+                                            {saveToast === 'saved' ? (
+                                              <>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                저장 완료
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                                </svg>
+                                                {isDirtyAfterSave || !hasSavedPoint ? '지금 상태로 저장' : '저장됨'}
+                                              </>
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+
+                                <ExcelTable data={state.fixtureData} selectedIndices={state.selectedFixtureIndices[state.fixtureData.activeSheetName] || new Set()} onToggleSelect={() => { }} onToggleAll={() => { }} onUpdateCell={(idx, col, val) => handleUpdateCell(idx, col, val, 'fixture')} onSheetChange={(name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } }))} onExpandFailClaim={handleExpandFailClaim} activeManufacturers={Array.from(new Set(state.fixtureData.sheets[state.fixtureData.activeSheetName].rows.filter(r => r['사용안함'] !== true).map(r => String(r['제조사'] || '')).filter(m => m && !m.startsWith('수술중FAIL_') && m !== '보험청구'))).sort()} />
+
+                                {/* 하단 액션바 — STEP 6/7 (워크플로우 마지막 단계, 스크롤 후 자연스럽게 진입) */}
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">다음 단계</p>
+                                  <div className="flex flex-col sm:flex-row gap-3">
+                                    {/* STEP 6: 엑셀 다운로드 (먼저 — 재고 마스터 반영 후에는 페이지 이동되므로) */}
                                     <button
-                                      type="button"
-                                      onClick={handleSaveSettings}
-                                      className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 ${
-                                        saveToast === 'saved'
-                                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100'
-                                          : isDirtyAfterSave || !hasSavedPoint
-                                          ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700 hover:border-indigo-700 active:scale-[0.99] shadow-md shadow-indigo-100'
-                                          : 'bg-slate-100 border-slate-100 text-slate-400 hover:bg-slate-200 hover:border-slate-200 active:scale-[0.99]'
-                                      }`}
+                                      onClick={() => {
+                                        setConfirmModal({
+                                          title: '엑셀 다운로드',
+                                          message: '현재 설정 상태로 엑셀 파일을 다운로드합니다.',
+                                          tip: '다운로드한 파일은 덴트웹 → 환경설정 → 임플란트 픽스처 설정에서 등록하세요.',
+                                          confirmLabel: '다운로드',
+                                          confirmColor: 'amber',
+                                          icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+                                          onConfirm: async () => {
+                                            setConfirmModal(null);
+                                            try {
+                                              const now = new Date();
+                                              const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+                                              await downloadExcelFile(
+                                                state.fixtureData!,
+                                                state.selectedFixtureIndices[state.fixtureData!.activeSheetName] || new Set(),
+                                                `픽스쳐_${yyyymmdd}.xlsx`
+                                              );
+                                            } catch (error) {
+                                              console.error('[App] Excel download failed:', error);
+                                              showAlertToast('엑셀 다운로드 중 오류가 발생했습니다.', 'error');
+                                            }
+                                          },
+                                        });
+                                      }}
+                                      className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] transition-all"
                                     >
-                                      {saveToast === 'saved' ? (
-                                        <>
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                          </svg>
-                                          저장 완료
-                                        </>
-                                      ) : (
-                                        <>
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                          </svg>
-                                          {isDirtyAfterSave || !hasSavedPoint ? '지금 상태로 저장' : '저장됨'}
-                                        </>
-                                      )}
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                      STEP 6 — 엑셀 다운로드 (덴트웹용)
+                                    </button>
+                                    {/* STEP 7: 재고 마스터 반영 (나중 — 클릭 시 페이지 이동됨) */}
+                                    <button
+                                      onClick={() => {
+                                        setConfirmModal({
+                                          title: '재고 마스터 반영',
+                                          message: '현재 설정 상태를 재고 마스터에 반영합니다.\n반영 후 재고 현황 페이지로 이동합니다.',
+                                          tip: '엑셀 다운로드를 아직 하지 않으셨다면 먼저 다운로드해주세요.',
+                                          confirmLabel: '반영하기',
+                                          confirmColor: 'indigo',
+                                          icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+                                          onConfirm: () => {
+                                            setConfirmModal(null);
+                                            handleApplyToInventory();
+                                          },
+                                        });
+                                      }}
+                                      className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.99] transition-all"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                      STEP 7 — 재고 마스터 반영
                                     </button>
                                   </div>
                                 </div>
-                              );
-                            })()}
-                            </div>
-
-                            <ExcelTable data={state.fixtureData} selectedIndices={state.selectedFixtureIndices[state.fixtureData.activeSheetName] || new Set()} onToggleSelect={() => { }} onToggleAll={() => { }} onUpdateCell={(idx, col, val) => handleUpdateCell(idx, col, val, 'fixture')} onSheetChange={(name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } }))} onExpandFailClaim={handleExpandFailClaim} activeManufacturers={Array.from(new Set(state.fixtureData.sheets[state.fixtureData.activeSheetName].rows.filter(r => r['사용안함'] !== true).map(r => String(r['제조사'] || '')).filter(m => m && !m.startsWith('수술중FAIL_') && m !== '보험청구'))).sort()} />
-
-                            {/* 하단 액션바 — STEP 6/7 (워크플로우 마지막 단계, 스크롤 후 자연스럽게 진입) */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
-                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">다음 단계</p>
-                              <div className="flex flex-col sm:flex-row gap-3">
-                                {/* STEP 6: 엑셀 다운로드 (먼저 — 재고 마스터 반영 후에는 페이지 이동되므로) */}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-fade-in-up">
+                                <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100 shadow-sm">
+                                  <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                  </svg>
+                                </div>
+                                <div className="space-y-2">
+                                  <h3 className="text-xl font-bold text-slate-800">등록된 데이터가 없습니다</h3>
+                                  <p className="text-slate-500 max-w-sm mx-auto text-sm leading-relaxed">
+                                    현재 픽스쳐 데이터가 비어 있습니다.<br />
+                                    <span className="font-semibold text-indigo-600">로우데이터 업로드</span> 메뉴에서 엑셀 파일을 업로드해주세요.
+                                  </p>
+                                </div>
                                 <button
-                                  onClick={() => {
-                                    setConfirmModal({
-                                      title: '엑셀 다운로드',
-                                      message: '현재 설정 상태로 엑셀 파일을 다운로드합니다.',
-                                      tip: '다운로드한 파일은 덴트웹 → 환경설정 → 임플란트 픽스처 설정에서 등록하세요.',
-                                      confirmLabel: '다운로드',
-                                      confirmColor: 'amber',
-                                      icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
-                                      onConfirm: async () => {
-                                        setConfirmModal(null);
-                                        try {
-                                          const now = new Date();
-                                          const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-                                          await downloadExcelFile(
-                                            state.fixtureData!,
-                                            state.selectedFixtureIndices[state.fixtureData!.activeSheetName] || new Set(),
-                                            `픽스쳐_${yyyymmdd}.xlsx`
-                                          );
-                                        } catch (error) {
-                                          console.error('[App] Excel download failed:', error);
-                                          showAlertToast('엑셀 다운로드 중 오류가 발생했습니다.', 'error');
-                                        }
-                                      },
-                                    });
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] transition-all"
+                                  onClick={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_upload' }))}
+                                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 group"
                                 >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                  STEP 6 — 엑셀 다운로드 (덴트웹용)
-                                </button>
-                                {/* STEP 7: 재고 마스터 반영 (나중 — 클릭 시 페이지 이동됨) */}
-                                <button
-                                  onClick={() => {
-                                    setConfirmModal({
-                                      title: '재고 마스터 반영',
-                                      message: '현재 설정 상태를 재고 마스터에 반영합니다.\n반영 후 재고 현황 페이지로 이동합니다.',
-                                      tip: '엑셀 다운로드를 아직 하지 않으셨다면 먼저 다운로드해주세요.',
-                                      confirmLabel: '반영하기',
-                                      confirmColor: 'indigo',
-                                      icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
-                                      onConfirm: () => {
-                                        setConfirmModal(null);
-                                        handleApplyToInventory();
-                                      },
-                                    });
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.99] transition-all"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                                  STEP 7 — 재고 마스터 반영
+                                  <span className="bg-white/20 p-1.5 rounded-lg group-hover:bg-white/30 transition-colors">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                  </span>
+                                  <span>로우데이터 업로드하러 가기</span>
                                 </button>
                               </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-fade-in-up">
-                            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100 shadow-sm">
-                              <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                              </svg>
-                            </div>
-                            <div className="space-y-2">
-                              <h3 className="text-xl font-bold text-slate-800">등록된 데이터가 없습니다</h3>
-                              <p className="text-slate-500 max-w-sm mx-auto text-sm leading-relaxed">
-                                현재 픽스쳐 데이터가 비어 있습니다.<br />
-                                <span className="font-semibold text-indigo-600">로우데이터 업로드</span> 메뉴에서 엑셀 파일을 업로드해주세요.
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_upload' }))}
-                              className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 group"
-                            >
-                              <span className="bg-white/20 p-1.5 rounded-lg group-hover:bg-white/30 transition-colors">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                </svg>
-                              </span>
-                              <span>로우데이터 업로드하러 가기</span>
-                            </button>
-                          </div>
-                        )
-                      )}
-                      {state.dashboardTab === 'inventory_master' && (
-                        <InventoryManager
-                          inventory={state.inventory}
-                          isReadOnly={isReadOnly}
-                          userId={state.user?.email}
-                          hospitalId={state.user?.hospitalId}
-                          plan={effectivePlan}
-                          onUpdateStock={async (id, val, nextCurrentStock) => {
-                            const prevInventory = state.inventory;
-                            setState(prev => ({
-                              ...prev,
-                              inventory: prev.inventory.map(i =>
-                                i.id === id
-                                  ? {
-                                    ...i,
-                                    initialStock: val,
-                                    currentStock: typeof nextCurrentStock === 'number' ? nextCurrentStock : (val - i.usageCount),
+                            )
+                          )}
+                          {state.dashboardTab === 'inventory_master' && (
+                            <InventoryManager
+                              inventory={state.inventory}
+                              isReadOnly={isReadOnly}
+                              userId={state.user?.email}
+                              hospitalId={state.user?.hospitalId}
+                              plan={effectivePlan}
+                              onUpdateStock={async (id, val, nextCurrentStock) => {
+                                const prevInventory = state.inventory;
+                                setState(prev => ({
+                                  ...prev,
+                                  inventory: prev.inventory.map(i =>
+                                    i.id === id
+                                      ? {
+                                        ...i,
+                                        initialStock: val,
+                                        currentStock: typeof nextCurrentStock === 'number' ? nextCurrentStock : (val - i.usageCount),
+                                      }
+                                      : i
+                                  ),
+                                }));
+                                try {
+                                  await inventoryService.updateItem(id, { initial_stock: val });
+                                  operationLogService.logOperation('base_stock_edit', `기초재고 수정 (${val}개)`, { inventoryId: id, value: val });
+                                } catch (error) {
+                                  console.error('[App] 기초재고 수정 실패, 롤백:', error);
+                                  setState(prev => ({ ...prev, inventory: prevInventory }));
+                                  showAlertToast('기초재고 수정에 실패했습니다.', 'error');
+                                }
+                              }}
+                              onBulkUpdateStocks={applyBaseStockBatch}
+                              onDeleteInventoryItem={async (id) => {
+                                const delItem = state.inventory.find(i => i.id === id);
+                                const prevInventory = state.inventory;
+                                // 정규 품목 삭제 시 수술중FAIL_ 연동 품목도 함께 찾기
+                                // IBS Implant 계열은 fixIbsImplant 때문에 manufacturer/brand가 뒤바뀌어 있을 수 있으므로 양방향 매칭
+                                let failCounterpartId: string | null = null;
+                                if (delItem && !delItem.manufacturer.startsWith('수술중FAIL_') && delItem.manufacturer !== '보험청구') {
+                                  const failCounterpart = state.inventory.find(i => {
+                                    if (!i.manufacturer.startsWith('수술중FAIL_')) return false;
+                                    const rawBase = i.manufacturer.slice('수술중FAIL_'.length);
+                                    const sizeMatch = i.size === delItem.size;
+                                    // 일반 케이스: FAIL 제조사 베이스 = 정품목 제조사
+                                    if (rawBase === delItem.manufacturer && i.brand === delItem.brand && sizeMatch) return true;
+                                    // IBS Implant 역방향: FAIL 품목이 교정 전 brand명을 제조사로 가진 경우
+                                    if (rawBase === delItem.brand && i.brand === delItem.manufacturer && sizeMatch) return true;
+                                    return false;
+                                  });
+                                  if (failCounterpart) failCounterpartId = failCounterpart.id;
+                                }
+                                const idsToRemove = new Set([id, ...(failCounterpartId ? [failCounterpartId] : [])]);
+                                setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => !idsToRemove.has(i.id)) }));
+                                try {
+                                  await inventoryService.deleteItem(id);
+                                  if (failCounterpartId) await inventoryService.deleteItem(failCounterpartId);
+                                  operationLogService.logOperation('item_delete', `품목 삭제: ${delItem?.brand || ''} ${delItem?.size || ''}`, { inventoryId: id });
+                                } catch (error) {
+                                  console.error('[App] 품목 삭제 실패, 롤백:', error);
+                                  setState(prev => ({ ...prev, inventory: prevInventory }));
+                                  showAlertToast('품목 삭제에 실패했습니다.', 'error');
+                                }
+                              }}
+                              onAddInventoryItem={async (ni) => {
+                                const fixed = fixIbsImplant(ni.manufacturer, ni.brand);
+                                const normalizedItem = {
+                                  ...ni,
+                                  manufacturer: fixed.manufacturer,
+                                  brand: fixed.brand,
+                                  size: toCanonicalSize(ni.size, fixed.manufacturer),
+                                };
+                                const incomingKey = buildInventoryDuplicateKey(normalizedItem);
+                                const alreadyExists = state.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                                if (alreadyExists) {
+                                  showAlertToast('이미 등록된 제조사/브랜드/규격입니다. 중복 등록되지 않았습니다.', 'info');
+                                  return false;
+                                }
+
+                                const isBillable = !normalizedItem.manufacturer.startsWith('수술중FAIL_') && normalizedItem.manufacturer !== '보험청구';
+                                if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
+                                  const req = planService.getRequiredPlanForItems(billableItemCount + 1);
+                                  showAlertToast(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`, 'error');
+                                  return false;
+                                }
+
+                                let inserted = false;
+                                if (state.user?.hospitalId) {
+                                  const result = await inventoryService.addItem({
+                                    hospital_id: state.user.hospitalId,
+                                    manufacturer: normalizedItem.manufacturer,
+                                    brand: normalizedItem.brand,
+                                    size: normalizedItem.size,
+                                    initial_stock: normalizedItem.initialStock,
+                                    stock_adjustment: ni.stockAdjustment ?? 0
+                                  });
+
+                                  if (!result) {
+                                    showAlertToast('품목 추가에 실패했습니다. (중복 또는 네트워크 오류)', 'error');
+                                    return false;
                                   }
-                                  : i
-                              ),
-                            }));
-                            try {
-                              await inventoryService.updateItem(id, { initial_stock: val });
-                              operationLogService.logOperation('base_stock_edit', `기초재고 수정 (${val}개)`, { inventoryId: id, value: val });
-                            } catch (error) {
-                              console.error('[App] 기초재고 수정 실패, 롤백:', error);
-                              setState(prev => ({ ...prev, inventory: prevInventory }));
-                              showAlertToast('기초재고 수정에 실패했습니다.', 'error');
-                            }
-                          }}
-                          onBulkUpdateStocks={applyBaseStockBatch}
-                          onDeleteInventoryItem={async (id) => {
-                            const delItem = state.inventory.find(i => i.id === id);
-                            const prevInventory = state.inventory;
-                            // 정규 품목 삭제 시 수술중FAIL_ 연동 품목도 함께 찾기
-                            // IBS Implant 계열은 fixIbsImplant 때문에 manufacturer/brand가 뒤바뀌어 있을 수 있으므로 양방향 매칭
-                            let failCounterpartId: string | null = null;
-                            if (delItem && !delItem.manufacturer.startsWith('수술중FAIL_') && delItem.manufacturer !== '보험청구') {
-                              const failCounterpart = state.inventory.find(i => {
-                                if (!i.manufacturer.startsWith('수술중FAIL_')) return false;
-                                const rawBase = i.manufacturer.slice('수술중FAIL_'.length);
-                                const sizeMatch = i.size === delItem.size;
-                                // 일반 케이스: FAIL 제조사 베이스 = 정품목 제조사
-                                if (rawBase === delItem.manufacturer && i.brand === delItem.brand && sizeMatch) return true;
-                                // IBS Implant 역방향: FAIL 품목이 교정 전 brand명을 제조사로 가진 경우
-                                if (rawBase === delItem.brand && i.brand === delItem.manufacturer && sizeMatch) return true;
-                                return false;
-                              });
-                              if (failCounterpart) failCounterpartId = failCounterpart.id;
-                            }
-                            const idsToRemove = new Set([id, ...(failCounterpartId ? [failCounterpartId] : [])]);
-                            setState(prev => ({ ...prev, inventory: prev.inventory.filter(i => !idsToRemove.has(i.id)) }));
-                            try {
-                              await inventoryService.deleteItem(id);
-                              if (failCounterpartId) await inventoryService.deleteItem(failCounterpartId);
-                              operationLogService.logOperation('item_delete', `품목 삭제: ${delItem?.brand || ''} ${delItem?.size || ''}`, { inventoryId: id });
-                            } catch (error) {
-                              console.error('[App] 품목 삭제 실패, 롤백:', error);
-                              setState(prev => ({ ...prev, inventory: prevInventory }));
-                              showAlertToast('품목 삭제에 실패했습니다.', 'error');
-                            }
-                          }}
-                          onAddInventoryItem={async (ni) => {
-                            const fixed = fixIbsImplant(ni.manufacturer, ni.brand);
-                            const normalizedItem = {
-                              ...ni,
-                              manufacturer: fixed.manufacturer,
-                              brand: fixed.brand,
-                              size: toCanonicalSize(ni.size, fixed.manufacturer),
-                            };
-                            const incomingKey = buildInventoryDuplicateKey(normalizedItem);
-                            const alreadyExists = state.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
-                            if (alreadyExists) {
-                              showAlertToast('이미 등록된 제조사/브랜드/규격입니다. 중복 등록되지 않았습니다.', 'info');
-                              return false;
-                            }
 
-                            const isBillable = !normalizedItem.manufacturer.startsWith('수술중FAIL_') && normalizedItem.manufacturer !== '보험청구';
-                            if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
-                              const req = planService.getRequiredPlanForItems(billableItemCount + 1);
-                              showAlertToast(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`, 'error');
-                              return false;
-                            }
+                                  const savedItem: InventoryItem = {
+                                    id: result.id,
+                                    manufacturer: result.manufacturer,
+                                    brand: result.brand,
+                                    size: toCanonicalSize(result.size, result.manufacturer),
+                                    initialStock: result.initial_stock,
+                                    stockAdjustment: result.stock_adjustment ?? 0,
+                                    usageCount: 0,
+                                    currentStock: result.initial_stock + (result.stock_adjustment ?? 0),
+                                    recommendedStock: 5,
+                                    monthlyAvgUsage: 0,
+                                    dailyMaxUsage: 0,
+                                  };
 
-                            let inserted = false;
-                            if (state.user?.hospitalId) {
-                              const result = await inventoryService.addItem({
-                                hospital_id: state.user.hospitalId,
-                                manufacturer: normalizedItem.manufacturer,
-                                brand: normalizedItem.brand,
-                                size: normalizedItem.size,
-                                initial_stock: normalizedItem.initialStock,
-                                stock_adjustment: ni.stockAdjustment ?? 0
-                              });
+                                  setState(prev => {
+                                    const dupAfterSave = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                                    if (dupAfterSave) return prev;
+                                    inserted = true;
+                                    return { ...prev, inventory: [...prev.inventory, savedItem] };
+                                  });
+                                } else {
+                                  setState(prev => {
+                                    const dupInLocal = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
+                                    if (dupInLocal) return prev;
+                                    inserted = true;
+                                    return { ...prev, inventory: [...prev.inventory, normalizedItem] };
+                                  });
+                                }
 
-                              if (!result) {
-                                showAlertToast('품목 추가에 실패했습니다. (중복 또는 네트워크 오류)', 'error');
-                                return false;
+                                if (inserted) {
+                                  operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${normalizedItem.brand} ${normalizedItem.size}`, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size });
+                                }
+
+                                return inserted;
+                              }}
+                              onUpdateInventoryItem={async (ui) => {
+                                const fixed = fixIbsImplant(ui.manufacturer, ui.brand);
+                                const normalizedItem = {
+                                  ...ui,
+                                  manufacturer: fixed.manufacturer,
+                                  brand: fixed.brand,
+                                  size: toCanonicalSize(ui.size, fixed.manufacturer),
+                                };
+                                setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === normalizedItem.id ? normalizedItem : i) }));
+                                await inventoryService.updateItem(normalizedItem.id, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size, initial_stock: normalizedItem.initialStock });
+                              }}
+                              surgeryData={virtualSurgeryData}
+                              unregisteredFromSurgery={surgeryUnregisteredItems}
+                              onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
+                              onResolveManualInput={resolveManualSurgeryInput}
+                              onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
+                            />
+                          )}
+                          <DashboardOperationalTabs
+                            dashboardTab={state.dashboardTab}
+                            user={state.user}
+                            inventory={state.inventory}
+                            surgeryMaster={state.surgeryMaster}
+                            orders={state.orders}
+                            isReadOnly={isReadOnly}
+                            effectivePlan={effectivePlan}
+                            isHospitalMaster={isHospitalMaster}
+                            isSystemAdmin={isSystemAdmin}
+                            hospitalWorkDays={state.hospitalWorkDays}
+                            planState={state.planState}
+                            isLoading={state.isLoading}
+                            surgeryUnregisteredItems={surgeryUnregisteredItems}
+                            showAuditHistory={showAuditHistory}
+                            onCloseAuditHistory={() => setShowAuditHistory(false)}
+                            onLoadHospitalData={loadHospitalData}
+                            onTabChange={(tab) => {
+                              if (tab === 'surgery_upload') {
+                                surgeryFileRef.current?.click();
+                                return;
                               }
-
-                              const savedItem: InventoryItem = {
-                                id: result.id,
-                                manufacturer: result.manufacturer,
-                                brand: result.brand,
-                                size: toCanonicalSize(result.size, result.manufacturer),
-                                initialStock: result.initial_stock,
-                                stockAdjustment: result.stock_adjustment ?? 0,
-                                usageCount: 0,
-                                currentStock: result.initial_stock + (result.stock_adjustment ?? 0),
-                                recommendedStock: 5,
-                                monthlyAvgUsage: 0,
-                                dailyMaxUsage: 0,
-                              };
-
-                              setState(prev => {
-                                const dupAfterSave = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
-                                if (dupAfterSave) return prev;
-                                inserted = true;
-                                return { ...prev, inventory: [...prev.inventory, savedItem] };
-                              });
-                            } else {
-                              setState(prev => {
-                                const dupInLocal = prev.inventory.some(inv => buildInventoryDuplicateKey(inv) === incomingKey);
-                                if (dupInLocal) return prev;
-                                inserted = true;
-                                return { ...prev, inventory: [...prev.inventory, normalizedItem] };
-                              });
-                            }
-
-                            if (inserted) {
-                              operationLogService.logOperation('manual_item_add', `품목 수동 추가: ${normalizedItem.brand} ${normalizedItem.size}`, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size });
-                            }
-
-                            return inserted;
-                          }}
-                          onUpdateInventoryItem={async (ui) => {
-                            const fixed = fixIbsImplant(ui.manufacturer, ui.brand);
-                            const normalizedItem = {
-                              ...ui,
-                              manufacturer: fixed.manufacturer,
-                              brand: fixed.brand,
-                              size: toCanonicalSize(ui.size, fixed.manufacturer),
-                            };
-                            setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === normalizedItem.id ? normalizedItem : i) }));
-                            await inventoryService.updateItem(normalizedItem.id, { manufacturer: normalizedItem.manufacturer, brand: normalizedItem.brand, size: normalizedItem.size, initial_stock: normalizedItem.initialStock });
-                          }}
-                          surgeryData={virtualSurgeryData}
-                          unregisteredFromSurgery={surgeryUnregisteredItems}
-                          onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
-                          onResolveManualInput={resolveManualSurgeryInput}
-                          onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
-                        />
+                              setState(prev => ({ ...prev, dashboardTab: tab }));
+                            }}
+                            onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
+                            onAddFailOrder={handleAddOrder}
+                            onUpdateOrderStatus={handleUpdateOrderStatus}
+                            onDeleteOrder={handleDeleteOrder}
+                            onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
+                          />
+                        </div>
                       )}
-                      <DashboardOperationalTabs
-                        dashboardTab={state.dashboardTab}
-                        user={state.user}
-                        inventory={state.inventory}
-                        surgeryMaster={state.surgeryMaster}
-                        orders={state.orders}
-                        isReadOnly={isReadOnly}
-                        effectivePlan={effectivePlan}
-                        isHospitalMaster={isHospitalMaster}
-                        isSystemAdmin={isSystemAdmin}
-                        hospitalWorkDays={state.hospitalWorkDays}
-                        planState={state.planState}
-                        isLoading={state.isLoading}
-                        surgeryUnregisteredItems={surgeryUnregisteredItems}
-                        showAuditHistory={showAuditHistory}
-                        onCloseAuditHistory={() => setShowAuditHistory(false)}
-                        onLoadHospitalData={loadHospitalData}
-                        onTabChange={(tab) => {
-                          if (tab === 'surgery_upload') {
-                            surgeryFileRef.current?.click();
-                            return;
-                          }
-                          setState(prev => ({ ...prev, dashboardTab: tab }));
-                        }}
-                        onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
-                        onAddFailOrder={handleAddOrder}
-                        onUpdateOrderStatus={handleUpdateOrderStatus}
-                        onDeleteOrder={handleDeleteOrder}
-                        onQuickOrder={(item) => handleAddOrder({ id: `order_${Date.now()}`, type: 'replenishment', manufacturer: item.manufacturer, date: new Date().toISOString().split('T')[0], items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }], manager: state.user?.name || '관리자', status: 'ordered' })}
-                      />
-                    </div>
-                  )}
-                </Suspense>
+                  </Suspense>
                 </ErrorBoundary>
               </main>
               {showMobileDashboardNav && (
@@ -2835,7 +2895,9 @@ const App: React.FC = () => {
           /* Non-Dashboard Views (Landing, Login, etc.) */
           <div className="h-full flex flex-col">
             <Header
-              onHomeClick={() => setState(p => ({ ...p, currentView: 'landing' }))}
+              onHomeClick={() => state.user
+                ? setState(p => ({ ...p, currentView: 'dashboard', dashboardTab: 'overview' }))
+                : setState(p => ({ ...p, currentView: 'landing' }))}
               onLoginClick={() => setState(p => ({ ...p, currentView: 'login' }))}
               onSignupClick={() => setState(p => ({ ...p, currentView: 'signup' }))}
               onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
@@ -2846,113 +2908,138 @@ const App: React.FC = () => {
               currentView={state.currentView}
               showLogo={true}
             />
+            <PublicMobileNav
+              currentView={state.currentView}
+              onNavigate={(v) => setState(p => ({ ...p, currentView: v }))}
+              onAnalyzeClick={() => {
+                const isRealMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+                if (isRealMobileDevice) {
+                  return; // The internal component handles the toast notice
+                }
+                setState(p => ({ ...p, currentView: 'analyze' }));
+              }}
+            />
             <main className="flex-1 overflow-x-hidden">
               <ErrorBoundary>
-              <Suspense fallback={suspenseFallback}>
-              {state.currentView === 'landing' && (
-                <LandingPage
-                  onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))}
-                  onAnalyze={() => {
-                    if (window.matchMedia('(max-width: 1023px)').matches) {
-                      showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
-                      return;
-                    }
-                    setState(p => ({ ...p, currentView: 'analyze' }));
-                  }}
-                  onGoToValue={() => setState(p => ({ ...p, currentView: 'value' }))}
-                  onGoToPricing={() => setState(p => ({ ...p, currentView: 'pricing' }))}
-                  onGoToNotices={() => setState(p => ({ ...p, currentView: 'notices' }))}
-                  onGoToContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
-                />
-              )}
-              {state.currentView === 'login' && <AuthForm key="login" type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} />}
-              {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccessWithTrial} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} />}
-              {state.currentView === 'invite' && inviteInfo && (
-                <AuthForm
-                  type="invite"
-                  inviteInfo={inviteInfo}
-                  onSuccess={handleLoginSuccess}
-                  onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))}
-                />
-              )}
-              {state.currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
-              {state.currentView === 'pricing' && (
-                <PricingPage
-                  onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
-                  onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup' }))}
-                  currentPlan={state.planState?.plan}
-                  isLoggedIn={!!state.user}
-                  userName={state.user?.name}
-                  userPhone={state.user?.phone || ''}
-                  daysUntilExpiry={state.planState?.daysUntilExpiry}
-                  onSelectPlan={state.user?.hospitalId ? async (plan: PlanType, billing: BillingCycle) => {
-                    try {
-                      const ok = await planService.changePlan(state.user!.hospitalId!, plan, billing);
-                      if (ok) {
-                        const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
-                        setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
-                        showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.`, 'success');
-                      } else {
-                        showAlertToast('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.', 'error');
-                      }
-                    } catch (err) {
-                      console.error('[App] Plan change error:', err);
-                      showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
-                    }
-                  } : undefined}
-                  onRequestPayment={state.user?.hospitalId ? async (plan, billing, contactName, contactPhone, paymentMethod, receiptType) => {
-                    try {
-                      const hospital = await hospitalService.getHospitalById(state.user!.hospitalId!);
-                      const result = await makePaymentService.requestPayment({
-                        hospitalId: state.user!.hospitalId!,
-                        hospitalName: hospital?.name || '',
-                        plan,
-                        billingCycle: billing,
-                        contactName,
-                        contactPhone,
-                        paymentMethod,
-                        receiptType,
-                      });
-                      if (result.success) {
-                        showAlertToast('결제 요청이 완료되었습니다. 입력하신 연락처로 결제 안내 문자가 발송됩니다.', 'success');
-                        const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
-                        setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
-                        return true;
-                      } else {
-                        showAlertToast(result.error || '결제 요청에 실패했습니다. 다시 시도해주세요.', 'error');
-                        return false;
-                      }
-                    } catch (err) {
-                      console.error('[App] Payment request error:', err);
-                      showAlertToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
-                      return false;
-                    }
-                  } : undefined}
-                />
-              )}
-              {state.currentView === 'contact' && (
-                <ContactPage onGetStarted={() => setState(p => ({ ...p, currentView: 'signup' }))} />
-              )}
-              {state.currentView === 'value' && (
-                <ValuePage
-                  onGetStarted={() => setState(p => ({ ...p, currentView: 'signup' }))}
-                  onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
-                />
-              )}
-              {state.currentView === 'analyze' && (
-                <AnalyzePage
-                  onSignup={() => setState(p => ({ ...p, currentView: 'signup' }))}
-                  onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
-                />
-              )}
-              {state.currentView === 'notices' && (
-                <div className="max-w-3xl mx-auto py-12 px-6">
-                  <h1 className="text-3xl font-bold text-slate-900 mb-2">업데이트 소식</h1>
-                  <p className="text-slate-500 mb-8">DenJOY 서비스의 새로운 기능과 개선 사항을 확인하세요.</p>
-                  <NoticeBoard isAdmin={isSystemAdmin} fullPage />
-                </div>
-              )}
-              </Suspense>
+                <Suspense fallback={suspenseFallback}>
+                  {state.currentView === 'landing' && (
+                    <LandingPage
+                      onGetStarted={() => setState(p => ({ ...p, currentView: 'login' }))}
+                      onAnalyze={() => {
+                        if (window.matchMedia('(max-width: 1023px)').matches) {
+                          showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
+                          return;
+                        }
+                        setState(p => ({ ...p, currentView: 'analyze' }));
+                      }}
+                      onGoToValue={() => setState(p => ({ ...p, currentView: 'value' }))}
+                      onGoToPricing={() => setState(p => ({ ...p, currentView: 'pricing' }))}
+                      onGoToNotices={() => setState(p => ({ ...p, currentView: 'notices' }))}
+                      onGoToContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
+                    />
+                  )}
+                  {state.currentView === 'login' && <AuthForm key="login" type="login" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'signup' }))} onMfaRequired={(email) => setState(p => ({ ...p, currentView: 'mfa_otp', mfaPendingEmail: email }))} />}
+                  {state.currentView === 'mfa_otp' && state.mfaPendingEmail && (
+                    <MfaOtpScreen
+                      email={state.mfaPendingEmail}
+                      onVerified={() => window.location.reload()}
+                      onCancel={() => setState(p => ({ ...p, currentView: 'login', mfaPendingEmail: undefined }))}
+                    />
+                  )}
+          {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} />}
+                  {state.currentView === 'invite' && inviteInfo && (
+                    <AuthForm
+                      type="invite"
+                      inviteInfo={inviteInfo}
+                      onSuccess={handleLoginSuccess}
+                      onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))}
+                    />
+                  )}
+                  {state.currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
+                  {state.currentView === 'pricing' && (
+                    <PricingPage
+                      onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
+                      onGoToValue={() => setState(p => ({ ...p, currentView: 'value' }))}
+                      onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup' }))}
+                      currentPlan={state.planState?.plan}
+                      isLoggedIn={!!state.user}
+                      userName={state.user?.name}
+                      userPhone={state.user?.phone || ''}
+                      daysUntilExpiry={state.planState?.daysUntilExpiry}
+                      onSelectPlan={state.user?.hospitalId ? async (plan: PlanType, billing: BillingCycle) => {
+                        try {
+                          const ok = await planService.changePlan(state.user!.hospitalId!, plan, billing);
+                          if (ok) {
+                            const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
+                            setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
+                            showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.`, 'success');
+                          } else {
+                            showAlertToast('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.', 'error');
+                          }
+                        } catch (err) {
+                          console.error('[App] Plan change error:', err);
+                          showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+                        }
+                      } : undefined}
+                      onRequestPayment={state.user?.hospitalId ? async (plan, billing, contactName, contactPhone, paymentMethod, receiptType) => {
+                        try {
+                          const hospital = await hospitalService.getHospitalById(state.user!.hospitalId!);
+                          const result = await makePaymentService.requestPayment({
+                            hospitalId: state.user!.hospitalId!,
+                            hospitalName: hospital?.name || '',
+                            plan,
+                            billingCycle: billing,
+                            contactName,
+                            contactPhone,
+                            paymentMethod,
+                            receiptType,
+                          });
+                          if (result.success) {
+                            showAlertToast('결제 요청이 완료되었습니다. 입력하신 연락처로 결제 안내 문자가 발송됩니다.', 'success');
+                            const ps = await planService.getHospitalPlan(state.user!.hospitalId!);
+                            setState(prev => ({ ...prev, planState: ps, currentView: 'dashboard', dashboardTab: 'overview' }));
+                            return true;
+                          } else {
+                            showAlertToast(result.error || '결제 요청에 실패했습니다. 다시 시도해주세요.', 'error');
+                            return false;
+                          }
+                        } catch (err) {
+                          console.error('[App] Payment request error:', err);
+                          showAlertToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+                          return false;
+                        }
+                      } : undefined}
+                    />
+                  )}
+                  {state.currentView === 'contact' && (
+                    <ContactPage
+                      onGetStarted={() => setState(p => ({ ...p, currentView: 'signup' }))}
+                      onAnalyze={() => setState(p => ({ ...p, currentView: 'analyze' }))}
+                    />
+                  )}
+                  {state.currentView === 'value' && (
+                    <ValuePage
+                      onGetStarted={() => setState(p => ({ ...p, currentView: 'signup' }))}
+                      onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
+                    />
+                  )}
+                  {state.currentView === 'analyze' && (
+                    <AnalyzePage
+                      onSignup={() => setState(p => ({ ...p, currentView: 'signup' }))}
+                      onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
+                    />
+                  )}
+                  {state.currentView === 'notices' && (
+                    <div className="max-w-3xl mx-auto py-12 px-6">
+                      <h1 className="text-3xl font-bold text-slate-900 mb-2">업데이트 소식</h1>
+                      <p className="text-slate-500 mb-8">DenJOY 서비스의 새로운 기능과 개선 사항을 확인하세요.</p>
+                      <NoticeBoard isAdmin={isSystemAdmin} fullPage />
+                    </div>
+                  )}
+                  {state.currentView === 'reviews' && (
+                    <ReviewsPage onBack={() => setState(p => ({ ...p, currentView: 'landing' }))} />
+                  )}
+                </Suspense>
               </ErrorBoundary>
             </main>
           </div>
@@ -2976,6 +3063,60 @@ const App: React.FC = () => {
           </ErrorBoundary>
         )
       }
+
+      {reviewPopupType && state.user && (() => {
+        const u = state.user!;
+        const initLastName = u.name ? u.name.charAt(0) : '';
+        const initRole = u.clinicRole
+          ? CLINIC_ROLE_LABELS[u.clinicRole]
+          : u.role === 'master' ? '원장' : undefined;
+        const initHospital = state.hospitalName ?? '';
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={null}>
+              <ReviewPopup
+                userId={u.id}
+                reviewType={reviewPopupType}
+                initialLastName={initLastName}
+                initialRole={initRole as import('./services/reviewService').ReviewRole | undefined}
+                initialHospital={initHospital}
+                onSubmitted={() => {
+                  setReviewPopupType(null);
+                  showAlertToast('후기를 남겨주셔서 감사합니다!', 'success');
+                }}
+                onSnooze={() => setReviewPopupType(null)}
+                onClose={() => setReviewPopupType(null)}
+              />
+            </Suspense>
+          </ErrorBoundary>
+        );
+      })()}
+
+      {shouldShowOnboarding && state.user && (
+        <Suspense fallback={null}>
+          <OnboardingWizard
+            hospitalId={state.user.hospitalId ?? ''}
+            hospitalName={state.hospitalName ?? state.user.name}
+            initialStep={onboardingStep ?? 1}
+            onComplete={async () => {
+              setOnboardingDismissed(true);
+              await loadHospitalData(state.user!);
+            }}
+            onSkip={() => {
+              setOnboardingDismissed(true);
+            }}
+            onGoToDataSetup={() => {
+              setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));
+            }}
+            onGoToSurgeryUpload={() => {
+              setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'surgery_database' }));
+            }}
+            onGoToFailManagement={() => {
+              setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fail_management' }));
+            }}
+          />
+        </Suspense>
+      )}
 
       {planLimitModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -3049,9 +3190,8 @@ const App: React.FC = () => {
       {alertToast && (
         <div
           style={showMobileDashboardNav ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${
-          alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-        }`}
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+            }`}
         >
           {alertToast.type === 'success' ? (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>

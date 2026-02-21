@@ -102,6 +102,10 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           onAddFailOrder={onAddFailOrder}
           currentUserName={user?.name || '관리자'}
           isReadOnly={isReadOnly}
+          hospitalId={user?.hospitalId}
+          onBulkSetupComplete={async () => {
+            if (user) await onLoadHospitalData(user);
+          }}
         />
       )}
       {dashboardTab === 'order_management' && (

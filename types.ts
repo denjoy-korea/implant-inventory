@@ -88,6 +88,16 @@ export interface FailOrder extends Order { }
 
 export type UserRole = 'master' | 'dental_staff' | 'staff' | 'admin';
 
+/** 치과 내 직책 (초대 시 지정, 권한과 무관) */
+export type ClinicRole = 'director' | 'manager' | 'team_lead' | 'staff';
+
+export const CLINIC_ROLE_LABELS: Record<ClinicRole, string> = {
+  director:  '원장',
+  manager:   '실장',
+  team_lead: '팀장',
+  staff:     '스탭',
+};
+
 export interface Hospital {
   id: string;
   name: string;
@@ -102,9 +112,12 @@ export interface User {
   name: string;
   phone?: string | null;
   role: UserRole;
+  clinicRole?: ClinicRole | null;
   hospitalId: string;
   status?: 'pending' | 'active' | 'readonly' | 'paused'; // New field for approval flow
   permissions?: MemberPermissions | null;
+  mfaEnabled?: boolean;
+  signupSource?: string | null;
 }
 
 /** 주어진 탭에 접근 가능한지 권한 확인 */
@@ -137,7 +150,7 @@ export function canAccessTab(
   }
 }
 
-export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices';
+export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices' | 'mfa_otp' | 'reviews';
 
 export interface DiagnosticItem {
   category: string;
@@ -243,6 +256,8 @@ export interface AppState {
   hospitalMasterAdminId: string;
   /** 병원별 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
   hospitalWorkDays: number[];
+  /** MFA OTP 검증 대기 중인 이메일 */
+  mfaPendingEmail?: string;
 }
 
 // ============================================
@@ -370,6 +385,15 @@ export const PLAN_NAMES: Record<PlanType, string> = {
   ultimate: 'Ultimate',
 };
 
+/** 플랜 축약 이름 (관리자 목록/배지용) */
+export const PLAN_SHORT_NAMES: Record<PlanType, string> = {
+  free: 'Free',
+  basic: 'Base',
+  plus: 'Plus',
+  business: 'Bizs',
+  ultimate: 'Maxs',
+};
+
 /** 플랜 순서 (업그레이드 비교용) */
 export const PLAN_ORDER: Record<PlanType, number> = {
   free: 0,
@@ -379,8 +403,8 @@ export const PLAN_ORDER: Record<PlanType, number> = {
   ultimate: 4,
 };
 
-/** 체험 기간 (일) */
-export const TRIAL_DAYS = 14;
+/** 체험 기간 (일) — 베타 4주 */
+export const TRIAL_DAYS = 28;
 
 // ============================================
 // Supabase Database Types
@@ -418,6 +442,17 @@ export interface MemberPermissions {
   canManageFails: boolean;     // 실패 관리
 }
 
+/** 거래처 영업사원 연락처 */
+export interface VendorContact {
+  id: string;
+  hospitalId: string;
+  manufacturer: string;
+  repName: string | null;
+  phone: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 권한 레벨 프리셋 */
 export type PermissionLevel = 'full' | 'readonly' | 'custom';
 
@@ -451,6 +486,14 @@ export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
   canManageFails: '실패 관리',
 };
 
+/** 신뢰 기기 (프론트엔드) */
+export interface TrustedDevice {
+  id: string;
+  deviceName: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
 /** Supabase profiles 테이블 Row */
 export interface DbProfile {
   id: string;
@@ -458,12 +501,16 @@ export interface DbProfile {
   name: string;
   phone: string | null;
   role: UserRole;
+  clinic_role: ClinicRole | null;
   hospital_id: string | null;
   status: 'pending' | 'active' | 'readonly' | 'paused';
   permissions: MemberPermissions | null;
   created_at: string;
   updated_at: string;
   last_sign_in_at?: string | null;
+  session_token?: string | null;
+  mfa_enabled?: boolean;
+  signup_source?: string | null;
 }
 
 /** Supabase inventory 테이블 Row */

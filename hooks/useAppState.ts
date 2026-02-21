@@ -8,7 +8,7 @@
  * - 로그인 성공, 병원 탈퇴, 계정 삭제 핸들러
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder,
 } from '../types';
@@ -50,9 +50,13 @@ const INITIAL_STATE: AppState = {
 
 type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
 
+const SESSION_POLL_INTERVAL_MS = 60_000;
+const SESSION_TOKEN_KEY = 'dentweb_session_token';
+
 export function useAppState(onNotify?: NotifyFn) {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
   const notify = onNotify ?? ((msg: string, _type?: string) => console.warn('[useAppState] notify fallback:', msg));
+  const sessionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /** 병원 데이터 로드 (로그인 후 / 세션 복원 시) */
   const loadHospitalData = async (user: User) => {
@@ -143,6 +147,7 @@ export function useAppState(onNotify?: NotifyFn) {
   const handleLoginSuccess = async (user: User) => {
     setState(prev => ({ ...prev, isLoading: true }));
     await loadHospitalData(user);
+    startSessionPolling();
   };
 
   /** 병원 탈퇴 */
@@ -189,6 +194,43 @@ export function useAppState(onNotify?: NotifyFn) {
     }
   };
 
+  /** 세션 토큰 검증 — DB 토큰과 localStorage 토큰 비교 */
+  const validateSessionToken = async (): Promise<boolean> => {
+    const localToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (!localToken) return true; // 토큰 없으면 구 세션이므로 무시
+
+    try {
+      const { data: dbToken, error } = await supabase.rpc('get_session_token');
+      if (error) return true; // RPC 오류 시 로그아웃하지 않음
+      if (dbToken === null) return true; // DB에 토큰 없으면 무시
+      return dbToken === localToken;
+    } catch {
+      return true; // 네트워크 오류 시 로그아웃하지 않음
+    }
+  };
+
+  /** 세션 토큰 폴링 시작 */
+  const startSessionPolling = () => {
+    if (sessionPollRef.current) return; // 이미 실행 중
+    sessionPollRef.current = setInterval(async () => {
+      const valid = await validateSessionToken();
+      if (!valid) {
+        clearInterval(sessionPollRef.current!);
+        sessionPollRef.current = null;
+        notify('다른 기기에서 로그인하여 자동 로그아웃됩니다.', 'error');
+        setTimeout(() => authService.signOut(), 2000);
+      }
+    }, SESSION_POLL_INTERVAL_MS);
+  };
+
+  /** 세션 토큰 폴링 중지 */
+  const stopSessionPolling = () => {
+    if (sessionPollRef.current) {
+      clearInterval(sessionPollRef.current);
+      sessionPollRef.current = null;
+    }
+  };
+
   // 세션 초기화 및 Auth 상태 변경 구독
   useEffect(() => {
     const initSession = async () => {
@@ -197,8 +239,30 @@ export function useAppState(onNotify?: NotifyFn) {
         if (session?.user) {
           const profile = await authService.getProfileById();
           if (profile) {
+            // 기존 세션 복원 시 토큰 유효성 1회 검증
+            const valid = await validateSessionToken();
+            if (!valid) {
+              notify('다른 기기에서 로그인하여 자동 로그아웃됩니다.', 'error');
+              setTimeout(() => authService.signOut(), 2000);
+              setState(prev => ({ ...prev, isLoading: false }));
+              return;
+            }
+            // MFA 활성화 여부 + 기기 신뢰 확인
+            if (profile.mfa_enabled) {
+              const isTrusted = await authService.checkTrustedDevice();
+              if (!isTrusted) {
+                setState(prev => ({
+                  ...prev,
+                  currentView: 'mfa_otp',
+                  mfaPendingEmail: profile.email,
+                  isLoading: false,
+                }));
+                return;
+              }
+            }
             const user = dbToUser(profile);
             await loadHospitalData(user);
+            startSessionPolling();
             return;
           }
         }
@@ -214,6 +278,7 @@ export function useAppState(onNotify?: NotifyFn) {
 
     const { data: { subscription } } = authService.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') {
+        stopSessionPolling();
         setState(prev => ({
           ...prev,
           user: null,
@@ -227,7 +292,10 @@ export function useAppState(onNotify?: NotifyFn) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      stopSessionPolling();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

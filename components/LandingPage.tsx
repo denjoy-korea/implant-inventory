@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { reviewService, UserReview, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
 
 
 interface LandingPageProps {
@@ -57,6 +58,25 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileNotice, setMobileNotice] = useState<string | null>(null);
+  const [featuredReviews, setFeaturedReviews] = useState<UserReview[]>([]);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselFading, setCarouselFading] = useState(false);
+
+  useEffect(() => {
+    reviewService.getFeaturedReviews().then(setFeaturedReviews).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (featuredReviews.length <= 3) return;
+    const t = setInterval(() => {
+      setCarouselFading(true);
+      setTimeout(() => {
+        setCarouselIndex(i => (i + 1) % featuredReviews.length);
+        setCarouselFading(false);
+      }, 250);
+    }, 4500);
+    return () => clearInterval(t);
+  }, [featuredReviews.length]);
 
   const scrollToSection = useCallback((sectionId: string) => {
     const target = document.getElementById(sectionId);
@@ -66,16 +86,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
   const handleAnalyzeClick = useCallback(() => {
     if (!onAnalyze) return;
-    if (isMobileViewport) {
+    const isRealMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (isRealMobileDevice) {
       setMobileNotice('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.');
       return;
     }
     onAnalyze();
-  }, [isMobileViewport, onAnalyze]);
+  }, [onAnalyze]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const mediaQuery = window.matchMedia('(max-width: 1279px)');
     const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
     syncViewport();
 
@@ -113,7 +134,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
             </span>
-            <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">베타 테스터 10곳 한정 모집 중 &middot; 1개월 무료 + 후기 작성 시 2개월 추가</span>
+            <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">베타 테스터 10곳 한정 모집 중 &middot; 4주 무료 체험</span>
           </div>
 
           {/* 프레이밍: 구체적 수치로 가치 제시 */}
@@ -528,56 +549,103 @@ const LandingPage: React.FC<LandingPageProps> = ({
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase">Early Adopters</h2>
             <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 sm:text-4xl text-balance">베타 테스터 후기</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
-            {[
-              {
-                name: '김OO 원장',
-                clinic: '서울 · 치과의원',
-                role: '원장',
-                text: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.',
-                metric: '주 2시간 절약',
-              },
-              {
-                name: '박OO 실장',
-                clinic: '경기 · 치과의원',
-                role: '실장',
-                text: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.',
-                metric: '발주 실수 감소',
-              },
-              {
-                name: '이OO 매니저',
-                clinic: '부산 · 치과의원',
-                role: '매니저',
-                text: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.',
-                metric: '업무 시간 대폭 단축',
-              },
-            ].map((t, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-100 flex flex-col hover:shadow-lg transition-shadow">
-                <div className="flex gap-1 mb-3 sm:mb-4">
-                  {[...Array(5)].map((_, si) => (
-                    <svg key={si} className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+          {/* 평균 평점 (featured 후기 2건 이상 시 표시) */}
+          {featuredReviews.length >= 2 && (() => {
+            const avg = featuredReviews.reduce((s, r) => s + r.rating, 0) / featuredReviews.length;
+            return (
+              <div className="flex items-center justify-center gap-2 mb-8">
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <svg key={s} className={`w-5 h-5 ${s <= Math.round(avg) ? 'text-amber-400' : 'text-slate-200'}`} fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
                   ))}
                 </div>
-                <p className="text-slate-600 text-sm sm:text-base leading-relaxed flex-1 mb-4 sm:mb-6 text-balance">"{t.text}"</p>
-                <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
-                      {t.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{t.name}</p>
-                      <p className="text-[11px] sm:text-xs text-slate-400 truncate">{t.clinic} &middot; {t.role}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full hidden sm:inline-block">
-                    {t.metric}
-                  </span>
-                </div>
+                <span className="text-sm font-bold text-slate-700">{avg.toFixed(1)}</span>
+                <span className="text-sm text-slate-400">({featuredReviews.length}개 후기)</span>
               </div>
-            ))}
-          </div>
+            );
+          })()}
+
+          {(() => {
+            const FALLBACK: UserReview[] = [
+              { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+              { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.', display_last_name: '박', display_role: '실장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+              { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.', display_last_name: '이', display_role: '팀장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+            ];
+            const displayList = featuredReviews.length > 0 ? featuredReviews : FALLBACK;
+            const isCarousel = displayList.length > 3;
+            const visibleItems = isCarousel
+              ? [0, 1, 2].map(offset => displayList[(carouselIndex + offset) % displayList.length])
+              : displayList;
+
+            const goTo = (idx: number) => {
+              setCarouselFading(true);
+              setTimeout(() => { setCarouselIndex(idx); setCarouselFading(false); }, 250);
+            };
+
+            return (
+              <div>
+                <div className={`grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8 transition-opacity duration-200 ${carouselFading ? 'opacity-0' : 'opacity-100'}`}>
+                  {visibleItems.map((r, vi) => {
+                    const displayName = formatReviewDisplayName(r.display_last_name, r.display_role as ReviewRole | null, r.display_hospital);
+                    return (
+                      <div key={isCarousel ? `${carouselIndex}-${vi}` : r.id} className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-100 flex flex-col hover:shadow-lg transition-shadow">
+                        <div className="flex gap-1 mb-3 sm:mb-4">
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <svg key={s} className={`w-4 h-4 sm:w-5 sm:h-5 ${s <= r.rating ? 'text-amber-400' : 'text-slate-200'}`} fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                        <p className="text-slate-600 text-sm sm:text-base leading-relaxed flex-1 mb-4 sm:mb-6 text-balance">"{r.content}"</p>
+                        <div className="flex items-center pt-3 sm:pt-4 border-t border-slate-100 gap-2.5 sm:gap-3 min-w-0">
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            {(r.display_last_name ?? '익').charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{displayName.line1}</p>
+                            {displayName.line2 && <p className="text-[11px] sm:text-xs text-slate-400 truncate">{displayName.line2}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 캐러셀 네비게이션 (4개 이상) */}
+                {isCarousel && (
+                  <div className="flex items-center justify-center gap-3 mt-8">
+                    <button
+                      onClick={() => goTo((carouselIndex - 1 + displayList.length) % displayList.length)}
+                      className="w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <div className="flex gap-1.5">
+                      {displayList.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => goTo(i)}
+                          className={`rounded-full transition-all duration-300 ${i === carouselIndex ? 'w-5 h-2 bg-indigo-500' : 'w-2 h-2 bg-slate-300 hover:bg-slate-400'}`}
+                        />
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => goTo((carouselIndex + 1) % displayList.length)}
+                      className="w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -594,17 +662,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative z-10">
           <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-amber-500/10 border border-amber-500/20 mb-5 sm:mb-8">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">10곳 한정 · 1개월 무료 체험 후 후기 작성 시 +2개월</span>
+            <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">10곳 한정 · 4주 무료 베타 체험</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-5xl font-black mb-5 sm:mb-6 leading-tight text-balance">
             지금 시작하면<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">최대 3개월 무료</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">4주 무료</span>
           </h2>
           <p className="text-slate-400 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance">
             엑셀에 쓰는 시간을 환자에게 쓰세요.
           </p>
           <p className="text-sm text-slate-500 mb-7 sm:mb-10 text-balance">
-            1개월 무료 체험 + 후기 작성 시 2개월 추가 &middot; 카드 불필요
+            베타 테스터 10곳 한정 &middot; 4주 무료 체험 &middot; 카드 불필요
           </p>
           <button
             onClick={onGetStarted}
@@ -614,63 +682,6 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </button>
         </div>
       </section>
-
-      {isMobileViewport && (
-        <>
-          {mobileNotice && (
-            <div className="fixed left-1/2 -translate-x-1/2 bottom-[6.75rem] z-[170] rounded-xl bg-slate-900 text-white text-xs font-bold px-4 py-2 shadow-xl">
-              {mobileNotice}
-            </div>
-          )}
-          <nav className="fixed inset-x-0 bottom-0 z-[160] border-t border-slate-200 bg-white/96 backdrop-blur pb-[max(env(safe-area-inset-bottom),0px)]">
-            <div className="grid grid-cols-3 gap-1 px-2 py-2">
-              <button
-                type="button"
-                onClick={() => (onGoToValue ? onGoToValue() : scrollToSection('features'))}
-                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
-              >
-                도입효과
-              </button>
-              <button
-                type="button"
-                onClick={() => (onGoToPricing ? onGoToPricing() : onGetStarted())}
-                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
-              >
-                요금제
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollToSection('testimonials')}
-                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
-              >
-                고객후기
-              </button>
-              <button
-                type="button"
-                onClick={() => (onGoToNotices ? onGoToNotices() : null)}
-                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
-              >
-                업데이트 소식
-              </button>
-              <button
-                type="button"
-                onClick={() => (onGoToContact ? onGoToContact() : null)}
-                className="min-h-11 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 active:scale-[0.98]"
-              >
-                문의하기
-              </button>
-              <button
-                type="button"
-                onClick={handleAnalyzeClick}
-                className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 active:scale-[0.98] flex items-center justify-center gap-1"
-              >
-                <span>무료분석</span>
-                <span className="text-[9px] font-black text-amber-600">PC</span>
-              </button>
-            </div>
-          </nav>
-        </>
-      )}
 
       {/* Footer - 약관 링크 + 기업정보 */}
       <footer className="border-t border-slate-200 bg-slate-50">
@@ -724,13 +735,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 4 조 (서비스의 제공 및 변경)</h3>
               <p>회사는 다음과 같은 업무를 수행합니다.</p>
-              <p className="pl-4">가. 자료 관련 판매 및 대리판매/제작<br/>나. 디지털 콘텐츠(콘텐츠물), 문서 파일 등의 전달<br/>다. 커뮤니티 및 게시판 서비스 운영<br/>라. 기타 회사가 정하는 서비스</p>
+              <p className="pl-4">가. 자료 관련 판매 및 대리판매/제작<br />나. 디지털 콘텐츠(콘텐츠물), 문서 파일 등의 전달<br />다. 커뮤니티 및 게시판 서비스 운영<br />라. 기타 회사가 정하는 서비스</p>
               <p>서비스는 연중무휴, 1일 24시간 제공을 원칙으로 합니다. 다만, 회사의 정보 및 기술상의 필요에 따라 서비스가 일시적 중단될 수 있으며, 이 경우 사전에 공지합니다.</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 5 조 (회원가입 및 이용계약 체결)</h3>
               <p>1. 이용자는 회사가 정한 가입 양식에 따라 회원정보를 기입한 후 이 약관에 동의하는 의사표시를 함으로써 회원가입을 신청합니다.</p>
               <p>2. 회사는 다음 각 호에 해당되지 않는 한 회원가입을 승인합니다.</p>
-              <p className="pl-4">가. 가입신청자가 이 약관에 의하여 이전에 회원자격을 상실한 적이 있는 경우<br/>나. 등록 내용에 허위, 기재누락, 오기가 있는 경우<br/>다. 기타 회원으로 등록하는 것이 회사의 기술상 현저히 지장이 있다고 인정되는 경우</p>
+              <p className="pl-4">가. 가입신청자가 이 약관에 의하여 이전에 회원자격을 상실한 적이 있는 경우<br />나. 등록 내용에 허위, 기재누락, 오기가 있는 경우<br />다. 기타 회원으로 등록하는 것이 회사의 기술상 현저히 지장이 있다고 인정되는 경우</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 6 조 (개인정보보호)</h3>
               <p>회사는 "개인정보 보호법" 등 관련 법령이 정하는 바에 따라 회원의 개인정보를 보호하기 위해 노력합니다. 개인정보의 보호 및 사용에 대해서는 관련법령 및 회사의 개인정보처리방침이 적용됩니다.</p>
@@ -747,7 +758,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 9 조 (청약철회 및 환불 정책)</h3>
               <p><strong>1. 일반 상품:</strong> 배송완료 날짜로부터 7일 이내 청약철회가 가능합니다. 단, 포장 훼손 등으로 상품 가치가 훼손된 경우에는 제한될 수 있습니다.</p>
               <p><strong>2. 디지털 콘텐츠:</strong></p>
-              <p className="pl-4">가. 회원이 구매한 상품이 디지털 콘텐츠(스 다운로드, 전자책, 파일 등)인 경우, "전자상거래등에서의 소비자보호에 관한 법률"에 따라 다운로드 또는 스트리밍이 시작된 이후에는 청약철회가 제한됩니다.<br/>나. 단, 파일이 손상되거나 내용이 표시된 내용과 다른 경우에는 구매일로부터 7일 이내 환불을 요청할 수 있습니다.<br/>다. 회원의 구매건의 콘텐츠 구매일로부터 3개월 이내/콘텐츠 제공일로부터 30일 이내라면 환불이 가능합니다.</p>
+              <p className="pl-4">가. 회원이 구매한 상품이 디지털 콘텐츠(스 다운로드, 전자책, 파일 등)인 경우, "전자상거래등에서의 소비자보호에 관한 법률"에 따라 다운로드 또는 스트리밍이 시작된 이후에는 청약철회가 제한됩니다.<br />나. 단, 파일이 손상되거나 내용이 표시된 내용과 다른 경우에는 구매일로부터 7일 이내 환불을 요청할 수 있습니다.<br />다. 회원의 구매건의 콘텐츠 구매일로부터 3개월 이내/콘텐츠 제공일로부터 30일 이내라면 환불이 가능합니다.</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 10 조 (저작권의 귀속 및 이용제한)</h3>
               <p>1. 회사가 작성한 저작물에 대한 저작권 및 기타 지적재산권은 회사에 귀속합니다.</p>
@@ -756,7 +767,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 11 조 (회원의 게시물)</h3>
               <p>회원이 작성한 게시물에 대한 책임은 회원에게 있으며, 회사는 회원이 게시하는 내용이 다음 각 호에 해당되면 사전 통보 없이 삭제할 수 있습니다.</p>
-              <p className="pl-4">가. 타인의 명예를 훼손하거나 비하하는 내용<br/>나. 공서양속에 위반되는 내용<br/>다. 저작권 기타 권리를 침해하는 내용<br/>라. 회사의 게시판 운영 및 게시규정에 합하지 않는 내용<br/>마. 스팸성 홍보글 또는 상업적 광고</p>
+              <p className="pl-4">가. 타인의 명예를 훼손하거나 비하하는 내용<br />나. 공서양속에 위반되는 내용<br />다. 저작권 기타 권리를 침해하는 내용<br />라. 회사의 게시판 운영 및 게시규정에 합하지 않는 내용<br />마. 스팸성 홍보글 또는 상업적 광고</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 12 조 (면책조항)</h3>
               <p>1. 회사는 천재지변, 디도스(DDoS) 공격, IDC 장애 또는 이에 준하는 불가항력으로 인하여 서비스를 제공할 수 없는 경우에는 서비스 제공에 관한 책임이 면제됩니다.</p>
@@ -794,7 +805,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 1 조 (개인정보의 처리목적)</h3>
               <p>회사는 다음의 목적을 위하여 개인정보를 처리합니다. 처리하고 있는 개인정보는 다음의 목적 이외의 용도로는 이용되지 않으며 이용 목적이 변경되는 등 필요시 동의를 다시 받는 등 필요한 조치를 이행할 것입니다.</p>
-              <p className="pl-4"><strong>가. 회원가입 및 관리:</strong> 회원 가입의사 확인, 본인 확인, 회원자격 유지·관리, 서비스 부정이용 방지, 각종 고지·통지 목적<br/><strong>나. 서비스 제공:</strong> 콘텐츠 제공, 구매 및 요금 결제, 물품배송 또는 서비스 제공<br/><strong>다. 교육서비스:</strong> 인재대상 선발 확인, 인재대상 계약 확인, 서비스대상에 관한 안내 통보, 출석 확인, 최종결과 확인 및 기록<br/><strong>라. 마케팅 및 광고:</strong> 신규 서비스 개발 및 알림 서비스 제공, 이벤트 제공 및 광고성 정보 제공 및 이를 관리·운영을 위한 목적으로 개인정보를 처리합니다.</p>
+              <p className="pl-4"><strong>가. 회원가입 및 관리:</strong> 회원 가입의사 확인, 본인 확인, 회원자격 유지·관리, 서비스 부정이용 방지, 각종 고지·통지 목적<br /><strong>나. 서비스 제공:</strong> 콘텐츠 제공, 구매 및 요금 결제, 물품배송 또는 서비스 제공<br /><strong>다. 교육서비스:</strong> 인재대상 선발 확인, 인재대상 계약 확인, 서비스대상에 관한 안내 통보, 출석 확인, 최종결과 확인 및 기록<br /><strong>라. 마케팅 및 광고:</strong> 신규 서비스 개발 및 알림 서비스 제공, 이벤트 제공 및 광고성 정보 제공 및 이를 관리·운영을 위한 목적으로 개인정보를 처리합니다.</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 2 조 (처리하는 개인정보 항목)</h3>
               <p>회사는 다음의 개인정보 항목을 처리하고 있습니다.</p>
@@ -812,7 +823,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 3 조 (개인정보의 처리 및 보유기간)</h3>
               <p>1. 회사는 법령에 따른 개인정보 보유·이용기간 또는 정보주체로부터 개인정보를 수집 시에 동의 받은 개인정보 보유·이용기간 내에서 개인정보를 처리·보유합니다.</p>
               <p>2. 각각의 개인정보 처리 및 보유기간은 다음과 같습니다.</p>
-              <p className="pl-4">가. 회원정보의 경우: <strong>회원 탈퇴 시까지</strong><br/>나. 계약 또는 청약철회에 관한 기록: <strong>5년</strong> (전자상거래법)<br/>다. 대금결제 및 재화 등의 공급에 관한 기록: <strong>5년</strong> (전자상거래법)<br/>라. 소비자 불만 또는 분쟁처리에 관한 기록: <strong>3년</strong> (전자상거래법)<br/>마. 접속에 관한 기록: <strong>3개월</strong> (통신비밀보호법)</p>
+              <p className="pl-4">가. 회원정보의 경우: <strong>회원 탈퇴 시까지</strong><br />나. 계약 또는 청약철회에 관한 기록: <strong>5년</strong> (전자상거래법)<br />다. 대금결제 및 재화 등의 공급에 관한 기록: <strong>5년</strong> (전자상거래법)<br />라. 소비자 불만 또는 분쟁처리에 관한 기록: <strong>3년</strong> (전자상거래법)<br />마. 접속에 관한 기록: <strong>3개월</strong> (통신비밀보호법)</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 4 조 (개인정보의 제3자 제공)</h3>
               <p>회사는 정보주체의 개인정보를 제1조(개인정보의 처리목적)에서 명시한 범위 내에서만 처리하며, 정보주체의 동의, 법률의 특별한 규정 등 개인정보 보호법 제17조 및 제18조에 해당하는 경우에만 개인정보를 제3자에게 제공합니다.</p>
@@ -832,17 +843,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 6 조 (개인정보의 파기)</h3>
               <p>1. 회사는 개인정보 처리목적이 달성된 경우 지체 없이 해당 개인정보를 파기합니다. 다만 법정의무기간이 남아있는 경우에는 제3조에 따릅니다.</p>
               <p>2. 파기의 절차 및 방법은 다음과 같습니다.</p>
-              <p className="pl-4"><strong>전자적 파일형태:</strong> 복구가 불가능한 방법으로 영구 삭제<br/><strong>종이 문서:</strong> 분쇄기로 분쇄하거나 소각</p>
+              <p className="pl-4"><strong>전자적 파일형태:</strong> 복구가 불가능한 방법으로 영구 삭제<br /><strong>종이 문서:</strong> 분쇄기로 분쇄하거나 소각</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 7 조 (정보주체의 권리·의무 및 행사방법)</h3>
               <p>1. 정보주체는 회사에 대해 언제든지 다음 각 호의 개인정보 보호 관련 권리를 행사할 수 있습니다.</p>
-              <p className="pl-4">가. 개인정보 열람 요구<br/>나. 오류 등이 있는 경우 정정 요구<br/>다. 삭제 요구<br/>라. 처리정지 요구</p>
+              <p className="pl-4">가. 개인정보 열람 요구<br />나. 오류 등이 있는 경우 정정 요구<br />다. 삭제 요구<br />라. 처리정지 요구</p>
               <p>2. 권리 행사는 이메일 또는 서비스 내 고객센터를 통해 할 수 있으며, 회사는 이에 대해 즉시 필요한 조치를 취합니다.</p>
               <p>3. 정보주체가 개인정보의 오류 등에 대한 정정 또는 삭제를 요구한 경우에는 회사는 정정 또는 삭제를 완료할 때까지 당해 개인정보를 이용하거나 제공하지 않습니다.</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 8 조 (개인정보의 안전성 확보조치)</h3>
               <p>회사는 개인정보의 안전성 확보를 위해 다음과 같은 조치를 취하고 있습니다.</p>
-              <p className="pl-4"><strong>가. 비밀번호의 암호화:</strong> 회원의 비밀번호는 암호화되어 저장 및 관리되고 있습니다.<br/><strong>나. 해킹 등에 대한 대비:</strong> 해킹이나 컴퓨터 바이러스에 의해 개인정보가 유출되는 것을 방지하기 위한 기술적 대책을 마련하고 있습니다.<br/><strong>다. 접근 통제:</strong> 개인정보에 대한 접근권한을 최소화하여 권한있는 자만 접근 가능합니다.<br/><strong>라. 개인정보의 암호화:</strong> 개인정보는 암호화 등을 통해 안전하게 저장 및 관리되고 있습니다.</p>
+              <p className="pl-4"><strong>가. 비밀번호의 암호화:</strong> 회원의 비밀번호는 암호화되어 저장 및 관리되고 있습니다.<br /><strong>나. 해킹 등에 대한 대비:</strong> 해킹이나 컴퓨터 바이러스에 의해 개인정보가 유출되는 것을 방지하기 위한 기술적 대책을 마련하고 있습니다.<br /><strong>다. 접근 통제:</strong> 개인정보에 대한 접근권한을 최소화하여 권한있는 자만 접근 가능합니다.<br /><strong>라. 개인정보의 암호화:</strong> 개인정보는 암호화 등을 통해 안전하게 저장 및 관리되고 있습니다.</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 9 조 (쿠키의 사용)</h3>
               <p>1. 회사는 이용자에게 개별적인 맞춤 서비스를 제공하기 위해 이용정보를 저장하고 수시로 불러오는 '쿠키(Cookie)'를 사용합니다.</p>
@@ -859,7 +870,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 11 조 (권익침해 구제방법)</h3>
               <p>정보주체는 개인정보침해로 인한 구제를 받기 위하여 다음 기관에 분쟁해결이나 상담 등을 신청할 수 있습니다.</p>
-              <p className="pl-4">개인정보분쟁조정위원회: (국번없이) 1833-6972<br/>개인정보침해신고센터: (국번없이) 118<br/>대검찰청 사이버수사과: (국번없이) 1301<br/>경찰청 사이버안전수사국: (국번없이) 182</p>
+              <p className="pl-4">개인정보분쟁조정위원회: (국번없이) 1833-6972<br />개인정보침해신고센터: (국번없이) 118<br />대검찰청 사이버수사과: (국번없이) 1301<br />경찰청 사이버안전수사국: (국번없이) 182</p>
 
               <h3 className="text-base font-black text-slate-900 mt-10 mb-3 text-center">제 12 조 (개인정보 처리방침 변경)</h3>
               <p>이 개인정보 처리방침은 시행일로부터 적용됩니다. 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 서비스 사이트 공지사항을 통하여 고지할 것입니다.</p>

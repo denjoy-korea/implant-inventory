@@ -1,5 +1,26 @@
 import { supabase } from './supabaseClient';
 
+export interface AnalysisLead {
+  id: string;
+  email: string;
+  type: 'report_only' | 'detailed_analysis';
+  hospital_name: string | null;
+  region: string | null;
+  contact: string | null;
+  score: number | null;
+  grade: string | null;
+  report_summary: string | null;
+  created_at: string;
+}
+
+export interface GetAnalysisLeadsOptions {
+  type?: 'report_only' | 'detailed_analysis';
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export type OperationAction =
   | 'raw_data_upload'
   | 'data_processing'
@@ -31,6 +52,26 @@ export interface OperationLog {
 
 export interface GetLogsOptions {
   action?: OperationAction;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AccessLog {
+  id: string;
+  ip: string;
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  path: string | null;
+  user_agent: string | null;
+  blocked: boolean;
+  created_at: string;
+}
+
+export interface GetAccessLogsOptions {
+  blocked?: boolean;
   startDate?: string;
   endDate?: string;
   limit?: number;
@@ -121,5 +162,98 @@ export const operationLogService = {
     }));
 
     return { data: logs, total: count ?? 0 };
+  },
+
+  /** 접속 IP 로그 조회 */
+  async getAccessLogs(
+    options: GetAccessLogsOptions = {}
+  ): Promise<{ data: AccessLog[]; total: number }> {
+    const { blocked, startDate, endDate, limit = 50, offset = 0 } = options;
+
+    let query = supabase
+      .from('access_logs')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (blocked !== undefined) query = query.eq('blocked', blocked);
+    if (startDate) query = query.gte('created_at', startDate);
+    if (endDate) query = query.lte('created_at', endDate);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[operationLogService] getAccessLogs failed:', error);
+      return { data: [], total: 0 };
+    }
+
+    return {
+      data: (data || []) as AccessLog[],
+      total: count ?? 0,
+    };
+  },
+
+  /** 분석 리드 저장 (fire-and-forget, anon 가능) */
+  saveAnalysisLead(lead: {
+    email: string;
+    type: 'report_only' | 'detailed_analysis';
+    hospital_name?: string;
+    region?: string;
+    contact?: string;
+    score: number;
+    grade: string;
+    report_summary?: string;
+  }): void {
+    (async () => {
+      try {
+        await supabase.from('analysis_leads').insert({
+          email: lead.email,
+          type: lead.type,
+          hospital_name: lead.hospital_name || null,
+          region: lead.region || null,
+          contact: lead.contact || null,
+          score: lead.score,
+          grade: lead.grade,
+          report_summary: lead.report_summary || null,
+        });
+      } catch (err) {
+        console.error('[operationLogService] saveAnalysisLead failed:', err);
+      }
+    })();
+  },
+
+  /** 분석 리드 목록 조회 (운영자 전용) */
+  async getAnalysisLeads(
+    options: GetAnalysisLeadsOptions = {}
+  ): Promise<{ data: AnalysisLead[]; total: number }> {
+    const { type, startDate, endDate, limit = 50, offset = 0 } = options;
+
+    let query = supabase
+      .from('analysis_leads')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (type) query = query.eq('type', type);
+    if (startDate) query = query.gte('created_at', startDate);
+    if (endDate) query = query.lte('created_at', endDate);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[operationLogService] getAnalysisLeads failed:', error);
+      return { data: [], total: 0 };
+    }
+
+    return {
+      data: (data || []) as AnalysisLead[],
+      total: count ?? 0,
+    };
+  },
+
+  async deleteAnalysisLead(id: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.from('analysis_leads').delete().eq('id', id);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 };

@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AnalysisReport } from '../types';
 import { runAnalysis } from '../services/analysisService';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 interface AnalyzePageProps {
   onSignup: () => void;
@@ -15,6 +17,20 @@ const GRADE_CONFIG = {
   C: { label: 'C', color: 'orange', text: '상당한 개선이 필요합니다', min: 40 },
   D: { label: 'D', color: 'rose', text: '데이터 관리 체계 재검토가 필요합니다', min: 0 },
 } as const;
+
+function formatPhoneNumber(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.startsWith('02')) {
+    // 서울 02 지역번호: 02-XXX-XXXX or 02-XXXX-XXXX
+    if (digits.length <= 5) return digits.replace(/^(\d{2})(\d+)$/, '$1-$2');
+    if (digits.length <= 9) return digits.replace(/^(\d{2})(\d{3})(\d+)$/, '$1-$2-$3');
+    return digits.slice(0, 10).replace(/^(\d{2})(\d{4})(\d{4})$/, '$1-$2-$3');
+  }
+  // 010, 031, 032 등 10~11자리
+  if (digits.length <= 6) return digits.replace(/^(\d{3})(\d+)$/, '$1-$2');
+  if (digits.length <= 10) return digits.replace(/^(\d{3})(\d{3})(\d+)$/, '$1-$2-$3');
+  return digits.slice(0, 11).replace(/^(\d{3})(\d{4})(\d{4})$/, '$1-$2-$3');
+}
 
 function getGrade(score: number) {
   if (score >= 80) return GRADE_CONFIG.A;
@@ -290,26 +306,28 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     if (!leadEmail || !report) return;
     if (wantDetailedAnalysis && (!leadHospital || !leadRegion || !leadContact)) return;
 
-    const lead = {
-      email: leadEmail,
-      type: wantDetailedAnalysis ? 'detailed_analysis' : 'report_only',
-      hospitalName: leadHospital || '',
-      region: leadRegion || '',
-      contact: leadContact || '',
-      score: report.dataQualityScore,
-      grade: getGrade(report.dataQualityScore).label,
-      timestamp: new Date().toISOString(),
-    };
-
-    try {
-      const existing = JSON.parse(localStorage.getItem('analysis_leads') || '[]');
-      existing.push(lead);
-      localStorage.setItem('analysis_leads', JSON.stringify(existing));
-    } catch {
-      localStorage.setItem('analysis_leads', JSON.stringify([lead]));
-    }
-
     const reportText = generateReportText(report);
+
+    // Edge Function 호출 (DB 저장 + 이메일 발송)
+    fetch(`${SUPABASE_URL}/functions/v1/send-analysis-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        email: leadEmail,
+        grade: getGrade(report.dataQualityScore).label,
+        score: report.dataQualityScore,
+        reportText,
+        isDetailed: wantDetailedAnalysis,
+        hospitalName: leadHospital || undefined,
+        region: leadRegion || undefined,
+        contact: leadContact || undefined,
+      }),
+    }).catch(err => console.error('[AnalyzePage] send-analysis-report failed:', err));
+
     try {
       await navigator.clipboard.writeText(reportText);
     } catch {
@@ -915,7 +933,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                     <input
                       type="tel"
                       value={leadContact}
-                      onChange={(e) => setLeadContact(e.target.value)}
+                      onChange={(e) => setLeadContact(formatPhoneNumber(e.target.value))}
                       placeholder="연락처 *"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     />

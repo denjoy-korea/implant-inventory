@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS } from '../types';
+import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact } from '../types';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
 import { WorkDaySelector } from './WorkDaySelector';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
+
+function formatPhoneNumber(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.startsWith('02')) {
+    if (digits.length <= 6) return digits.replace(/(\d{2})(\d{0,4})/, '$1-$2').replace(/-$/, '');
+    if (digits.length <= 9) return digits.replace(/(\d{2})(\d{3,4})(\d{0,4})/, '$1-$2-$3').replace(/-$/, '');
+    return digits.replace(/(\d{2})(\d{4})(\d{4})/, '$1-$2-$3');
+  }
+  if (digits.length <= 7) return digits.replace(/(\d{3})(\d{0,4})/, '$1-$2').replace(/-$/, '');
+  if (digits.length <= 10) return digits.replace(/(\d{3})(\d{3,4})(\d{0,4})/, '$1-$2-$3').replace(/-$/, '');
+  return digits.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+}
 
 interface SettingsHubProps {
   onNavigate: (tab: DashboardTab) => void;
@@ -51,10 +63,74 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [isSavingWorkDays, setIsSavingWorkDays] = useState(false);
   const [workDaysSaved, setWorkDaysSaved] = useState(false);
 
+  // 거래처 관리 상태
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [vendorManufacturers, setVendorManufacturers] = useState<string[]>([]);
+  const [vendors, setVendors] = useState<VendorContact[]>([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<string | null>(null);
+  const [editRepName, setEditRepName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [vendorSaving, setVendorSaving] = useState(false);
+  const [vendorDeleting, setVendorDeleting] = useState<string | null>(null);
+
   // hospitalWorkDays prop 변경 시 로컬 상태 동기화
   useEffect(() => {
     if (hospitalWorkDays) setLocalWorkDays(hospitalWorkDays);
   }, [hospitalWorkDays]);
+
+  // 거래처 데이터 로딩
+  useEffect(() => {
+    if (!hospitalId || !isMaster) return;
+    setVendorsLoading(true);
+    Promise.all([
+      hospitalService.getDistinctManufacturers(hospitalId),
+      hospitalService.getVendorContacts(hospitalId),
+    ]).then(([mfrs, contacts]) => {
+      setVendorManufacturers(mfrs);
+      setVendors(contacts);
+    }).finally(() => setVendorsLoading(false));
+  }, [hospitalId, isMaster]);
+
+  const startEditVendor = (manufacturer: string) => {
+    const existing = vendors.find(v => v.manufacturer === manufacturer);
+    setEditingVendor(manufacturer);
+    setEditRepName(existing?.repName ?? '');
+    setEditPhone(existing?.phone ?? '');
+  };
+
+  const cancelEditVendor = () => {
+    setEditingVendor(null);
+    setEditRepName('');
+    setEditPhone('');
+  };
+
+  const handleSaveVendor = async () => {
+    if (!hospitalId || !editingVendor) return;
+    setVendorSaving(true);
+    const result = await hospitalService.upsertVendorContact(hospitalId, editingVendor, editRepName, editPhone);
+    if (result) {
+      setVendors(prev => {
+        const filtered = prev.filter(v => v.manufacturer !== editingVendor);
+        return [...filtered, result].sort((a, b) => a.manufacturer.localeCompare(b.manufacturer));
+      });
+      cancelEditVendor();
+    } else {
+      showToast('저장에 실패했습니다.', 'error');
+    }
+    setVendorSaving(false);
+  };
+
+  const handleDeleteVendor = async (contact: VendorContact) => {
+    setVendorDeleting(contact.id);
+    try {
+      await hospitalService.deleteVendorContact(contact.id);
+      setVendors(prev => prev.filter(v => v.id !== contact.id));
+    } catch {
+      showToast('삭제에 실패했습니다.', 'error');
+    }
+    setVendorDeleting(null);
+  };
 
   const handleSaveWorkDays = async () => {
     if (!hospitalId) return;
@@ -236,6 +312,31 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
             </button>
           );
         })}
+
+        {/* 거래처 관리 카드 (Master 전용) */}
+        {isMaster && !isStaff && hospitalId && (
+          <button
+            onClick={() => setShowVendorModal(true)}
+            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-800">거래처 관리</h3>
+                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                  제조사별 영업사원 이름과 전화번호를 등록·수정합니다.
+                </p>
+              </div>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* 진료 요일 설정 섹션 (Master 전용) */}
@@ -290,6 +391,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
               </button>
             </div>
           </div>
+
         </>
       )}
 
@@ -449,6 +551,140 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         </div>
       )}
     </div>
+
+    {/* 거래처 관리 모달 */}
+    {showVendorModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        onClick={() => { setShowVendorModal(false); cancelEditVendor(); }}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* 헤더 */}
+          <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-bold text-slate-900">거래처 관리</h3>
+              <p className="text-xs text-slate-500">제조사별 영업사원 연락처</p>
+            </div>
+            <button
+              onClick={() => { setShowVendorModal(false); cancelEditVendor(); }}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 목록 */}
+          <div className="overflow-y-auto flex-1 px-6 py-4">
+            {vendorsLoading ? (
+              <div className="text-center py-10 text-slate-400 text-sm">불러오는 중...</div>
+            ) : vendorManufacturers.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm">
+                <svg className="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                등록된 재고 품목이 없습니다
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {vendorManufacturers.map(mfr => {
+                  const contact = vendors.find(v => v.manufacturer === mfr);
+                  const isEditing = editingVendor === mfr;
+
+                  if (isEditing) {
+                    return (
+                      <div key={mfr} className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+                        <p className="text-xs font-bold text-slate-700 mb-3">{mfr}</p>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-500 mb-1 block">담당자명</label>
+                            <input
+                              type="text"
+                              value={editRepName}
+                              onChange={e => setEditRepName(e.target.value)}
+                              placeholder="예) 김철수"
+                              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-500 mb-1 block">전화번호</label>
+                            <input
+                              type="tel"
+                              value={editPhone}
+                              onChange={e => setEditPhone(formatPhoneNumber(e.target.value))}
+                              placeholder="010-0000-0000"
+                              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 bg-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={cancelEditVendor}
+                            className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={handleSaveVendor}
+                            disabled={vendorSaving || (!editRepName.trim() && !editPhone.trim())}
+                            className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {vendorSaving ? '저장 중...' : '저장'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={mfr} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 transition-all group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{mfr}</p>
+                        {contact ? (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {contact.repName && <span className="font-medium text-slate-600">{contact.repName}</span>}
+                            {contact.repName && contact.phone && <span className="mx-1.5 text-slate-300">·</span>}
+                            {contact.phone && <span>{contact.phone}</span>}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 mt-0.5">연락처 미등록</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => startEditVendor(mfr)}
+                          className="px-3 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                          {contact ? '수정' : '등록'}
+                        </button>
+                        {contact && (
+                          <button
+                            onClick={() => handleDeleteVendor(contact)}
+                            disabled={vendorDeleting === contact.id}
+                            className="px-3 py-1 text-xs font-semibold text-rose-500 bg-rose-50 rounded-lg hover:bg-rose-100 disabled:opacity-40 transition-colors"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
     {confirmModal && (
       <ConfirmModal

@@ -429,17 +429,17 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center text-white">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-sm font-bold text-amber-200">10곳 한정 · 1개월 무료 체험 후 후기 작성 시 +2개월</span>
+            <span className="text-sm font-bold text-amber-200">10곳 한정 · 4주 무료 베타 체험</span>
           </div>
           <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight">
-            지금 시작하면<br />최대 3개월 무료
+            지금 시작하면<br />4주 무료
           </h2>
           <p className="text-indigo-200 text-lg mb-4 leading-relaxed">
             엑셀에 쓰는 시간을 환자에게 쓰세요.<br />
             더 이상 재고 걱정에 시간을 낭비하지 마세요.
           </p>
           <p className="text-sm text-indigo-300 mb-10">
-            1개월 무료 체험 + 후기 작성 시 2개월 추가 | 카드 불필요
+            베타 테스터 10곳 한정 · 4주 무료 체험 | 카드 불필요
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button

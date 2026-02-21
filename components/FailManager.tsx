@@ -4,6 +4,8 @@ import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { useToast } from '../hooks/useToast';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
+import FailBulkSetupModal from './FailBulkSetupModal';
+import { surgeryService } from '../services/surgeryService';
 
 // ============================================================
 // UTILITY: Sparkline SVG path builder (same as InventoryManager)
@@ -33,6 +35,8 @@ interface FailManagerProps {
   onAddFailOrder: (order: FailOrder) => void;
   currentUserName: string;
   isReadOnly?: boolean;
+  hospitalId?: string;
+  onBulkSetupComplete?: () => Promise<void>;
 }
 
 interface MonthlyFailDatum {
@@ -44,7 +48,7 @@ interface MonthlyFailDatum {
 // ============================================================
 // COMPONENT
 // ============================================================
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete }) => {
   const { toast, showToast } = useToast();
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
@@ -66,8 +70,31 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return Array.from(set).sort();
   }, [historyFailList]);
 
+  // 4. 일괄 등록 모달용: 재고에서 유효 제조사 목록
+  const availableManufacturers = useMemo(() => {
+    const set = new Set<string>();
+    inventory.forEach(item => {
+      const m = item.manufacturer;
+      if (m && !m.startsWith('수술중FAIL_') && !m.startsWith('FAIL_') && m !== '보험임플란트') {
+        set.add(m);
+      }
+    });
+    return Array.from(set).sort();
+  }, [inventory]);
+
+  // 5. 미처리 FAIL을 제조사별 카운트로 변환
+  const pendingByManufacturer = useMemo(() => {
+    const counts: Record<string, number> = {};
+    pendingFailList.forEach(f => {
+      const m = String(f['제조사'] || '기타');
+      counts[m] = (counts[m] || 0) + 1;
+    });
+    return Object.entries(counts).map(([manufacturer, count]) => ({ manufacturer, count }));
+  }, [pendingFailList]);
+
   const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -227,6 +254,18 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     }
     setSelectedItems([{ brand: '', size: '', quantity: 1 }]);
     setIsModalOpen(true);
+  };
+
+  const handleBulkInitialize = async (items: { manufacturer: string; count: number; date: string }[]) => {
+    if (!hospitalId) return;
+    await surgeryService.bulkInsertFailRecords(items, hospitalId);
+    await onBulkSetupComplete?.();
+  };
+
+  const handleBulkReconcile = async (reconciles: { manufacturer: string; targetCount: number }[], date: string) => {
+    if (!hospitalId) return;
+    await surgeryService.bulkReconcileFails(reconciles, hospitalId, date);
+    await onBulkSetupComplete?.();
   };
 
   useEffect(() => {
@@ -433,6 +472,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {hospitalId && (
+                <button
+                  onClick={() => setIsBulkModalOpen(true)}
+                  disabled={isReadOnly}
+                  className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[0.98]'}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                  FAIL 재고 정리
+                </button>
+              )}
               <button
                 onClick={handleOpenOrderModal}
                 disabled={isReadOnly}
@@ -575,6 +624,19 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           >
             반품/교환 주문 등록
           </button>
+          {hospitalId && (
+            <button
+              onClick={() => setIsBulkModalOpen(true)}
+              disabled={isReadOnly}
+              className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${
+                isReadOnly
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-slate-700 text-white active:scale-[0.98]'
+              }`}
+            >
+              FAIL 재고 정리
+            </button>
+          )}
         </div>
       </div>{/* end sticky wrapper */}
 
@@ -1099,6 +1161,17 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             </div>
           </div>
         </div>
+      )}
+
+      {isBulkModalOpen && (
+        <FailBulkSetupModal
+          isOpen={isBulkModalOpen}
+          onClose={() => setIsBulkModalOpen(false)}
+          availableManufacturers={availableManufacturers}
+          pendingByManufacturer={pendingByManufacturer}
+          onInitialize={handleBulkInitialize}
+          onReconcile={handleBulkReconcile}
+        />
       )}
 
       <style>{`

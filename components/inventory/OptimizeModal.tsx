@@ -17,6 +17,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const yearItems = deadStockItems.filter(i => i.olderThanYear);
   const neverItems = deadStockItems.filter(i => i.neverUsed);
@@ -31,8 +32,9 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (selectedOptimizeIds.size === 0) return;
+    setShowDeleteConfirm(false);
     setIsDeletingOptimize(true);
     for (const id of selectedOptimizeIds) {
       await Promise.resolve(onDeleteInventoryItem(id));
@@ -63,7 +65,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
               onClick={() => { setOptimizeFilter('year'); setSelectedOptimizeIds(new Set()); }}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'year' ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+              className={`group relative p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'year' ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -71,10 +73,15 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               </div>
               <p className="text-2xl font-black text-amber-600 tabular-nums">{yearItems.length}<span className="text-sm font-semibold text-slate-400 ml-1">품목</span></p>
               <p className="text-[10px] text-slate-400 mt-0.5">사용 기록이 1년 이상 없는 규격</p>
+              {/* Tooltip */}
+              <div className="pointer-events-none absolute top-full left-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                전체 수술 데이터에서 사용한 이력은 있지만 <strong className="font-bold text-amber-300">1년 이상 미사용</strong>된 품목입니다.
+                <span className="absolute -top-1.5 left-4 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
+              </div>
             </button>
             <button
               onClick={() => { setOptimizeFilter('never'); setSelectedOptimizeIds(new Set()); }}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'never' ? 'border-rose-400 bg-rose-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+              className={`group relative p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'never' ? 'border-rose-400 bg-rose-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
@@ -82,6 +89,11 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               </div>
               <p className="text-2xl font-black text-rose-500 tabular-nums">{neverItems.length}<span className="text-sm font-semibold text-slate-400 ml-1">품목</span></p>
               <p className="text-[10px] text-slate-400 mt-0.5">수술기록에 전혀 나타나지 않은 규격</p>
+              {/* Tooltip */}
+              <div className="pointer-events-none absolute top-full right-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                전체 수술 데이터에서 <strong className="font-bold text-rose-300">한번도 사용하지 않은</strong> 품목입니다.
+                <span className="absolute -top-1.5 right-4 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
+              </div>
             </button>
           </div>
         </div>
@@ -140,26 +152,55 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-          <p className="text-xs text-slate-500">
-            {selectedOptimizeIds.size > 0
-              ? <><span className="font-bold text-slate-800">{selectedOptimizeIds.size}개</span> 품목 선택됨</>
-              : '삭제할 품목을 선택하세요'}
-          </p>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-              닫기
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={selectedOptimizeIds.size === 0 || isDeletingOptimize}
-              className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              {isDeletingOptimize ? '삭제 중...' : `선택 품목 삭제 (${selectedOptimizeIds.size})`}
-            </button>
+        {showDeleteConfirm ? (
+          <div className="px-6 py-4 border-t border-rose-100 bg-rose-50 rounded-b-2xl">
+            <div className="flex items-start gap-3 mb-3">
+              <svg className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <div>
+                <p className="text-sm font-bold text-rose-800">정말 삭제하시겠습니까?</p>
+                <p className="text-xs text-rose-600 mt-0.5">
+                  선택한 <span className="font-bold">{selectedOptimizeIds.size}개</span> 품목이 재고 마스터에서 영구 삭제됩니다. 삭제한 데이터는 복구되지 않습니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 bg-white rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                확인, 영구 삭제
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              {selectedOptimizeIds.size > 0
+                ? <><span className="font-bold text-slate-800">{selectedOptimizeIds.size}개</span> 품목 선택됨</>
+                : '삭제할 품목을 선택하세요'}
+            </p>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+                닫기
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={selectedOptimizeIds.size === 0 || isDeletingOptimize}
+                className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                {isDeletingOptimize ? '삭제 중...' : `선택 품목 삭제 (${selectedOptimizeIds.size})`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

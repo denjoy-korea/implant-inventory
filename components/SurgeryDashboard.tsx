@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem } from '../types';
 import { useCountUp } from './surgery-dashboard/shared';
 import { useSurgeryStats } from './surgery-dashboard/useSurgeryStats';
+import { holidayService } from '../services/holidayService';
 import KPIStrip from './surgery-dashboard/KPIStrip';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import MonthlyTrendChart from './surgery-dashboard/MonthlyTrendChart';
@@ -249,6 +250,135 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   const clinicalStats = useClinicalStats(filteredRows);
   const isRangeFiltered = stats.monthlyData.length > 1 && !(effectiveStart === 0 && effectiveEnd >= stats.monthlyData.length - 1);
 
+  // 진행율 기반 전월 대비 델타 (이번달이 진행중인 경우 공휴일·진료일 반영)
+  const [progressAwareDeltas, setProgressAwareDeltas] = useState<{
+    placementDelta: number;
+    failDelta: number;
+    claimDelta: number;
+    prevMonthPlacement: number;
+    prevMonthFail: number;
+    prevMonthClaim: number;
+    prevCutoffDay: number;
+    progressPct: number;
+    isReady: boolean;
+    isPartialMonth: boolean;
+  }>({ placementDelta: 0, failDelta: 0, claimDelta: 0, prevMonthPlacement: 0, prevMonthFail: 0, prevMonthClaim: 0, prevCutoffDay: 0, progressPct: 0, isReady: false, isPartialMonth: false });
+
+  useEffect(() => {
+    const monthlyDataArr = stats.monthlyData;
+    if (monthlyDataArr.length < 2 || !workDaysMap) return;
+
+    const lastMonth = monthlyDataArr[monthlyDataArr.length - 1];
+    const prevMonth = monthlyDataArr[monthlyDataArr.length - 2];
+    const lastMonthKey = lastMonth.month;
+    const prevMonthKey = prevMonth.month;
+
+    const lastDataDate = stats.dateRange.max;
+    if (!lastDataDate) return;
+
+    const lastDataMonthKey = lastDataDate.substring(0, 7);
+    const lastDataDay = parseInt(lastDataDate.substring(8, 10));
+    const lastYear = parseInt(lastMonthKey.substring(0, 4));
+    const lastMonthNum = parseInt(lastMonthKey.substring(5, 7));
+    const daysInLastMonth = new Date(lastYear, lastMonthNum, 0).getDate();
+
+    const isPartialMonth = lastDataMonthKey === lastMonthKey && lastDataDay < daysInLastMonth;
+
+    if (!isPartialMonth) {
+      setProgressAwareDeltas({
+        placementDelta: lastMonth['식립'] - prevMonth['식립'],
+        failDelta: lastMonth['수술중 FAIL'] - prevMonth['수술중 FAIL'],
+        claimDelta: lastMonth['청구'] - prevMonth['청구'],
+        prevMonthPlacement: prevMonth['식립'],
+        prevMonthFail: prevMonth['수술중 FAIL'],
+        prevMonthClaim: prevMonth['청구'],
+        prevCutoffDay: daysInLastMonth,
+        progressPct: 100,
+        isReady: true,
+        isPartialMonth: false,
+      });
+      return;
+    }
+
+    const prevYear = parseInt(prevMonthKey.substring(0, 4));
+    const prevMonthNum = parseInt(prevMonthKey.substring(5, 7));
+
+    Promise.all([
+      holidayService.getHolidays(lastYear),
+      holidayService.getHolidays(prevYear),
+    ]).then(([thisHolidays, prevHolidays]) => {
+      const thisHolidaySet = new Set(thisHolidays);
+      const prevHolidaySet = new Set(prevHolidays);
+
+      // 이번달 경과 진료일 수 (1..lastDataDay)
+      let thisElapsed = 0;
+      for (let day = 1; day <= lastDataDay; day++) {
+        const dow = new Date(lastYear, lastMonthNum - 1, day).getDay();
+        const dateStr = `${lastYear}-${String(lastMonthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (hospitalWorkDays.includes(dow) && !thisHolidaySet.has(dateStr)) thisElapsed++;
+      }
+
+      const thisTotalWorkDays = workDaysMap[lastMonthKey] ?? 25;
+      const progressRate = thisTotalWorkDays > 0 ? thisElapsed / thisTotalWorkDays : 0;
+      const progressPct = Math.round(progressRate * 100);
+
+      // 전월에서 동일 진행율에 해당하는 컷오프 일자 찾기
+      const daysInPrevMonth = new Date(prevYear, prevMonthNum, 0).getDate();
+      const targetPrevWorkDays = Math.round(progressRate * (workDaysMap[prevMonthKey] ?? 25));
+      let prevElapsed = 0;
+      let prevCutoffDay = daysInPrevMonth;
+      for (let day = 1; day <= daysInPrevMonth; day++) {
+        const dow = new Date(prevYear, prevMonthNum - 1, day).getDay();
+        const dateStr = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (hospitalWorkDays.includes(dow) && !prevHolidaySet.has(dateStr)) {
+          prevElapsed++;
+          if (prevElapsed >= targetPrevWorkDays) { prevCutoffDay = day; break; }
+        }
+      }
+
+      // 전월 컷오프 이전 row 집계
+      const prevMonthPrefix = prevMonthKey + '-';
+      let prevPlacement = 0, prevFail = 0, prevClaim = 0;
+      stats.cleanRows.forEach(row => {
+        const dateStr = String(row['날짜'] || '');
+        if (!dateStr.startsWith(prevMonthPrefix)) return;
+        const day = parseInt(dateStr.substring(8, 10));
+        if (isNaN(day) || day > prevCutoffDay) return;
+        const cls = String(row['구분'] || '');
+        const qty = Number(row['갯수']) || 1;
+        if (cls === '식립') prevPlacement += qty;
+        else if (cls === '수술중 FAIL') prevFail += qty;
+        else if (cls === '청구') prevClaim += qty;
+      });
+
+      setProgressAwareDeltas({
+        placementDelta: lastMonth['식립'] - prevPlacement,
+        failDelta: lastMonth['수술중 FAIL'] - prevFail,
+        claimDelta: lastMonth['청구'] - prevClaim,
+        prevMonthPlacement: prevPlacement,
+        prevMonthFail: prevFail,
+        prevMonthClaim: prevClaim,
+        prevCutoffDay,
+        progressPct,
+        isReady: true,
+        isPartialMonth: true,
+      });
+    }).catch(() => {
+      setProgressAwareDeltas({
+        placementDelta: lastMonth['식립'] - prevMonth['식립'],
+        failDelta: lastMonth['수술중 FAIL'] - prevMonth['수술중 FAIL'],
+        claimDelta: lastMonth['청구'] - prevMonth['청구'],
+        prevMonthPlacement: prevMonth['식립'],
+        prevMonthFail: prevMonth['수술중 FAIL'],
+        prevMonthClaim: prevMonth['청구'],
+        prevCutoffDay: daysInLastMonth,
+        progressPct: 100,
+        isReady: true,
+        isPartialMonth: false,
+      });
+    });
+  }, [stats.monthlyData, stats.dateRange.max, stats.cleanRows, workDaysMap, hospitalWorkDays]);
+
   // KPIStrip 표시용 월 평균 진료일수 (공휴일 반영 후)
   const avgWorkDaysPerMonth = useMemo(() => {
     if (!workDaysMap) return 25;
@@ -282,6 +412,14 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   };
 
   // =====================================================
+  // HOOKS — must be before any early return
+  // =====================================================
+  const unregisteredUsageTotal = useMemo(
+    () => unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0),
+    [unregisteredFromSurgery]
+  );
+
+  // =====================================================
   // EMPTY STATE / SKELETON
   // =====================================================
   if (stats.cleanRows.length === 0) {
@@ -308,10 +446,6 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   // =====================================================
   // RENDER
   // =====================================================
-  const unregisteredUsageTotal = useMemo(
-    () => unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0),
-    [unregisteredFromSurgery]
-  );
 
   return (
     <div className="space-y-6 pb-16" style={{ animationDuration: '0s' }}>
@@ -412,6 +546,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
           animRecentDailyAvg={animRecentDailyAvg}
           sparkline={kpiStats.sparkline}
           avgWorkDaysPerMonth={avgWorkDaysPerMonth}
+          progressAwareDeltas={progressAwareDeltas}
         />
 
         {/* C. Date Range Slider */}

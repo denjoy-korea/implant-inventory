@@ -1,44 +1,45 @@
-import { ExcelData } from '../types';
+import * as XLSX from 'xlsx';
+import { ExcelData, ExcelRow } from '../types';
 import { supabase } from './supabaseClient';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024;
-
-async function toBase64(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (const b of bytes) {
-    binary += String.fromCharCode(b);
-  }
-  return btoa(binary);
-}
-
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error('파일 크기가 2MB를 초과합니다.');
-  }
+  const arrayBuffer = await file.arrayBuffer();
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: 'array' });
 
-  const fileBase64 = await toBase64(file);
-  const { data, error } = await supabase.functions.invoke('xlsx-parse', {
-    body: {
-      fileBase64,
-      filename: file.name,
-    },
+  const sheets: Record<string, { name: string; columns: string[]; rows: ExcelRow[] }> = {};
+
+  workbook.SheetNames.forEach((sheetName: string) => {
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, { defval: '' });
+
+    const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
+    const columns: string[] = [];
+    if (range) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const address = XLSX.utils.encode_col(C) + '1';
+        const cell = worksheet[address];
+        if (cell && cell.v !== undefined && cell.v !== null) {
+          columns.push(String(cell.v));
+        }
+      }
+    }
+
+    const cleanedRows = rows.map((row) => {
+      if (row['사용안함'] !== undefined) {
+        const val = row['사용안함'];
+        row['사용안함'] = val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v';
+      }
+      return row;
+    });
+
+    sheets[sheetName] = { name: sheetName, columns, rows: cleanedRows };
   });
 
-  if (error) {
-    const raw = error.message || '';
-    const detail = raw.includes('Failed to send a request to the Edge Function')
-      ? 'Edge Function 연결 실패 (xlsx-parse 배포/프로젝트 URL/네트워크 확인 필요)'
-      : raw || '서버에서 상세 오류를 반환하지 않았습니다.';
-    throw new Error(`엑셀 파싱 실패: ${detail}`);
-  }
-
-  if (!data || typeof data !== 'object') {
-    throw new Error('엑셀 파싱 실패: 서버 응답 형식이 올바르지 않습니다.');
-  }
-
-  return data as ExcelData;
+  return {
+    sheets,
+    activeSheetName: workbook.SheetNames[0],
+  };
 };
 
 export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {
