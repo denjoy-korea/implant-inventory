@@ -8,7 +8,7 @@ interface MfaOtpScreenProps {
 }
 
 const RESEND_COOLDOWN = 60;
-const OTP_LENGTH = 8;
+const OTP_LENGTH = 6;
 
 const MfaOtpScreen: React.FC<MfaOtpScreenProps> = ({ email, onVerified, onCancel }) => {
   const [otp, setOtp] = useState('');
