@@ -367,17 +367,14 @@ export const authService = {
     });
     if (!error) return;
 
-    // PGRST202 fallback: 직접 업데이트
-    if (error.code === 'PGRST202') {
-      const { error: fbErr } = await supabase
-        .from('hospitals')
-        .update({ plan, trial_started_at: new Date().toISOString(), trial_used: false })
-        .eq('id', hospitalId)
-        .is('trial_started_at', null);
-      if (fbErr) console.error('[authService] Trial start fallback failed:', fbErr);
-    } else {
-      console.error('[authService] Trial start failed:', error);
-    }
+    // RPC 실패 시 직접 업데이트로 fallback (permission error, PGRST202 등 모든 케이스)
+    console.warn('[authService] Trial RPC failed, using fallback:', error.code, error.message);
+    const { error: fbErr } = await supabase
+      .from('hospitals')
+      .update({ plan, trial_started_at: new Date().toISOString(), trial_used: false })
+      .eq('id', hospitalId)
+      .is('trial_started_at', null);
+    if (fbErr) console.error('[authService] Trial start fallback failed:', fbErr);
   },
 
   /** 회원 탈퇴 (DB 함수로 auth.users 완전 삭제) */
