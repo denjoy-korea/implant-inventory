@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Hospital, PlanType, PLAN_PRICING, PLAN_NAMES } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { planService } from '../services/planService';
 import { authService } from '../services/authService';
 import { supabase } from '../services/supabaseClient';
 import { dbToUser } from '../services/mappers';
 import { useToast } from '../hooks/useToast';
+import { contactService } from '../services/contactService';
 
 interface InviteInfo {
   token: string;
@@ -22,6 +24,8 @@ interface AuthFormProps {
   inviteInfo?: InviteInfo;
   /** MFA 필요 시 호출 (email 전달) */
   onMfaRequired?: (email: string) => void;
+  /** PricingPage 에서 플랜 선택 후 넘어온 경우 자동 플랜 선택 */
+  initialPlan?: PlanType;
 }
 
 type SignupStep = 'role_selection' | 'plan_select' | 'form_input';
@@ -46,7 +50,7 @@ const formatPhone = (value: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 };
 
-const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContact, inviteInfo, onMfaRequired }) => {
+const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContact, inviteInfo, onMfaRequired, initialPlan }) => {
   const [step, setStep] = useState<SignupStep>('plan_select');
   const [userType, setUserType] = useState<UserType | null>(null);
 
@@ -66,6 +70,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [trialConsented, setTrialConsented] = useState(false);
   const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
   const [showFindId, setShowFindId] = useState(false);
+
+  // 대기 신청 모달 (P1-2)
+  const [waitlistPlan, setWaitlistPlan] = useState<{ key: string; name: string } | null>(null);
+  const [waitlistName, setWaitlistName] = useState('');
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [findPhone, setFindPhone] = useState('');
   const [foundEmail, setFoundEmail] = useState<string | null>(null);
 
@@ -84,6 +94,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     }
   }, [type]);
 
+  // PricingPage에서 플랜 지정 후 넘어온 경우 자동 선택 (P0-2)
+  useEffect(() => {
+    if (type !== 'signup' || !initialPlan) return;
+    const planInfo = SIGNUP_PLANS.find(p => p.key === initialPlan);
+    if (!planInfo) return;
+    if (!planInfo.trial) {
+      setStep('role_selection');
+    } else {
+      setPendingTrialPlan(initialPlan);
+      setTrialConsented(false);
+    }
+  }, [type, initialPlan]);
+
   // Reset state when switching between login/signup
   useEffect(() => {
     if (type === 'invite') return;
@@ -98,6 +121,33 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     setBizFile(null);
     setPasswordConfirm('');
   }, [type]);
+
+  const handleWaitlistSubmit = async () => {
+    if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
+    setWaitlistSubmitting(true);
+    try {
+      await contactService.submit({
+        hospital_name: '-',
+        contact_name: waitlistName.trim(),
+        email: waitlistEmail.trim(),
+        phone: '-',
+        weekly_surgeries: '-',
+        inquiry_type: `plan_waitlist_${waitlistPlan.key}`,
+        content: `${waitlistPlan.name} 플랜 대기 신청`,
+      });
+      setWaitlistPlan(null);
+      setWaitlistName('');
+      setWaitlistEmail('');
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : '대기 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      showToast(message, 'error');
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  };
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,12 +203,24 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       }
 
       // 2. Edge Function으로 초대 수락 처리 (hospital_id 연결 + invitation 상태 업데이트)
+      // signUp 직후 profile 트리거 실행 대기
+      await new Promise(r => setTimeout(r, 800));
+
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
       const { data: acceptData, error: acceptError } = await supabase.functions.invoke('accept-invite', {
         body: { token: inviteInfo.token, userId },
+        headers: currentSession ? { Authorization: `Bearer ${currentSession.access_token}` } : undefined,
       });
 
       if (acceptError || acceptData?.error) {
-        setErrorStatus({ message: acceptData?.error || '초대 수락 처리에 실패했습니다.' });
+        // 실제 에러 메시지 추출 시도
+        let msg = '초대 수락 처리에 실패했습니다.';
+        if (acceptData?.error) {
+          msg = acceptData.error;
+        } else if (acceptError && acceptError.message && acceptError.message !== 'Edge Function returned a non-2xx status code') {
+          msg = acceptError.message;
+        }
+        setErrorStatus({ message: msg });
         setIsSubmitting(false);
         return;
       }
@@ -166,8 +228,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       // 3. 자동 로그인
       await authService.signIn(inviteInfo.email, password);
       window.location.reload();
-    } catch (err: any) {
-      setErrorStatus({ message: err.message || '오류가 발생했습니다.' });
+    } catch (err: unknown) {
+      setErrorStatus({ message: getErrorMessage(err, '오류가 발생했습니다.') });
     } finally {
       setIsSubmitting(false);
     }
@@ -345,7 +407,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500 text-white">품절</span>
                       </div>
                       <p className="text-xs text-slate-300">
-                        현재 가입 불가 · <button type="button" onClick={(e) => { e.stopPropagation(); onContact ? onContact() : window.open('https://inventory.denjoy.info/#/contact', '_blank'); }} className="text-indigo-400 font-bold hover:underline">문의하기</button>
+                        현재 가입 불가 · <button type="button" onClick={(e) => { e.stopPropagation(); setWaitlistPlan({ key: plan.key, name: plan.label }); }} className="text-indigo-400 font-bold hover:underline">대기 신청</button>
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -1151,6 +1213,46 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     {toast && (
       <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
         {toast.message}
+      </div>
+    )}
+
+    {/* 대기 신청 모달 (P1-2) */}
+    {waitlistPlan && (
+      <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{waitlistPlan.name}</span>
+                  <span className="text-slate-300 text-xs">플랜</span>
+                </div>
+                <h3 className="text-base font-bold">대기 신청</h3>
+                <p className="text-slate-300 text-xs mt-0.5">자리가 나면 가장 먼저 연락드릴게요</p>
+              </div>
+              <button onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} className="text-slate-400 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">이름 *</label>
+              <input type="text" value={waitlistName} onChange={e => setWaitlistName(e.target.value)} placeholder="홍길동" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" disabled={waitlistSubmitting} />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">이메일 *</label>
+              <input type="email" value={waitlistEmail} onChange={e => setWaitlistEmail(e.target.value)} placeholder="example@clinic.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" disabled={waitlistSubmitting} />
+            </div>
+            <p className="text-[11px] text-slate-400">제공하신 정보는 대기 순번 연락 목적으로만 사용됩니다.</p>
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} disabled={waitlistSubmitting} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 text-sm font-bold hover:bg-slate-50 transition-colors disabled:opacity-50">취소</button>
+              <button type="button" onClick={handleWaitlistSubmit} disabled={waitlistSubmitting || !waitlistName.trim() || !waitlistEmail.trim()} className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
+                {waitlistSubmitting ? '신청 중...' : '대기 신청하기'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )}
     </>

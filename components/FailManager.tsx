@@ -326,12 +326,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
-  const updateOrderItem = (index: number, field: string, value: any) => {
+  const updateOrderItem = (index: number, field: string, value: string | number) => {
     const next = [...selectedItems];
     if (field === 'brand') {
-      next[index] = { ...next[index], brand: value, size: '' };
+      next[index] = { ...next[index], brand: String(value), size: '' };
     } else {
-      next[index] = { ...next[index], [field]: value };
+      next[index] = { ...next[index], [field]: value } as typeof selectedItems[number];
     }
     setSelectedItems(next);
   };

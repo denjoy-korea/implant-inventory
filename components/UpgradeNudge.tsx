@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 export type NudgeType =
   | 'trial_expired'
   | 'trial_ending'
-  | 'item_limit_warning';
+  | 'item_limit_warning'
+  | 'data_expiry_warning'
+  | 'upload_limit';
 
 interface NudgeConfig {
   urgent: boolean;
@@ -51,6 +53,27 @@ const NUDGE_CONFIG: Record<NudgeType, NudgeConfig> = {
     ),
     message: ({ currentCount, maxCount }) =>
       `재고 품목 ${currentCount}/${maxCount}개 — 한도의 90%에 도달했습니다.`,
+    cta: '업그레이드',
+  },
+  data_expiry_warning: {
+    urgent: false,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    message: ({ daysLeft }) =>
+      `수술기록이 ${daysLeft}일 후 삭제됩니다. 플랜을 업그레이드하면 데이터를 영구 보관할 수 있습니다.`,
+    cta: '업그레이드',
+  },
+  upload_limit: {
+    urgent: true,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+    ),
+    message: () => '이번 달 수술기록 업로드 한도를 초과했습니다. 더 업로드하려면 플랜을 업그레이드하세요.',
     cta: '업그레이드',
   },
 };

@@ -1,12 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { PlanType, BillingCycle, DbBillingHistory, PLAN_NAMES, PLAN_PRICING } from '../types';
 import { useToast } from '../hooks/useToast';
 import { planService } from '../services/planService';
 import { supabase } from '../services/supabaseClient';
+import { contactService } from '../services/contactService';
+import { pageViewService } from '../services/pageViewService';
+import PricingPaymentModal from './pricing/PricingPaymentModal';
+import PricingTrialConsentModal from './pricing/PricingTrialConsentModal';
+import PricingWaitlistModal from './pricing/PricingWaitlistModal';
 
 interface PricingPageProps {
-  onGetStarted: () => void;
+  onGetStarted: (plan?: PlanType) => void;
   currentPlan?: PlanType;
   isLoggedIn?: boolean;
   hospitalName?: string;
@@ -235,9 +240,16 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   const { toast, showToast } = useToast();
 
   // 비로그인 14일 무료 체험 동의 모달
-  const [trialConsentPlan, setTrialConsentPlan] = useState<{ key: PlanType; name: string; features: string[] } | null>(null);
+  const [trialConsentPlan, setTrialConsentPlan] = useState<{ key: PlanType; name: string } | null>(null);
   const [trialConsented, setTrialConsented] = useState(false);
   const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
+  const [availabilityError, setAvailabilityError] = useState(false);
+
+  // 대기 신청 모달
+  const [waitlistPlan, setWaitlistPlan] = useState<{ key: string; name: string } | null>(null);
+  const [waitlistName, setWaitlistName] = useState('');
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
 
   const [hospitalCount, setHospitalCount] = useState<number | null>(null);
 
@@ -310,9 +322,108 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
+  const loadAvailability = () => {
+    setAvailabilityError(false);
+    planService.getPlanAvailability()
+      .then(av => setPlanAvailability(av))
+      .catch(() => setAvailabilityError(true));
+  };
+  useEffect(() => { loadAvailability(); }, []);
+
+  // 대기신청 모달 오픈 계측
   useEffect(() => {
-    planService.getPlanAvailability().then(av => setPlanAvailability(av)).catch(() => {});
-  }, []);
+    if (waitlistPlan) {
+      pageViewService.trackEvent('pricing_waitlist_modal_open', { plan: waitlistPlan.key });
+    }
+  }, [waitlistPlan]);
+
+  const handleWaitlistSubmit = async () => {
+    if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
+    setWaitlistSubmitting(true);
+    pageViewService.trackEvent('pricing_waitlist_submit_start', { plan: waitlistPlan.key });
+    try {
+      await contactService.submit({
+        hospital_name: '-',
+        contact_name: waitlistName.trim(),
+        email: waitlistEmail.trim(),
+        phone: '-',
+        weekly_surgeries: '-',
+        inquiry_type: `plan_waitlist_${waitlistPlan.key}`,
+        content: `${waitlistPlan.name} 플랜 대기 신청`,
+      });
+      pageViewService.trackEvent('pricing_waitlist_submit_success', { plan: waitlistPlan.key });
+      setWaitlistPlan(null);
+      setWaitlistName('');
+      setWaitlistEmail('');
+      showToast('대기 신청이 완료되었습니다. 자리가 나면 가장 먼저 연락드릴게요!', 'success');
+    } catch (error) {
+      pageViewService.trackEvent('pricing_waitlist_submit_error', { plan: waitlistPlan.key });
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : '대기 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      showToast(message, 'error');
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  };
+
+  const resetPaymentForm = useCallback(() => {
+    setSelectedPlan(null);
+    setContactName(userName || '');
+    setContactPhone(userPhone || '');
+    setPaymentMethod('card');
+    setReceiptType('cash_receipt');
+  }, [userName, userPhone]);
+
+  const handleTrialConfirm = useCallback((planKey: PlanType) => {
+    setTrialConsentPlan(null);
+    onGetStarted(planKey);
+  }, [onGetStarted]);
+
+  const handlePaymentSubmit = useCallback(async () => {
+    if (!selectedPlan || selectedPlan === 'free') return;
+    if (!contactName.trim() || !contactPhone.trim()) {
+      showToast('담당자 이름과 연락처를 모두 입력해주세요.', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (onRequestPayment) {
+        const ok = await onRequestPayment(
+          selectedPlan,
+          isYearly ? 'yearly' : 'monthly',
+          contactName.trim(),
+          contactPhone.trim(),
+          paymentMethod,
+          paymentMethod === 'transfer' ? receiptType : undefined,
+        );
+        if (ok) {
+          resetPaymentForm();
+        }
+      } else if (onSelectPlan) {
+        onSelectPlan(selectedPlan, isYearly ? 'yearly' : 'monthly');
+        resetPaymentForm();
+      }
+    } catch {
+      showToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    contactName,
+    contactPhone,
+    isYearly,
+    onRequestPayment,
+    onSelectPlan,
+    paymentMethod,
+    receiptType,
+    resetPaymentForm,
+    selectedPlan,
+    showToast,
+  ]);
+
   useEffect(() => {
     supabase.from('hospitals').select('id', { count: 'exact', head: true })
       .then(({ count }) => { if (count !== null) setHospitalCount(count); }, () => {});
@@ -572,6 +683,23 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </span>
       </div>
 
+      {/* 가용성 조회 실패 배너 */}
+      {availabilityError && (
+        <div className="max-w-2xl mx-auto px-6 pb-4 w-full">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-center gap-2 text-sm text-amber-700">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <span>플랜 가용성 확인이 지연되고 있습니다. 실제 신청 가능 여부와 다를 수 있어요.</span>
+            </div>
+            <button onClick={loadAvailability} className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap underline">
+              다시 시도
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Plan Cards */}
       <section className="max-w-7xl mx-auto px-6 pb-24 w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch">
@@ -673,13 +801,20 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
 
                 {isSoldOut ? (
                   <div className="mb-6 space-y-2">
-                    <div className="w-full py-3 rounded-xl font-bold text-sm bg-slate-100 text-slate-400 cursor-not-allowed text-center">
-                      현재 가입 불가
+                    <div className="w-full py-2.5 rounded-xl font-bold text-xs bg-rose-50 text-rose-500 border border-rose-200 text-center">
+                      현재 수용 한도 도달
                     </div>
-                    <p className="text-xs text-slate-500 text-center leading-relaxed">
-                      해당 플랜은 현재 수용 한도에 도달했습니다.<br />
-                      <button type="button" onClick={() => onContact ? onContact() : undefined} className="text-indigo-500 font-bold hover:underline">문의하기</button>를 통해 대기 신청해 주세요.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pageViewService.trackEvent('pricing_waitlist_button_click', { plan: planKey });
+                        setWaitlistPlan({ key: planKey, name: plan.name });
+                      }}
+                      className="w-full py-3 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-700 transition-colors shadow-sm"
+                    >
+                      대기 신청하기 →
+                    </button>
+                    <p className="text-xs text-slate-400 text-center">자리가 나면 가장 먼저 안내해드려요</p>
                   </div>
                 ) : (
                   <button
@@ -694,9 +829,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                       } else {
                         if (plan.cta === '14일 무료 체험') {
                           setTrialConsented(false);
-                          setTrialConsentPlan({ key: planKey, name: plan.name, features: plan.features });
+                          setTrialConsentPlan({ key: planKey, name: plan.name });
                         } else {
-                          onGetStarted();
+                          onGetStarted(planKey);
                         }
                       }
                     }}
@@ -906,7 +1041,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           <h2 className="text-3xl md:text-4xl font-black mb-4">임플란트 재고 관리,<br />지금 바로 시작하세요</h2>
           <p className="text-slate-400 text-lg mb-8">덴트웹 엑셀만 업로드하면 끝. 무료 플랜으로 부담 없이 체험해 보세요.</p>
           <button
-            onClick={onGetStarted}
+            onClick={() => onGetStarted('free')}
             className="px-8 py-4 bg-white text-slate-900 text-lg font-bold rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
           >
             무료로 시작하기
@@ -928,310 +1063,43 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </div>
       </footer>
 
-      {/* 14일 무료 체험 동의 모달 */}
-      {trialConsentPlan && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setTrialConsentPlan(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{trialConsentPlan.name}</span>
-                <span className="text-indigo-200 text-xs">플랜</span>
-              </div>
-              <h3 className="text-lg font-bold">14일 무료 체험 시작</h3>
-              <p className="text-indigo-200 text-sm mt-0.5">카드 정보 없이 바로 체험할 수 있습니다</p>
-            </div>
+      <PricingTrialConsentModal
+        plan={trialConsentPlan}
+        consented={trialConsented}
+        onToggleConsented={setTrialConsented}
+        onClose={() => setTrialConsentPlan(null)}
+        onConfirm={handleTrialConfirm}
+      />
 
-            <div className="p-6 space-y-5">
-              {/* 선택 플랜 기능 목록 */}
-              <div className="bg-indigo-50 rounded-xl p-4">
-                <p className="text-xs font-bold text-indigo-700 mb-2.5 uppercase tracking-wider">체험 기간 중 이용 가능한 기능</p>
-                <ul className="space-y-1.5">
-                  {trialConsentPlan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-slate-700">
-                      <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+      <PricingPaymentModal
+        selectedPlan={selectedPlan}
+        isYearly={isYearly}
+        hospitalName={hospitalName}
+        contactName={contactName}
+        contactPhone={contactPhone}
+        paymentMethod={paymentMethod}
+        receiptType={receiptType}
+        isSubmitting={isSubmitting}
+        onDismiss={() => setSelectedPlan(null)}
+        onCancel={resetPaymentForm}
+        onContactNameChange={setContactName}
+        onContactPhoneChange={setContactPhone}
+        onPaymentMethodChange={setPaymentMethod}
+        onReceiptTypeChange={setReceiptType}
+        onSubmit={handlePaymentSubmit}
+      />
 
-              {/* 데이터 삭제 경고 */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-amber-700">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                  </svg>
-                  <span className="text-sm font-bold">체험 종료 후 안내</span>
-                </div>
-                <ul className="space-y-1 text-xs text-amber-700 pl-6 list-disc">
-                  <li>14일 무료 체험이 종료됩니다.</li>
-                  <li>종료 후 <strong>15일 이내에 유료 구독을 시작하지 않으면</strong>, 업로드하신 모든 데이터(재고, 수술기록 등)가 자동으로 삭제됩니다.</li>
-                  <li>구독 시작 시 데이터는 그대로 유지됩니다.</li>
-                </ul>
-              </div>
+      <PricingWaitlistModal
+        plan={waitlistPlan}
+        name={waitlistName}
+        email={waitlistEmail}
+        submitting={waitlistSubmitting}
+        onClose={() => setWaitlistPlan(null)}
+        onNameChange={setWaitlistName}
+        onEmailChange={setWaitlistEmail}
+        onSubmit={handleWaitlistSubmit}
+      />
 
-              {/* 동의 체크박스 */}
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={trialConsented}
-                  onChange={e => setTrialConsented(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-indigo-600 cursor-pointer"
-                />
-                <span className="text-sm text-slate-700 leading-relaxed">
-                  위 내용을 확인하였으며, 체험 종료 후 미구독 시 데이터가 삭제될 수 있음에 동의합니다.
-                </span>
-              </label>
-
-              {/* 버튼 */}
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => setTrialConsentPlan(null)}
-                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  disabled={!trialConsented}
-                  onClick={() => {
-                    if (!trialConsented) return;
-                    setTrialConsentPlan(null);
-                    onGetStarted();
-                  }}
-                  className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
-                    trialConsented
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100'
-                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  동의하고 가입하기
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Confirmation Modal */}
-      {selectedPlan && selectedPlan !== 'free' && (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4" onClick={() => !isSubmitting && setSelectedPlan(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
-              <h3 className="text-lg font-bold">결제 안내</h3>
-              <p className="text-indigo-200 text-sm mt-1">
-                {PLAN_NAMES[selectedPlan]} 플랜으로 변경합니다
-              </p>
-            </div>
-
-            <div className="p-6 space-y-5">
-              {/* Plan Summary */}
-              <div className="bg-slate-50 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500">플랜</span>
-                  <span className="text-sm font-bold text-slate-800">{PLAN_NAMES[selectedPlan]}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500">결제 주기</span>
-                  <span className="text-sm font-bold text-slate-800">{isYearly ? '연간 결제' : '월간 결제'}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-500">월 요금</span>
-                  <span className="text-sm font-bold text-slate-800">
-                    {formatPrice(isYearly ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice)}원/월
-                  </span>
-                </div>
-                <div className="border-t border-slate-200 pt-2 space-y-1">
-                  {(() => {
-                    const base = isYearly
-                      ? PLAN_PRICING[selectedPlan].yearlyPrice * 12
-                      : PLAN_PRICING[selectedPlan].monthlyPrice;
-                    const vat = Math.round(base * 0.1);
-                    return (
-                      <>
-                        <div className="flex justify-between items-center text-xs text-slate-400">
-                          <span>공급가액</span>
-                          <span>{formatPrice(base)}원</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs text-slate-400">
-                          <span>부가세 (10%)</span>
-                          <span>{formatPrice(vat)}원</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-1 border-t border-slate-100">
-                          <span className="text-sm font-bold text-slate-700">합계 (VAT 포함)</span>
-                          <span className="text-lg font-black text-indigo-600">{formatPrice(base + vat)}원</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-                {isYearly && (
-                  <p className="text-xs text-emerald-600 text-right">
-                    월간 대비 {formatPrice((PLAN_PRICING[selectedPlan].monthlyPrice - PLAN_PRICING[selectedPlan].yearlyPrice) * 12)}원 절약 (VAT 별도)
-                  </p>
-                )}
-              </div>
-
-              {hospitalName && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">병원명</label>
-                  <p className="text-sm font-medium text-slate-800 bg-slate-50 rounded-lg px-3 py-2">{hospitalName}</p>
-                </div>
-              )}
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">결제 방법 *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${
-                      paymentMethod === 'card'
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    신용카드
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('transfer')}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${
-                      paymentMethod === 'transfer'
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    계좌이체
-                  </button>
-                </div>
-              </div>
-
-              {/* Receipt Type - only for bank transfer */}
-              {paymentMethod === 'transfer' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">증빙 서류 *</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setReceiptType('cash_receipt')}
-                      className={`px-4 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${
-                        receiptType === 'cash_receipt'
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >
-                      현금영수증
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReceiptType('tax_invoice')}
-                      className={`px-4 py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${
-                        receiptType === 'tax_invoice'
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >
-                      세금계산서
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Contact Info */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">담당자 이름 *</label>
-                <input
-                  type="text"
-                  value={contactName}
-                  onChange={e => setContactName(e.target.value)}
-                  placeholder="홍길동"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">연락처 (결제 문자 수신) *</label>
-                <input
-                  type="tel"
-                  value={contactPhone}
-                  onChange={e => setContactPhone(e.target.value)}
-                  placeholder="010-1234-5678"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-
-              <p className="text-xs text-slate-400 leading-relaxed">
-                {paymentMethod === 'card'
-                  ? '결제 요청 후 입력하신 연락처로 카드결제 안내 문자가 발송됩니다. 문자 내 링크를 통해 결제를 완료하시면 플랜이 즉시 활성화됩니다.'
-                  : '결제 요청 후 입력하신 연락처로 계좌이체 안내 문자가 발송됩니다. 입금 확인 후 플랜이 활성화되며, 증빙 서류가 발행됩니다.'}
-              </p>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setSelectedPlan(null); setContactName(userName || ''); setContactPhone(userPhone || ''); setPaymentMethod('card'); setReceiptType('cash_receipt'); }}
-                  disabled={isSubmitting}
-                  className="flex-1 py-3 rounded-xl font-bold text-sm border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!contactName.trim() || !contactPhone.trim()) {
-                      showToast('담당자 이름과 연락처를 모두 입력해주세요.', 'error');
-                      return;
-                    }
-                    setIsSubmitting(true);
-                    try {
-                      if (onRequestPayment) {
-                        const ok = await onRequestPayment(
-                          selectedPlan,
-                          isYearly ? 'yearly' : 'monthly',
-                          contactName.trim(),
-                          contactPhone.trim(),
-                          paymentMethod,
-                          paymentMethod === 'transfer' ? receiptType : undefined,
-                        );
-                        if (ok) {
-                          setSelectedPlan(null);
-                          setContactName(userName || '');
-                          setContactPhone(userPhone || '');
-                          setPaymentMethod('card');
-                          setReceiptType('cash_receipt');
-                        }
-                      } else if (onSelectPlan) {
-                        onSelectPlan(selectedPlan, isYearly ? 'yearly' : 'monthly');
-                        setSelectedPlan(null);
-                        setContactName(userName || '');
-                        setContactPhone(userPhone || '');
-                        setPaymentMethod('card');
-                        setReceiptType('cash_receipt');
-                      }
-                    } catch {
-                      showToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  disabled={isSubmitting || !contactName.trim() || !contactPhone.trim()}
-                  className="flex-1 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? '처리 중...' : paymentMethod === 'card' ? '카드결제 요청' : '계좌이체 요청'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {toast && (
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
           {toast.message}

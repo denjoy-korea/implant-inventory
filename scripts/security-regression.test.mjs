@@ -40,6 +40,7 @@ test('order service uses transactional RPC with compatibility fallback', () => {
 test('rich HTML sinks are sanitized', () => {
   const noticeBoard = read('components/NoticeBoard.tsx');
   const systemAdmin = read('components/SystemAdminDashboard.tsx');
+  const systemAdminManualTab = read('components/system-admin/SystemAdminManualTab.tsx');
   const editor = read('components/NoticeEditor.tsx');
   const sanitizer = read('services/htmlSanitizer.ts');
 
@@ -47,9 +48,10 @@ test('rich HTML sinks are sanitized', () => {
     noticeBoard,
     /dangerouslySetInnerHTML=\{\{ __html: sanitizeRichHtml\(notice\.content\) \}\}/,
   );
-  assert.match(
-    systemAdmin,
-    /dangerouslySetInnerHTML=\{\{ __html: sanitizeRichHtml\(selected\.content\) \}\}/,
+  assert.ok(
+    /dangerouslySetInnerHTML=\{\{ __html: sanitizeRichHtml\(selected\.content\) \}\}/.test(systemAdmin)
+    || /dangerouslySetInnerHTML=\{\{ __html: sanitizeRichHtml\(selected\.content\) \}\}/.test(systemAdminManualTab),
+    'System admin rich HTML sink must be sanitized',
   );
   assert.match(editor, /editorRef\.current\.innerHTML = sanitizeRichHtml\(initialValue\);/);
   assert.match(sanitizer, /if \(name\.startsWith\('on'\)\) return;/);

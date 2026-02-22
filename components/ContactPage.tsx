@@ -50,8 +50,12 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
       });
       setSubmitted(form);
       setForm(EMPTY_FORM);
-    } catch {
-      showToast('문의 접수 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : '문의 접수에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      showToast(message, 'error');
     } finally {
       setSubmitting(false);
     }

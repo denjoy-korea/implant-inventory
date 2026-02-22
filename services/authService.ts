@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { Session } from '@supabase/supabase-js';
 import { DbProfile, TrustedDevice, UserRole } from '../types';
 
 const TRUSTED_DEVICE_TOKEN_KEY = 'dentweb_trusted_device_token';
@@ -334,7 +335,7 @@ export const authService = {
   },
 
   /** Auth 상태 변경 리스너 */
-  onAuthStateChange(callback: (event: string, session: any) => void) {
+  onAuthStateChange(callback: (event: string, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback);
   },
 

@@ -8,6 +8,7 @@ import { hospitalService } from '../services/hospitalService';
 import { dbToHospital } from '../services/mappers';
 import { planService } from '../services/planService';
 import { operationLogService } from '../services/operationLogService';
+import { getErrorMessage } from '../utils/errors';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 
@@ -320,8 +321,8 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             await loadData();
             // 초대 URL 복사 모달 표시
             setInviteUrlModal({ url: inviteUrl, name: inviteName, email: inviteEmail });
-        } catch (error: any) {
-            showToast(error.message || '초대에 실패했습니다.', 'error');
+        } catch (error: unknown) {
+            showToast(getErrorMessage(error, '초대에 실패했습니다.'), 'error');
         } finally {
             setIsInviting(false);
         }
@@ -341,8 +342,8 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                     operationLogService.logOperation('member_invite', `초대 재발송: ${inv.name} (${inv.email})`, { email: inv.email });
                     await loadData();
                     setInviteUrlModal({ url: inviteUrl, name: inv.name, email: inv.email });
-                } catch (error: any) {
-                    showToast(error.message || '재발송에 실패했습니다.', 'error');
+                } catch (error: unknown) {
+                    showToast(getErrorMessage(error, '재발송에 실패했습니다.'), 'error');
                 }
             },
         });
@@ -380,8 +381,8 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                     operationLogService.logOperation('member_kick', `구성원 방출 및 계정 삭제`, { userId });
                     await loadData();
                     showToast('구성원이 방출되었습니다.', 'info');
-                } catch (error: any) {
-                    showToast(error.message || '방출에 실패했습니다.', 'error');
+                } catch (error: unknown) {
+                    showToast(getErrorMessage(error, '방출에 실패했습니다.'), 'error');
                 }
             },
         });
@@ -793,8 +794,8 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                         await loadData();
                         setPermissionModal(null);
                         showToast('권한이 저장되었습니다.', 'success');
-                    } catch (error: any) {
-                        showToast(error.message || '권한 저장에 실패했습니다.', 'error');
+                    } catch (error: unknown) {
+                        showToast(getErrorMessage(error, '권한 저장에 실패했습니다.'), 'error');
                     }
                 }}
             />

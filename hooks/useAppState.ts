@@ -13,6 +13,7 @@ import {
   AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder,
 } from '../types';
 import { authService } from '../services/authService';
+import { errorIncludes } from '../utils/errors';
 import { inventoryService } from '../services/inventoryService';
 import { surgeryService } from '../services/surgeryService';
 import { orderService } from '../services/orderService';
@@ -21,6 +22,7 @@ import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { dbToInventoryItem, dbToExcelRow, dbToOrder, dbToUser } from '../services/mappers';
 import { supabase } from '../services/supabaseClient';
+import { pageViewService } from '../services/pageViewService';
 
 const INITIAL_STATE: AppState = {
   fixtureData: null,
@@ -146,6 +148,7 @@ export function useAppState(onNotify?: NotifyFn) {
   /** 로그인 성공 콜백 */
   const handleLoginSuccess = async (user: User) => {
     setState(prev => ({ ...prev, isLoading: true }));
+    pageViewService.markConverted(user.id);
     await loadHospitalData(user);
     startSessionPolling();
   };
@@ -266,9 +269,9 @@ export function useAppState(onNotify?: NotifyFn) {
             return;
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('[useAppState] Session check failed:', error);
-        if (error?.message?.includes('Refresh Token') || error?.message?.includes('Invalid')) {
+        if (errorIncludes(error, 'Refresh Token', 'Invalid')) {
           await authService.signOut();
         }
       }

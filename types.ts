@@ -1,6 +1,6 @@
 
 export interface ExcelRow {
-  [key: string]: any;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 /** 재고(Fixture) 엑셀 행 — 알려진 컬럼 명시 */
@@ -258,6 +258,8 @@ export interface AppState {
   hospitalWorkDays: number[];
   /** MFA OTP 검증 대기 중인 이메일 */
   mfaPendingEmail?: string;
+  /** PricingPage에서 플랜 선택 후 회원가입으로 넘어온 경우 */
+  preSelectedPlan?: PlanType;
 }
 
 // ============================================
@@ -313,6 +315,10 @@ export interface HospitalPlanState {
   isTrialActive: boolean;
   trialDaysRemaining: number;
   daysUntilExpiry: number;
+  /** T1: 수술기록 보관 만료까지 남은 일수 (planService 확장 시 채워짐) */
+  retentionDaysLeft?: number;
+  /** T3: 이번 달 업로드 한도 초과 여부 (planService 확장 시 채워짐) */
+  uploadLimitExceeded?: boolean;
 }
 
 /** 플랜별 제한 상수 */

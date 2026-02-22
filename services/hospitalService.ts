@@ -3,6 +3,7 @@ import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact } from '../types';
 import { dbToHospital } from './mappers';
 
+
 export const hospitalService = {
   /** 현재 사용자의 병원 정보 조회 */
   async getMyHospital(): Promise<DbHospital | null> {
@@ -113,19 +114,32 @@ export const hospitalService = {
 
   /** 이메일로 구성원 초대 (Supabase Edge Function 호출) */
   async inviteMember(email: string, name: string, hospitalId: string, clinicRole: ClinicRole): Promise<{ inviteUrl: string; token: string }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('로그인이 필요합니다.');
+
     const { data, error } = await supabase.functions.invoke('invite-member', {
       body: { email, name, hospitalId, clinicRole, siteUrl: window.location.origin },
+      headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
     if (error) {
-      // FunctionsHttpError에서 실제 에러 메시지 추출
+      let message = '초대 링크 생성에 실패했습니다.';
       try {
-        const errBody = error instanceof FunctionsError ? await error.context?.json?.() : null;
-        throw new Error(errBody?.error || '초대 링크 생성에 실패했습니다.');
-      } catch (e) {
-        if (e instanceof Error) throw e;
+        if (error instanceof FunctionsError && error.context) {
+          const ctx = error.context as Response;
+          // Response body may only be read once; clone to be safe
+          const cloned = ctx.clone ? ctx.clone() : ctx;
+          const body = await cloned.json();
+          if (body?.error) message = body.error;
+          else if (body?.message) message = body.message;
+        } else if (error.message && error.message !== 'Edge Function returned a non-2xx status code') {
+          message = error.message;
+        }
+      } catch (parseErr) {
+        console.warn('[inviteMember] failed to parse error body:', parseErr);
       }
-      throw new Error('초대 링크 생성에 실패했습니다.');
+      console.error('[inviteMember] error:', error);
+      throw new Error(message);
     }
     if (data?.error) throw new Error(data.error);
     return { inviteUrl: data.inviteUrl, token: data.token };
@@ -209,8 +223,10 @@ export const hospitalService = {
 
   /** 구성원 방출 + 계정 삭제 (Edge Function 호출) */
   async kickMember(targetUserId: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.functions.invoke('kick-member', {
       body: { targetUserId },
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
     });
     if (error) {
       try {
@@ -293,7 +309,7 @@ export const hospitalService = {
       .from('inventory')
       .select('manufacturer')
       .eq('hospital_id', hospitalId);
-    const all = (data || []).map((d: any) => d.manufacturer as string);
+    const all = (data || []).map((d: Record<string, unknown>) => d.manufacturer as string);
     return [...new Set(all)]
       .filter(m => m !== '보험임플란트' && !m.startsWith('수술중FAIL_'))
       .sort();
@@ -307,14 +323,14 @@ export const hospitalService = {
       .eq('hospital_id', hospitalId)
       .order('manufacturer');
     if (error) return [];
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      hospitalId: row.hospital_id,
-      manufacturer: row.manufacturer,
-      repName: row.rep_name,
-      phone: row.phone,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+    return (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      hospitalId: row.hospital_id as string,
+      manufacturer: row.manufacturer as string,
+      repName: row.rep_name as string | null,
+      phone: row.phone as string | null,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
     }));
   },
 

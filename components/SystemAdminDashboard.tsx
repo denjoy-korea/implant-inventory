@@ -3,13 +3,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { DbProfile, UserRole, PlanType, BillingCycle, PLAN_LIMITS, PLAN_SHORT_NAMES, DbResetRequest } from '../types';
 import { resetService } from '../services/resetService';
-import NoticeEditor from './NoticeEditor';
 import { sanitizeRichHtml } from '../services/htmlSanitizer';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from '../hooks/useToast';
 import { reviewService, UserReview, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
-import { contactService, ContactInquiry, InquiryStatus, STATUS_LABELS, STATUS_COLORS } from '../services/contactService';
+import { contactService, ContactInquiry, InquiryStatus, STATUS_LABELS, STATUS_COLORS, WAITLIST_PLAN_LABELS } from '../services/contactService';
 import { operationLogService, AnalysisLead } from '../services/operationLogService';
+import { pageViewService } from '../services/pageViewService';
+import SystemAdminManualTab from './system-admin/SystemAdminManualTab';
+import { getErrorMessage } from '../utils/errors';
 
 interface SystemAdminDashboardProps {
     onLogout: () => void;
@@ -53,7 +55,7 @@ const ROLE_MAP: Record<string, string> = {
     admin: '운영자', master: '원장', dental_staff: '치위생사', staff: '스태프',
 };
 
-type AdminTab = 'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual' | 'plan_management' | 'reviews' | 'analysis_leads' | 'inquiries';
+type AdminTab = 'overview' | 'hospitals' | 'users' | 'reset_requests' | 'manual' | 'plan_management' | 'reviews' | 'analysis_leads' | 'inquiries' | 'waitlist' | 'traffic';
 
 const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, onToggleView, onGoHome }) => {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -91,6 +93,15 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [inquiriesLoading, setInquiriesLoading] = useState(false);
     const [selectedInquiry, setSelectedInquiry] = useState<ContactInquiry | null>(null);
     const [inquiryStatusUpdating, setInquiryStatusUpdating] = useState<string | null>(null);
+    const [replyModal, setReplyModal] = useState<ContactInquiry | null>(null);
+    const [replyMessage, setReplyMessage] = useState('');
+    const [replySending, setReplySending] = useState(false);
+
+    // 대기자 관리 state
+    const [waitlist, setWaitlist] = useState<ContactInquiry[]>([]);
+    const [waitlistLoading, setWaitlistLoading] = useState(false);
+    const [waitlistFilter, setWaitlistFilter] = useState<string>('');
+    const [waitlistStatusUpdating, setWaitlistStatusUpdating] = useState<string | null>(null);
 
     // 분석 리드 state
     const [analysisLeads, setAnalysisLeads] = useState<AnalysisLead[]>([]);
@@ -100,6 +111,12 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [analysisLeadsLoading, setAnalysisLeadsLoading] = useState(false);
     const [leadDeletingId, setLeadDeletingId] = useState<string | null>(null);
     const ANALYSIS_LEADS_PER_PAGE = 20;
+
+    // 트래픽 state
+    type PageViewRow = { page: string; session_id: string | null; user_id: string | null; referrer: string | null; event_type: string | null; event_data: Record<string, unknown> | null; created_at: string };
+    const [trafficData, setTrafficData] = useState<PageViewRow[]>([]);
+    const [trafficLoading, setTrafficLoading] = useState(false);
+    const [trafficRange, setTrafficRange] = useState<7 | 14 | 30 | 90>(30);
 
     // 플랜 관리 state
     interface PlanCapacity { plan: string; capacity: number; }
@@ -245,6 +262,32 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         setAnalysisLeadsLoading(false);
     };
 
+    const handleSendReply = async () => {
+        if (!replyModal || !replyMessage.trim()) return;
+        setReplySending(true);
+        try {
+            await contactService.replyInquiry({
+                inquiryId: replyModal.id,
+                to: replyModal.email,
+                contactName: replyModal.contact_name,
+                hospitalName: replyModal.hospital_name,
+                inquiryType: replyModal.inquiry_type,
+                originalContent: replyModal.content,
+                replyMessage: replyMessage.trim(),
+            });
+            const updated = { ...replyModal, status: 'in_progress' as InquiryStatus, admin_note: replyMessage.trim() };
+            setInquiries(prev => prev.map(i => i.id === replyModal.id ? updated : i));
+            setSelectedInquiry(updated);
+            showToast('답변 이메일이 발송되었습니다.', 'success');
+            setReplyModal(null);
+            setReplyMessage('');
+        } catch {
+            showToast('이메일 발송에 실패했습니다.', 'error');
+        } finally {
+            setReplySending(false);
+        }
+    };
+
     const handleDeleteLead = async (id: string) => {
         if (!window.confirm('이 리드를 삭제하시겠습니까?')) return;
         setLeadDeletingId(id);
@@ -278,6 +321,25 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                 .catch(() => showToast('문의 목록을 불러오지 못했습니다.', 'error'))
                 .finally(() => setInquiriesLoading(false));
         }
+        if (tab === 'waitlist' && waitlist.length === 0) {
+            setWaitlistLoading(true);
+            contactService.getWaitlist()
+                .then(setWaitlist)
+                .catch(() => showToast('대기자 목록을 불러오지 못했습니다.', 'error'))
+                .finally(() => setWaitlistLoading(false));
+        }
+        if (tab === 'traffic') {
+            loadTrafficData(trafficRange);
+        }
+    };
+
+    const loadTrafficData = (days: 7 | 14 | 30 | 90) => {
+        setTrafficRange(days);
+        setTrafficLoading(true);
+        pageViewService.getRecent(days)
+            .then(setTrafficData)
+            .catch(() => showToast('트래픽 데이터를 불러오지 못했습니다.', 'error'))
+            .finally(() => setTrafficLoading(false));
     };
 
     const handleToggleReviewPublic = async (review: UserReview) => {
@@ -314,6 +376,18 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             showToast('후기 삭제에 실패했습니다.', 'error');
         } finally {
             setReviewDeletingId(null);
+        }
+    };
+
+    const handleWaitlistStatusChange = async (id: string, status: InquiryStatus) => {
+        setWaitlistStatusUpdating(id);
+        try {
+            await contactService.updateStatus(id, status);
+            setWaitlist(prev => prev.map(w => w.id === id ? { ...w, status } : w));
+        } catch {
+            showToast('상태 변경에 실패했습니다.', 'error');
+        } finally {
+            setWaitlistStatusUpdating(null);
         }
     };
 
@@ -436,7 +510,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         if (!rawRef) throw new Error('NO_BIZ_FILE');
 
         const parsed = parseBizFileRef(rawRef);
-        let lastError: any = null;
+        let lastError: unknown = null;
 
         if (parsed) {
             const attempts: Array<{ bucket: string; objectPath: string }> = [parsed];
@@ -466,8 +540,8 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             try {
                 const url = await resolveBizFileAccessUrl(hospital);
                 window.open(url, '_blank', 'noopener,noreferrer');
-            } catch (error: any) {
-                const msg = String(error?.message || '');
+            } catch (error: unknown) {
+                const msg = getErrorMessage(error, '');
                 if (msg.toLowerCase().includes('bucket not found')) {
                     showToast('스토리지 버킷 설정이 없어 파일을 열 수 없습니다. 운영자 DB에 스토리지 마이그레이션 적용이 필요합니다.', 'error');
                     return;
@@ -496,8 +570,8 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             a.remove();
             URL.revokeObjectURL(objectUrl);
             showToast('파일 다운로드를 시작했습니다.', 'success');
-        } catch (error: any) {
-            const msg = String(error?.message || '');
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error, '');
             if (msg.toLowerCase().includes('bucket not found')) {
                 showToast('스토리지 버킷 설정이 없어 다운로드할 수 없습니다. 운영자 DB에 스토리지 마이그레이션 적용이 필요합니다.', 'error');
                 return;
@@ -753,6 +827,16 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         </span>
                                     )}
                                 </button>
+                                <button onClick={() => handleTabChange('waitlist')}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${activeTab === 'waitlist' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    <span>대기자 관리</span>
+                                    {waitlist.filter(w => w.status === 'pending').length > 0 && (
+                                        <span className="ml-auto bg-rose-100 text-rose-700 text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                                            {waitlist.filter(w => w.status === 'pending').length}
+                                        </span>
+                                    )}
+                                </button>
                                 <button onClick={() => handleTabChange('analysis_leads')}
                                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${activeTab === 'analysis_leads' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
@@ -760,6 +844,11 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                     {analysisLeadsTotal > 0 && (
                                         <span className="ml-auto text-[10px] font-bold text-slate-500">{analysisLeadsTotal}</span>
                                     )}
+                                </button>
+                                <button onClick={() => handleTabChange('traffic')}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${activeTab === 'traffic' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    <span>방문자 트래픽</span>
                                 </button>
                             </nav>
                         </div>
@@ -821,7 +910,9 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                     {activeTab === 'plan_management' && '플랜 관리'}
                                     {activeTab === 'reviews' && '고객 후기 관리'}
                                     {activeTab === 'inquiries' && '문의내역 관리'}
+                                    {activeTab === 'waitlist' && '대기자 관리'}
                                     {activeTab === 'analysis_leads' && '분석 리드 관리'}
+                                    {activeTab === 'traffic' && '방문자 트래픽'}
                                 </h1>
                             </div>
                             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -1684,20 +1775,31 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                                             <p className="text-[10px] font-bold text-slate-400 mb-2">상세 내용</p>
                                                             <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedInquiry.content}</p>
                                                         </div>
-                                                        <button
-                                                            onClick={() => setConfirmModal({
-                                                                title: '문의 삭제', message: '이 문의를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.',
-                                                                confirmColor: 'rose', confirmLabel: '삭제',
-                                                                onConfirm: async () => {
-                                                                    setConfirmModal(null);
-                                                                    await contactService.delete(selectedInquiry.id);
-                                                                    setInquiries(prev => prev.filter(i => i.id !== selectedInquiry.id));
-                                                                    setSelectedInquiry(null);
-                                                                },
-                                                            })}
-                                                            className="text-xs font-bold text-rose-500 hover:text-rose-700 transition-colors">
-                                                            삭제
-                                                        </button>
+                                                        <div className="flex items-center justify-between">
+                                                            <button
+                                                                onClick={() => { setReplyMessage(''); setReplyModal(selectedInquiry); }}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                                </svg>
+                                                                이메일 답장
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setConfirmModal({
+                                                                    title: '문의 삭제', message: '이 문의를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.',
+                                                                    confirmColor: 'rose', confirmLabel: '삭제',
+                                                                    onConfirm: async () => {
+                                                                        setConfirmModal(null);
+                                                                        await contactService.delete(selectedInquiry.id);
+                                                                        setInquiries(prev => prev.filter(i => i.id !== selectedInquiry.id));
+                                                                        setSelectedInquiry(null);
+                                                                    },
+                                                                })}
+                                                                className="text-xs font-bold text-rose-500 hover:text-rose-700 transition-colors">
+                                                                삭제
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 ) : (
                                                     <div className="flex-1 flex items-center justify-center text-sm text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
@@ -1708,6 +1810,153 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         )}
                                     </div>
                                 )}
+
+                                {activeTab === 'waitlist' && (() => {
+                                    const PLAN_FILTER_OPTIONS = [
+                                        { value: '',         label: '전체' },
+                                        { value: 'basic',    label: 'Basic' },
+                                        { value: 'plus',     label: 'Plus' },
+                                        { value: 'business', label: 'Business' },
+                                        { value: 'ultimate', label: 'Ultimate' },
+                                    ];
+                                    const WAITLIST_STATUS_LABELS: Record<InquiryStatus, string> = {
+                                        pending:     '대기 중',
+                                        in_progress: '연락 완료',
+                                        resolved:    '가입 완료',
+                                    };
+                                    const WAITLIST_STATUS_COLORS: Record<InquiryStatus, string> = {
+                                        pending:     'bg-amber-100 text-amber-700',
+                                        in_progress: 'bg-blue-100 text-blue-700',
+                                        resolved:    'bg-emerald-100 text-emerald-700',
+                                    };
+                                    const filteredWaitlist = waitlistFilter
+                                        ? waitlist.filter(w => w.inquiry_type === `plan_waitlist_${waitlistFilter}`)
+                                        : waitlist;
+                                    return (
+                                        <div className="p-6">
+                                            {/* 헤더 */}
+                                            <div className="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h2 className="text-xl font-bold text-slate-900">대기자 관리</h2>
+                                                    <p className="text-sm text-slate-500 mt-0.5">플랜 대기 신청자를 관리합니다. 총 {waitlist.length}명</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setWaitlistLoading(true);
+                                                        contactService.getWaitlist()
+                                                            .then(setWaitlist)
+                                                            .catch(() => showToast('불러오기 실패', 'error'))
+                                                            .finally(() => setWaitlistLoading(false));
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                    새로고침
+                                                </button>
+                                            </div>
+
+                                            {waitlistLoading ? (
+                                                <div className="flex items-center justify-center py-20">
+                                                    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {/* 플랜별 요약 카드 */}
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                                                        {(['basic', 'plus', 'business', 'ultimate'] as const).map(plan => {
+                                                            const count = waitlist.filter(w => w.inquiry_type === `plan_waitlist_${plan}` && w.status === 'pending').length;
+                                                            return (
+                                                                <button
+                                                                    key={plan}
+                                                                    onClick={() => setWaitlistFilter(waitlistFilter === plan ? '' : plan)}
+                                                                    className={`rounded-xl p-4 text-left border-2 transition-all ${waitlistFilter === plan ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white hover:border-indigo-200'}`}
+                                                                >
+                                                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">{WAITLIST_PLAN_LABELS[`plan_waitlist_${plan}`]}</p>
+                                                                    <p className="text-2xl font-black text-slate-800">{count}</p>
+                                                                    <p className="text-[10px] text-slate-400 mt-0.5">대기 중</p>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    {/* 필터 탭 바 */}
+                                                    <div className="flex gap-1.5 flex-wrap mb-4">
+                                                        {PLAN_FILTER_OPTIONS.map(opt => (
+                                                            <button
+                                                                key={opt.value}
+                                                                onClick={() => setWaitlistFilter(opt.value)}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${waitlistFilter === opt.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                                            >
+                                                                {opt.label}
+                                                                {opt.value && (
+                                                                    <span className="ml-1 text-[10px] opacity-70">
+                                                                        {waitlist.filter(w => w.inquiry_type === `plan_waitlist_${opt.value}`).length}
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    {/* 목록 테이블 */}
+                                                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                                        <table className="w-full text-sm">
+                                                            <thead className="bg-slate-50 border-b border-slate-200">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">접수일시</th>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">플랜</th>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">이름</th>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">이메일</th>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">상태</th>
+                                                                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500">변경</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {filteredWaitlist.map(w => (
+                                                                    <tr key={w.id} className="hover:bg-slate-50 transition-colors">
+                                                                        <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                                                                            {new Date(w.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
+                                                                                {WAITLIST_PLAN_LABELS[w.inquiry_type] ?? w.inquiry_type}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-slate-800 font-medium">{w.contact_name || '—'}</td>
+                                                                        <td className="px-4 py-3 text-slate-600 text-xs">{w.email}</td>
+                                                                        <td className="px-4 py-3">
+                                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${WAITLIST_STATUS_COLORS[w.status]}`}>
+                                                                                {WAITLIST_STATUS_LABELS[w.status]}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <select
+                                                                                disabled={waitlistStatusUpdating === w.id}
+                                                                                value={w.status}
+                                                                                onChange={e => handleWaitlistStatusChange(w.id, e.target.value as InquiryStatus)}
+                                                                                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 disabled:opacity-50 focus:outline-none focus:border-indigo-400"
+                                                                            >
+                                                                                <option value="pending">대기 중</option>
+                                                                                <option value="in_progress">연락 완료</option>
+                                                                                <option value="resolved">가입 완료</option>
+                                                                            </select>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                                {filteredWaitlist.length === 0 && (
+                                                                    <tr>
+                                                                        <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
+                                                                            {waitlistFilter ? `${PLAN_FILTER_OPTIONS.find(o => o.value === waitlistFilter)?.label} 플랜 대기자가 없습니다.` : '대기자 신청이 없습니다.'}
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
 
                                 {activeTab === 'analysis_leads' && (
                                     <div className="space-y-4">
@@ -1846,139 +2095,445 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                     </div>
                                 )}
 
-                                {activeTab === 'manual' && (
-                                    <div className="flex gap-6 h-[calc(100vh-8rem)]">
-                                        {/* 좌측: 문서 목록 */}
-                                        <div className="w-72 flex-shrink-0 flex flex-col">
-                                            <button
-                                                onClick={() => { setManualEditing(null); setManualForm({ title: '', content: '', category: '일반' }); setManualSelectedId('__new__'); }}
-                                                className="w-full mb-3 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                                새 문서 작성
-                                            </button>
-                                            <div className="flex-1 overflow-y-auto space-y-1.5">
-                                                {manualEntries.length === 0 && manualSelectedId !== '__new__' && (
-                                                    <p className="text-xs text-slate-400 text-center py-8">작성된 매뉴얼이 없습니다.</p>
-                                                )}
-                                                {manualEntries.map(entry => (
+                                {activeTab === 'traffic' && (() => {
+                                    const now = new Date();
+                                    const todayStr = now.toISOString().slice(0, 10);
+                                    const weekAgo = new Date(now.getTime() - 6 * 86400_000).toISOString().slice(0, 10);
+                                    const todayViews = trafficData.filter(r => r.created_at.slice(0, 10) === todayStr).length;
+                                    const weekViews = trafficData.filter(r => r.created_at.slice(0, 10) >= weekAgo).length;
+                                    // 세션 분류
+                                    const allSessions = new Set(trafficData.map(r => r.session_id).filter(Boolean));
+                                    const convertedSessions = new Set(trafficData.filter(r => r.user_id).map(r => r.session_id).filter(Boolean));
+                                    const uniqueSessions = allSessions.size;
+                                    const convertedCount = convertedSessions.size;
+                                    const conversionRate = uniqueSessions > 0 ? Math.round((convertedCount / uniqueSessions) * 100) : 0;
+                                    // 일별 집계 (방문자 / 전환자 분리)
+                                    const dayMap: Record<string, { views: number; converted: number }> = {};
+                                    trafficData.forEach(r => {
+                                        const d = r.created_at.slice(0, 10);
+                                        if (!dayMap[d]) dayMap[d] = { views: 0, converted: 0 };
+                                        dayMap[d].views++;
+                                        if (r.user_id) dayMap[d].converted++;
+                                    });
+                                    const days: { date: string; views: number; converted: number }[] = [];
+                                    for (let i = trafficRange - 1; i >= 0; i--) {
+                                        const d = new Date(now.getTime() - i * 86400_000).toISOString().slice(0, 10);
+                                        days.push({ date: d, views: dayMap[d]?.views ?? 0, converted: dayMap[d]?.converted ?? 0 });
+                                    }
+                                    const maxDay = Math.max(...days.map(d => d.views), 1);
+                                    // 페이지별 집계 (방문 / 전환 분리)
+                                    const pageMap: Record<string, { views: number; converted: number }> = {};
+                                    trafficData.forEach(r => {
+                                        if (!pageMap[r.page]) pageMap[r.page] = { views: 0, converted: 0 };
+                                        pageMap[r.page].views++;
+                                        if (r.user_id) pageMap[r.page].converted++;
+                                    });
+                                    const pageRows = Object.entries(pageMap).sort((a, b) => b[1].views - a[1].views);
+                                    const maxPage = Math.max(...pageRows.map(p => p[1].views), 1);
+                                    // 레퍼러 집계 (referrer 없이 직접 유입 vs 외부 유입)
+                                    const referrerMap: Record<string, number> = {};
+                                    trafficData.forEach(r => {
+                                        let ref = '직접 유입';
+                                        if (r.referrer) {
+                                            try { ref = new URL(r.referrer).hostname; } catch { ref = r.referrer.slice(0, 30); }
+                                        }
+                                        referrerMap[ref] = (referrerMap[ref] ?? 0) + 1;
+                                    });
+                                    const referrerRows = Object.entries(referrerMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+                                    const maxRef = Math.max(...referrerRows.map(r => r[1]), 1);
+                                    // 세션 경로 분석
+                                    const sessionPaths: Record<string, string[]> = {};
+                                    [...trafficData]
+                                        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+                                        .forEach(r => {
+                                            const sid = r.session_id ?? '__unknown__';
+                                            if (!sessionPaths[sid]) sessionPaths[sid] = [];
+                                            const path = sessionPaths[sid];
+                                            if (path[path.length - 1] !== r.page) path.push(r.page);
+                                        });
+                                    const pathList = Object.values(sessionPaths);
+                                    // 전환 퍼널: landing → pricing → signup|login
+                                    const FUNNEL_STEPS = [
+                                        { label: 'landing', pages: ['landing'], color: 'bg-indigo-500' },
+                                        { label: 'analyze', pages: ['analyze'], color: 'bg-sky-500' },
+                                        { label: 'pricing', pages: ['pricing'], color: 'bg-violet-500' },
+                                        { label: 'signup / login', pages: ['signup', 'login'], color: 'bg-emerald-500' },
+                                    ];
+                                    const funnelCounts = FUNNEL_STEPS.map(step =>
+                                        pathList.filter(path => step.pages.some(p => path.includes(p))).length
+                                    );
+                                    const funnelMax = Math.max(...funnelCounts, 1);
+                                    // 페이지 이동 페어 (page A → page B 빈도)
+                                    const pairMap: Record<string, number> = {};
+                                    pathList.forEach(path => {
+                                        for (let i = 0; i < path.length - 1; i++) {
+                                            const key = `${path[i]} → ${path[i + 1]}`;
+                                            pairMap[key] = (pairMap[key] ?? 0) + 1;
+                                        }
+                                    });
+                                    const pairRows = Object.entries(pairMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+                                    const maxPair = Math.max(...pairRows.map(r => r[1]), 1);
+                                    // 진입/이탈 페이지
+                                    const entryMap2: Record<string, number> = {};
+                                    const exitMap2: Record<string, number> = {};
+                                    pathList.forEach(path => {
+                                        if (path[0]) entryMap2[path[0]] = (entryMap2[path[0]] ?? 0) + 1;
+                                        const last = path[path.length - 1];
+                                        if (last) exitMap2[last] = (exitMap2[last] ?? 0) + 1;
+                                    });
+                                    const entryRows = Object.entries(entryMap2).sort((a, b) => b[1] - a[1]);
+                                    const exitRows = Object.entries(exitMap2).sort((a, b) => b[1] - a[1]);
+                                    return (
+                                        <div className="space-y-6">
+                                            {/* 기간 선택 */}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                {([7, 14, 30, 90] as const).map(d => (
                                                     <button
-                                                        key={entry.id}
-                                                        onClick={() => { setManualSelectedId(entry.id); setManualEditing(null); setManualForm({ title: '', content: '', category: '일반' }); }}
-                                                        className={`w-full text-left p-3 rounded-xl border transition-all ${manualSelectedId === entry.id
-                                                            ? 'bg-indigo-50 border-indigo-200 shadow-sm'
-                                                            : 'bg-white border-slate-200 hover:border-slate-300'
-                                                            }`}
+                                                        key={d}
+                                                        onClick={() => { loadTrafficData(d); }}
+                                                        className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${trafficRange === d ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
                                                     >
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold">{entry.category}</span>
-                                                        </div>
-                                                        <p className="text-sm font-bold text-slate-800 truncate">{entry.title}</p>
-                                                        <p className="text-[10px] text-slate-400 mt-1">{new Date(entry.updated_at || entry.created_at).toLocaleDateString('ko-KR')}</p>
+                                                        {d}일
                                                     </button>
                                                 ))}
+                                                <button
+                                                    onClick={() => loadTrafficData(trafficRange)}
+                                                    className="px-3 py-1.5 text-xs font-bold rounded-lg border bg-white text-slate-600 border-slate-200 hover:border-slate-300 transition-all flex items-center gap-1.5"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                    새로고침
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!window.confirm('page_views 테이블 데이터를 전부 삭제합니다. 계속할까요?')) return;
+                                                        try {
+                                                            await pageViewService.deleteAll();
+                                                            setTrafficData([]);
+                                                            showToast('트래픽 데이터가 초기화되었습니다.', 'success');
+                                                        } catch {
+                                                            showToast('초기화에 실패했습니다.', 'error');
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-bold rounded-lg border bg-rose-50 text-rose-500 border-rose-200 hover:bg-rose-100 transition-all flex items-center gap-1.5"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    리셋
+                                                </button>
+                                                {trafficLoading && <span className="text-xs text-slate-400 animate-pulse">불러오는 중...</span>}
                                             </div>
-                                        </div>
-
-                                        {/* 우측: 문서 보기/편집 */}
-                                        <div className="flex-1 min-w-0">
-                                            {/* 초기 상태: 아무것도 선택 안됨 */}
-                                            {!manualSelectedId && !manualEditing && (
-                                                <div className="bg-white rounded-2xl border border-slate-200 p-6 h-full flex flex-col items-center justify-center text-slate-400">
-                                                    <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                                                    <p className="text-sm font-bold">문서를 선택하거나 새로 작성하세요</p>
-                                                    <p className="text-xs mt-1">시스템 구축 시 대화 내용을 정리하여 기록할 수 있습니다</p>
-                                                </div>
-                                            )}
-
-                                            {/* 새 문서 작성 / 수정 모드 */}
-                                            {(manualSelectedId === '__new__' || manualEditing) && (
-                                                <div className="bg-white rounded-2xl border border-slate-200 p-6 h-full flex flex-col">
-                                                    <div className="flex items-center gap-1.5 mb-3">
-                                                        {MANUAL_CATEGORIES.map(c => (
-                                                            <button
-                                                                key={c}
-                                                                onClick={() => setManualForm(f => ({ ...f, category: c }))}
-                                                                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-all ${manualForm.category === c
-                                                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                                                    : 'border-slate-200 text-slate-400 hover:border-slate-300'
-                                                                    }`}
-                                                            >
-                                                                {c}
-                                                            </button>
-                                                        ))}
+                                            {/* 요약 카드 */}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                {[
+                                                    { label: '오늘 페이지뷰', value: todayViews, color: 'text-indigo-600', sub: null },
+                                                    { label: '이번 주 페이지뷰', value: weekViews, color: 'text-emerald-600', sub: null },
+                                                    { label: '고유 방문자', value: uniqueSessions, color: 'text-slate-800', sub: `${trafficRange}일 기준` },
+                                                    { label: '로그인 전환자', value: convertedCount, color: 'text-purple-600', sub: `전환율 ${conversionRate}%` },
+                                                ].map(card => (
+                                                    <div key={card.label} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                                                        <p className="text-xs text-slate-500 mb-1">{card.label}</p>
+                                                        <p className={`text-2xl font-black ${card.color}`}>{card.value.toLocaleString()}</p>
+                                                        {card.sub && <p className="text-[10px] text-slate-400 mt-0.5">{card.sub}</p>}
                                                     </div>
-                                                    <input
-                                                        value={manualForm.title}
-                                                        onChange={e => setManualForm(f => ({ ...f, title: e.target.value }))}
-                                                        placeholder="제목을 입력하세요"
-                                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 mb-3"
+                                                ))}
+                                            </div>
+                                            {/* 전환율 게이지 */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <h3 className="text-sm font-bold text-slate-700">방문 → 로그인 전환율</h3>
+                                                    <span className="text-lg font-black text-purple-600">{conversionRate}%</span>
+                                                </div>
+                                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-gradient-to-r from-purple-400 to-purple-600 transition-all"
+                                                        style={{ width: `${conversionRate}%` }}
                                                     />
-                                                    <div className="flex-1 min-h-0">
-                                                        <NoticeEditor
-                                                            key={manualEditing ? manualEditing.id : '__new__'}
-                                                            onChange={(html) => setManualForm(f => ({ ...f, content: html }))}
-                                                            initialValue={manualEditing ? manualEditing.content : ''}
-                                                        />
-                                                    </div>
-                                                    <div className="flex gap-2 justify-end pt-3">
-                                                        <button
-                                                            onClick={() => { setManualEditing(null); setManualForm({ title: '', content: '', category: '일반' }); setManualSelectedId(null); }}
-                                                            className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 rounded-lg"
-                                                        >
-                                                            취소
-                                                        </button>
-                                                        <button
-                                                            onClick={saveManual}
-                                                            disabled={manualSaving || !manualForm.title.trim() || !manualForm.content.trim()}
-                                                            className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
-                                                        >
-                                                            {manualSaving ? '저장 중...' : manualEditing ? '수정 완료' : '등록'}
-                                                        </button>
+                                                </div>
+                                                <div className="flex justify-between mt-2 text-[10px] text-slate-400">
+                                                    <span>방문만 {uniqueSessions - convertedCount}명</span>
+                                                    <span>로그인까지 {convertedCount}명</span>
+                                                </div>
+                                            </div>
+                                            {/* 일별 바 차트 (방문/전환 겹치기) */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <h3 className="text-sm font-bold text-slate-700">일별 페이지뷰 / 전환</h3>
+                                                    <div className="flex items-center gap-3 text-[10px] text-slate-500">
+                                                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block" />페이지뷰</span>
+                                                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-purple-500 inline-block" />전환(로그인)</span>
                                                     </div>
                                                 </div>
-                                            )}
-
-                                            {/* 보기 모드 */}
-                                            {manualSelectedId && manualSelectedId !== '__new__' && !manualEditing && (() => {
-                                                const selected = manualEntries.find(e => e.id === manualSelectedId);
-                                                if (!selected) return null;
-                                                return (
-                                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 h-full flex flex-col">
-                                                        <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold">{selected.category}</span>
-                                                                    <span className="text-[10px] text-slate-400">
-                                                                        최종 수정: {new Date(selected.updated_at || selected.created_at).toLocaleString('ko-KR')}
-                                                                    </span>
-                                                                </div>
-                                                                <h2 className="text-lg font-bold text-slate-800">{selected.title}</h2>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setManualEditing(selected);
-                                                                        setManualForm({ title: selected.title, content: selected.content, category: selected.category });
-                                                                    }}
-                                                                    className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                                                                >
-                                                                    수정
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => deleteManual(selected.id)}
-                                                                    className="px-3 py-1.5 text-xs font-bold text-rose-500 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors"
-                                                                >
-                                                                    삭제
-                                                                </button>
+                                                <div className="flex items-end gap-1 h-32">
+                                                    {days.map(d => (
+                                                        <div key={d.date} className="flex-1 flex flex-col items-center justify-end gap-0 group relative" title={`${d.date}\n페이지뷰: ${d.views}\n전환: ${d.converted}`}>
+                                                            {/* 페이지뷰 바 */}
+                                                            <div
+                                                                className="w-full bg-indigo-300 rounded-t relative overflow-hidden"
+                                                                style={{ height: `${Math.round((d.views / maxDay) * 100)}%`, minHeight: d.views > 0 ? '2px' : '0' }}
+                                                            >
+                                                                {/* 전환 오버레이 */}
+                                                                {d.converted > 0 && (
+                                                                    <div
+                                                                        className="absolute bottom-0 left-0 w-full bg-purple-500"
+                                                                        style={{ height: `${Math.round((d.converted / d.views) * 100)}%` }}
+                                                                    />
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className="flex-1 overflow-y-auto text-sm text-slate-700 leading-relaxed notice-content" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(selected.content) }} />
+                                                    ))}
+                                                </div>
+                                                <div className="flex justify-between mt-1.5">
+                                                    <span className="text-[10px] text-slate-400">{days[0]?.date.slice(5)}</span>
+                                                    <span className="text-[10px] text-slate-400">{days[days.length - 1]?.date.slice(5)}</span>
+                                                </div>
+                                            </div>
+                                            {/* 페이지별 분석 */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <h3 className="text-sm font-bold text-slate-700 mb-4">페이지별 방문 / 전환</h3>
+                                                {pageRows.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 text-center py-6">데이터가 없습니다.</p>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {pageRows.map(([page, { views, converted }]) => {
+                                                            const pgRate = views > 0 ? Math.round((converted / views) * 100) : 0;
+                                                            return (
+                                                                <div key={page} className="flex items-center gap-3">
+                                                                    <span className="w-16 text-xs font-bold text-slate-600 shrink-0">{page}</span>
+                                                                    <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden relative">
+                                                                        <div className="bg-indigo-300 h-full rounded-full absolute" style={{ width: `${Math.round((views / maxPage) * 100)}%` }} />
+                                                                        <div className="bg-purple-500 h-full rounded-full absolute" style={{ width: `${Math.round((converted / maxPage) * 100)}%` }} />
+                                                                    </div>
+                                                                    <span className="w-8 text-xs font-bold text-slate-700 text-right shrink-0">{views}</span>
+                                                                    <span className="w-12 text-[10px] text-purple-600 text-right shrink-0 font-bold">{converted > 0 ? `전환 ${pgRate}%` : ''}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* 전환 퍼널 */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <h3 className="text-sm font-bold text-slate-700 mb-1">전환 퍼널</h3>
+                                                <p className="text-[11px] text-slate-400 mb-4">각 페이지를 방문한 세션 수 (중복 포함)</p>
+                                                {pathList.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 text-center py-6">데이터가 없습니다.</p>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {FUNNEL_STEPS.map((step, i) => {
+                                                            const count = funnelCounts[i];
+                                                            const dropOff = i > 0 && funnelCounts[i - 1] > 0
+                                                                ? Math.round((1 - count / funnelCounts[i - 1]) * 100)
+                                                                : null;
+                                                            return (
+                                                                <div key={step.label}>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <span className="w-24 text-xs font-bold text-slate-600 shrink-0">{step.label}</span>
+                                                                        <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden relative">
+                                                                            <div
+                                                                                className={`${step.color} h-full rounded-full flex items-center justify-end pr-2 transition-all`}
+                                                                                style={{ width: `${Math.round((count / funnelMax) * 100)}%`, minWidth: count > 0 ? '2rem' : '0' }}
+                                                                            >
+                                                                                {count > 0 && <span className="text-[10px] font-black text-white">{count}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        {dropOff !== null && (
+                                                                            <span className={`w-16 text-[10px] font-bold shrink-0 text-right ${dropOff > 50 ? 'text-rose-500' : dropOff > 20 ? 'text-amber-500' : 'text-emerald-600'}`}>
+                                                                                -{dropOff}% 이탈
+                                                                            </span>
+                                                                        )}
+                                                                        {dropOff === null && <span className="w-16 shrink-0" />}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* 페이지 이동 경로 Top 8 */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <h3 className="text-sm font-bold text-slate-700 mb-1">페이지 이동 경로 Top 8</h3>
+                                                <p className="text-[11px] text-slate-400 mb-4">세션 내 연속으로 이동한 페이지 쌍</p>
+                                                {pairRows.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 text-center py-6">데이터가 없습니다.</p>
+                                                ) : (
+                                                    <div className="space-y-2.5">
+                                                        {pairRows.map(([pair, count]) => (
+                                                            <div key={pair} className="flex items-center gap-3">
+                                                                <span className="w-44 text-xs font-bold text-slate-600 shrink-0 font-mono">{pair}</span>
+                                                                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div className="bg-sky-400 h-full rounded-full" style={{ width: `${Math.round((count / maxPair) * 100)}%` }} />
+                                                                </div>
+                                                                <span className="w-8 text-xs font-bold text-slate-700 text-right shrink-0">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* 진입 페이지 / 이탈 페이지 */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                    <h3 className="text-sm font-bold text-slate-700 mb-1">진입 페이지</h3>
+                                                    <p className="text-[11px] text-slate-400 mb-4">세션 첫 방문 페이지</p>
+                                                    <div className="space-y-2">
+                                                        {entryRows.map(([page, count]) => (
+                                                            <div key={page} className="flex items-center gap-2">
+                                                                <span className="w-20 text-xs font-bold text-slate-600 truncate">{page}</span>
+                                                                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div className="bg-indigo-400 h-full rounded-full" style={{ width: `${Math.round((count / (entryRows[0]?.[1] ?? 1)) * 100)}%` }} />
+                                                                </div>
+                                                                <span className="w-6 text-xs font-bold text-slate-700 text-right shrink-0">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                    <h3 className="text-sm font-bold text-slate-700 mb-1">이탈 페이지</h3>
+                                                    <p className="text-[11px] text-slate-400 mb-4">세션 마지막 방문 페이지</p>
+                                                    <div className="space-y-2">
+                                                        {exitRows.map(([page, count]) => (
+                                                            <div key={page} className="flex items-center gap-2">
+                                                                <span className="w-20 text-xs font-bold text-slate-600 truncate">{page}</span>
+                                                                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div className="bg-rose-400 h-full rounded-full" style={{ width: `${Math.round((count / (exitRows[0]?.[1] ?? 1)) * 100)}%` }} />
+                                                                </div>
+                                                                <span className="w-6 text-xs font-bold text-slate-700 text-right shrink-0">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* 품절 대기신청 전환 퍼널 */}
+                                            {(() => {
+                                                const WAITLIST_STEPS = [
+                                                    { key: 'pricing_waitlist_button_click',   label: '버튼 클릭',   color: 'bg-indigo-500' },
+                                                    { key: 'pricing_waitlist_modal_open',     label: '모달 오픈',   color: 'bg-violet-500' },
+                                                    { key: 'pricing_waitlist_submit_start',   label: '제출 시작',   color: 'bg-amber-500'  },
+                                                    { key: 'pricing_waitlist_submit_success', label: '제출 성공',   color: 'bg-emerald-500' },
+                                                ];
+                                                const wEvents = trafficData.filter(r => r.event_type?.startsWith('pricing_waitlist_'));
+                                                // 플랜별 집계
+                                                const plans = [...new Set(wEvents.map(r => String(r.event_data?.plan ?? '알수없음')))].sort();
+                                                // 스텝별 유니크 세션 수
+                                                const stepCount = (step: string, plan?: string) =>
+                                                    new Set(wEvents.filter(r => r.event_type === step && (plan ? r.event_data?.plan === plan : true)).map(r => r.session_id)).size;
+                                                const totalSteps = WAITLIST_STEPS.map(s => stepCount(s.key));
+                                                const maxTotal = Math.max(...totalSteps, 1);
+                                                if (wEvents.length === 0) return null;
+                                                return (
+                                                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <h3 className="text-sm font-bold text-slate-700">품절 대기신청 전환 퍼널</h3>
+                                                            <span className="text-[10px] text-slate-400">{trafficRange}일 기준 · 유니크 세션</span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-400 mb-5">버튼 클릭 → 모달 → 제출 시작 → 성공 단계별 이탈</p>
+                                                        {/* 전체 합산 퍼널 */}
+                                                        <div className="space-y-2.5 mb-6">
+                                                            {WAITLIST_STEPS.map((step, i) => {
+                                                                const count = totalSteps[i];
+                                                                const prev = totalSteps[i - 1] ?? count;
+                                                                const dropOff = i > 0 && prev > 0 ? Math.round((1 - count / prev) * 100) : null;
+                                                                return (
+                                                                    <div key={step.key} className="flex items-center gap-3">
+                                                                        <span className="w-20 text-xs font-bold text-slate-600 shrink-0">{step.label}</span>
+                                                                        <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden relative">
+                                                                            <div
+                                                                                className={`${step.color} h-full rounded-full flex items-center justify-end pr-3 transition-all`}
+                                                                                style={{ width: `${Math.max(Math.round((count / maxTotal) * 100), count > 0 ? 8 : 0)}%` }}
+                                                                            >
+                                                                                {count > 0 && <span className="text-[11px] font-black text-white">{count}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        {dropOff !== null ? (
+                                                                            <span className={`w-16 text-[10px] font-bold text-right shrink-0 ${dropOff >= 50 ? 'text-rose-500' : dropOff >= 20 ? 'text-amber-500' : 'text-emerald-600'}`}>
+                                                                                -{dropOff}% 이탈
+                                                                            </span>
+                                                                        ) : <span className="w-16 shrink-0" />}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {/* 플랜별 분리 */}
+                                                        {plans.length > 1 && (
+                                                            <>
+                                                                <p className="text-[11px] font-bold text-slate-500 mb-3 border-t border-slate-100 pt-4">플랜별 제출 성공</p>
+                                                                <div className="space-y-2">
+                                                                    {plans.map(plan => {
+                                                                        const clicks  = stepCount('pricing_waitlist_button_click',   plan);
+                                                                        const success = stepCount('pricing_waitlist_submit_success', plan);
+                                                                        const rate    = clicks > 0 ? Math.round((success / clicks) * 100) : 0;
+                                                                        return (
+                                                                            <div key={plan} className="flex items-center gap-3">
+                                                                                <span className="w-14 text-xs font-bold text-slate-600 shrink-0 capitalize">{plan}</span>
+                                                                                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                                    <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${rate}%` }} />
+                                                                                </div>
+                                                                                <span className="text-xs font-bold text-slate-700 shrink-0 w-20 text-right">
+                                                                                    {success}/{clicks} ({rate}%)
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 );
                                             })()}
+                                            {/* 유입 경로 분석 */}
+                                            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                                <h3 className="text-sm font-bold text-slate-700 mb-4">유입 경로 (Referrer)</h3>
+                                                {referrerRows.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 text-center py-6">데이터가 없습니다.</p>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {referrerRows.map(([ref, count]) => (
+                                                            <div key={ref} className="flex items-center gap-3">
+                                                                <span className="w-32 text-xs font-bold text-slate-600 shrink-0 truncate">{ref}</span>
+                                                                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                                    <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${Math.round((count / maxRef) * 100)}%` }} />
+                                                                </div>
+                                                                <span className="w-8 text-xs font-bold text-slate-700 text-right shrink-0">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
+                                    );
+                                })()}
+
+                                {activeTab === 'manual' && (
+                                    <SystemAdminManualTab
+                                        entries={manualEntries}
+                                        selectedId={manualSelectedId}
+                                        editingEntry={manualEditing}
+                                        form={manualForm}
+                                        categories={MANUAL_CATEGORIES}
+                                        isSaving={manualSaving}
+                                        onCreateNew={() => {
+                                            setManualEditing(null);
+                                            setManualForm({ title: '', content: '', category: '일반' });
+                                            setManualSelectedId('__new__');
+                                        }}
+                                        onSelectEntry={(entryId) => {
+                                            setManualSelectedId(entryId);
+                                            setManualEditing(null);
+                                            setManualForm({ title: '', content: '', category: '일반' });
+                                        }}
+                                        onCategoryChange={(category) => setManualForm((prev) => ({ ...prev, category }))}
+                                        onTitleChange={(title) => setManualForm((prev) => ({ ...prev, title }))}
+                                        onContentChange={(content) => setManualForm((prev) => ({ ...prev, content }))}
+                                        onCancelEdit={() => {
+                                            setManualEditing(null);
+                                            setManualForm({ title: '', content: '', category: '일반' });
+                                            setManualSelectedId(null);
+                                        }}
+                                        onSave={saveManual}
+                                        onStartEdit={(entry) => {
+                                            setManualEditing(entry);
+                                            setManualForm({ title: entry.title, content: entry.content, category: entry.category });
+                                        }}
+                                        onDelete={deleteManual}
+                                    />
                                 )}
                             </>
                         )}
@@ -2340,6 +2895,73 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     </div>
                 );
             })()}
+
+            {/* 이메일 답장 모달 */}
+            {replyModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col">
+                        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+                            <h3 className="text-base font-bold text-slate-800">이메일 답장</h3>
+                            <button onClick={() => setReplyModal(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="px-6 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
+                            {/* 수신자 정보 (읽기 전용) */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">수신자 이메일</p>
+                                    <p className="text-xs font-semibold text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{replyModal.email}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">담당자</p>
+                                    <p className="text-xs font-semibold text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{replyModal.contact_name}</p>
+                                </div>
+                                <div className="col-span-2">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">병원명</p>
+                                    <p className="text-xs font-semibold text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{replyModal.hospital_name}</p>
+                                </div>
+                            </div>
+                            {/* 원본 문의 내용 (읽기 전용) */}
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">원본 문의 내용</p>
+                                <div className="bg-slate-50 rounded-lg px-3 py-2.5 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                    {replyModal.content}
+                                </div>
+                            </div>
+                            {/* 답변 입력 */}
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">답변 메시지 <span className="text-rose-400">*</span></p>
+                                <textarea
+                                    value={replyMessage}
+                                    onChange={e => setReplyMessage(e.target.value)}
+                                    placeholder="답변 내용을 입력하세요..."
+                                    rows={6}
+                                    className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-2 px-6 py-4 border-t border-slate-100">
+                            <button
+                                onClick={() => setReplyModal(null)}
+                                disabled={replySending}
+                                className="flex-1 px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={handleSendReply}
+                                disabled={replySending || !replyMessage.trim()}
+                                className="flex-1 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                                {replySending ? '발송 중...' : '발송'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

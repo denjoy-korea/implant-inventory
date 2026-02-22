@@ -1,6 +1,112 @@
 import { supabase } from './supabaseClient';
+import { FunctionsError } from '@supabase/supabase-js';
 
 export type InquiryStatus = 'pending' | 'in_progress' | 'resolved';
+
+const DEFAULT_SUBMIT_ERROR_MESSAGE = '문의 접수에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+
+const normalizeSubmitErrorMessage = (raw?: string | null, code?: string | null): string => {
+  const errorCode = (code ?? '').trim().toLowerCase();
+  if (errorCode === 'invalid_json') return '요청 형식이 올바르지 않습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.';
+  if (errorCode === 'invalid_input') return '입력한 필수 항목을 다시 확인해 주세요.';
+  if (errorCode === 'invalid_email') return '이메일 형식을 다시 확인해 주세요.';
+  if (errorCode === 'server_misconfigured') return '서버 설정 오류로 접수가 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';
+  if (errorCode === 'permission_denied') return '권한 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  if (errorCode === 'duplicate_request') return '동일한 문의가 이미 접수되었습니다. 잠시 후 확인해 주세요.';
+  if (errorCode === 'db_error' || errorCode === 'internal_error') return DEFAULT_SUBMIT_ERROR_MESSAGE;
+
+  const message = (raw ?? '').trim();
+  if (!message) return DEFAULT_SUBMIT_ERROR_MESSAGE;
+
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('failed to send a request') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('network')
+  ) {
+    return '네트워크 연결이 불안정합니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
+  }
+
+  if (
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('gateway')
+  ) {
+    return '요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  if (
+    normalized.includes('too many requests') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('429')
+  ) {
+    return '요청이 일시적으로 많습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  if (
+    normalized.includes('null value in column') ||
+    normalized.includes('violates not-null constraint') ||
+    normalized.includes('invalid input') ||
+    normalized.includes('required')
+  ) {
+    return '입력한 필수 항목을 다시 확인해 주세요.';
+  }
+
+  if (
+    normalized.includes('permission denied') ||
+    normalized.includes('not authorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('401') ||
+    normalized.includes('403')
+  ) {
+    return '권한 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  return DEFAULT_SUBMIT_ERROR_MESSAGE;
+};
+
+interface SubmitErrorInfo {
+  code: string | null;
+  message: string | null;
+}
+
+const extractFunctionErrorInfo = async (error: unknown): Promise<SubmitErrorInfo> => {
+  if (error instanceof FunctionsError) {
+    try {
+      const body = await error.context?.json?.();
+      const code =
+        body && typeof body.error_code === 'string' && body.error_code.trim()
+          ? body.error_code.trim()
+          : null;
+      if (body && typeof body.error === 'string' && body.error.trim()) {
+        return { code, message: body.error.trim() };
+      }
+      if (body && typeof body.message === 'string' && body.message.trim()) {
+        return { code, message: body.message.trim() };
+      }
+      if (code) {
+        return { code, message: null };
+      }
+    } catch {
+      // Ignore context parse failures and fall back to generic message extraction.
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return { code: null, message: error.message.trim() };
+  }
+
+  return { code: null, message: null };
+};
+
+interface SubmitContactResponse {
+  success?: boolean;
+  error_code?: string;
+  error?: string;
+  message?: string;
+  request_id?: string;
+}
 
 export interface ContactInquiry {
   id: string;
@@ -44,8 +150,26 @@ export const contactService = {
         content: params.content.trim(),
       },
     });
-    if (error) throw error;
-    if (data && data.success === false) throw new Error('문의 접수에 실패했습니다.');
+
+    if (error) {
+      const parsed = await extractFunctionErrorInfo(error);
+      console.error('[contactService] submit invoke failed:', error, parsed);
+      throw new Error(normalizeSubmitErrorMessage(parsed.message, parsed.code));
+    }
+
+    const response = (data ?? {}) as SubmitContactResponse;
+    if (response.success === false) {
+      const rawCode =
+        typeof response.error_code === 'string' && response.error_code.trim()
+          ? response.error_code.trim()
+          : null;
+      const rawMessage =
+        (typeof response.error === 'string' && response.error.trim()) ||
+        (typeof response.message === 'string' && response.message.trim()) ||
+        '';
+      console.error('[contactService] submit rejected:', { code: rawCode, message: rawMessage, requestId: response.request_id });
+      throw new Error(normalizeSubmitErrorMessage(rawMessage, rawCode));
+    }
   },
 
   /** 관리자용 전체 문의 조회 */
@@ -54,6 +178,23 @@ export const contactService = {
       .from('contact_inquiries')
       .select('*')
       .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as ContactInquiry[];
+  },
+
+  /** 대기자 신청 목록 조회 (plan_waitlist_* 만) */
+  async getWaitlist(filter?: { plan?: string }): Promise<ContactInquiry[]> {
+    let query = supabase
+      .from('contact_inquiries')
+      .select('*')
+      .like('inquiry_type', 'plan_waitlist_%')
+      .order('created_at', { ascending: false });
+
+    if (filter?.plan) {
+      query = query.eq('inquiry_type', `plan_waitlist_${filter.plan}`);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return (data ?? []) as ContactInquiry[];
   },
@@ -68,6 +209,21 @@ export const contactService = {
       })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  /** 앱 내 이메일 답변 발송 (Edge Function 호출) */
+  async replyInquiry(params: {
+    inquiryId: string;
+    to: string;
+    contactName: string;
+    hospitalName: string;
+    inquiryType: string;
+    originalContent: string;
+    replyMessage: string;
+  }): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('reply-inquiry', { body: params });
+    if (error) throw error;
+    if (data && !data.success) throw new Error(data.error || '답변 발송에 실패했습니다.');
   },
 
   /** 삭제 */
@@ -90,4 +246,11 @@ export const STATUS_COLORS: Record<InquiryStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
   in_progress: 'bg-blue-100 text-blue-700',
   resolved: 'bg-emerald-100 text-emerald-700',
+};
+
+export const WAITLIST_PLAN_LABELS: Record<string, string> = {
+  plan_waitlist_basic:    'Basic',
+  plan_waitlist_plus:     'Plus',
+  plan_waitlist_business: 'Business',
+  plan_waitlist_ultimate: 'Ultimate',
 };

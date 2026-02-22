@@ -149,16 +149,16 @@ export const operationLogService = {
       return { data: [], total: 0 };
     }
 
-    const logs: OperationLog[] = (data || []).map((row: any) => ({
-      id: row.id,
-      hospitalId: row.hospital_id,
-      userId: row.user_id,
-      userEmail: row.user_email,
-      userName: row.user_name,
-      action: row.action,
-      description: row.description,
-      metadata: row.metadata || {},
-      createdAt: row.created_at,
+    const logs: OperationLog[] = (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      hospitalId: row.hospital_id as string,
+      userId: row.user_id as string,
+      userEmail: row.user_email as string,
+      userName: row.user_name as string,
+      action: row.action as OperationAction,
+      description: row.description as string,
+      metadata: (row.metadata as Record<string, unknown>) || {},
+      createdAt: row.created_at as string,
     }));
 
     return { data: logs, total: count ?? 0 };

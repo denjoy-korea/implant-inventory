@@ -161,6 +161,106 @@ const PROCESSING_MESSAGES = [
   '리포트를 생성하고 있습니다...',
 ];
 
+const EXCEL_FILE_REGEX = /\.(xlsx|xls)$/i;
+const HTTP_STATUS_REGEX = /(?:http[_\s-]*)?(\d{3})/i;
+
+function isExcelFile(file: File): boolean {
+  return EXCEL_FILE_REGEX.test(file.name);
+}
+
+function splitExcelFiles(files: File[]): { valid: File[]; invalid: File[] } {
+  const valid: File[] = [];
+  const invalid: File[] = [];
+
+  files.forEach((file) => {
+    if (isExcelFile(file)) valid.push(file);
+    else invalid.push(file);
+  });
+
+  return { valid, invalid };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message || '';
+  if (typeof error === 'string') return error;
+  return '';
+}
+
+function getErrorStatus(error: unknown): number | null {
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === 'number') return status;
+  }
+
+  const message = getErrorMessage(error);
+  const match = message.match(HTTP_STATUS_REGEX);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function classifyAnalyzeError(error: unknown): string {
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (message.includes('xlsx') || message.includes('xls') || message.includes('zip') || message.includes('format') || message.includes('file')) {
+    return '형식 오류: .xlsx 또는 .xls 엑셀 파일인지 확인해주세요.';
+  }
+  if (message.includes('sheet') || message.includes('column') || message.includes('header') || message.includes('수술기록지') || message.includes('parse')) {
+    return '데이터 오류: 필수 시트/열이 누락되지 않았는지 확인해주세요.';
+  }
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
+    return '네트워크 오류: 연결 상태를 확인한 뒤 다시 시도해주세요.';
+  }
+
+  return '분석 처리 오류: 파일 내용 확인 후 다시 시도해주세요.';
+}
+
+function classifyLeadSubmitError(error: unknown): string {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return '네트워크 오류: 인터넷 연결 후 다시 전송해주세요.';
+  }
+
+  const status = getErrorStatus(error);
+  if (status !== null) {
+    if (status >= 500) {
+      return '서버 오류: 전송이 지연되고 있습니다. 잠시 후 다시 시도해주세요.';
+    }
+    if (status >= 400) {
+      return '입력 오류: 이메일/연락처 형식을 확인한 뒤 다시 전송해주세요.';
+    }
+  }
+
+  const message = getErrorMessage(error).toLowerCase();
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout') || message.includes('abort')) {
+    return '네트워크 오류: 연결이 불안정합니다. 다시 전송해주세요.';
+  }
+
+  return '전송 오류: 요청이 완료되지 않았습니다. 다시 전송해주세요.';
+}
+
+function buildQuickInsights(report: AnalysisReport): string[] {
+  const insights: string[] = [];
+
+  if (report.summary.surgeryOnlyItems > 0) {
+    insights.push(`수술기록에만 있는 미등록 품목이 ${report.summary.surgeryOnlyItems}건입니다.`);
+  }
+  if (report.summary.deadStockItems > 0) {
+    insights.push(`수술기록이 없는 Dead Stock 후보가 ${report.summary.deadStockItems}건입니다.`);
+  }
+  if (report.diagnostics.some((item) => item.status === 'critical')) {
+    const critical = report.diagnostics.find((item) => item.status === 'critical');
+    if (critical) insights.push(`우선 개선 항목: ${critical.category} (${critical.score}/${critical.maxScore}점)`);
+  }
+  if (insights.length < 2 && report.recommendations.length > 0) {
+    insights.push(`추천 액션: ${report.recommendations[0]}`);
+  }
+  if (insights.length < 2) {
+    insights.push('현재 데이터 품질 진단 결과를 기반으로 맞춤 개선안을 받아보세요.');
+  }
+
+  return insights.slice(0, 2);
+}
+
 function generateReportText(report: AnalysisReport): string {
   const grade = getGrade(report.dataQualityScore);
   const lines: string[] = [];
@@ -213,12 +313,15 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   const [progress, setProgress] = useState(0);
   const [processingMsg, setProcessingMsg] = useState('');
   const [error, setError] = useState('');
+  const [uploadFormatWarning, setUploadFormatWarning] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [leadEmail, setLeadEmail] = useState('');
   const [wantDetailedAnalysis, setWantDetailedAnalysis] = useState(false);
   const [leadHospital, setLeadHospital] = useState('');
   const [leadRegion, setLeadRegion] = useState('');
   const [leadContact, setLeadContact] = useState('');
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [leadSubmitError, setLeadSubmitError] = useState('');
   const reportRef = useRef<HTMLDivElement>(null);
 
   const fixtureDrop = useRef<HTMLDivElement>(null);
@@ -226,12 +329,36 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
   const handleFixtureChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setFixtureFile(file);
+    if (!file) return;
+
+    const { valid, invalid } = splitExcelFiles([file]);
+    if (invalid.length > 0) {
+      setUploadFormatWarning(`형식 오류: ${invalid[0].name} 파일은 제외되었습니다. .xlsx/.xls만 지원합니다.`);
+      return;
+    }
+
+    setFixtureFile(valid[0]);
+    setError('');
+    setUploadFormatWarning('');
   }, []);
 
   const handleSurgeryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setSurgeryFiles(prev => [...prev, ...files].slice(0, 6));
+    const { valid, invalid } = splitExcelFiles(files);
+
+    if (valid.length > 0) {
+      setSurgeryFiles(prev => [...prev, ...valid].slice(0, 6));
+      setError('');
+    }
+
+    if (invalid.length > 0) {
+      setUploadFormatWarning(`형식 오류: ${invalid.map((file) => file.name).join(', ')} 파일은 제외되었습니다. .xlsx/.xls만 지원합니다.`);
+      return;
+    }
+
+    if (valid.length > 0) {
+      setUploadFormatWarning('');
+    }
   }, []);
 
   const removeSurgeryFile = useCallback((idx: number) => {
@@ -241,13 +368,24 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   const handleDrop = useCallback((e: React.DragEvent, type: 'fixture' | 'surgery') => {
     e.preventDefault();
     e.stopPropagation();
-    const files = Array.from(e.dataTransfer.files as FileList).filter((f: File) =>
-      f.name.endsWith('.xlsx') || f.name.endsWith('.xls')
-    );
-    if (type === 'fixture' && files[0]) {
-      setFixtureFile(files[0]);
-    } else if (type === 'surgery') {
-      setSurgeryFiles(prev => [...prev, ...files].slice(0, 6));
+    const files = Array.from(e.dataTransfer.files as FileList);
+    const { valid, invalid } = splitExcelFiles(files);
+
+    if (type === 'fixture' && valid[0]) {
+      setFixtureFile(valid[0]);
+      setError('');
+    } else if (type === 'surgery' && valid.length > 0) {
+      setSurgeryFiles(prev => [...prev, ...valid].slice(0, 6));
+      setError('');
+    }
+
+    if (invalid.length > 0) {
+      setUploadFormatWarning(`형식 오류: ${invalid.map((file) => file.name).join(', ')} 파일은 제외되었습니다. .xlsx/.xls만 지원합니다.`);
+      return;
+    }
+
+    if (valid.length > 0) {
+      setUploadFormatWarning('');
     }
   }, []);
 
@@ -290,8 +428,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
         setStep('report');
       }, 600);
     } catch (err) {
+      console.error('[AnalyzePage] runAnalysis failed:', err);
       clearInterval(progressInterval);
-      setError('분석 중 오류가 발생했습니다. 파일 형식을 확인해주세요.');
+      setError(classifyAnalyzeError(err));
       setStep('upload');
     }
   }, [fixtureFile, surgeryFiles]);
@@ -305,37 +444,73 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   const handleLeadSubmit = useCallback(async () => {
     if (!leadEmail || !report) return;
     if (wantDetailedAnalysis && (!leadHospital || !leadRegion || !leadContact)) return;
+    if (isSubmittingLead) return;
 
+    setIsSubmittingLead(true);
+    setLeadSubmitError('');
     const reportText = generateReportText(report);
 
-    // Edge Function 호출 (DB 저장 + 이메일 발송)
-    fetch(`${SUPABASE_URL}/functions/v1/send-analysis-report`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        email: leadEmail,
-        grade: getGrade(report.dataQualityScore).label,
-        score: report.dataQualityScore,
-        reportText,
-        isDetailed: wantDetailedAnalysis,
-        hospitalName: leadHospital || undefined,
-        region: leadRegion || undefined,
-        contact: leadContact || undefined,
-      }),
-    }).catch(err => console.error('[AnalyzePage] send-analysis-report failed:', err));
-
     try {
-      await navigator.clipboard.writeText(reportText);
-    } catch {
-      // fallback: do nothing silently
-    }
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-analysis-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          email: leadEmail,
+          grade: getGrade(report.dataQualityScore).label,
+          score: report.dataQualityScore,
+          reportText,
+          isDetailed: wantDetailedAnalysis,
+          hospitalName: leadHospital || undefined,
+          region: leadRegion || undefined,
+          contact: leadContact || undefined,
+        }),
+      });
 
-    setEmailSent(true);
-  }, [leadEmail, leadHospital, leadRegion, leadContact, wantDetailedAnalysis, report]);
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const payload = await res.json();
+          if (payload && typeof payload === 'object') {
+            if ('error' in payload && typeof payload.error === 'string') detail = payload.error;
+            else if ('message' in payload && typeof payload.message === 'string') detail = payload.message;
+          }
+        } catch {
+          // ignore body parse errors
+        }
+
+        const httpError = new Error(detail || `HTTP_${res.status}`) as Error & { status?: number };
+        httpError.status = res.status;
+        throw httpError;
+      }
+
+      try { await navigator.clipboard.writeText(reportText); } catch { /* silent */ }
+      setEmailSent(true);
+    } catch (err) {
+      console.error('[AnalyzePage] send-analysis-report failed:', err);
+      setLeadSubmitError(classifyLeadSubmitError(err));
+    } finally {
+      setIsSubmittingLead(false);
+    }
+  }, [leadEmail, leadHospital, leadRegion, leadContact, wantDetailedAnalysis, report, isSubmittingLead]);
+
+  const hasAnyUploadedFile = Boolean(fixtureFile) || surgeryFiles.length > 0;
+  const uploadRequirements: { label: string; status: 'done' | 'pending' | 'warning' }[] = [
+    { label: '재고 목록 파일 업로드', status: fixtureFile ? 'done' : 'pending' },
+    { label: '수술기록 파일 1개 이상 업로드', status: surgeryFiles.length > 0 ? 'done' : 'pending' },
+    {
+      label: '엑셀 형식(.xlsx/.xls) 확인',
+      status: uploadFormatWarning ? 'warning' : hasAnyUploadedFile ? 'done' : 'pending',
+    },
+  ];
+  const analyzeDisabledReasons = [
+    !fixtureFile ? '재고 목록 파일을 업로드해주세요.' : '',
+    surgeryFiles.length === 0 ? '수술기록 파일을 1개 이상 업로드해주세요.' : '',
+  ].filter(Boolean);
+  const isAnalyzeDisabled = analyzeDisabledReasons.length > 0;
 
   // ═══════════════ UPLOAD STEP ═══════════════
   if (step === 'upload') {
@@ -453,6 +628,67 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
             </div>
           </div>
 
+          {/* Upload Requirement Checklist */}
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">분석 시작 전 체크</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {uploadRequirements.map((item) => {
+                const isDone = item.status === 'done';
+                const isWarning = item.status === 'warning';
+                return (
+                  <div
+                    key={item.label}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold border ${
+                      isDone
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : isWarning
+                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-500'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      {isDone ? (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : isWarning ? (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <circle cx="12" cy="12" r="9" />
+                        </svg>
+                      )}
+                      {item.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Trust Anchor */}
+          <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { title: '전송 구간 암호화', detail: '업로드/전송은 HTTPS 암호화 채널로 처리됩니다.' },
+              { title: '원본 파일 비저장', detail: '분석 파일은 브라우저 내에서 처리 후 저장되지 않습니다.' },
+              { title: '처리 방식 투명성', detail: '진단 기준과 점수 계산 항목을 결과 화면에 함께 제공합니다.' },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-bold text-slate-800 mb-1">{item.title}</p>
+                <p className="text-xs text-slate-500 leading-relaxed">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Upload format warning */}
+          {uploadFormatWarning && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 text-center font-medium">
+              {uploadFormatWarning}
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 text-center font-medium">
@@ -464,11 +700,18 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           <div className="text-center">
             <button
               onClick={handleAnalyze}
-              disabled={!fixtureFile || surgeryFiles.length === 0}
+              disabled={isAnalyzeDisabled}
               className="px-10 py-4 bg-slate-900 text-white text-lg font-bold rounded-2xl shadow-2xl shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-1 transition-all duration-300 disabled:opacity-40 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
             >
               분석 시작
             </button>
+            {isAnalyzeDisabled ? (
+              <p className="mt-3 text-sm text-amber-700 font-semibold">
+                분석 시작을 위해 {analyzeDisabledReasons.join(' / ')}
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-emerald-700 font-semibold">업로드 준비 완료. 분석을 시작할 수 있습니다.</p>
+            )}
             <div className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 rounded-xl">
               <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -536,6 +779,33 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   if (!report) return null;
   const grade = getGrade(report.dataQualityScore);
   const colors = gradeColorMap[grade.color];
+  const quickInsights = buildQuickInsights(report);
+  const missingDetailedFields = [
+    !leadHospital ? '병원명' : '',
+    !leadRegion ? '지역' : '',
+    !leadContact ? '연락처' : '',
+  ].filter(Boolean);
+  const leadSubmitDisabled = isSubmittingLead || !leadEmail || (wantDetailedAnalysis && missingDetailedFields.length > 0);
+  const leadSubmitBlockReason = !leadEmail
+    ? '이메일을 입력하면 결과를 저장할 수 있습니다.'
+    : wantDetailedAnalysis && missingDetailedFields.length > 0
+      ? `${missingDetailedFields.join(', ')}을(를) 입력하면 요청할 수 있어요`
+      : '';
+  const leadSuccessCta = wantDetailedAnalysis
+    ? {
+        title: '요청 접수 완료',
+        eta: '담당자가 영업일 기준 1일 이내에 연락드립니다.',
+        detail: '요청 내역이 정상 접수되었고 분석 리포트 텍스트는 클립보드에 복사되었습니다.',
+        ctaLabel: '상담 일정 잡기',
+        onClick: onContact,
+      }
+    : {
+        title: '리포트 저장 완료',
+        eta: '정식 서비스 전환 시점에 동일 이메일로 안내를 드립니다.',
+        detail: '결과 요약이 클립보드에 복사되었습니다. 다음 단계로 자동 분석을 바로 시작할 수 있습니다.',
+        ctaLabel: '무료로 시작하기',
+        onClick: onSignup,
+      };
 
   return (
     <div ref={reportRef} className="min-h-screen bg-slate-50">
@@ -862,7 +1132,18 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
       {/* Section 5.5: Email Lead Collection */}
       <section className="py-12 bg-white">
-        <div className="max-w-2xl mx-auto px-6">
+        <div className="max-w-2xl mx-auto px-6 space-y-4">
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-500 mb-2">먼저 확인할 핵심 인사이트</p>
+            <ul className="space-y-1.5">
+              {quickInsights.map((insight, index) => (
+                <li key={index} className="text-sm text-indigo-900 font-semibold">
+                  {index + 1}. {insight}
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {emailSent ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
@@ -870,14 +1151,15 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-emerald-800 mb-2">
-                {wantDetailedAnalysis ? '상세 분석 요청이 접수되었습니다' : '분석 결과가 클립보드에 복사되었습니다'}
-              </h3>
-              <p className="text-sm text-emerald-600">
-                {wantDetailedAnalysis
-                  ? '담당자가 확인 후 연락드리겠습니다. 분석 리포트도 클립보드에 복사되었습니다.'
-                  : '정식 서비스 출시 시 입력하신 이메일로 상세 리포트를 발송해드리겠습니다.'}
-              </p>
+              <h3 className="text-xl font-bold text-emerald-900 mb-2">접수 완료: {leadSuccessCta.title}</h3>
+              <p className="text-sm text-emerald-700 font-semibold mb-1">처리 예상시간: {leadSuccessCta.eta}</p>
+              <p className="text-sm text-emerald-700 mb-6">{leadSuccessCta.detail}</p>
+              <button
+                onClick={leadSuccessCta.onClick}
+                className="inline-flex items-center justify-center px-6 py-3 bg-emerald-700 text-white font-bold rounded-xl hover:bg-emerald-800 transition-colors"
+              >
+                다음 단계: {leadSuccessCta.ctaLabel}
+              </button>
             </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8">
@@ -887,24 +1169,31 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-1">분석 결과를 저장하세요</h3>
-                <p className="text-sm text-slate-500">이메일을 입력하시면 분석 리포트 텍스트가 클립보드에 복사됩니다.</p>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">분석 결과를 저장하고 다음 단계를 받아보세요</h3>
+                <p className="text-sm text-slate-500">최소 입력(이메일)만으로 결과 저장이 가능합니다.</p>
               </div>
               <div className="space-y-3 max-w-sm mx-auto">
                 <input
                   type="email"
                   value={leadEmail}
-                  onChange={(e) => setLeadEmail(e.target.value)}
+                  onChange={(e) => {
+                    setLeadEmail(e.target.value);
+                    setLeadSubmitError('');
+                  }}
                   placeholder="이메일 주소 *"
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
+                <p className="text-xs text-slate-500">입력하신 이메일은 결과 전달 및 후속 안내 목적으로만 사용합니다.</p>
 
                 {/* 상세 분석 체크박스 */}
                 <label className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
                   <input
                     type="checkbox"
                     checked={wantDetailedAnalysis}
-                    onChange={(e) => setWantDetailedAnalysis(e.target.checked)}
+                    onChange={(e) => {
+                      setWantDetailedAnalysis(e.target.checked);
+                      setLeadSubmitError('');
+                    }}
                     className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
                   />
                   <div>
@@ -916,37 +1205,105 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 {/* 상세 분석 추가 필드 */}
                 {wantDetailedAnalysis && (
                   <div className="space-y-3 pt-1">
+                    {/* 진행 체크리스트 */}
+                    <div className="flex items-center gap-3 px-3 py-2 bg-indigo-50 rounded-lg">
+                      {[
+                        { label: '병원명', filled: !!leadHospital },
+                        { label: '지역', filled: !!leadRegion },
+                        { label: '연락처', filled: !!leadContact },
+                      ].map((item) => (
+                        <div key={item.label} className={`flex items-center gap-1 text-xs font-bold ${item.filled ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {item.filled ? (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <circle cx="12" cy="12" r="9" />
+                            </svg>
+                          )}
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
                     <input
                       type="text"
                       value={leadHospital}
-                      onChange={(e) => setLeadHospital(e.target.value)}
+                      onChange={(e) => {
+                        setLeadHospital(e.target.value);
+                        setLeadSubmitError('');
+                      }}
                       placeholder="병원명 *"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadHospital ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
                     <input
                       type="text"
                       value={leadRegion}
-                      onChange={(e) => setLeadRegion(e.target.value)}
+                      onChange={(e) => {
+                        setLeadRegion(e.target.value);
+                        setLeadSubmitError('');
+                      }}
                       placeholder="지역 (예: 서울 강남구) *"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadRegion ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
                     <input
                       type="tel"
                       value={leadContact}
-                      onChange={(e) => setLeadContact(formatPhoneNumber(e.target.value))}
+                      onChange={(e) => {
+                        setLeadContact(formatPhoneNumber(e.target.value));
+                        setLeadSubmitError('');
+                      }}
                       placeholder="연락처 *"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadContact ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
+                    <p className="text-xs text-slate-500">연락처는 분석 결과 브리핑 일정 조율 용도로만 사용합니다.</p>
+                    {/* 버튼 비활성 이유 */}
+                    {(!leadHospital || !leadRegion || !leadContact) && (
+                      <p className="text-xs text-amber-600 text-center">
+                        {[!leadHospital && '병원명', !leadRegion && '지역', !leadContact && '연락처'].filter(Boolean).join(', ')}을(를) 입력하면 요청할 수 있어요
+                      </p>
+                    )}
                   </div>
                 )}
 
+                {leadSubmitError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      </svg>
+                      <span>{leadSubmitError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLeadSubmit}
+                      disabled={leadSubmitDisabled}
+                      className="w-full py-2 text-xs font-bold rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      다시 전송
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={handleLeadSubmit}
-                  disabled={!leadEmail || (wantDetailedAnalysis && (!leadHospital || !leadRegion || !leadContact))}
-                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={leadSubmitDisabled}
+                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {wantDetailedAnalysis ? '상세 분석 요청하기' : '분석결과 받기'}
+                  {isSubmittingLead ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      전송 중...
+                    </>
+                  ) : (
+                    wantDetailedAnalysis ? '상세 분석 요청하기' : '분석결과 받기'
+                  )}
                 </button>
+                {leadSubmitBlockReason && !isSubmittingLead && (
+                  <p className="text-xs text-amber-600 text-center">{leadSubmitBlockReason}</p>
+                )}
               </div>
             </div>
           )}

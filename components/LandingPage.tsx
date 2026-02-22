@@ -335,7 +335,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* ═══════════════════════════════════════════
-          Features - Bento Grid
+          Features - Bento Grid (6-card)
           심리효과: 앵커링 + 특이성 효과(폰 레스토르프)
           - 가장 인상적인 기능을 먼저 배치 (앵커링)
           - 핵심 기능 카드를 시각적으로 차별화 (폰 레스토르프)
@@ -345,64 +345,141 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <div className="text-center mb-10 sm:mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase">Key Features</h2>
             <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 sm:text-4xl text-balance">병원 운영의 품격을 높이는 기능</p>
+            <p className="mt-3 text-base sm:text-lg text-slate-500 max-w-2xl mx-auto">치과 임플란트 관리의 모든 것을 하나로</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
-            {/* Feature 1 - 폰 레스토르프: 핵심 기능을 시각적으로 차별화 */}
-            <div className="group relative p-5 sm:p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
+
+            {/* Card 1 — 실시간 재고 & 자동 차감 (Hero, row-span-2) */}
+            <div className="group relative p-5 sm:p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden md:row-span-2 flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[2rem] -mr-8 -mt-8"></div>
               <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
-              <div className="relative z-10">
+              <div className="relative z-10 flex flex-col flex-1">
                 <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
                   <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 text-xs font-bold mb-4">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 text-xs font-bold mb-4 w-fit">
                   <span className="w-1.5 h-1.5 bg-amber-300 rounded-full"></span>
                   가장 인기 있는 기능
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold mb-3 text-balance">실시간 재고 & 자동 차감</h3>
-                <p className="text-indigo-100 leading-relaxed text-balance">
+                <p className="text-indigo-100 leading-relaxed text-balance flex-1">
                   수술 기록을 업로드하면 재고가 자동으로 차감됩니다. 브랜드/사이즈별 현재고를 한눈에 파악하고,
                   부족 시 즉시 알림을 받으세요.
                 </p>
+                <div className="flex flex-wrap gap-2 mt-6 pt-5 border-t border-white/20">
+                  {['업로드 후 30초', '14개 브랜드', '실시간 알림'].map(stat => (
+                    <span key={stat} className="px-2.5 py-1 rounded-full bg-white/15 text-xs font-semibold text-white/90 backdrop-blur-sm">
+                      {stat}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Feature 2 */}
+            {/* Card 2 — 수술 통계 & 임상 분석 (NEW) */}
             <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-purple-100"></div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-emerald-100"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-purple-50 shadow-sm mb-4 sm:mb-6 text-purple-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-emerald-50 shadow-sm mb-4 sm:mb-6 text-emerald-600 group-hover:scale-110 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">스마트 데이터 정규화</h3>
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold mb-3">
+                  NEW
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">수술 통계 & 임상 분석</h3>
                 <p className="text-slate-500 leading-relaxed text-balance">
-                  다양한 제조사와 브랜드의 파편화된 이름을 표준 규격으로 자동 변환합니다. 오타 자동 수정으로
-                  데이터 정확도 99.9%.
+                  월별 수술 트렌드, 제조사별 점유율, 식립 위치 분석까지. 데이터로 임상 패턴을 파악하고 발주 계획에 활용하세요.
                 </p>
               </div>
             </div>
 
-            {/* Feature 3 */}
+            {/* Card 3 — FAIL 완전 추적 */}
             <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-blue-100"></div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-rose-100"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-blue-50 shadow-sm mb-4 sm:mb-6 text-blue-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-rose-50 shadow-sm mb-4 sm:mb-6 text-rose-600 group-hover:scale-110 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">FAIL 관리 & 발주 추적</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">FAIL 완전 추적</h3>
                 <p className="text-slate-500 leading-relaxed text-balance">
-                  수술 중 FAIL부터 교환 접수, 입고 확인까지 전 과정을 추적합니다. 소모 패턴 기반 스마트 발주 추천으로
-                  발주 실수를 크게 줄이세요.
+                  수술 중 FAIL → 교환 접수 → 입고 확인까지 단계별 추적. 브랜드별 FAIL률을 자동으로 계산합니다.
                 </p>
               </div>
             </div>
+
+            {/* Card 4 — 스마트 발주 추천 */}
+            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-amber-100"></div>
+              <div className="relative z-10">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-amber-50 shadow-sm mb-4 sm:mb-6 text-amber-600 group-hover:scale-110 transition-transform duration-300">
+                  <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">스마트 발주 추천</h3>
+                <p className="text-slate-500 leading-relaxed text-balance">
+                  소모 패턴 기반 적정 재고 자동 계산. 원클릭 발주 생성으로 과주문·품절을 방지하세요.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 5 — 재고 실사 & 불일치 감지 */}
+            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-sky-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-sky-100"></div>
+              <div className="relative z-10">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-sky-50 shadow-sm mb-4 sm:mb-6 text-sky-600 group-hover:scale-110 transition-transform duration-300">
+                  <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">재고 실사 & 불일치 감지</h3>
+                <p className="text-slate-500 leading-relaxed text-balance">
+                  실물 재고와 시스템 재고를 비교합니다. 불일치 항목을 즉시 파악하고 실사 이력을 관리하세요.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 6 — 스마트 데이터 정규화 (Wide, col-span-3) */}
+            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden md:col-span-3">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-all group-hover:scale-110 group-hover:bg-purple-100"></div>
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-10">
+                {/* 좌측: 아이콘 + 텍스트 */}
+                <div className="flex items-start gap-4 sm:gap-6 flex-1">
+                  <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-purple-50 shadow-sm text-purple-600 flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 text-balance">스마트 데이터 정규화</h3>
+                    <p className="text-slate-500 leading-relaxed text-balance">
+                      다양한 제조사와 브랜드의 파편화된 이름을 표준 규격으로 자동 변환합니다. 오타 자동 수정으로 데이터 정확도 99.9%.
+                    </p>
+                  </div>
+                </div>
+                {/* 우측: Stat 수치 */}
+                <div className="flex sm:flex-col gap-4 sm:gap-4 sm:border-l sm:border-slate-100 sm:pl-10 flex-shrink-0">
+                  {[
+                    { value: '14개', label: '지원 브랜드' },
+                    { value: '99.9%', label: '데이터 정확도' },
+                    { value: '자동', label: '오타 수정' },
+                  ].map(({ value, label }) => (
+                    <div key={label} className="flex sm:flex-row items-center gap-2">
+                      <span className="text-xl sm:text-2xl font-extrabold text-purple-600 leading-none">{value}</span>
+                      <span className="text-xs text-slate-400 font-medium leading-tight">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>

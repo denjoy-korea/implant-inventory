@@ -423,8 +423,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     return { placement, fail };
   }, [surgeryData, selectedManufacturer]);
 
-  const handleEditChange = (field: keyof InventoryItem, value: any) => {
-    setEditFormData(prev => ({ ...prev, [field]: value }));
+  const handleEditChange = (field: keyof InventoryItem, value: InventoryItem[keyof InventoryItem]) => {
+    setEditFormData(prev => ({ ...prev, [field]: value } as Partial<InventoryItem>));
   };
 
   const toggleInventoryDetailColumn = (columnKey: InventoryDetailColumnKey) => {

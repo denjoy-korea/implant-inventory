@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
     // profiles 업데이트: hospital_id 연결 + role 설정 + status=active
     // (초대받은 사람은 바로 active — 관리자가 초대한 것이므로 승인 불필요)
-    const { error: profileError } = await supabase
+    const { data: updatedRows, error: profileError } = await supabase
       .from("profiles")
       .update({
         hospital_id: invitation.hospital_id,
@@ -67,7 +67,8 @@ Deno.serve(async (req: Request) => {
         status: "active",
         name: invitation.name,
       })
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
 
     if (profileError) {
       console.error("profile update error:", profileError);
@@ -75,6 +76,30 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "프로필 업데이트에 실패했습니다." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // 프로필이 아직 생성되지 않은 경우 (signUp trigger 지연) — upsert로 재시도
+    if (!updatedRows || updatedRows.length === 0) {
+      console.warn("profile not found for userId:", userId, "— attempting upsert");
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: userId,
+          hospital_id: invitation.hospital_id,
+          role: "dental_staff",
+          clinic_role: invitation.clinic_role ?? "staff",
+          status: "active",
+          name: invitation.name,
+          email: invitation.email,
+        }, { onConflict: "id" });
+
+      if (upsertError) {
+        console.error("profile upsert error:", upsertError);
+        return new Response(
+          JSON.stringify({ error: "프로필 업데이트에 실패했습니다." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // invitation 상태 업데이트

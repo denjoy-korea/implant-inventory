@@ -11,17 +11,17 @@ import LengthFilter from './components/LengthFilter';
 import FixtureWorkflowGuide from './components/FixtureWorkflowGuide';
 import MigrationBanner from './components/MigrationBanner';
 import UpgradeNudge, { NudgeType } from './components/UpgradeNudge';
+import PlanLimitToast, { LimitType } from './components/PlanLimitToast';
 import PlanBadge from './components/PlanBadge';
 import ReadOnlyBanner from './components/ReadOnlyBanner';
 import FeatureGate from './components/FeatureGate';
 import NewDataModal from './components/NewDataModal';
-import ConfirmModal from './components/ConfirmModal';
-import InventoryCompareModal, { CompareItem } from './components/InventoryCompareModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import PausedAccountScreen from './components/PausedAccountScreen';
 import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
 import DashboardOperationalTabs from './components/dashboard/DashboardOperationalTabs';
 import { PublicMobileNav } from './components/PublicMobileNav';
+import AppGlobalOverlays from './components/app/AppGlobalOverlays';
 
 /* ── Lazy imports (route-level code splitting) ── */
 const OnboardingWizard = lazy(() => import('./components/OnboardingWizard'));
@@ -67,20 +67,15 @@ import { useToast } from './hooks/useToast';
 import { UNLIMITED_DAYS, DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 import { buildHash, parseHash, VIEW_HASH, TAB_HASH, HASH_TO_VIEW, HASH_TO_TAB } from './appRouting';
 import { reviewService, ReviewType } from './services/reviewService';
+import { pageViewService } from './services/pageViewService';
+import { useInventoryCompare } from './hooks/useInventoryCompare';
+import { buildInventoryDuplicateKey } from './services/inventoryUtils';
 
 declare global {
   // eslint-disable-next-line no-var
   var __securityMaintenanceService: typeof securityMaintenanceService | undefined;
 }
 
-function buildInventoryDuplicateKey(item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>): string {
-  const fixed = fixIbsImplant(String(item.manufacturer || ''), String(item.brand || ''));
-  const canonicalSize = toCanonicalSize(String(item.size || ''), fixed.manufacturer);
-  const manufacturerKey = manufacturerAliasKey(fixed.manufacturer);
-  const brandKey = normalizeInventory(fixed.brand);
-  const sizeKey = getSizeMatchKey(canonicalSize, fixed.manufacturer);
-  return `${manufacturerKey}|${brandKey}|${sizeKey}`;
-}
 
 type BrandSizeFormatEntry = {
   manufacturerKey: string;
@@ -256,6 +251,7 @@ const App: React.FC = () => {
   // 후기 팝업 state
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
 
   // 대시보드 진입 시 후기 팝업 여부 확인
   useEffect(() => {
@@ -281,7 +277,6 @@ const App: React.FC = () => {
     if (state.user) _handleLeaveHospital(state.user);
   }, [_handleLeaveHospital, state.user]);
 
-  const [planLimitModal, setPlanLimitModal] = React.useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
@@ -366,6 +361,11 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, currentView: 'dashboard' }));
     }
   }, [state.user, state.currentView]);
+
+  // 공개 페이지 뷰 트래킹
+  useEffect(() => {
+    pageViewService.track(state.currentView);
+  }, [state.currentView]);
 
   // sticky 섹션들이 참조할 대시보드 헤더 높이 동기화
   useEffect(() => {
@@ -498,12 +498,17 @@ const App: React.FC = () => {
   const activeNudge = useMemo<NudgeType | null>(() => {
     const ps = state.planState;
     if (!ps) return null;
-    // 체험 만료 (Free로 복귀, 체험 사용됨)
+    // T5: 체험 만료 (Free로 복귀, 체험 사용됨)
     if (ps.plan === 'free' && ps.trialUsed && !ps.isTrialActive) return 'trial_expired';
-    // 체험 D-3 이하 (아직 체험 중)
+    // T4: 체험 D-3 이하 (아직 체험 중)
     if (ps.isTrialActive && ps.trialDaysRemaining <= 3) return 'trial_ending';
-    // Free 플랜 재고 품목 90% 이상
+    // T1: 데이터 보관 만료 D-7 (planService에 retentionDaysLeft 필드 추가 후 활성화)
+    // T1: 데이터 보관 만료 D-7 (planService에 retentionDaysLeft 추가 후 자동 활성화)
+    if (ps.plan === 'free' && !ps.isTrialActive && ps.retentionDaysLeft !== undefined && ps.retentionDaysLeft <= 7) return 'data_expiry_warning';
+    // T2: Free 플랜 재고 품목 90% 이상
     if (ps.plan === 'free' && !ps.isTrialActive && billableItemCount >= PLAN_LIMITS.free.maxItems * 0.9) return 'item_limit_warning';
+    // T3: 업로드 한도 초과 (planService에 uploadLimitExceeded 추가 후 자동 활성화)
+    if (ps.plan === 'free' && !ps.isTrialActive && ps.uploadLimitExceeded === true) return 'upload_limit';
     return null;
   }, [state.planState, billableItemCount]);
 
@@ -674,7 +679,7 @@ const App: React.FC = () => {
       records.forEach(row => {
         const dateStr = row['날짜'];
         if (dateStr) {
-          const t = new Date(dateStr).getTime();
+          const t = new Date(dateStr as string | number).getTime();
           if (!isNaN(t)) {
             if (t < minTime) minTime = t;
             if (t > maxTime) maxTime = t;
@@ -1433,8 +1438,8 @@ const App: React.FC = () => {
       const totalToProcess = order.items.reduce((sum, item) => sum + item.quantity, 0);
       const targetM = normalize(order.manufacturer);
       failRecordIds = rows
-        .filter(row => row['구분'] === '수술중 FAIL' && normalize(row['제조사']) === targetM)
-        .sort((a, b) => String(a['날짜'] || '').localeCompare(String(b['날짜'] || '')))
+        .filter(row => row['구분'] === '수술중 FAIL' && normalize(String(row['제조사'] ?? '')) === targetM)
+        .sort((a, b) => String(a['날짜'] ?? '').localeCompare(String(b['날짜'] ?? '')))
         .slice(0, totalToProcess)
         .filter(r => r._id)
         .map(r => r._id as string);
@@ -1450,8 +1455,8 @@ const App: React.FC = () => {
           const targetM = normalize(nextOrder.manufacturer);
           const failIndices = rows
             .map((row, idx) => ({ row, idx }))
-            .filter(({ row }) => row['구분'] === '수술중 FAIL' && normalize(row['제조사']) === targetM)
-            .sort((a, b) => String(a.row['날짜'] || '').localeCompare(String(b.row['날짜'] || '')))
+            .filter(({ row }) => row['구분'] === '수술중 FAIL' && normalize(String(row['제조사'] ?? '')) === targetM)
+            .sort((a, b) => String(a.row['날짜'] ?? '').localeCompare(String(b.row['날짜'] ?? '')))
             .map(item => item.idx);
           const indicesToUpdate = failIndices.slice(0, totalToProcess);
           indicesToUpdate.forEach(idx => {
@@ -1560,13 +1565,6 @@ const App: React.FC = () => {
   const [isDirtyAfterSave, setIsDirtyAfterSave] = useState(false);
   // 저장 후 복구지점 패널로 스크롤 이동용 ref
   const restorePanelRef = React.useRef<HTMLDivElement>(null);
-
-  // 재고 비교 모달 상태
-  const [inventoryCompare, setInventoryCompare] = useState<{
-    duplicates: CompareItem[];
-    newItems: CompareItem[];
-    fullNewItems: InventoryItem[];
-  } | null>(null);
 
   // 확인 모달 상태
   const [confirmModal, setConfirmModal] = useState<{
@@ -1816,114 +1814,22 @@ const App: React.FC = () => {
     });
   }, [setSaveToast]);
 
-  // STEP 6: 재고 마스터 반영 핸들러 (인라인에서 추출)
-  // STEP 7: 재고 마스터 반영 — 비교 모달 표시
-  const handleApplyToInventory = useCallback(() => {
-    if (!state.fixtureData) return;
-    const activeSheet = state.fixtureData.sheets[state.fixtureData.activeSheetName];
-    if (!activeSheet || activeSheet.rows.length === 0) {
-      showAlertToast('워크시트에 데이터가 없습니다.', 'error');
-      return;
-    }
-    const allCandidates = activeSheet.rows
-      .filter(row => row['사용안함'] !== true)
-      .map((row, idx) => {
-        const fixed = fixIbsImplant(
-          String(row['제조사'] || row['Manufacturer'] || '기타'),
-          String(row['브랜드'] || row['Brand'] || '기타')
-        );
-        const rawSize = String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || '');
-        return {
-          id: `sync_${Date.now()}_${idx}`,
-          manufacturer: fixed.manufacturer,
-          brand: fixed.brand,
-          size: toCanonicalSize(rawSize, fixed.manufacturer),
-          initialStock: 0,
-          stockAdjustment: 0,
-          usageCount: 0,
-          currentStock: 0,
-          recommendedStock: 5,
-          monthlyAvgUsage: 0,
-          dailyMaxUsage: 0,
-        };
-      });
-
-    const duplicates: CompareItem[] = [];
-    const newItems: typeof allCandidates = [];
-    const existingKeys = new Set(state.inventory.map(inv => buildInventoryDuplicateKey(inv)));
-    const pendingKeys = new Set<string>();
-
-    allCandidates.forEach(ni => {
-      const key = buildInventoryDuplicateKey(ni);
-      const isDup = existingKeys.has(key) || pendingKeys.has(key);
-      if (isDup) {
-        duplicates.push({ manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size });
-      } else {
-        newItems.push(ni);
-        pendingKeys.add(key);
-      }
-    });
-
-    // 플랜 품목 수 제한 체크 (수술중FAIL_ / 보험청구 제외)
-    const planMaxItems = PLAN_LIMITS[effectivePlan].maxItems;
-    const billableNew = newItems.filter(i => !i.manufacturer.startsWith('수술중FAIL_') && i.manufacturer !== '보험청구').length;
-    const totalAfterAdd = billableItemCount + billableNew;
-    if (planMaxItems !== Infinity && totalAfterAdd > planMaxItems) {
-      setPlanLimitModal({ currentCount: billableItemCount, newCount: billableNew, maxItems: planMaxItems });
-      return;
-    }
-
-    // 비교 모달 표시
-    setInventoryCompare({
-      duplicates,
-      newItems: newItems.map(ni => ({ manufacturer: ni.manufacturer, brand: ni.brand, size: ni.size })),
-      fullNewItems: newItems,
-    });
-  }, [state.fixtureData, state.inventory, effectivePlan, billableItemCount, showAlertToast]);
-
-  // 비교 모달에서 확인 시 실제 저장
-  const handleConfirmApplyToInventory = useCallback(async () => {
-    if (!inventoryCompare) return;
-    const newItems: InventoryItem[] = inventoryCompare.fullNewItems;
-    setInventoryCompare(null);
-
-    if (newItems.length === 0) return;
-
-    // DB 저장이 필요한 경우: DB 성공 후 상태 반영 (롤백 불필요)
-    if (state.user?.hospitalId) {
-      try {
-        const dbItems = newItems.map((ni) => ({
-          hospital_id: state.user!.hospitalId,
-          manufacturer: ni.manufacturer,
-          brand: ni.brand,
-          size: ni.size,
-          initial_stock: ni.initialStock,
-          stock_adjustment: 0,
-        }));
-        const saved = await inventoryService.bulkInsert(dbItems);
-        if (saved.length > 0) {
-          // DB 성공 → 서버 ID가 반영된 상태로 로컬 업데이트
-          const itemsWithDbId = newItems.map(item => {
-            const match = saved.find(s => s.manufacturer === item.manufacturer && s.brand === item.brand && s.size === item.size);
-            return match ? { ...item, id: match.id } : item;
-          });
-          setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsWithDbId], dashboardTab: 'inventory_master' }));
-          showAlertToast(`${saved.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
-          operationLogService.logOperation('data_processing', `재고 마스터 반영 ${saved.length}건`, { count: saved.length });
-        } else {
-          console.error('[App] bulkInsert 실패: 0개 저장됨. hospitalId:', state.user!.hospitalId);
-          showAlertToast('서버 저장 실패 — 다시 시도해주세요.', 'error');
-        }
-      } catch (err) {
-        console.error('[App] bulkInsert 예외:', err);
-        showAlertToast('서버 저장 중 오류가 발생했습니다. 네트워크를 확인해주세요.', 'error');
-      }
-    } else {
-      // 로그인 전(로컬 전용): 바로 상태에 반영
-      setState(prev => ({ ...prev, inventory: [...prev.inventory, ...newItems], dashboardTab: 'inventory_master' }));
-      showAlertToast(`${newItems.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
-    }
-  }, [inventoryCompare, state.user, showAlertToast]);
+  const {
+    inventoryCompare,
+    planLimitModal,
+    handleApplyToInventory,
+    handleConfirmApplyToInventory,
+    cancelInventoryCompare,
+    closePlanLimitModal,
+  } = useInventoryCompare({
+    fixtureData: state.fixtureData,
+    inventory: state.inventory,
+    user: state.user,
+    setState,
+    effectivePlan,
+    billableItemCount,
+    showAlertToast,
+  });
 
   const virtualSurgeryData = useMemo(() => {
     const masterRows = state.surgeryMaster['수술기록지'];
@@ -2354,6 +2260,16 @@ const App: React.FC = () => {
                               currentCount={billableItemCount}
                               maxCount={PLAN_LIMITS.free.maxItems}
                               onUpgrade={() => setState(prev => ({ ...prev, currentView: 'pricing' }))}
+                            />
+                          )}
+                          {/* Plan Limit Toast */}
+                          {planLimitToast && (
+                            <PlanLimitToast
+                              type={planLimitToast}
+                              currentCount={billableItemCount}
+                              maxCount={PLAN_LIMITS.free.maxItems}
+                              onUpgrade={() => { setPlanLimitToast(null); setState(prev => ({ ...prev, currentView: 'pricing' })); }}
+                              onClose={() => setPlanLimitToast(null)}
                             />
                           )}
                           {/* Readonly User Banner */}
@@ -2946,7 +2862,7 @@ const App: React.FC = () => {
                       onCancel={() => setState(p => ({ ...p, currentView: 'login', mfaPendingEmail: undefined }))}
                     />
                   )}
-          {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} />}
+          {state.currentView === 'signup' && <AuthForm key="signup" type="signup" onSuccess={handleLoginSuccess} onSwitch={() => setState(p => ({ ...p, currentView: 'login' }))} onContact={() => setState(p => ({ ...p, currentView: 'contact' }))} initialPlan={state.preSelectedPlan} />}
                   {state.currentView === 'invite' && inviteInfo && (
                     <AuthForm
                       type="invite"
@@ -2960,7 +2876,7 @@ const App: React.FC = () => {
                     <PricingPage
                       onContact={() => setState(p => ({ ...p, currentView: 'contact' }))}
                       onGoToValue={() => setState(p => ({ ...p, currentView: 'value' }))}
-                      onGetStarted={() => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup' }))}
+                      onGetStarted={(plan) => setState(p => ({ ...p, currentView: state.user ? 'dashboard' : 'signup', preSelectedPlan: plan }))}
                       currentPlan={state.planState?.plan}
                       isLoggedIn={!!state.user}
                       userName={state.user?.name}
@@ -3118,89 +3034,21 @@ const App: React.FC = () => {
         </Suspense>
       )}
 
-      {planLimitModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden">
-            <div className="p-8 flex flex-col items-center text-center">
-              <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-5">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
-              </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">품목 수 제한 초과</h3>
-              <p className="text-sm text-slate-500 mb-6">현재 플랜의 최대 품목 수를 초과하여<br />재고 마스터에 반영할 수 없습니다.</p>
-
-              <div className="w-full bg-slate-50 rounded-2xl p-5 space-y-3 mb-6">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-400">현재 등록</span>
-                  <span className="text-sm font-black text-slate-700">{planLimitModal.currentCount}개</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-400">추가 대상</span>
-                  <span className="text-sm font-black text-indigo-600">+{planLimitModal.newCount}개</span>
-                </div>
-                <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-400">플랜 최대</span>
-                  <span className="text-sm font-black text-rose-500">{planLimitModal.maxItems}개</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-400 mb-6">플랜을 업그레이드하거나, 기존 품목을 정리한 후 다시 시도해주세요.</p>
-            </div>
-            <div className="px-8 pb-8 flex gap-3">
-              <button
-                onClick={() => setPlanLimitModal(null)}
-                className="flex-1 py-3 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all"
-              >
-                닫기
-              </button>
-              <button
-                onClick={() => { setPlanLimitModal(null); setState(prev => ({ ...prev, currentView: 'pricing' })); }}
-                className="flex-1 py-3 bg-indigo-600 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
-              >
-                플랜 업그레이드
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 확인 모달 */}
-      {confirmModal && (
-        <ConfirmModal
-          title={confirmModal.title}
-          message={confirmModal.message}
-          tip={confirmModal.tip}
-          confirmLabel={confirmModal.confirmLabel}
-          confirmColor={confirmModal.confirmColor}
-          icon={confirmModal.icon}
-          onConfirm={confirmModal.onConfirm}
-          onCancel={() => setConfirmModal(null)}
-        />
-      )}
-
-      {inventoryCompare && (
-        <InventoryCompareModal
-          duplicates={inventoryCompare.duplicates}
-          newItems={inventoryCompare.newItems}
-          onConfirm={handleConfirmApplyToInventory}
-          onCancel={() => setInventoryCompare(null)}
-        />
-      )}
-
-      {/* Alert Toast */}
-      {alertToast && (
-        <div
-          style={showMobileDashboardNav ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-            }`}
-        >
-          {alertToast.type === 'success' ? (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          )}
-          {alertToast.message}
-        </div>
-      )}
+      <AppGlobalOverlays
+        planLimitModal={planLimitModal}
+        confirmModal={confirmModal}
+        inventoryCompare={inventoryCompare}
+        alertToast={alertToast}
+        showMobileDashboardNav={showMobileDashboardNav}
+        onClosePlanLimitModal={closePlanLimitModal}
+        onUpgradePlan={() => {
+          closePlanLimitModal();
+          setState(prev => ({ ...prev, currentView: 'pricing' }));
+        }}
+        onCloseConfirmModal={() => setConfirmModal(null)}
+        onConfirmInventoryCompare={handleConfirmApplyToInventory}
+        onCancelInventoryCompare={cancelInventoryCompare}
+      />
     </div >
   );
 };

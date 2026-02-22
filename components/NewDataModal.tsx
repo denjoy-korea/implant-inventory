@@ -30,9 +30,9 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
     setRows(rows.filter((_, i) => i !== index));
   };
 
-  const updateRow = (index: number, field: keyof TempRow, value: any) => {
+  const updateRow = (index: number, field: keyof TempRow, value: TempRow[keyof TempRow]) => {
     const newRows = [...rows];
-    newRows[index] = { ...newRows[index], [field]: value };
+    newRows[index] = { ...newRows[index], [field]: value } as TempRow;
     setRows(newRows);
   };
 

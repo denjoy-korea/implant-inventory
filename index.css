@@ -114,6 +114,11 @@ textarea:focus-visible {
   to { opacity: 1; }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .chart-dot-grid {
   background-image: radial-gradient(circle, #e2e8f0 0.5px, transparent 0.5px);
   background-size: 16px 16px;

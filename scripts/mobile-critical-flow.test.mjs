@@ -80,6 +80,36 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   assert.match(order, /title="주문 삭제"\s+aria-label="주문 삭제"/);
 });
 
+test('analyze page shows upload requirement checklist and disabled reasons', () => {
+  const analyze = read('components/AnalyzePage.tsx');
+
+  assert.match(analyze, /const uploadRequirements:[\s\S]*엑셀 형식\(\.xlsx\/\.xls\) 확인/s);
+  assert.match(analyze, /const analyzeDisabledReasons = \[/);
+  assert.match(analyze, /분석 시작 전 체크/);
+  assert.match(analyze, /analyzeDisabledReasons\.join\(/);
+  assert.match(analyze, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
+});
+
+test('analyze page classifies analyze\/lead errors and exposes retry CTA', () => {
+  const analyze = read('components/AnalyzePage.tsx');
+
+  assert.match(analyze, /function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
+  assert.match(analyze, /function classifyLeadSubmitError\(error: unknown\)[\s\S]*서버 오류:[\s\S]*입력 오류:[\s\S]*네트워크 오류:/s);
+  assert.match(analyze, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
+  assert.match(analyze, /다시 전송/);
+  assert.match(analyze, /onClick=\{handleLeadSubmit\}/);
+});
+
+test('analyze page strengthens success confidence with ETA and next action CTA', () => {
+  const analyze = read('components/AnalyzePage.tsx');
+
+  assert.match(analyze, /const leadSuccessCta = wantDetailedAnalysis[\s\S]*ctaLabel: '상담 일정 잡기'[\s\S]*ctaLabel: '무료로 시작하기'/s);
+  assert.match(analyze, /먼저 확인할 핵심 인사이트/);
+  assert.match(analyze, /접수 완료: \{leadSuccessCta\.title\}/);
+  assert.match(analyze, /처리 예상시간: \{leadSuccessCta\.eta\}/);
+  assert.match(analyze, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
+});
+
 test('app shell guard states and settings routes stay wired', () => {
   const app = read('App.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');

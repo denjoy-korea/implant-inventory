@@ -119,18 +119,21 @@ export const auditService = {
       console.error('[auditService] Fetch history failed:', error);
       return [];
     }
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      auditDate: row.audit_date,
-      systemStock: row.system_stock,
-      actualStock: row.actual_stock,
-      difference: row.difference,
-      reason: row.reason,
-      createdAt: row.created_at,
-      manufacturer: row.inventory?.manufacturer || '',
-      brand: row.inventory?.brand || '',
-      size: row.inventory?.size || '',
-      performedBy: row.performed_by ?? null,
-    }));
+    return (data || []).map((row: Record<string, unknown>) => {
+      const inv = row.inventory as { manufacturer?: string; brand?: string; size?: string } | null;
+      return {
+        id: row.id as string,
+        auditDate: row.audit_date as string,
+        systemStock: row.system_stock as number,
+        actualStock: row.actual_stock as number,
+        difference: row.difference as number,
+        reason: row.reason as string | null,
+        createdAt: row.created_at as string,
+        manufacturer: inv?.manufacturer || '',
+        brand: inv?.brand || '',
+        size: inv?.size || '',
+        performedBy: (row.performed_by as string | null) ?? null,
+      };
+    });
   },
 };

@@ -150,22 +150,22 @@ export async function excelRowToDbSurgery(
   hospitalId: string
 ): Promise<Omit<DbSurgeryRecord, 'id' | 'created_at'>> {
   const patientRaw = row['환자정보'] ? String(row['환자정보']) : '';
-  const { manufacturer, brand } = fixIbsImplant(row['제조사'] || '', row['브랜드'] || '');
-  const canonicalSize = toCanonicalSize(String(row['규격(SIZE)'] || ''), manufacturer);
+  const { manufacturer, brand } = fixIbsImplant(String(row['제조사'] ?? ''), String(row['브랜드'] ?? ''));
+  const canonicalSize = toCanonicalSize(String(row['규격(SIZE)'] ?? ''), manufacturer);
   return {
     hospital_id: hospitalId,
-    date: row['날짜'] || null,
+    date: row['날짜'] ? String(row['날짜']) : null,
     patient_info: patientRaw ? await encryptPatientInfo(patientRaw) : null,
     patient_info_hash: patientRaw ? await hashPatientInfo(patientRaw) : null,
-    tooth_number: row['치아번호'] || null,
+    tooth_number: row['치아번호'] ? String(row['치아번호']) : null,
     quantity: Number(row['갯수']) || 1,
-    surgery_record: row['수술기록'] || null,
-    classification: row['구분'] || '식립',
+    surgery_record: row['수술기록'] ? String(row['수술기록']) : null,
+    classification: String(row['구분'] ?? '') || '식립',
     manufacturer: manufacturer || null,
     brand: brand || null,
     size: canonicalSize || null,
-    bone_quality: row['골질'] || null,
-    initial_fixation: row['초기고정'] || null,
+    bone_quality: row['골질'] ? String(row['골질']) : null,
+    initial_fixation: row['초기고정'] ? String(row['초기고정']) : null,
   };
 }
 
