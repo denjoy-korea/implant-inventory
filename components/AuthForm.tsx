@@ -373,6 +373,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         phone: phone || undefined,
         bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
         signupSource: signupSource || undefined,
+        trialPlan: (pendingTrialPlan && pendingTrialPlan !== 'free') ? pendingTrialPlan : undefined,
       });
       setIsSubmitting(false);
 

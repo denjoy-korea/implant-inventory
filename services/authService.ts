@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
-import { DbProfile, TrustedDevice, UserRole } from '../types';
+import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
 
 const TRUSTED_DEVICE_TOKEN_KEY = 'dentweb_trusted_device_token';
 
@@ -13,6 +13,7 @@ interface SignupParams {
   phone?: string;
   bizFile?: File;
   signupSource?: string;
+  trialPlan?: PlanType;
 }
 
 interface AuthResult {
@@ -25,7 +26,7 @@ interface AuthResult {
 export const authService = {
   /** 이메일/비밀번호 회원가입 */
   async signUp(params: SignupParams): Promise<AuthResult> {
-    const { email, password, name, role, hospitalName, phone, bizFile, signupSource } = params;
+    const { email, password, name, role, hospitalName, phone, bizFile, signupSource, trialPlan } = params;
     if (role === 'admin') {
       return { success: false, error: '운영자 계정은 직접 가입할 수 없습니다.' };
     }
@@ -116,6 +117,11 @@ export const authService = {
         console.error('[authService] Profile update failed:', profileError);
       }
 
+      // 3-1. 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 hospital.id 직접 사용)
+      if (trialPlan && trialPlan !== 'free') {
+        await this._startTrialForHospital(hospital.id, trialPlan);
+      }
+
       // 4. 사업자등록증 업로드 (선택)
       if (bizFile) {
         const fileExt = bizFile.name.split('.').pop();
@@ -161,6 +167,11 @@ export const authService = {
       if (profileError) {
         console.error('[authService] Profile workspace link failed:', profileError);
       }
+
+      // 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 workspace.id 직접 사용)
+      if (trialPlan && trialPlan !== 'free') {
+        await this._startTrialForHospital(workspace.id, trialPlan);
+      }
     }
 
     // 5. 슬랙 가입 알림 (fire-and-forget)
@@ -180,15 +191,15 @@ export const authService = {
       }
     })();
 
-    // 6. 프로필 조회 (userId로 직접 조회 + 재시도)
-    for (let i = 0; i < 3; i++) {
+    // 6. 프로필 조회 — hospital_id가 설정될 때까지 재시도 (최대 5회 × 400ms)
+    for (let i = 0; i < 5; i++) {
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
-      if (profileData) return { success: true, profile: profileData as DbProfile };
-      await new Promise(r => setTimeout(r, 500));
+      if (profileData?.hospital_id) return { success: true, profile: profileData as DbProfile };
+      await new Promise(r => setTimeout(r, 400));
     }
     return { success: true };
   },
@@ -225,22 +236,36 @@ export const authService = {
 
   /** 로그인 */
   async signIn(email: string, password: string): Promise<AuthResult> {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    let authError: Error | null = null;
+    try {
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('네트워크 응답이 없습니다. 잠시 후 다시 시도해주세요.')), 10_000)
+        ),
+      ]);
+      authError = error;
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : '로그인 중 오류가 발생했습니다.' };
+    }
 
-    if (error) {
-      return { success: false, error: error.message };
+    if (authError) {
+      return { success: false, error: authError.message };
     }
 
     // 세션 토큰 발급 및 저장 (중복 로그인 차단용)
+    // RPC 실패/지연 시 stale 토큰으로 인한 false 로그아웃 방지 — 먼저 기존 토큰 제거
+    localStorage.removeItem('dentweb_session_token');
     try {
       const token = crypto.randomUUID();
-      await supabase.rpc('set_session_token', { p_token: token });
+      await Promise.race([
+        supabase.rpc('set_session_token', { p_token: token }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
+      ]);
       localStorage.setItem('dentweb_session_token', token);
     } catch (tokenError) {
       console.warn('[authService] session token setup failed:', tokenError);
+      // localStorage는 이미 비워짐 → validateSessionToken이 true 반환
     }
 
     return { success: true };
@@ -330,6 +355,28 @@ export const authService = {
       }).catch(() => {});
     } catch (err) {
       console.warn('[authService] saveWithdrawalReason failed:', err);
+    }
+  },
+
+  /** 가입 시 트라이얼 시작 (hospital.id를 직접 받아 profile 의존 없이 실행) */
+  async _startTrialForHospital(hospitalId: string, plan: PlanType): Promise<void> {
+    // RPC 시도 (p_plan 파라미터 지원)
+    const { error } = await supabase.rpc('start_hospital_trial', {
+      p_hospital_id: hospitalId,
+      p_plan: plan,
+    });
+    if (!error) return;
+
+    // PGRST202 fallback: 직접 업데이트
+    if (error.code === 'PGRST202') {
+      const { error: fbErr } = await supabase
+        .from('hospitals')
+        .update({ plan, trial_started_at: new Date().toISOString(), trial_used: false })
+        .eq('id', hospitalId)
+        .is('trial_started_at', null);
+      if (fbErr) console.error('[authService] Trial start fallback failed:', fbErr);
+    } else {
+      console.error('[authService] Trial start failed:', error);
     }
   },
 
