@@ -356,6 +356,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         { mode: 'signup', user_type: userType ?? null, has_trial_plan: Boolean(pendingTrialPlan) },
         'signup',
       );
+
+      // SIGNED_IN 이벤트가 signUp() 완료 전에 먼저 발화될 수 있으므로,
+      // 가입 전에 미리 저장하여 핸들러가 startTrial을 확실히 실행하도록 함
+      if (pendingTrialPlan && pendingTrialPlan !== 'free') {
+        localStorage.setItem('_pending_trial_plan', pendingTrialPlan);
+      }
+
       setIsSubmitting(true);
       const result = await authService.signUp({
         email,
@@ -370,16 +377,14 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       setIsSubmitting(false);
 
       if (!result.success) {
+        localStorage.removeItem('_pending_trial_plan');
         setErrorStatus(toAuthErrorStatus(result.error || '회원가입에 실패했습니다.'));
         pageViewService.trackEvent('auth_error', { mode: 'signup', reason: result.error || 'signup_failed' }, 'signup');
         return;
       }
 
       if (result.emailConfirmationRequired) {
-        // 이메일 인증 후 트라이얼 플랜 적용을 위해 로컬스토리지에 저장
-        if (pendingTrialPlan && pendingTrialPlan !== 'free') {
-          localStorage.setItem('_pending_trial_plan', pendingTrialPlan);
-        }
+        // _pending_trial_plan은 이미 signUp() 호출 전에 저장됨
         setResendCooldown(60);
         setStep('email_sent');
         pageViewService.trackEvent('auth_email_sent', { mode: 'signup' }, 'signup');
@@ -389,6 +394,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       if (result.profile) {
         const signedUpUser = dbToUser(result.profile);
         await maybeStartTrialForSignup(signedUpUser);
+        localStorage.removeItem('_pending_trial_plan');
         pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedUpUser.role }, 'signup');
         onSuccess(signedUpUser);
       } else {
@@ -397,9 +403,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         if (loginResult.success && loginResult.profile) {
           const signedInUser = dbToUser(loginResult.profile);
           await maybeStartTrialForSignup(signedInUser);
+          localStorage.removeItem('_pending_trial_plan');
           pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedInUser.role }, 'signup');
           onSuccess(signedInUser);
         } else {
+          localStorage.removeItem('_pending_trial_plan');
           pageViewService.trackEvent('auth_error', { mode: 'signup', reason: loginResult.error || 'post_signup_signin_failed' }, 'signup');
           showToast('회원가입 완료! 로그인해주세요.', 'success');
           onSwitch();
