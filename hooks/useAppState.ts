@@ -338,7 +338,7 @@ export function useAppState(onNotify?: NotifyFn) {
             const user = dbToUser(profile);
             // 이메일 인증 완료 후 트라이얼 플랜 적용 (이메일 인증 ON 경로)
             const pendingPlan = localStorage.getItem('_pending_trial_plan') as PlanType | null;
-            if (pendingPlan && pendingPlan !== 'free' && user.role === 'master' && user.hospitalId) {
+            if (pendingPlan && pendingPlan !== 'free' && user.hospitalId) {
               localStorage.removeItem('_pending_trial_plan');
               await planService.startTrial(user.hospitalId, pendingPlan);
             }

@@ -314,7 +314,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const maybeStartTrialForSignup = async (user: User): Promise<void> => {
     if (type !== 'signup') return;
     if (!pendingTrialPlan || pendingTrialPlan === 'free') return;
-    if (user.role !== 'master' || !user.hospitalId) return;
+    if (!user.hospitalId) return;
 
     const started = await planService.startTrial(user.hospitalId, pendingTrialPlan);
     if (started) {
