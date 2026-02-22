@@ -19,12 +19,16 @@ const PUBLIC_PAGES = new Set([
   'landing', 'pricing', 'analyze', 'contact', 'value', 'login', 'signup',
 ]);
 
+type EventData = Record<string, unknown>;
+
 export const pageViewService = {
   /** 페이지 뷰 기록 (fire-and-forget, 실패 시 조용히 무시) */
   track(page: string): void {
     if (!PUBLIC_PAGES.has(page)) return;
     supabase.from('page_views').insert({
       page,
+      event_type: `${page}_view`,
+      event_data: null,
       session_id: getSessionId(),
       referrer: document.referrer || null,
     }).then(undefined, () => {});
@@ -34,12 +38,16 @@ export const pageViewService = {
    * 로그인 성공 시 호출 — 현재 세션의 page_views에 user_id를 기록해
    * "방문 후 로그인" 전환을 추적한다. fire-and-forget.
    */
-  markConverted(userId: string): void {
+  markConverted(userId: string, accountId?: string | null): void {
     const sid = getSessionId();
     if (!sid || sid === 'unknown') return;
+    const payload: { user_id: string; account_id?: string } = { user_id: userId };
+    if (accountId && accountId.trim()) {
+      payload.account_id = accountId.trim();
+    }
     supabase
       .from('page_views')
-      .update({ user_id: userId })
+      .update(payload)
       .eq('session_id', sid)
       .is('user_id', null)
       .then(undefined, () => {});
@@ -50,12 +58,14 @@ export const pageViewService = {
    * event_type 예: 'pricing_waitlist_button_click', 'pricing_waitlist_submit_success'
    * event_data 예: { plan: 'plus' }
    */
-  trackEvent(event_type: string, event_data?: Record<string, unknown>): void {
+  trackEvent(event_type: string, event_data?: EventData, page = 'pricing'): void {
+    const normalizedPage = PUBLIC_PAGES.has(page) ? page : 'landing';
     supabase.from('page_views').insert({
-      page: 'pricing',
+      page: normalizedPage,
       event_type,
       event_data: event_data ?? null,
       session_id: getSessionId(),
+      referrer: document.referrer || null,
     }).then(undefined, () => {});
   },
 

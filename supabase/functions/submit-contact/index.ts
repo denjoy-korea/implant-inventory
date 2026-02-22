@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 
@@ -47,6 +42,7 @@ const isWaitlistInquiry = (inquiryType: string): boolean =>
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
+    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
@@ -54,6 +50,7 @@ Deno.serve(async (req: Request) => {
 
   let payload: ContactPayload;
   try {
+    const corsHeaders = getCorsHeaders(req);
     payload = await req.json();
   } catch {
     return jsonResponse(400, {

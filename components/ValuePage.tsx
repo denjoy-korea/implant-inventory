@@ -1,5 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
+import {
+  DEFAULT_TRIAL_HIGHLIGHT_TEXT,
+  getTrialCopy,
+} from '../utils/trialPolicy';
 
 interface ValuePageProps {
   onGetStarted: () => void;
@@ -43,6 +47,9 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
   const stat2 = useCountUp(14, 600);
   const stat3 = useCountUp(5, 600);
   const stat4 = useCountUp(0, 400);
+  const trialCopy = getTrialCopy();
+  const ctaTrialBadgeText = trialCopy.badgeText;
+  const ctaTrialFootnoteText = trialCopy.footnoteWithPipe;
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans selection:bg-indigo-500 selection:text-white">
@@ -429,17 +436,17 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center text-white">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-sm font-bold text-amber-200">10곳 한정 · 4주 무료 베타 체험</span>
+            <span className="text-sm font-bold text-amber-200">{ctaTrialBadgeText}</span>
           </div>
           <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight">
-            지금 시작하면<br />4주 무료
+            지금 시작하면<br />{DEFAULT_TRIAL_HIGHLIGHT_TEXT}
           </h2>
           <p className="text-indigo-200 text-lg mb-4 leading-relaxed">
             엑셀에 쓰는 시간을 환자에게 쓰세요.<br />
             더 이상 재고 걱정에 시간을 낭비하지 마세요.
           </p>
           <p className="text-sm text-indigo-300 mb-10">
-            베타 테스터 10곳 한정 · 4주 무료 체험 | 카드 불필요
+            {ctaTrialFootnoteText}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button

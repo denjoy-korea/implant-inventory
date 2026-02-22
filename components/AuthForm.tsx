@@ -7,6 +7,10 @@ import { supabase } from '../services/supabaseClient';
 import { dbToUser } from '../services/mappers';
 import { useToast } from '../hooks/useToast';
 import { contactService } from '../services/contactService';
+import { pageViewService } from '../services/pageViewService';
+import { formatPhone, SIGNUP_PLANS } from './auth/authSignupConfig';
+import AuthSignupPlanSelect from './auth/AuthSignupPlanSelect';
+import AuthSignupRoleSelect from './auth/AuthSignupRoleSelect';
 
 interface InviteInfo {
   token: string;
@@ -28,27 +32,47 @@ interface AuthFormProps {
   initialPlan?: PlanType;
 }
 
-type SignupStep = 'role_selection' | 'plan_select' | 'form_input';
+type SignupStep = 'role_selection' | 'plan_select' | 'form_input' | 'email_sent';
 type UserType = 'dentist' | 'staff';
+type AuthErrorCode = 'network' | 'permission' | 'invite' | 'validation' | 'unknown';
+interface AuthErrorStatus {
+  message: string;
+  code: AuthErrorCode;
+  canRetry: boolean;
+  showContact: boolean;
+}
 
-const SIGNUP_PLANS: { key: PlanType; label: string; tag?: string; price: string; summary: string; trial: boolean }[] = [
-  { key: 'free',     label: 'Free',     price: '무료',          summary: '재고 100개 · 1인 · 3개월 기록',    trial: false },
-  { key: 'basic',    label: 'Basic',    tag: '팀용',  price: '29,000원/월', summary: '재고 200개 · 3인 · 6개월 기록',    trial: true  },
-  { key: 'plus',     label: 'Plus',     tag: '추천',  price: '69,000원/월', summary: '재고 500개 · 5인 · 12개월 기록',   trial: true  },
-  { key: 'business', label: 'Business', tag: '기업용', price: '129,000원/월', summary: '재고 무제한 · 인원 무제한 · 24개월', trial: true  },
-];
+const toAuthErrorStatus = (message: string): AuthErrorStatus => {
+  const normalized = message.toLowerCase();
+  const isNetwork = /network|fetch|timeout|timed out|연결|네트워크/.test(normalized);
+  const isPermission = /permission|forbidden|권한|unauthorized|denied/.test(normalized);
+  const isInvite = /invite|초대|토큰|만료/.test(normalized);
+  const isValidation = /비밀번호|이메일|입력|형식|필수|일치하지/.test(normalized);
 
-const formatPhone = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.startsWith('02')) {
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
-  }
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  const code: AuthErrorCode = isNetwork
+    ? 'network'
+    : isPermission
+      ? 'permission'
+      : isInvite
+        ? 'invite'
+        : isValidation
+          ? 'validation'
+          : 'unknown';
+
+  return {
+    message,
+    code,
+    canRetry: code === 'network' || code === 'permission' || code === 'invite' || code === 'unknown',
+    showContact: code === 'permission' || code === 'invite' || code === 'unknown',
+  };
 };
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain) return email;
+  if (local.length <= 2) return `${local[0]}***@${domain}`;
+  return `${local[0]}${'*'.repeat(local.length - 2)}${local.slice(-1)}@${domain}`;
+}
 
 const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContact, inviteInfo, onMfaRequired, initialPlan }) => {
   const [step, setStep] = useState<SignupStep>('plan_select');
@@ -62,7 +86,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [signupSource, setSignupSource] = useState('');
   const [bizFile, setBizFile] = useState<File | null>(null);
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [errorStatus, setErrorStatus] = useState<{ message: string } | null>(null);
+  const [errorStatus, setErrorStatus] = useState<AuthErrorStatus | null>(null);
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
   // plan_select 단계
@@ -78,6 +102,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [findPhone, setFindPhone] = useState('');
   const [foundEmail, setFoundEmail] = useState<string | null>(null);
+
+  // 이메일 인증 재전송 쿨다운
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
 
   // invite 모드: 초대 정보 사전 입력
   useEffect(() => {
@@ -125,6 +159,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const handleWaitlistSubmit = async () => {
     if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
     setWaitlistSubmitting(true);
+    pageViewService.trackEvent('waitlist_submit_start', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
     try {
       await contactService.submit({
         hospital_name: '-',
@@ -135,10 +170,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         inquiry_type: `plan_waitlist_${waitlistPlan.key}`,
         content: `${waitlistPlan.name} 플랜 대기 신청`,
       });
+      pageViewService.trackEvent('waitlist_submit', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
       setWaitlistPlan(null);
       setWaitlistName('');
       setWaitlistEmail('');
     } catch (error) {
+      pageViewService.trackEvent('waitlist_submit_error', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
       const message =
         error instanceof Error && error.message
           ? error.message
@@ -153,14 +190,17 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     e.preventDefault();
     if (!inviteInfo) return;
     setErrorStatus(null);
+    pageViewService.trackEvent('auth_start', { mode: 'invite' }, 'signup');
 
     const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
     if (!pwRegex.test(password)) {
-      setErrorStatus({ message: '비밀번호는 8자 이상, 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.' });
+      setErrorStatus(toAuthErrorStatus('비밀번호는 8자 이상, 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.'));
+      pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'password_policy' }, 'signup');
       return;
     }
     if (password !== passwordConfirm) {
-      setErrorStatus({ message: '비밀번호가 일치하지 않습니다.' });
+      setErrorStatus(toAuthErrorStatus('비밀번호가 일치하지 않습니다.'));
+      pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'password_mismatch' }, 'signup');
       return;
     }
 
@@ -184,18 +224,21 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
             password,
           });
           if (signInError || !signInData.user) {
-            setErrorStatus({ message: '이미 등록된 이메일입니다. 비밀번호를 다시 확인해주세요.' });
+            setErrorStatus(toAuthErrorStatus('이미 등록된 이메일입니다. 비밀번호를 다시 확인해주세요.'));
+            pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'already_registered_signin_failed' }, 'signup');
             setIsSubmitting(false);
             return;
           }
           userId = signInData.user.id;
         } else {
-          setErrorStatus({ message: authError.message });
+          setErrorStatus(toAuthErrorStatus(authError.message));
+          pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'signup_error', message: authError.message }, 'signup');
           setIsSubmitting(false);
           return;
         }
       } else if (!authData.user) {
-        setErrorStatus({ message: '계정 생성에 실패했습니다.' });
+        setErrorStatus(toAuthErrorStatus('계정 생성에 실패했습니다.'));
+        pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'missing_user_after_signup' }, 'signup');
         setIsSubmitting(false);
         return;
       } else {
@@ -220,16 +263,23 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         } else if (acceptError && acceptError.message && acceptError.message !== 'Edge Function returned a non-2xx status code') {
           msg = acceptError.message;
         }
-        setErrorStatus({ message: msg });
+        setErrorStatus(toAuthErrorStatus(msg));
+        pageViewService.trackEvent('auth_error', { mode: 'invite', reason: 'accept_invite_failed', message: msg }, 'signup');
         setIsSubmitting(false);
         return;
       }
 
       // 3. 자동 로그인
       await authService.signIn(inviteInfo.email, password);
+      pageViewService.trackEvent('auth_complete', { mode: 'invite' }, 'signup');
       window.location.reload();
     } catch (err: unknown) {
-      setErrorStatus({ message: getErrorMessage(err, '오류가 발생했습니다.') });
+      setErrorStatus(toAuthErrorStatus(getErrorMessage(err, '오류가 발생했습니다.')));
+      pageViewService.trackEvent(
+        'auth_error',
+        { mode: 'invite', reason: 'unexpected', message: getErrorMessage(err, '오류가 발생했습니다.') },
+        'signup',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -269,12 +319,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
 
       const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
       if (!pwRegex.test(password)) {
-        setErrorStatus({ message: "비밀번호는 8자 이상, 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다." });
+        setErrorStatus(toAuthErrorStatus('비밀번호는 8자 이상, 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.'));
         return;
       }
 
       if (password !== passwordConfirm) {
-        setErrorStatus({ message: "비밀번호가 일치하지 않습니다." });
+        setErrorStatus(toAuthErrorStatus('비밀번호가 일치하지 않습니다.'));
         return;
       }
 
@@ -283,6 +333,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       if (userType === 'dentist' && !bizFile) { showToast('사업자등록증을 첨부해주세요.', 'error'); return; }
       if (!signupSource) { showToast('가입경로를 선택해주세요.', 'error'); return; }
 
+      pageViewService.trackEvent(
+        'auth_start',
+        { mode: 'signup', user_type: userType ?? null, has_trial_plan: Boolean(pendingTrialPlan) },
+        'signup',
+      );
       setIsSubmitting(true);
       const result = await authService.signUp({
         email,
@@ -297,13 +352,22 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       setIsSubmitting(false);
 
       if (!result.success) {
-        setErrorStatus({ message: result.error || '회원가입에 실패했습니다.' });
+        setErrorStatus(toAuthErrorStatus(result.error || '회원가입에 실패했습니다.'));
+        pageViewService.trackEvent('auth_error', { mode: 'signup', reason: result.error || 'signup_failed' }, 'signup');
+        return;
+      }
+
+      if (result.emailConfirmationRequired) {
+        setResendCooldown(60);
+        setStep('email_sent');
+        pageViewService.trackEvent('auth_email_sent', { mode: 'signup' }, 'signup');
         return;
       }
 
       if (result.profile) {
         const signedUpUser = dbToUser(result.profile);
         await maybeStartTrialForSignup(signedUpUser);
+        pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedUpUser.role }, 'signup');
         onSuccess(signedUpUser);
       } else {
         // profile 없으면 가입 정보로 자동 로그인 시도
@@ -311,8 +375,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         if (loginResult.success && loginResult.profile) {
           const signedInUser = dbToUser(loginResult.profile);
           await maybeStartTrialForSignup(signedInUser);
+          pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedInUser.role }, 'signup');
           onSuccess(signedInUser);
         } else {
+          pageViewService.trackEvent('auth_error', { mode: 'signup', reason: loginResult.error || 'post_signup_signin_failed' }, 'signup');
           showToast('회원가입 완료! 로그인해주세요.', 'success');
           onSwitch();
         }
@@ -325,12 +391,14 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         return;
       }
 
+      pageViewService.trackEvent('auth_start', { mode: 'login' }, 'login');
       setIsSubmitting(true);
       const result = await authService.signIn(email, password);
 
       if (!result.success) {
         setIsSubmitting(false);
-        setErrorStatus({ message: result.error || '로그인에 실패했습니다.' });
+        setErrorStatus(toAuthErrorStatus(result.error || '로그인에 실패했습니다.'));
+        pageViewService.trackEvent('auth_error', { mode: 'login', reason: result.error || 'login_failed' }, 'login');
         return;
       }
 
@@ -341,6 +409,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           const isTrusted = await authService.checkTrustedDevice();
           if (!isTrusted) {
             setIsSubmitting(false);
+            pageViewService.trackEvent('auth_mfa_required', { mode: 'login' }, 'login');
             if (onMfaRequired) {
               onMfaRequired(email);
             } else {
@@ -355,6 +424,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       }
 
       setIsSubmitting(false);
+      pageViewService.trackEvent('auth_complete', { mode: 'login' }, 'login');
       // 로그인 성공 → 새로고침으로 initSession이 세션 감지 후 대시보드 진입
       window.location.reload();
     }
@@ -363,253 +433,88 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   // ── Plan Selection Screen ──
   if (type === 'signup' && step === 'plan_select') {
     return (
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-slate-50/50">
-        <div className="w-full max-w-[900px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
-          {/* Left Panel */}
-          <div className="md:col-span-2 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-8 flex flex-col justify-between text-white relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-[-50%] right-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle,rgba(99,102,241,0.4)_0%,transparent_60%)]" />
-            </div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2.5 mb-8">
-                <div className="w-9 h-9 rounded-lg bg-indigo-500 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-                  </svg>
-                </div>
-                <span className="text-lg font-bold tracking-tight">DenJOY</span>
-              </div>
-              <h2 className="text-[22px] font-bold leading-snug mb-3">
-                14일 무료 체험으로<br />부담 없이 시작하세요.
-              </h2>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                카드 정보 없이도<br />체험 가능합니다.
-              </p>
-            </div>
-            <div className="relative z-10 mt-8 pt-6 border-t border-white/10">
-              <p className="text-xs text-slate-500">언제든지 플랜 변경 가능</p>
-            </div>
-          </div>
-          {/* Right Panel */}
-          <div className="md:col-span-3 p-8 flex flex-col">
-            <div className="mb-5">
-              <h2 className="text-2xl font-bold text-slate-900">플랜 선택</h2>
-              <p className="text-sm text-slate-400 mt-1">원하시는 플랜을 선택해주세요. 언제든 변경할 수 있습니다.</p>
-            </div>
-            <div className="space-y-2.5 flex-1">
-              {SIGNUP_PLANS.map(plan => {
-                const isSoldOut = planAvailability[plan.key] === false;
-                return isSoldOut ? (
-                  <div key={plan.key} className="w-full rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-3.5 flex items-center gap-4 opacity-70">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-sm font-bold text-slate-400">{plan.label}</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500 text-white">품절</span>
-                      </div>
-                      <p className="text-xs text-slate-300">
-                        현재 가입 불가 · <button type="button" onClick={(e) => { e.stopPropagation(); setWaitlistPlan({ key: plan.key, name: plan.label }); }} className="text-indigo-400 font-bold hover:underline">대기 신청</button>
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-slate-300">{plan.price}</p>
-                    </div>
-                    <svg className="w-4 h-4 flex-shrink-0 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                    </svg>
-                  </div>
-                ) : (
-                  <button
-                    key={plan.key}
-                    onClick={() => {
-                      if (!plan.trial) {
-                        setStep('role_selection');
-                      } else {
-                        setPendingTrialPlan(plan.key);
-                        setTrialConsented(false);
-                      }
-                    }}
-                    className={`w-full text-left rounded-xl border-2 px-4 py-3.5 transition-all flex items-center gap-4 ${
-                      pendingTrialPlan === plan.key
-                        ? 'border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100'
-                        : 'border-slate-100 hover:border-indigo-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-sm font-bold text-slate-900">{plan.label}</span>
-                        {plan.tag && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            plan.tag === '추천' ? 'bg-indigo-600 text-white'
-                              : plan.tag === '팀용' ? 'bg-violet-50 text-violet-600 border border-violet-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>{plan.tag}</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400">{plan.summary}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-slate-800">{plan.price}</p>
-                      <p className="text-[10px] text-indigo-500 font-medium mt-0.5">
-                        {plan.trial ? '14일 무료 체험' : '무료로 시작'}
-                      </p>
-                    </div>
-                    <svg className={`w-4 h-4 flex-shrink-0 ${pendingTrialPlan === plan.key ? 'text-indigo-500' : 'text-slate-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                );
-              })}
-            </div>
-            {pendingTrialPlan && (
-              <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                  <div className="flex items-center gap-1.5 text-amber-700 mb-1">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    </svg>
-                    <span className="text-xs font-bold">체험 종료 후 안내</span>
-                  </div>
-                  <ul className="text-xs text-amber-700 space-y-0.5 pl-5 list-disc">
-                    <li>14일 무료 체험 종료 후 구독을 시작하지 않으면</li>
-                    <li><strong>15일 이내 업로드된 모든 데이터가 자동 삭제</strong>됩니다.</li>
-                    <li>구독 시작 시 데이터는 그대로 유지됩니다.</li>
-                  </ul>
-                </div>
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={trialConsented} onChange={e => setTrialConsented(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0" />
-                  <span className="text-xs text-slate-600 leading-relaxed">위 내용을 확인하였으며, 미구독 시 데이터 삭제에 동의합니다.</span>
-                </label>
-                <button
-                  disabled={!trialConsented}
-                  onClick={() => {
-                    if (!trialConsented || !pendingTrialPlan) return;
-                    setStep('role_selection');
-                  }}
-                  className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${trialConsented ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                >
-                  {PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험 시작 →
-                </button>
-              </div>
-            )}
-            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-              <button onClick={onSwitch} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-                이미 계정이 있으신가요? 로그인
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AuthSignupPlanSelect
+        planAvailability={planAvailability}
+        pendingTrialPlan={pendingTrialPlan}
+        trialConsented={trialConsented}
+        onSelectPlanWithoutTrial={() => setStep('role_selection')}
+        onSelectTrialPlan={(plan) => {
+          setPendingTrialPlan(plan);
+          setTrialConsented(false);
+        }}
+        onChangeTrialConsented={setTrialConsented}
+        onContinueAfterTrialConsent={() => {
+          if (!trialConsented || !pendingTrialPlan) return;
+          setStep('role_selection');
+        }}
+        onSwitchToLogin={onSwitch}
+        onRequestWaitlist={(plan) => setWaitlistPlan(plan)}
+      />
     );
   }
 
   // Render Role Selection Screen
   if (type === 'signup' && step === 'role_selection') {
     return (
+      <AuthSignupRoleSelect
+        onSelectRole={handleRoleSelect}
+        onBack={() => setStep('plan_select')}
+        onSwitchToLogin={onSwitch}
+      />
+    );
+  }
+
+  // ── Email Sent Screen ──
+  if (type === 'signup' && step === 'email_sent') {
+    return (
       <>
       <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/50">
-        <div className="w-full max-w-[900px] min-h-[640px] bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden grid grid-cols-1 md:grid-cols-5">
-          {/* Left Panel - Branding */}
-          <div className="md:col-span-2 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-8 flex flex-col justify-between text-white relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-[-50%] right-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle,rgba(99,102,241,0.4)_0%,transparent_60%)]" />
-            </div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2.5 mb-8">
-                <div className="w-9 h-9 rounded-lg bg-indigo-500 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-                  </svg>
-                </div>
-                <span className="text-lg font-bold tracking-tight">DenJOY</span>
-              </div>
-              <h2 className="text-[22px] font-bold leading-snug mb-3">
-                임플란트 재고관리,<br />이제 스마트하게.
-              </h2>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                역할에 맞는 회원 유형을<br />선택하고 시작하세요.
-              </p>
-            </div>
+        <div className="w-full max-w-[480px] bg-white rounded-2xl shadow-lg border border-slate-100 p-10 flex flex-col items-center text-center">
+          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center mb-6">
+            <svg className="w-8 h-8 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">인증 메일을 확인해주세요</h2>
+          <p className="text-slate-500 text-sm mb-1">아래 이메일로 인증 링크를 발송했습니다.</p>
+          <p className="text-indigo-600 font-semibold text-sm mb-6">{maskEmail(email)}</p>
 
-            <div className="relative z-10 space-y-2.5 mt-8">
-              {[
-                { icon: '📊', text: '실시간 재고 현황' },
-                { icon: '🔗', text: '덴트웹 자동 연동' },
-                { icon: '📦', text: '원클릭 발주 시스템' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-2.5">
-                  <span className="text-base">{item.icon}</span>
-                  <span className="text-sm text-slate-300">{item.text}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="relative z-10 mt-8 pt-6 border-t border-white/10">
-              <p className="text-xs text-slate-500">14개 제조사 데이터 기본 적용</p>
-            </div>
+          <div className="bg-slate-50 rounded-xl p-4 text-left w-full mb-6">
+            <p className="text-xs text-slate-500 leading-relaxed">
+              메일함에서 <span className="font-semibold text-slate-700">DenJOY 이메일 인증</span> 메일을 찾아 링크를 클릭하면 자동으로 로그인됩니다. 스팸함도 확인해보세요.
+            </p>
           </div>
 
-          {/* Right Panel - Selection */}
-          <div className="md:col-span-3 p-8 lg:p-10 flex flex-col justify-center">
-            <div className="mb-7">
-              <h2 className="text-2xl font-bold text-slate-900">회원 유형 선택</h2>
-              <p className="text-sm text-slate-400 mt-1.5">가입하실 유형을 선택해주세요.</p>
-            </div>
-
-            <div className="space-y-4">
-              {/* Dentist Card */}
-              <button
-                onClick={() => handleRoleSelect('dentist')}
-                className="group w-full bg-white rounded-2xl border-2 border-slate-100 hover:border-indigo-500 p-6 text-left transition-all hover:shadow-lg hover:shadow-indigo-500/5 flex items-start gap-5"
-              >
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-slate-900">치과 회원 (관리자)</h3>
-                    <svg className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                  </div>
-                  <p className="text-sm text-slate-500 leading-relaxed">병원 데이터를 생성·관리하고, 스태프에게 권한을 부여합니다.</p>
-                </div>
-              </button>
-
-              {/* Staff Card */}
-              <button
-                onClick={() => handleRoleSelect('staff')}
-                className="group w-full bg-white rounded-2xl border-2 border-slate-100 hover:border-emerald-500 p-6 text-left transition-all hover:shadow-lg hover:shadow-emerald-500/5 flex items-start gap-5"
-              >
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
-                  <svg className="w-6 h-6 text-emerald-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-slate-900">개인 회원 (담당자)</h3>
-                    <svg className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                  </div>
-                  <p className="text-sm text-slate-500 leading-relaxed">병원 소속 없이 독립적으로 재고를 관리합니다. <span className="text-slate-400 font-medium">개인 전용 데이터 공간이 생성됩니다.</span></p>
-                </div>
-              </button>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
-              <button
-                onClick={() => setStep('plan_select')}
-                className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-                이전으로
-              </button>
-              <button onClick={onSwitch} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
-                이미 계정이 있으신가요? 로그인
-              </button>
-            </div>
+          <div className="w-full space-y-3">
+            <p className="text-xs text-slate-400">메일이 오지 않나요?</p>
+            <button
+              type="button"
+              disabled={isResending || resendCooldown > 0}
+              onClick={async () => {
+                setIsResending(true);
+                await authService.resendConfirmationEmail(email);
+                setIsResending(false);
+                setResendCooldown(60);
+              }}
+              className="w-full h-11 border border-indigo-200 text-indigo-600 font-semibold rounded-xl text-sm hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isResending ? '전송 중...' : resendCooldown > 0 ? `재전송 가능 (${resendCooldown}초)` : '인증 메일 재전송'}
+            </button>
+            <button
+              type="button"
+              onClick={onSwitch}
+              className="w-full text-sm text-slate-400 hover:text-slate-600 transition-colors py-2"
+            >
+              로그인으로 돌아가기
+            </button>
           </div>
         </div>
       </div>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+          {toast.message}
+        </div>
+      )}
       </>
     );
   }
@@ -644,6 +549,36 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
 
   // ── Shared input style ──
   const inputClass = "w-full h-12 px-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 outline-none transition-all text-sm placeholder:text-slate-300";
+  const renderAuthErrorBanner = () => {
+    if (!errorStatus) return null;
+    return (
+      <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium space-y-2">
+        <p>{errorStatus.message}</p>
+        {(errorStatus.canRetry || (errorStatus.showContact && onContact)) && (
+          <div className="flex items-center gap-3 text-xs">
+            {errorStatus.canRetry && (
+              <button
+                type="button"
+                onClick={() => setErrorStatus(null)}
+                className="font-semibold underline underline-offset-2 hover:text-red-800"
+              >
+                다시 시도
+              </button>
+            )}
+            {errorStatus.showContact && onContact && (
+              <button
+                type="button"
+                onClick={onContact}
+                className="font-semibold underline underline-offset-2 hover:text-red-800"
+              >
+                문의하기
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ── Invite Accept Form ──
   if (type === 'invite' && inviteInfo) {
@@ -718,11 +653,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               <p className="text-sm text-slate-400 mt-1.5">비밀번호를 설정하면 팀에 합류됩니다.</p>
             </div>
 
-            {errorStatus && (
-              <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-                {errorStatus.message}
-              </div>
-            )}
+            {renderAuthErrorBanner()}
 
             <form onSubmit={handleInviteSubmit} className="space-y-5">
               <div>
@@ -846,11 +777,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               <p className="text-sm text-slate-400 mt-1.5">계정 정보를 입력해주세요.</p>
             </div>
 
-            {errorStatus && (
-              <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-                {errorStatus.message}
-              </div>
-            )}
+            {renderAuthErrorBanner()}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
@@ -883,7 +810,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                   const result = await authService.resetPassword(email);
                   if (result.success) {
                     setResetEmailSent(true);
-                    setErrorStatus({ message: `비밀번호 재설정 이메일을 ${email}로 발송했습니다.` });
+                    setErrorStatus(null);
+                    showToast(`비밀번호 재설정 이메일을 ${email}로 발송했습니다.`, 'success');
                   } else {
                     showToast(result.error || '이메일 발송에 실패했습니다.', 'error');
                   }
@@ -1005,11 +933,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               <p className="text-sm text-slate-400 mt-1.5">본인 정보를 입력해주세요.</p>
             </div>
 
-            {errorStatus && (
-              <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-                {errorStatus.message}
-              </div>
-            )}
+            {renderAuthErrorBanner()}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1115,11 +1039,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
 
         {/* Right Panel - Form */}
         <div className="md:col-span-3 p-8">
-          {errorStatus && (
-            <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-              {errorStatus.message}
-            </div>
-          )}
+          {renderAuthErrorBanner()}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Row 1: 병원명 + 연락처 */}

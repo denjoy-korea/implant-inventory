@@ -51,13 +51,18 @@ test('app handles order conflict responses and re-syncs order list', () => {
 
 test('mobile critical operations stay wired in dashboard routes', () => {
   const app = read('App.tsx');
+  const workspace = read('components/app/DashboardWorkspaceSection.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');
   const audit = read('components/InventoryAudit.tsx');
   const fail = read('components/FailManager.tsx');
   const order = read('components/OrderManager.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
 
-  assert.match(app, /<DashboardOperationalTabs[\s\S]*onAddFailOrder=\{handleAddOrder\}/s);
+  assert.ok(
+    /<DashboardOperationalTabs[\s\S]*onAddFailOrder=\{handleAddOrder\}/s.test(app)
+      || /<DashboardOperationalTabs[\s\S]*onAddFailOrder=\{onAddOrder\}/s.test(workspace),
+    'DashboardOperationalTabs should stay wired to fail/order handlers in App or DashboardWorkspaceSection',
+  );
   assert.match(tabs, /dashboardTab === 'inventory_audit'[\s\S]*<InventoryAudit/s);
   assert.match(tabs, /dashboardTab === 'fail_management'[\s\S]*<FailManager[\s\S]*onAddFailOrder=\{onAddFailOrder\}/s);
   assert.match(
@@ -92,9 +97,11 @@ test('analyze page shows upload requirement checklist and disabled reasons', () 
 
 test('analyze page classifies analyze\/lead errors and exposes retry CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
+  const analyzeHelpers = read('components/analyze/analyzeHelpers.ts');
 
-  assert.match(analyze, /function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
-  assert.match(analyze, /function classifyLeadSubmitError\(error: unknown\)[\s\S]*서버 오류:[\s\S]*입력 오류:[\s\S]*네트워크 오류:/s);
+  assert.match(analyzeHelpers, /export function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
+  assert.match(analyzeHelpers, /export function classifyLeadSubmitError\(error: unknown\)[\s\S]*서버 오류:[\s\S]*입력 오류:[\s\S]*네트워크 오류:/s);
+  assert.match(analyze, /import[\s\S]*classifyAnalyzeError[\s\S]*from '\.\/analyze\/analyzeHelpers'/s);
   assert.match(analyze, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
   assert.match(analyze, /다시 전송/);
   assert.match(analyze, /onClick=\{handleLeadSubmit\}/);
@@ -110,17 +117,77 @@ test('analyze page strengthens success confidence with ETA and next action CTA',
   assert.match(analyze, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
 });
 
+test('funnel instrumentation uses standardized events and page-aware tracking', () => {
+  const pageView = read('services/pageViewService.ts');
+  const pricing = read('components/PricingPage.tsx');
+  const auth = read('components/AuthForm.tsx');
+  const analyze = read('components/AnalyzePage.tsx');
+  const contact = read('components/ContactPage.tsx');
+  const appState = read('hooks/useAppState.ts');
+
+  assert.match(pageView, /event_type: `\$\{page\}_view`/);
+  assert.match(pageView, /trackEvent\(event_type: string, event_data\?: EventData, page = 'pricing'\)/);
+  assert.match(pageView, /markConverted\(userId: string, accountId\?: string \| null\)/);
+  assert.match(appState, /pageViewService\.markConverted\(user\.id, user\.hospitalId \|\| null\)/);
+
+  assert.match(pricing, /trackEvent\(\s*'pricing_plan_select'/);
+  assert.match(auth, /trackEvent\('auth_start'/);
+  assert.match(auth, /trackEvent\('auth_complete'/);
+  assert.match(analyze, /trackEvent\(\s*'analyze_start'/);
+  assert.match(analyze, /trackEvent\(\s*'analyze_complete'/);
+  assert.match(contact, /trackEvent\('contact_submit'/);
+});
+
+test('contact success state surfaces request id and single primary next action', () => {
+  const contact = read('components/ContactPage.tsx');
+  const contactService = read('services/contactService.ts');
+
+  assert.match(contactService, /export interface SubmitInquiryResult[\s\S]*requestId: string \| null;/s);
+  assert.match(contactService, /async submit\(params: SubmitInquiryParams\): Promise<SubmitInquiryResult>/);
+  assert.match(contact, /type SubmittedForm = typeof EMPTY_FORM & \{ requestId: string \| null \}/);
+  assert.match(contact, /label: '접수번호'/);
+  assert.match(contact, /다음 단계 1순위: 무료 회원가입/);
+});
+
 test('app shell guard states and settings routes stay wired', () => {
   const app = read('App.tsx');
+  const guard = read('components/app/DashboardGuardedContent.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');
 
-  assert.match(app, /state\.user\?\.status === 'paused'[\s\S]*<PausedAccountScreen/s);
-  assert.match(app, /state\.user\?\.role === 'dental_staff'[\s\S]*<StaffWaitingRoom/s);
+  assert.ok(
+    /state\.user\?\.status === 'paused'[\s\S]*<PausedAccountScreen/s.test(app)
+      || /state\.user\?\.status === 'paused'[\s\S]*<PausedAccountScreen/s.test(guard),
+    'Paused guard should stay wired in App or DashboardGuardedContent',
+  );
+  assert.ok(
+    /state\.user\?\.role === 'dental_staff'[\s\S]*<StaffWaitingRoom/s.test(app)
+      || /state\.user\?\.role === 'dental_staff'[\s\S]*<StaffWaitingRoom/s.test(guard),
+    'Staff waiting room guard should stay wired in App or DashboardGuardedContent',
+  );
 
   assert.match(tabs, /dashboardTab === 'settings'[\s\S]*<SettingsHub[\s\S]*onNavigate=\{onTabChange\}/s);
   assert.match(tabs, /dashboardTab === 'audit_log'[\s\S]*<AuditLogViewer[\s\S]*hospitalId=\{user\.hospitalId\}/s);
 
   assert.match(app, /<MobileDashboardNav[\s\S]*userPermissions=\{state\.user\?\.permissions\}[\s\S]*effectiveAccessRole=\{effectiveAccessRole\}/s);
+});
+
+test('landing/value pages share unified trial copy policy', () => {
+  const landing = read('components/LandingPage.tsx');
+  const value = read('components/ValuePage.tsx');
+  const policy = read('utils/trialPolicy.ts');
+
+  assert.match(policy, /BETA_TRIAL_DEADLINE_TEXT = '2026년 3월 31일까지'/);
+  assert.match(policy, /export function getTrialCopy\(now: Date = new Date\(\)\)/);
+  assert.match(policy, /footnoteWithDot/);
+  assert.match(policy, /footnoteWithPipe/);
+
+  assert.match(landing, /import[\s\S]*getTrialCopy[\s\S]*from '\.\.\/utils\/trialPolicy'/s);
+  assert.match(landing, /const trialCopy = getTrialCopy\(\);/);
+  assert.match(landing, /DEFAULT_TRIAL_HIGHLIGHT_TEXT/);
+
+  assert.match(value, /import[\s\S]*getTrialCopy[\s\S]*from '\.\.\/utils\/trialPolicy'/s);
+  assert.match(value, /const trialCopy = getTrialCopy\(\);/);
+  assert.match(value, /DEFAULT_TRIAL_HIGHLIGHT_TEXT/);
 });
 
 test('operational smoke checklist stays available as npm script', () => {

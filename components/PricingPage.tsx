@@ -333,14 +333,15 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   // 대기신청 모달 오픈 계측
   useEffect(() => {
     if (waitlistPlan) {
-      pageViewService.trackEvent('pricing_waitlist_modal_open', { plan: waitlistPlan.key });
+      pageViewService.trackEvent('pricing_waitlist_modal_open', { plan: waitlistPlan.key }, 'pricing');
     }
   }, [waitlistPlan]);
 
   const handleWaitlistSubmit = async () => {
     if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
     setWaitlistSubmitting(true);
-    pageViewService.trackEvent('pricing_waitlist_submit_start', { plan: waitlistPlan.key });
+    pageViewService.trackEvent('pricing_waitlist_submit_start', { plan: waitlistPlan.key }, 'pricing');
+    pageViewService.trackEvent('waitlist_submit_start', { plan: waitlistPlan.key, source: 'pricing' }, 'pricing');
     try {
       await contactService.submit({
         hospital_name: '-',
@@ -351,13 +352,15 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         inquiry_type: `plan_waitlist_${waitlistPlan.key}`,
         content: `${waitlistPlan.name} 플랜 대기 신청`,
       });
-      pageViewService.trackEvent('pricing_waitlist_submit_success', { plan: waitlistPlan.key });
+      pageViewService.trackEvent('pricing_waitlist_submit_success', { plan: waitlistPlan.key }, 'pricing');
+      pageViewService.trackEvent('waitlist_submit', { plan: waitlistPlan.key, source: 'pricing' }, 'pricing');
       setWaitlistPlan(null);
       setWaitlistName('');
       setWaitlistEmail('');
       showToast('대기 신청이 완료되었습니다. 자리가 나면 가장 먼저 연락드릴게요!', 'success');
     } catch (error) {
-      pageViewService.trackEvent('pricing_waitlist_submit_error', { plan: waitlistPlan.key });
+      pageViewService.trackEvent('pricing_waitlist_submit_error', { plan: waitlistPlan.key }, 'pricing');
+      pageViewService.trackEvent('waitlist_submit_error', { plan: waitlistPlan.key, source: 'pricing' }, 'pricing');
       const message =
         error instanceof Error && error.message
           ? error.message
@@ -686,16 +689,26 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       {/* 가용성 조회 실패 배너 */}
       {availabilityError && (
         <div className="max-w-2xl mx-auto px-6 pb-4 w-full">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
             <div className="flex items-center gap-2 text-sm text-amber-700">
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
               <span>플랜 가용성 확인이 지연되고 있습니다. 실제 신청 가능 여부와 다를 수 있어요.</span>
             </div>
-            <button onClick={loadAvailability} className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap underline">
-              다시 시도
-            </button>
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <button onClick={loadAvailability} className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap underline">
+                다시 시도
+              </button>
+              {onContact && (
+                <button
+                  onClick={onContact}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-900 whitespace-nowrap underline"
+                >
+                  문의하기
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -807,7 +820,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                     <button
                       type="button"
                       onClick={() => {
-                        pageViewService.trackEvent('pricing_waitlist_button_click', { plan: planKey });
+                        pageViewService.trackEvent('pricing_waitlist_button_click', { plan: planKey }, 'pricing');
                         setWaitlistPlan({ key: planKey, name: plan.name });
                       }}
                       className="w-full py-3 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-700 transition-colors shadow-sm"
@@ -820,6 +833,15 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   <button
                     onClick={() => {
                       if (isLoggedIn && currentPlan === planKey) return;
+                      pageViewService.trackEvent(
+                        'pricing_plan_select',
+                        {
+                          plan: planKey,
+                          billing_cycle: isYearly ? 'yearly' : 'monthly',
+                          is_logged_in: Boolean(isLoggedIn),
+                        },
+                        'pricing',
+                      );
                       if (isLoggedIn) {
                         if (planKey === 'free' && onSelectPlan) {
                           onSelectPlan(planKey, 'monthly');

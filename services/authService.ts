@@ -19,6 +19,7 @@ interface AuthResult {
   success: boolean;
   error?: string;
   profile?: DbProfile;
+  emailConfirmationRequired?: boolean;
 }
 
 export const authService = {
@@ -40,6 +41,7 @@ export const authService = {
       password,
       options: {
         data: { name, role: signupRole, phone: phone || '' },
+        emailRedirectTo: window.location.origin,
       },
     });
 
@@ -57,6 +59,27 @@ export const authService = {
     }
 
     const userId = authData.user.id;
+
+    // 이메일 인증 대기 상태 (Supabase "Confirm email" ON)
+    if (!authData.session) {
+      // 슬랙 가입 알림 (fire-and-forget)
+      (async () => {
+        try {
+          await supabase.functions.invoke('notify-signup', {
+            body: {
+              name,
+              email,
+              role: signupRole,
+              hospitalName: signupRole === 'master' ? hospitalName : undefined,
+              signupSource: signupSource || undefined,
+            },
+          });
+        } catch {
+          // 알림 실패는 무시
+        }
+      })();
+      return { success: true, emailConfirmationRequired: true };
+    }
 
     // 2. 전화번호 / 가입경로 profiles에 저장
     const profileUpdates: Record<string, any> = {};
@@ -414,6 +437,13 @@ export const authService = {
   /** 신뢰 기기 제거 */
   async removeTrustedDevice(id: string): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase.rpc('remove_trusted_device', { p_id: id });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 이메일 인증 메일 재전송 */
+  async resendConfirmationEmail(email: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
     if (error) return { success: false, error: error.message };
     return { success: true };
   },

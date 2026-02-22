@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import XLSX from "npm:xlsx";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 interface ActiveSheet {
   name: string;
@@ -37,6 +32,7 @@ Deno.serve(async (req: Request) => {
 
   let parsedBody: unknown;
   try {
+    const corsHeaders = getCorsHeaders(req);
     parsedBody = await req.json();
   } catch {
     return jsonError("Invalid JSON body", 400);

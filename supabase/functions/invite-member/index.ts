@@ -1,18 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
+    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    const corsHeaders = getCorsHeaders(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -38,7 +35,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const VALID_CLINIC_ROLES = ['director', 'manager', 'team_lead', 'staff'];
-    const { email, name, hospitalId, clinicRole, siteUrl } = await req.json();
+    // SEC-07: siteUrl은 클라이언트 입력을 받지 않음 — 서버 환경변수만 사용 (피싱 방지)
+    const { email, name, hospitalId, clinicRole } = await req.json();
     if (!email || !name || !hospitalId || !clinicRole) {
       return new Response(
         JSON.stringify({ error: "email, name, hospitalId, clinicRole는 필수입니다." }),
@@ -146,8 +144,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // siteUrl: 클라이언트에서 전달받거나 환경변수 사용
-    const baseUrl = siteUrl || Deno.env.get("SITE_URL") || "https://denjoy.info";
+    // SEC-07: 서버 환경변수만 사용 (클라이언트 입력 불허 — 피싱 방지)
+    const baseUrl = Deno.env.get("SITE_URL") || "https://denjoy.info";
     const inviteUrl = `${baseUrl}?invite=${token}`;
 
     // Resend로 초대 이메일 발송

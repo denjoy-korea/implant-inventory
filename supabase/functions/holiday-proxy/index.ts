@@ -10,14 +10,10 @@
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const BASE_URL =
   "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 /** 공공데이터포털에서 특정 연도·월의 공휴일 locdate 목록을 가져옵니다. */
 async function fetchMonth(apiKey: string, year: number, month: number): Promise<string[]> {
@@ -59,6 +55,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const corsHeaders = getCorsHeaders(req);
     const apiKey = Deno.env.get("HOLIDAY_API_KEY");
     if (!apiKey) {
       return new Response(

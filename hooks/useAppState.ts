@@ -98,13 +98,16 @@ export function useAppState(onNotify?: NotifyFn) {
       // 위에서 이미 조회한 planState 재사용 (중복 API 호출 방지)
       const planState = planStateForDate;
 
-      console.log('[useAppState] loadHospitalData:', {
-        inventoryCount: inventoryData.length,
-        surgeryCount: surgeryData.length,
-        ordersCount: ordersData.length,
-        hospitalName: hospitalData?.name,
-        hospitalId: user.hospitalId,
-      });
+      // SEC-10: 민감 정보(hospitalId, hospitalName)는 개발 환경에서만 로깅
+      if (import.meta.env.DEV) {
+        console.log('[useAppState] loadHospitalData:', {
+          inventoryCount: inventoryData.length,
+          surgeryCount: surgeryData.length,
+          ordersCount: ordersData.length,
+          hospitalName: hospitalData?.name,
+          hospitalId: user.hospitalId,
+        });
+      }
 
       const inventory = inventoryData.map(dbToInventoryItem);
       const surgeryRows = await Promise.all(surgeryData.map(dbToExcelRow));
@@ -148,7 +151,7 @@ export function useAppState(onNotify?: NotifyFn) {
   /** 로그인 성공 콜백 */
   const handleLoginSuccess = async (user: User) => {
     setState(prev => ({ ...prev, isLoading: true }));
-    pageViewService.markConverted(user.id);
+    pageViewService.markConverted(user.id, user.hospitalId || null);
     await loadHospitalData(user);
     startSessionPolling();
   };
@@ -292,6 +295,15 @@ export function useAppState(onNotify?: NotifyFn) {
           fixtureData: null,
           isLoading: false,
         }));
+      }
+      // 이메일 인증 링크 클릭 → 토큰 교환 → SIGNED_IN 이벤트로 자동 대시보드 진입
+      if (event === 'SIGNED_IN') {
+        const profile = await authService.getProfileById();
+        if (profile) {
+          const user = dbToUser(profile);
+          await loadHospitalData(user);
+          startSessionPolling();
+        }
       }
     });
 

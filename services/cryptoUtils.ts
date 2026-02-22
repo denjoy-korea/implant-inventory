@@ -3,21 +3,29 @@
  * - ENCv2: Web Crypto API(AES-GCM + PBKDF2 키 도출)
  * - ENCv1(ENC:): 기존 XOR 포맷 하위 호환 (복호화 전용)
  *
- * ⚠️  보안 주의사항 (VITE_PATIENT_DATA_KEY):
- *   VITE_ 접두어 환경변수는 Vite 빌드 시 클라이언트 번들에 인라인됩니다.
- *   즉, dist/*.js 파일과 브라우저 DevTools Source에서 키 값이 노출될 수 있습니다.
+ * ⚠️  SEC-01 Critical: VITE_PATIENT_DATA_KEY 클라이언트 번들 노출
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *   VITE_ 접두어 환경변수는 Vite 빌드 시 클라이언트 JS 번들에 인라인됩니다.
+ *   → dist/assets/*.js 파일 및 브라우저 DevTools에서 암호화 키 원문이 노출됩니다.
  *
- *   현재 위험 수준:
- *   - 공격자가 키를 얻더라도 암호문(DB 저장값)에 별도로 접근해야 복호화 가능
- *   - PBKDF2 100,000회 반복으로 무차별대입 공격에 방어
+ *   현재 완화 요소 (위험을 낮추지만 제거하지는 않음):
+ *   - 공격자가 키를 얻어도 DB 암호문에 별도 접근해야 복호화 가능 (RLS로 보호)
+ *   - PBKDF2 100,000회 반복으로 키 탈취 후 무차별대입 공격 방어
  *   - 환자명 해시는 단방향이므로 키 노출 시에도 원본 복원 불가
  *
- *   향후 개선 방향 (다음 스프린트):
- *   - VITE_PATIENT_DATA_KEY → PATIENT_DATA_KEY (서버 전용)
- *   - 암·복호화 로직을 Supabase Edge Function으로 이전
- *   - 클라이언트는 암호문만 저장·전달
+ *   필수 개선 (SEC-01 해결):
+ *   1. 이 파일의 암호화 로직을 Supabase Edge Function (crypto-encrypt, crypto-decrypt)으로 이전
+ *   2. VITE_PATIENT_DATA_KEY → PATIENT_DATA_KEY (Edge Function 서버 전용 시크릿)
+ *   3. 클라이언트는 암호문만 저장·전달하고, 복호화는 Edge Function 호출로 처리
+ *   ※ 개선 전까지 Supabase RLS 정책으로 암호문 접근을 최대한 제한해야 합니다.
  */
 
+/**
+ * SEC-12: ENCv1(XOR) 레거시 복호화 전용 상수
+ * ⚠️  이 값은 신규 암호화에 절대 사용하지 않습니다.
+ * ENCv1 형식 데이터의 하위 호환 복호화에만 사용됩니다.
+ * DB에서 ENCv1 데이터가 완전히 제거되면 LEGACY_SALT, legacyEncryptXor, legacyDecryptXor를 삭제하세요.
+ */
 const LEGACY_SALT = 'dentweb-patient-info-2026';
 const ENC_V2_PREFIX = 'ENCv2:';
 const ENC_V1_PREFIX = 'ENC:';
@@ -59,15 +67,8 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-function legacyEncryptXor(text: string): string {
-  const encoded = new TextEncoder().encode(text);
-  const key = new TextEncoder().encode(LEGACY_SALT);
-  const result = new Uint8Array(encoded.length);
-  for (let i = 0; i < encoded.length; i++) {
-    result[i] = encoded[i] ^ key[i % key.length];
-  }
-  return ENC_V1_PREFIX + bytesToBase64(result);
-}
+// SEC-12: legacyEncryptXor 제거 — 신규 암호화는 ENCv2(AES-GCM)만 사용
+// (기존 함수가 dead code로 확인되어 삭제)
 
 function legacyDecryptXor(encrypted: string): string {
   const base64 = encrypted.slice(ENC_V1_PREFIX.length);

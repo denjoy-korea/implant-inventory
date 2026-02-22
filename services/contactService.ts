@@ -135,9 +135,13 @@ export interface SubmitInquiryParams {
   content: string;
 }
 
+export interface SubmitInquiryResult {
+  requestId: string | null;
+}
+
 export const contactService = {
   /** 문의 제출 (비로그인 가능) - Edge Function으로 처리 (DB insert + Slack) */
-  async submit(params: SubmitInquiryParams): Promise<void> {
+  async submit(params: SubmitInquiryParams): Promise<SubmitInquiryResult> {
     const { data, error } = await supabase.functions.invoke('submit-contact', {
       body: {
         hospital_name: params.hospital_name.trim(),
@@ -153,7 +157,12 @@ export const contactService = {
 
     if (error) {
       const parsed = await extractFunctionErrorInfo(error);
-      console.error('[contactService] submit invoke failed:', error, parsed);
+      // SEC-10: 개발 환경에서만 상세 에러 로깅 (프로덕션에서는 에러 코드만)
+      if (import.meta.env.DEV) {
+        console.error('[contactService] submit invoke failed:', error, parsed);
+      } else {
+        console.error('[contactService] submit failed:', parsed.code);
+      }
       throw new Error(normalizeSubmitErrorMessage(parsed.message, parsed.code));
     }
 
@@ -167,9 +176,15 @@ export const contactService = {
         (typeof response.error === 'string' && response.error.trim()) ||
         (typeof response.message === 'string' && response.message.trim()) ||
         '';
-      console.error('[contactService] submit rejected:', { code: rawCode, message: rawMessage, requestId: response.request_id });
+      // SEC-10: requestId 등 내부 식별자는 개발 환경에서만 로깅
+      if (import.meta.env.DEV) {
+        console.error('[contactService] submit rejected:', { code: rawCode, message: rawMessage, requestId: response.request_id });
+      } else {
+        console.error('[contactService] submit rejected:', rawCode);
+      }
       throw new Error(normalizeSubmitErrorMessage(rawMessage, rawCode));
     }
+    return { requestId: response.request_id ?? null };
   },
 
   /** 관리자용 전체 문의 조회 */

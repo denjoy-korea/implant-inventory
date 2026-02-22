@@ -1,6 +1,20 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { AnalysisReport } from '../types';
+import React, { useState, useCallback, useRef } from 'react';
 import { runAnalysis } from '../services/analysisService';
+import { BarChart, DonutChart, ScoreGauge } from './analyze/AnalyzeCharts';
+import {
+  buildQuickInsights,
+  classifyAnalyzeError,
+  classifyLeadSubmitError,
+  generateReportText,
+  getGrade,
+  gradeColorMap,
+  PROCESSING_MESSAGES,
+  splitExcelFiles,
+  statusColorMap,
+} from './analyze/analyzeHelpers';
+import { useAnalyzeStateMachine } from './analyze/useAnalyzeStateMachine';
+import { DEFAULT_TRIAL_OFFER_TEXT, getBetaTrialOfferText } from '../utils/trialPolicy';
+import { pageViewService } from '../services/pageViewService';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
@@ -9,320 +23,45 @@ interface AnalyzePageProps {
   onContact: () => void;
 }
 
-type Step = 'upload' | 'processing' | 'report';
-
-const GRADE_CONFIG = {
-  A: { label: 'A', color: 'emerald', text: '데이터 관리가 우수합니다', min: 80 },
-  B: { label: 'B', color: 'amber', text: '개선하면 더 좋아집니다', min: 60 },
-  C: { label: 'C', color: 'orange', text: '상당한 개선이 필요합니다', min: 40 },
-  D: { label: 'D', color: 'rose', text: '데이터 관리 체계 재검토가 필요합니다', min: 0 },
-} as const;
-
-function formatPhoneNumber(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  if (digits.startsWith('02')) {
-    // 서울 02 지역번호: 02-XXX-XXXX or 02-XXXX-XXXX
-    if (digits.length <= 5) return digits.replace(/^(\d{2})(\d+)$/, '$1-$2');
-    if (digits.length <= 9) return digits.replace(/^(\d{2})(\d{3})(\d+)$/, '$1-$2-$3');
-    return digits.slice(0, 10).replace(/^(\d{2})(\d{4})(\d{4})$/, '$1-$2-$3');
-  }
-  // 010, 031, 032 등 10~11자리
-  if (digits.length <= 6) return digits.replace(/^(\d{3})(\d+)$/, '$1-$2');
-  if (digits.length <= 10) return digits.replace(/^(\d{3})(\d{3})(\d+)$/, '$1-$2-$3');
-  return digits.slice(0, 11).replace(/^(\d{3})(\d{4})(\d{4})$/, '$1-$2-$3');
-}
-
-function getGrade(score: number) {
-  if (score >= 80) return GRADE_CONFIG.A;
-  if (score >= 60) return GRADE_CONFIG.B;
-  if (score >= 40) return GRADE_CONFIG.C;
-  return GRADE_CONFIG.D;
-}
-
-const gradeColorMap: Record<string, { bg: string; text: string; border: string; light: string; stroke: string }> = {
-  emerald: { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-200', light: 'bg-emerald-50', stroke: '#10b981' },
-  amber: { bg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-200', light: 'bg-amber-50', stroke: '#f59e0b' },
-  orange: { bg: 'bg-orange-500', text: 'text-orange-600', border: 'border-orange-200', light: 'bg-orange-50', stroke: '#f97316' },
-  rose: { bg: 'bg-rose-500', text: 'text-rose-600', border: 'border-rose-200', light: 'bg-rose-50', stroke: '#f43f5e' },
-};
-
-const statusColorMap = {
-  good: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓', iconBg: 'bg-emerald-100 text-emerald-600' },
-  warning: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: '!', iconBg: 'bg-amber-100 text-amber-600' },
-  critical: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: '✕', iconBg: 'bg-rose-100 text-rose-600' },
-};
-
-// ─── Half-circle gauge SVG ───
-const ScoreGauge: React.FC<{ score: number; color: string }> = ({ score, color }) => {
-  const colors = gradeColorMap[color] || gradeColorMap.emerald;
-  const radius = 80;
-  const circumference = Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-
-  return (
-    <svg viewBox="0 0 200 130" className="w-72 h-auto mx-auto">
-      <path d="M 20 105 A 80 80 0 0 1 180 105" fill="none" stroke="#334155" strokeWidth="14" strokeLinecap="round" />
-      <path
-        d="M 20 105 A 80 80 0 0 1 180 105"
-        fill="none"
-        stroke={colors.stroke}
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        className="transition-all duration-1000 ease-out"
-      />
-      <text x="100" y="88" textAnchor="middle" fill="#ffffff" fontSize="48" fontWeight="900">{score}</text>
-      <text x="100" y="110" textAnchor="middle" fill="#94a3b8" fontSize="14">/ 100점</text>
-    </svg>
-  );
-};
-
-// ─── Simple bar chart ───
-const BarChart: React.FC<{ items: { label: string; value: number }[]; maxValue: number }> = ({ items, maxValue }) => (
-  <div className="space-y-3">
-    {items.map((item, i) => (
-      <div key={i}>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-slate-600 font-medium truncate">{item.label}</span>
-          <span className="text-xs font-bold text-slate-800 ml-2 flex-shrink-0">{item.value}건</span>
-        </div>
-        <div className="bg-slate-100 rounded-full h-5 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-700"
-            style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%` }}
-          />
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-// ─── Simple donut chart ───
-const DonutChart: React.FC<{ data: { label: string; count: number }[] }> = ({ data }) => {
-  const total = data.reduce((s, d) => s + d.count, 0);
-  if (total === 0) return <p className="text-sm text-slate-400 text-center">데이터 없음</p>;
-  const colors = ['#6366f1', '#8b5cf6', '#a78bfa', '#c084fc', '#e879f9', '#f472b6', '#fb923c', '#fbbf24'];
-  let cumulativePercent = 0;
-
-  const slices = data.slice(0, 8).map((d, i) => {
-    const percent = d.count / total;
-    const startAngle = cumulativePercent * 360;
-    cumulativePercent += percent;
-    const endAngle = cumulativePercent * 360;
-
-    const x1 = 50 + 40 * Math.cos((Math.PI * (startAngle - 90)) / 180);
-    const y1 = 50 + 40 * Math.sin((Math.PI * (startAngle - 90)) / 180);
-    const x2 = 50 + 40 * Math.cos((Math.PI * (endAngle - 90)) / 180);
-    const y2 = 50 + 40 * Math.sin((Math.PI * (endAngle - 90)) / 180);
-    const largeArc = percent > 0.5 ? 1 : 0;
-
-    return (
-      <path
-        key={i}
-        d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
-        fill={colors[i % colors.length]}
-        className="hover:opacity-80 transition-opacity"
-      />
-    );
-  });
-
-  return (
-    <div className="flex flex-col items-center gap-6">
-      <svg viewBox="0 0 100 100" className="w-40 h-40 flex-shrink-0">
-        {slices}
-        <circle cx="50" cy="50" r="22" fill="white" />
-        <text x="50" y="48" textAnchor="middle" fill="#1e293b" fontSize="10" fontWeight="bold">{total}</text>
-        <text x="50" y="58" textAnchor="middle" fill="#94a3b8" fontSize="6">총 사용</text>
-      </svg>
-      <div className="w-full space-y-2">
-        {data.slice(0, 8).map((d, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }}></span>
-            <span className="text-slate-600 truncate flex-1">{d.label}</span>
-            <span className="font-bold text-slate-800 tabular-nums">{d.count}개</span>
-            <span className="text-slate-400 w-8 text-right tabular-nums">{Math.round((d.count / total) * 100)}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const PROCESSING_MESSAGES = [
-  '파일을 읽고 있습니다...',
-  '재고 목록을 분석하고 있습니다...',
-  '수술기록을 파싱하고 있습니다...',
-  'FAIL 항목을 검사하고 있습니다...',
-  '보험청구 구분을 확인하고 있습니다...',
-  '품목 매칭을 진행하고 있습니다...',
-  '표기 일관성을 검사하고 있습니다...',
-  '사용 패턴을 분석하고 있습니다...',
-  '리포트를 생성하고 있습니다...',
-];
-
-const EXCEL_FILE_REGEX = /\.(xlsx|xls)$/i;
-const HTTP_STATUS_REGEX = /(?:http[_\s-]*)?(\d{3})/i;
-
-function isExcelFile(file: File): boolean {
-  return EXCEL_FILE_REGEX.test(file.name);
-}
-
-function splitExcelFiles(files: File[]): { valid: File[]; invalid: File[] } {
-  const valid: File[] = [];
-  const invalid: File[] = [];
-
-  files.forEach((file) => {
-    if (isExcelFile(file)) valid.push(file);
-    else invalid.push(file);
-  });
-
-  return { valid, invalid };
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message || '';
-  if (typeof error === 'string') return error;
-  return '';
-}
-
-function getErrorStatus(error: unknown): number | null {
-  if (typeof error === 'object' && error !== null && 'status' in error) {
-    const status = (error as { status?: unknown }).status;
-    if (typeof status === 'number') return status;
-  }
-
-  const message = getErrorMessage(error);
-  const match = message.match(HTTP_STATUS_REGEX);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function classifyAnalyzeError(error: unknown): string {
-  const message = getErrorMessage(error).toLowerCase();
-
-  if (message.includes('xlsx') || message.includes('xls') || message.includes('zip') || message.includes('format') || message.includes('file')) {
-    return '형식 오류: .xlsx 또는 .xls 엑셀 파일인지 확인해주세요.';
-  }
-  if (message.includes('sheet') || message.includes('column') || message.includes('header') || message.includes('수술기록지') || message.includes('parse')) {
-    return '데이터 오류: 필수 시트/열이 누락되지 않았는지 확인해주세요.';
-  }
-  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
-    return '네트워크 오류: 연결 상태를 확인한 뒤 다시 시도해주세요.';
-  }
-
-  return '분석 처리 오류: 파일 내용 확인 후 다시 시도해주세요.';
-}
-
-function classifyLeadSubmitError(error: unknown): string {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return '네트워크 오류: 인터넷 연결 후 다시 전송해주세요.';
-  }
-
-  const status = getErrorStatus(error);
-  if (status !== null) {
-    if (status >= 500) {
-      return '서버 오류: 전송이 지연되고 있습니다. 잠시 후 다시 시도해주세요.';
-    }
-    if (status >= 400) {
-      return '입력 오류: 이메일/연락처 형식을 확인한 뒤 다시 전송해주세요.';
-    }
-  }
-
-  const message = getErrorMessage(error).toLowerCase();
-  if (message.includes('network') || message.includes('fetch') || message.includes('timeout') || message.includes('abort')) {
-    return '네트워크 오류: 연결이 불안정합니다. 다시 전송해주세요.';
-  }
-
-  return '전송 오류: 요청이 완료되지 않았습니다. 다시 전송해주세요.';
-}
-
-function buildQuickInsights(report: AnalysisReport): string[] {
-  const insights: string[] = [];
-
-  if (report.summary.surgeryOnlyItems > 0) {
-    insights.push(`수술기록에만 있는 미등록 품목이 ${report.summary.surgeryOnlyItems}건입니다.`);
-  }
-  if (report.summary.deadStockItems > 0) {
-    insights.push(`수술기록이 없는 Dead Stock 후보가 ${report.summary.deadStockItems}건입니다.`);
-  }
-  if (report.diagnostics.some((item) => item.status === 'critical')) {
-    const critical = report.diagnostics.find((item) => item.status === 'critical');
-    if (critical) insights.push(`우선 개선 항목: ${critical.category} (${critical.score}/${critical.maxScore}점)`);
-  }
-  if (insights.length < 2 && report.recommendations.length > 0) {
-    insights.push(`추천 액션: ${report.recommendations[0]}`);
-  }
-  if (insights.length < 2) {
-    insights.push('현재 데이터 품질 진단 결과를 기반으로 맞춤 개선안을 받아보세요.');
-  }
-
-  return insights.slice(0, 2);
-}
-
-function generateReportText(report: AnalysisReport): string {
-  const grade = getGrade(report.dataQualityScore);
-  const lines: string[] = [];
-
-  lines.push('═══ 임플란트 재고 데이터 품질 진단 리포트 ═══');
-  lines.push('');
-  lines.push(`종합 점수: ${report.dataQualityScore}/100 (${grade.label}등급)`);
-  lines.push(`평가: ${grade.text}`);
-  lines.push('');
-
-  lines.push('── 진단 항목 ──');
-  for (const d of report.diagnostics) {
-    const statusLabel = d.status === 'good' ? '[양호]' : d.status === 'warning' ? '[주의]' : '[위험]';
-    lines.push(`${statusLabel} ${d.category}: ${d.title} (${d.score}/${d.maxScore}점)`);
-    lines.push(`   ${d.detail}`);
-  }
-  lines.push('');
-
-  lines.push('── 매칭 분석 요약 ──');
-  lines.push(`매칭: ${report.matchedCount}건 / 재고 ${report.totalFixtureItems}건 / 수술기록 ${report.totalSurgeryItems}건`);
-  lines.push(`불일치: ${report.unmatchedItems.length}건`);
-  lines.push('');
-
-  lines.push('── 사용 패턴 ──');
-  lines.push(`총 수술: ${report.usagePatterns.totalSurgeries}건 (${report.usagePatterns.periodMonths}개월, 월평균 ${report.usagePatterns.monthlyAvgSurgeries}건)`);
-  if (report.usagePatterns.topUsedItems.length > 0) {
-    lines.push('TOP 사용 품목:');
-    for (const item of report.usagePatterns.topUsedItems.slice(0, 5)) {
-      lines.push(`  - ${item.manufacturer} ${item.brand} ${item.size}: ${item.count}건`);
-    }
-  }
-  lines.push('');
-
-  lines.push('── 개선 권장사항 ──');
-  report.recommendations.forEach((rec, i) => {
-    lines.push(`${i + 1}. ${rec}`);
-  });
-  lines.push('');
-  lines.push('─────────────────────────────');
-  lines.push('DenJOY 무료 데이터 품질 진단');
-
-  return lines.join('\n');
-}
-
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
-  const [step, setStep] = useState<Step>('upload');
   const [fixtureFile, setFixtureFile] = useState<File | null>(null);
   const [surgeryFiles, setSurgeryFiles] = useState<File[]>([]);
-  const [report, setReport] = useState<AnalysisReport | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [processingMsg, setProcessingMsg] = useState('');
-  const [error, setError] = useState('');
   const [uploadFormatWarning, setUploadFormatWarning] = useState('');
-  const [emailSent, setEmailSent] = useState(false);
-  const [leadEmail, setLeadEmail] = useState('');
-  const [wantDetailedAnalysis, setWantDetailedAnalysis] = useState(false);
-  const [leadHospital, setLeadHospital] = useState('');
-  const [leadRegion, setLeadRegion] = useState('');
-  const [leadContact, setLeadContact] = useState('');
-  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
-  const [leadSubmitError, setLeadSubmitError] = useState('');
   const reportRef = useRef<HTMLDivElement>(null);
+  const {
+    step,
+    report,
+    progress,
+    processingMsg,
+    error,
+    emailSent,
+    leadEmail,
+    wantDetailedAnalysis,
+    leadHospital,
+    leadRegion,
+    leadContact,
+    isSubmittingLead,
+    leadSubmitError,
+    setProgress,
+    setProcessingMsg,
+    setIsSubmittingLead,
+    setLeadSubmitError,
+    setEmailSent,
+    clearAnalyzeError,
+    setAnalyzeError,
+    startAnalyzeProcessing,
+    completeAnalyzeProcessing,
+    failAnalyzeProcessing,
+    updateLeadEmail,
+    updateWantDetailedAnalysis,
+    updateLeadHospital,
+    updateLeadRegion,
+    updateLeadContact,
+  } = useAnalyzeStateMachine({ reportRef });
+  const betaTrialOfferText = getBetaTrialOfferText();
+  const analyzeTrialFootnoteText = betaTrialOfferText
+    ? `카드 정보 불필요 · 1분 가입 · ${DEFAULT_TRIAL_OFFER_TEXT} · ${betaTrialOfferText}`
+    : `카드 정보 불필요 · 1분 가입 · ${DEFAULT_TRIAL_OFFER_TEXT}`;
 
   const fixtureDrop = useRef<HTMLDivElement>(null);
   const surgeryDrop = useRef<HTMLDivElement>(null);
@@ -338,9 +77,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     }
 
     setFixtureFile(valid[0]);
-    setError('');
+    clearAnalyzeError();
     setUploadFormatWarning('');
-  }, []);
+  }, [clearAnalyzeError]);
 
   const handleSurgeryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -348,7 +87,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
     if (valid.length > 0) {
       setSurgeryFiles(prev => [...prev, ...valid].slice(0, 6));
-      setError('');
+      clearAnalyzeError();
     }
 
     if (invalid.length > 0) {
@@ -359,7 +98,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     if (valid.length > 0) {
       setUploadFormatWarning('');
     }
-  }, []);
+  }, [clearAnalyzeError]);
 
   const removeSurgeryFile = useCallback((idx: number) => {
     setSurgeryFiles(prev => prev.filter((_, i) => i !== idx));
@@ -373,10 +112,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
     if (type === 'fixture' && valid[0]) {
       setFixtureFile(valid[0]);
-      setError('');
+      clearAnalyzeError();
     } else if (type === 'surgery' && valid.length > 0) {
       setSurgeryFiles(prev => [...prev, ...valid].slice(0, 6));
-      setError('');
+      clearAnalyzeError();
     }
 
     if (invalid.length > 0) {
@@ -387,7 +126,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     if (valid.length > 0) {
       setUploadFormatWarning('');
     }
-  }, []);
+  }, [clearAnalyzeError]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -396,13 +135,18 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
   const handleAnalyze = useCallback(async () => {
     if (!fixtureFile || surgeryFiles.length === 0) {
-      setError('재고 목록 파일과 수술기록지를 모두 업로드해주세요.');
+      setAnalyzeError('재고 목록 파일과 수술기록지를 모두 업로드해주세요.');
       return;
     }
-    setError('');
-    setStep('processing');
-    setProgress(0);
-    setProcessingMsg(PROCESSING_MESSAGES[0]);
+    pageViewService.trackEvent(
+      'analyze_start',
+      {
+        fixture_uploaded: Boolean(fixtureFile),
+        surgery_file_count: surgeryFiles.length,
+      },
+      'analyze',
+    );
+    startAnalyzeProcessing(PROCESSING_MESSAGES[0]);
 
     // Fake progress animation
     let msgIdx = 0;
@@ -421,25 +165,23 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     try {
       const result = await runAnalysis(fixtureFile, surgeryFiles);
       clearInterval(progressInterval);
-      setProgress(100);
-      setProcessingMsg('분석이 완료되었습니다!');
-      setTimeout(() => {
-        setReport(result);
-        setStep('report');
-      }, 600);
+      pageViewService.trackEvent(
+        'analyze_complete',
+        {
+          score: result.dataQualityScore,
+          matched_count: result.matchedCount,
+          unmatched_count: result.unmatchedItems.length,
+        },
+        'analyze',
+      );
+      completeAnalyzeProcessing(result);
     } catch (err) {
       console.error('[AnalyzePage] runAnalysis failed:', err);
       clearInterval(progressInterval);
-      setError(classifyAnalyzeError(err));
-      setStep('upload');
+      pageViewService.trackEvent('analyze_error', { message: classifyAnalyzeError(err) }, 'analyze');
+      failAnalyzeProcessing(classifyAnalyzeError(err));
     }
-  }, [fixtureFile, surgeryFiles]);
-
-  useEffect(() => {
-    if (step === 'report' && reportRef.current) {
-      reportRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [step]);
+  }, [completeAnalyzeProcessing, failAnalyzeProcessing, fixtureFile, setAnalyzeError, startAnalyzeProcessing, surgeryFiles]);
 
   const handleLeadSubmit = useCallback(async () => {
     if (!leadEmail || !report) return;
@@ -448,6 +190,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
     setIsSubmittingLead(true);
     setLeadSubmitError('');
+    pageViewService.trackEvent('analyze_lead_submit_start', { detailed: wantDetailedAnalysis }, 'analyze');
     const reportText = generateReportText(report);
 
     try {
@@ -489,9 +232,15 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
 
       try { await navigator.clipboard.writeText(reportText); } catch { /* silent */ }
       setEmailSent(true);
+      pageViewService.trackEvent('analyze_lead_submit', { detailed: wantDetailedAnalysis }, 'analyze');
     } catch (err) {
       console.error('[AnalyzePage] send-analysis-report failed:', err);
       setLeadSubmitError(classifyLeadSubmitError(err));
+      pageViewService.trackEvent(
+        'analyze_lead_submit_error',
+        { detailed: wantDetailedAnalysis, message: classifyLeadSubmitError(err) },
+        'analyze',
+      );
     } finally {
       setIsSubmittingLead(false);
     }
@@ -1176,10 +925,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 <input
                   type="email"
                   value={leadEmail}
-                  onChange={(e) => {
-                    setLeadEmail(e.target.value);
-                    setLeadSubmitError('');
-                  }}
+                  onChange={(e) => updateLeadEmail(e.target.value)}
                   placeholder="이메일 주소 *"
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
@@ -1190,10 +936,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                   <input
                     type="checkbox"
                     checked={wantDetailedAnalysis}
-                    onChange={(e) => {
-                      setWantDetailedAnalysis(e.target.checked);
-                      setLeadSubmitError('');
-                    }}
+                    onChange={(e) => updateWantDetailedAnalysis(e.target.checked)}
                     className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
                   />
                   <div>
@@ -1229,30 +972,21 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                     <input
                       type="text"
                       value={leadHospital}
-                      onChange={(e) => {
-                        setLeadHospital(e.target.value);
-                        setLeadSubmitError('');
-                      }}
+                      onChange={(e) => updateLeadHospital(e.target.value)}
                       placeholder="병원명 *"
                       className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadHospital ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
                     <input
                       type="text"
                       value={leadRegion}
-                      onChange={(e) => {
-                        setLeadRegion(e.target.value);
-                        setLeadSubmitError('');
-                      }}
+                      onChange={(e) => updateLeadRegion(e.target.value)}
                       placeholder="지역 (예: 서울 강남구) *"
                       className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadRegion ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
                     <input
                       type="tel"
                       value={leadContact}
-                      onChange={(e) => {
-                        setLeadContact(formatPhoneNumber(e.target.value));
-                        setLeadSubmitError('');
-                      }}
+                      onChange={(e) => updateLeadContact(e.target.value)}
                       placeholder="연락처 *"
                       className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadContact ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
@@ -1310,7 +1044,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
         </div>
       </section>
 
-      {/* Section 6: Dual CTA */}
+      {/* Section 6: Next Action */}
       <section className="py-16 bg-slate-900 text-white">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl font-black mb-3">이 진단을 매일 자동으로 받아보세요</h2>
@@ -1321,18 +1055,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           >
             무료로 시작하기
           </button>
-          <p className="text-xs text-slate-500 mt-3">카드 정보 불필요 &middot; 1분 가입 &middot; 1개월 무료</p>
-
-          <div className="flex items-center justify-center gap-4 my-10">
-            <div className="h-px flex-1 bg-slate-700"></div>
-            <span className="text-sm text-slate-500 font-medium">또는</span>
-            <div className="h-px flex-1 bg-slate-700"></div>
-          </div>
-
-          <p className="text-slate-400 mb-4">현장 방문 정밀 재고 분석이 필요하시면</p>
+          <p className="text-xs text-slate-500 mt-3">{analyzeTrialFootnoteText}</p>
           <button
             onClick={onContact}
-            className="px-8 py-3 border-2 border-slate-600 text-slate-300 font-bold rounded-2xl hover:border-slate-400 hover:text-white transition-all"
+            className="mt-4 text-sm text-slate-400 hover:text-white underline underline-offset-2 transition-colors"
           >
             정밀 분석 문의하기
           </button>

@@ -1,7 +1,11 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { reviewService, UserReview, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
-
+import {
+  DEFAULT_TRIAL_HIGHLIGHT_TEXT,
+  getTrialCopy,
+} from '../utils/trialPolicy';
+import { DashboardPromoMockup } from './DashboardPromoMockup';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -61,9 +65,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const [featuredReviews, setFeaturedReviews] = useState<UserReview[]>([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselFading, setCarouselFading] = useState(false);
+  const trialCopy = getTrialCopy();
+  const heroTrialText = trialCopy.heroText;
+  const ctaTrialBadgeText = trialCopy.badgeText;
+  const ctaTrialFootnoteText = trialCopy.footnoteWithDot;
 
   useEffect(() => {
-    reviewService.getFeaturedReviews().then(setFeaturedReviews).catch(() => {});
+    reviewService.getFeaturedReviews().then(setFeaturedReviews).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -134,7 +142,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
             </span>
-            <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">베타 테스터 10곳 한정 모집 중 &middot; 4주 무료 체험</span>
+            <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">{heroTrialText}</span>
           </div>
 
           {/* 프레이밍: 구체적 수치로 가치 제시 */}
@@ -190,14 +198,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <div className="mt-10 sm:mt-20 relative z-10 w-full max-w-4xl sm:max-w-6xl mx-auto px-3 sm:px-4 perspective-1000 animate-fade-in-up animation-delay-400">
           <div className="relative rounded-2xl bg-slate-900/5 p-1.5 sm:p-2 backdrop-blur-xl ring-1 ring-slate-900/10 shadow-2xl transform rotate-x-6 sm:rotate-x-12 hover:rotate-x-0 transition-transform duration-700 ease-out-back origin-center">
             <div className="rounded-xl bg-white shadow-inner overflow-hidden border border-slate-200/50 aspect-[16/9] flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-              <div className="text-center">
-                <div className="w-14 h-14 sm:w-20 sm:h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-2 sm:mb-4">
-                  <svg className="w-7 h-7 sm:w-10 sm:h-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <span className="text-slate-400 text-xs sm:text-sm font-medium">Dashboard Preview</span>
-              </div>
+              <DashboardPromoMockup />
             </div>
           </div>
           <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-[2rem] blur-2xl opacity-20 -z-10"></div>
@@ -739,17 +740,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative z-10">
           <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-amber-500/10 border border-amber-500/20 mb-5 sm:mb-8">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">10곳 한정 · 4주 무료 베타 체험</span>
+            <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">{ctaTrialBadgeText}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-5xl font-black mb-5 sm:mb-6 leading-tight text-balance">
             지금 시작하면<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">4주 무료</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
           </h2>
           <p className="text-slate-400 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance">
             엑셀에 쓰는 시간을 환자에게 쓰세요.
           </p>
           <p className="text-sm text-slate-500 mb-7 sm:mb-10 text-balance">
-            베타 테스터 10곳 한정 &middot; 4주 무료 체험 &middot; 카드 불필요
+            {ctaTrialFootnoteText}
           </p>
           <button
             onClick={onGetStarted}

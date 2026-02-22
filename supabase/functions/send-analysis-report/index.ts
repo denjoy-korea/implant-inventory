@@ -1,10 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 // ── 리포트 텍스트 파서 ──────────────────────────────────────────────
 interface DiagItem { status: "good" | "warning" | "critical"; category: string; subtitle: string; score: string; detail: string; }
@@ -272,9 +268,11 @@ function buildHtml(parsed: ParsedReport, hospitalName: string | null, isDetailed
 
 // ── 메인 핸들러 ──────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") const corsHeaders = getCorsHeaders(req);
+    return new Response("ok", { headers: corsHeaders });
 
   try {
+    const corsHeaders = getCorsHeaders(req);
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

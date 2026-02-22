@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "npm run typecheck && node scripts/lint-check.mjs",
     "test": "node --test scripts/*.test.mjs",
+    "test:funnel": "node --test scripts/funnel-kpi-regression.test.mjs",
+    "report:traffic": "node scripts/admin-traffic-snapshot.mjs 30",
     "smoke:ops": "node scripts/operational-smoke-checklist.mjs",
     "smoke:edge": "node scripts/check-edge-functions.mjs",
     "smoke:edge:strict": "node scripts/check-edge-functions.mjs --require-env --fail-on-unreachable",

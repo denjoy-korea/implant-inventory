@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import XLSX from "npm:xlsx";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
@@ -42,6 +37,7 @@ Deno.serve(async (req: Request) => {
 
   let parsedBody: unknown;
   try {
+    const corsHeaders = getCorsHeaders(req);
     parsedBody = await req.json();
   } catch {
     return jsonResponse({ error: "Invalid JSON body" }, 400);

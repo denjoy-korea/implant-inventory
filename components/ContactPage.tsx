@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { contactService } from '../services/contactService';
+import { pageViewService } from '../services/pageViewService';
 
 interface ContactPageProps {
   onGetStarted: () => void;
@@ -9,13 +10,14 @@ interface ContactPageProps {
 }
 
 const EMPTY_FORM = { hospitalName: '', contactName: '', email: '', role: '', phone: '', weeklySurgeries: '', inquiryType: '', content: '', agree: false };
+type SubmittedForm = typeof EMPTY_FORM & { requestId: string | null };
 
 const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) => {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const { toast, showToast } = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<typeof EMPTY_FORM | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedForm | null>(null);
 
   const set = (key: keyof typeof EMPTY_FORM, value: string | boolean) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -38,7 +40,8 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
     if (!form.agree) { showToast('개인정보 수집 및 이용에 동의해 주세요.', 'error'); return; }
     setSubmitting(true);
     try {
-      await contactService.submit({
+      pageViewService.trackEvent('contact_submit_start', { inquiry_type: form.inquiryType || null }, 'contact');
+      const result = await contactService.submit({
         hospital_name: form.hospitalName,
         contact_name: form.contactName,
         email: form.email,
@@ -48,9 +51,11 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
         inquiry_type: form.inquiryType,
         content: form.content,
       });
-      setSubmitted(form);
+      pageViewService.trackEvent('contact_submit', { inquiry_type: form.inquiryType || null }, 'contact');
+      setSubmitted({ ...form, requestId: result.requestId });
       setForm(EMPTY_FORM);
     } catch (error) {
+      pageViewService.trackEvent('contact_submit_error', { inquiry_type: form.inquiryType || null }, 'contact');
       const message =
         error instanceof Error && error.message
           ? error.message
@@ -137,6 +142,7 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                         { label: '연락처', value: submitted.phone },
                         { label: '문의 유형', value: submitted.inquiryType },
                         { label: '수술 건수', value: submitted.weeklySurgeries },
+                        { label: '접수번호', value: submitted.requestId || '생성 중' },
                       ].map(({ label, value }) => (
                         <div key={label} className="flex items-start gap-3">
                           <span className="text-xs text-slate-400 w-20 flex-shrink-0 pt-0.5">{label}</span>
@@ -145,27 +151,11 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                       ))}
                     </div>
 
-                    {/* 무료 분석 유도 */}
-                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-5 mb-3">
-                      <p className="text-sm font-black text-emerald-800 mb-1">답변을 기다리는 동안,<br/>우리 병원 데이터 건강도를 확인해보세요!</p>
-                      <p className="text-xs text-emerald-600 leading-relaxed mb-4">
-                        픽스쳐 재고 파일과 수술기록지를 업로드하면<br/>
-                        데이터 품질을 6가지 항목으로 무료 진단해드려요.
-                      </p>
-                      <button
-                        onClick={onAnalyze}
-                        className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors text-sm shadow-md shadow-emerald-200"
-                      >
-                        무료 데이터 건강도 진단 →
-                      </button>
-                    </div>
-
-                    {/* 무료 회원가입 유도 */}
+                    {/* 다음 행동(Primary 1개) */}
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-4">
-                      <p className="text-sm font-black text-slate-800 mb-1">지금 바로 사용해볼 수도 있어요</p>
+                      <p className="text-sm font-black text-slate-800 mb-1">다음 단계 1순위: 무료 회원가입</p>
                       <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                        무료 회원가입으로 재고 관리, 수술 기록 연동 등<br/>
-                        핵심 기능을 직접 체험해보세요. 신용카드 없이 무료로 시작!
+                        재고/주문/식립 FAIL 관리를 지금 바로 시작할 수 있습니다.
                       </p>
                       <button
                         onClick={onGetStarted}
@@ -173,6 +163,14 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                       >
                         무료로 시작하기 →
                       </button>
+                      {onAnalyze && (
+                        <button
+                          onClick={onAnalyze}
+                          className="w-full mt-3 py-2.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+                        >
+                          또는 무료 데이터 건강도 진단 보기
+                        </button>
+                      )}
                     </div>
 
                     <button
