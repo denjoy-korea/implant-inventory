@@ -42,8 +42,26 @@ interface AuthErrorStatus {
   showContact: boolean;
 }
 
+const AUTH_ERROR_KO: Record<string, string> = {
+  'invalid login credentials': '이메일 또는 비밀번호가 올바르지 않습니다.',
+  'invalid email or password': '이메일 또는 비밀번호가 올바르지 않습니다.',
+  'email not confirmed': '이메일 인증이 완료되지 않았습니다. 받은 메일함을 확인해주세요.',
+  'user already registered': '이미 가입된 이메일입니다.',
+  'email rate limit exceeded': '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+  'invalid email': '이메일 형식이 올바르지 않습니다.',
+  'unable to validate email address: invalid format': '이메일 형식이 올바르지 않습니다.',
+  'password should be at least 6 characters': '비밀번호는 6자 이상이어야 합니다.',
+  'signups not allowed for this instance': '현재 회원가입이 불가능합니다.',
+  'token has expired or is invalid': '링크가 만료되었거나 유효하지 않습니다.',
+  'otp expired': '인증 코드가 만료되었습니다.',
+  'invalid otp': '인증 코드가 올바르지 않습니다.',
+  'for security purposes, you can only request this once every 60 seconds': '보안을 위해 60초 후 다시 시도해주세요.',
+  'too many requests': '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+};
+
 const toAuthErrorStatus = (message: string): AuthErrorStatus => {
   const normalized = message.toLowerCase();
+  const translated = AUTH_ERROR_KO[normalized] ?? message;
   const isNetwork = /network|fetch|timeout|timed out|연결|네트워크/.test(normalized);
   const isPermission = /permission|forbidden|권한|unauthorized|denied/.test(normalized);
   const isInvite = /invite|초대|토큰|만료/.test(normalized);
@@ -60,7 +78,7 @@ const toAuthErrorStatus = (message: string): AuthErrorStatus => {
           : 'unknown';
 
   return {
-    message,
+    message: translated,
     code,
     canRetry: code === 'network' || code === 'permission' || code === 'invite' || code === 'unknown',
     showContact: code === 'permission' || code === 'invite' || code === 'unknown',
@@ -358,6 +376,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       }
 
       if (result.emailConfirmationRequired) {
+        // 이메일 인증 후 트라이얼 플랜 적용을 위해 로컬스토리지에 저장
+        if (pendingTrialPlan && pendingTrialPlan !== 'free') {
+          localStorage.setItem('_pending_trial_plan', pendingTrialPlan);
+        }
         setResendCooldown(60);
         setStep('email_sent');
         pageViewService.trackEvent('auth_email_sent', { mode: 'signup' }, 'signup');
@@ -402,9 +424,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         return;
       }
 
-      // MFA 활성화 여부 확인
+      // MFA 활성화 여부 확인 (최대 8초, 초과 시 새로고침으로 fallback)
       try {
-        const profile = await authService.getProfileById();
+        const profile = await Promise.race([
+          authService.getProfileById(),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 8_000)),
+        ]);
         if (profile?.mfa_enabled) {
           const isTrusted = await authService.checkTrustedDevice();
           if (!isTrusted) {
@@ -413,7 +438,6 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
             if (onMfaRequired) {
               onMfaRequired(email);
             } else {
-              // fallback: onMfaRequired prop 없을 때 새로고침 (initSession에서 MFA 체크)
               window.location.reload();
             }
             return;

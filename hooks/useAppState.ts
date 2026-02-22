@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder,
+  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder, PlanType,
 } from '../types';
 import { authService } from '../services/authService';
 import { errorIncludes } from '../utils/errors';
@@ -54,6 +54,7 @@ type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
 
 const SESSION_POLL_INTERVAL_MS = 60_000;
 const SESSION_TOKEN_KEY = 'dentweb_session_token';
+const LOAD_TIMEOUT_MS = 20_000; // 20초 초과 시 스피너 강제 해제
 
 export function useAppState(onNotify?: NotifyFn) {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
@@ -240,10 +241,37 @@ export function useAppState(onNotify?: NotifyFn) {
   // 세션 초기화 및 Auth 상태 변경 구독
   useEffect(() => {
     const initSession = async () => {
+      const timeoutId = setTimeout(() => {
+        console.error('[useAppState] initSession timed out, forcing isLoading: false');
+        setState(prev => ({ ...prev, isLoading: false }));
+      }, LOAD_TIMEOUT_MS);
       try {
+        // 이메일 인증 링크 처리: ?token_hash=xxx&type=signup
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenHash = urlParams.get('token_hash');
+        const tokenType = urlParams.get('type');
+        if (tokenHash && tokenType === 'signup') {
+          window.history.replaceState({}, '', window.location.pathname);
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'signup',
+          });
+          if (verifyError) {
+            console.error('[useAppState] 이메일 인증 실패:', verifyError);
+            setState(prev => ({ ...prev, isLoading: false }));
+          }
+          // 성공 시 SIGNED_IN 이벤트가 loadHospitalData 처리
+          return;
+        }
+
         const session = await authService.getSession();
         if (session?.user) {
-          const profile = await authService.getProfileById();
+          let profile = await authService.getProfileById();
+          // 프로필 조회 실패 시 500ms 후 1회 재시도 (RPC 일시 오류 대응)
+          if (!profile) {
+            await new Promise(r => setTimeout(r, 500));
+            profile = await authService.getProfileById();
+          }
           if (profile) {
             // 기존 세션 복원 시 토큰 유효성 1회 검증
             const valid = await validateSessionToken();
@@ -277,12 +305,17 @@ export function useAppState(onNotify?: NotifyFn) {
         if (errorIncludes(error, 'Refresh Token', 'Invalid')) {
           await authService.signOut();
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
       setState(prev => ({ ...prev, isLoading: false }));
     };
     initSession();
 
-    const { data: { subscription } } = authService.onAuthStateChange(async (event) => {
+    // ⚠️ Supabase v2는 SIGNED_IN / TOKEN_REFRESHED 이벤트에서 콜백을 내부적으로 await함.
+    // async 콜백이 hang하면 signInWithPassword 자체도 블로킹되므로
+    // SIGNED_IN 처리는 반드시 fire-and-forget (void IIFE) 으로 실행해야 함.
+    const { data: { subscription } } = authService.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         stopSessionPolling();
         setState(prev => ({
@@ -297,13 +330,22 @@ export function useAppState(onNotify?: NotifyFn) {
         }));
       }
       // 이메일 인증 링크 클릭 → 토큰 교환 → SIGNED_IN 이벤트로 자동 대시보드 진입
+      // fire-and-forget: 콜백을 즉시 반환해 signInWithPassword 블로킹 방지
       if (event === 'SIGNED_IN') {
-        const profile = await authService.getProfileById();
-        if (profile) {
-          const user = dbToUser(profile);
-          await loadHospitalData(user);
-          startSessionPolling();
-        }
+        void (async () => {
+          const profile = await authService.getProfileById();
+          if (profile) {
+            const user = dbToUser(profile);
+            // 이메일 인증 완료 후 트라이얼 플랜 적용 (이메일 인증 ON 경로)
+            const pendingPlan = localStorage.getItem('_pending_trial_plan') as PlanType | null;
+            if (pendingPlan && pendingPlan !== 'free' && user.role === 'master' && user.hospitalId) {
+              localStorage.removeItem('_pending_trial_plan');
+              await planService.startTrial(user.hospitalId, pendingPlan);
+            }
+            await loadHospitalData(user);
+            startSessionPolling();
+          }
+        })();
       }
     });
 
