@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { onboardingService } from '../services/onboardingService';
+import { InventoryItem } from '../types';
 import Step1Welcome from './onboarding/Step1Welcome';
 import Step2DenwebFixtureDownload from './onboarding/Step2DenwebFixtureDownload';
 import Step2FixtureUpload from './onboarding/Step2FixtureUpload';
@@ -7,6 +8,9 @@ import Step4DenwebSurgeryDownload from './onboarding/Step4DenwebSurgeryDownload'
 import Step4UploadGuide from './onboarding/Step4UploadGuide';
 import Step6InventoryAudit from './onboarding/Step6InventoryAudit';
 import Step3FailAudit from './onboarding/Step3FailAudit';
+
+// 덴트웹 다운로드 안내 단계 — "다음" 버튼 숨김 (단계 내부에서 직접 진행)
+const DOWNLOAD_STEPS = new Set([2, 4]);
 
 // 각 단계 진입 시 표시할 진행률 (단계별 완료 후 사용자가 확정할 값)
 const STEP_PROGRESS: Record<number, number> = {
@@ -19,17 +23,17 @@ const STEP_PROGRESS: Record<number, number> = {
   7: 85,
 };
 
-// 헤더 "다음" 버튼을 숨기고 콘텐츠 내 "완료" 버튼만으로 진행하는 단계
-const DOWNLOAD_STEPS = new Set([2, 4]);
 
 interface Props {
   hospitalId: string;
   hospitalName: string;
   initialStep: number;
+  inventory: InventoryItem[];
   onComplete: () => void;
   onSkip: () => void;
-  onGoToDataSetup: () => void;
-  onGoToSurgeryUpload: () => void;
+  onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
+  onGoToSurgeryUpload: (file?: File) => void;
+  onGoToInventoryAudit: () => void;
   onGoToFailManagement: () => void;
 }
 
@@ -38,10 +42,12 @@ export default function OnboardingWizard({
   hospitalId,
   hospitalName,
   initialStep,
+  inventory,
   onComplete,
   onSkip,
   onGoToDataSetup,
   onGoToSurgeryUpload,
+  onGoToInventoryAudit,
   onGoToFailManagement,
 }: Props) {
   const [step, setStep] = useState(initialStep);
@@ -137,12 +143,12 @@ export default function OnboardingWizard({
               : 'translateX(0)',
           }}
         >
-          {step === 1 && <Step1Welcome hospitalName={hospitalName} onSkip={onSkip} />}
+          {step === 1 && <Step1Welcome hospitalName={hospitalName} onNext={handleNext} onSkip={onSkip} />}
           {step === 2 && <Step2DenwebFixtureDownload onNext={handleNext} />}
           {step === 3 && <Step2FixtureUpload onGoToDataSetup={onGoToDataSetup} />}
           {step === 4 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
-          {step === 5 && <Step4UploadGuide onGoToSurgeryUpload={onGoToSurgeryUpload} />}
-          {step === 6 && <Step6InventoryAudit />}
+          {step === 5 && <Step4UploadGuide inventory={inventory} onGoToSurgeryUpload={onGoToSurgeryUpload} />}
+          {step === 6 && <Step6InventoryAudit onGoToInventoryAudit={onGoToInventoryAudit} />}
           {step === 7 && <Step3FailAudit />}
         </div>
       </div>
