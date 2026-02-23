@@ -70,6 +70,8 @@ export async function encryptPatientInfo(text: string): Promise<string> {
 
 export async function decryptPatientInfo(encrypted: string): Promise<string> {
   if (!encrypted) return '';
+  // 암호화되지 않은 평문은 Edge Function 호출 없이 즉시 반환
+  if (!encrypted.startsWith('ENCv2:') && !encrypted.startsWith('ENC:')) return encrypted;
   return callCryptoService('decrypt', { text: encrypted }, true) as Promise<string>;
 }
 

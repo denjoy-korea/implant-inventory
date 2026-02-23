@@ -18,12 +18,18 @@ import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './crypt
 
 /** profiles PII 필드(name·email·phone) 복호화 — 평문(ENCv2 접두사 없음)은 그대로 반환 */
 export async function decryptProfile(db: DbProfile): Promise<DbProfile> {
-  const [email, name, phone] = await Promise.all([
-    decryptPatientInfo(db.email),
-    decryptPatientInfo(db.name),
-    db.phone ? decryptPatientInfo(db.phone) : Promise.resolve(db.phone),
-  ]);
-  return { ...db, email, name, phone };
+  try {
+    const [email, name, phone] = await Promise.all([
+      decryptPatientInfo(db.email),
+      decryptPatientInfo(db.name),
+      db.phone ? decryptPatientInfo(db.phone) : Promise.resolve(db.phone),
+    ]);
+    return { ...db, email, name, phone };
+  } catch (e) {
+    // Edge Function 실패 시 원본 반환 — 로그인 자체는 차단하지 않음
+    console.warn('[decryptProfile] 복호화 실패, 원본 반환:', e);
+    return db;
+  }
 }
 import { toCanonicalSize } from './sizeNormalizer';
 
