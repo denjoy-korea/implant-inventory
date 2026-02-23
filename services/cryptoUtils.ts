@@ -15,6 +15,10 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) ?? '';
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? '';
 const CRYPTO_SERVICE_URL = `${SUPABASE_URL}/functions/v1/crypto-service`;
 
+// H-6: 동시 refreshSession() 호출을 단일 Promise로 공유 (mutex 패턴)
+// 여러 컴포넌트가 동시에 expired token을 감지해도 refresh_token은 1회만 소비됨
+let _refreshingPromise: Promise<string | null> | null = null;
+
 /**
  * 유효한 access token 획득.
  * supabase.functions.invoke()는 초기 세션 복원 시 INITIAL_SESSION 이벤트로
@@ -29,13 +33,22 @@ async function getValidToken(): Promise<string | null> {
 
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = session.expires_at ?? 0;
-    const isExpired = expiresAt - 10 <= now;
 
     // 10초 버퍼: 만료가 임박했거나 이미 만료된 경우 갱신
-    if (isExpired) {
-      const { data: refreshed, error } = await supabase.auth.refreshSession();
-      if (error || !refreshed.session) return null;
-      return refreshed.session.access_token;
+    if (expiresAt - 10 <= now) {
+      // H-6: 이미 진행 중인 refresh가 있으면 공유, 없으면 새로 시작
+      if (!_refreshingPromise) {
+        _refreshingPromise = supabase.auth.refreshSession()
+          .then(({ data, error }) => {
+            _refreshingPromise = null;
+            return (!error && data.session) ? data.session.access_token : null;
+          })
+          .catch(() => {
+            _refreshingPromise = null;
+            return null;
+          });
+      }
+      return _refreshingPromise;
     }
 
     return session.access_token;
@@ -74,11 +87,10 @@ async function callCryptoService(
   });
 
   // 토큰이 만료/불일치한 경우 1회 갱신 후 재시도
+  // H-6 fix: refreshSession()을 직접 호출하지 않고 getValidToken()을 재호출해
+  // _refreshingPromise mutex를 통해 refresh_token 이중 소비를 방지한다
   if (requireAuth && res.status === 401) {
-    const { supabase } = await import('./supabaseClient');
-    const { data: refreshed, error } = await supabase.auth.refreshSession();
-    const refreshedToken = !error ? refreshed.session?.access_token : null;
-
+    const refreshedToken = await getValidToken();
     if (refreshedToken && refreshedToken !== token) {
       headers['Authorization'] = `Bearer ${refreshedToken}`;
       res = await fetch(CRYPTO_SERVICE_URL, {
@@ -97,7 +109,12 @@ async function callCryptoService(
   }
 
   const data = await res.json() as { result?: string; results?: string[] };
-  return (data.result ?? data.results) as string | string[];
+  // H-1: 서버가 { error: "..." } 등 예외 응답 시 undefined를 string으로 캐스팅하는 버그 방지
+  const value = data.result ?? data.results;
+  if (value === undefined) {
+    throw new Error(`[cryptoUtils] crypto-service (${op}): 응답에 result 필드 없음`);
+  }
+  return value;
 }
 
 export async function encryptPatientInfo(text: string): Promise<string> {
@@ -140,16 +157,33 @@ export async function decryptPatientInfoBatch(
   // 모두 평문이면 Edge Function 호출 없이 즉시 반환
   if (!encryptedValues.length) return encryptedList;
 
-  const decryptedValues = await callCryptoService(
-    'decrypt_batch',
-    { texts: encryptedValues },
-    true,
-  ) as string[];
+  // crypto-service 배치 한도(500) 초과 시 청킹 처리
+  const DECRYPT_BATCH_LIMIT = 500;
+  const decryptedValues: string[] = [];
+  for (let i = 0; i < encryptedValues.length; i += DECRYPT_BATCH_LIMIT) {
+    const chunk = encryptedValues.slice(i, i + DECRYPT_BATCH_LIMIT);
+    const chunkResult = await callCryptoService('decrypt_batch', { texts: chunk }, true) as string[];
+    decryptedValues.push(...chunkResult);
+  }
+
+  // W-1 fix: 서버 측 복호화 실패 시 ciphertext를 그대로 반환하는 경우 감지
+  // decryptText()의 3단계 fallback이 모두 실패하면 원본 암호문을 반환 → 클라이언트에서 차단
+  let failCount = 0;
+  const sanitized = decryptedValues.map((v) => {
+    if (v.startsWith('ENCv2:') || v.startsWith('ENC:')) {
+      failCount++;
+      return '[복호화 실패]';
+    }
+    return v;
+  });
+  if (failCount > 0) {
+    console.warn(`[decryptPatientInfoBatch] ${failCount}개 항목 복호화 실패 (암호문 그대로 반환됨)`);
+  }
 
   // 원본 순서 복원 (평문은 그대로, 암호문은 복호화 결과로 교체)
   const result = [...encryptedList];
   encryptedIndices.forEach((origIdx, i) => {
-    result[origIdx] = decryptedValues[i];
+    result[origIdx] = sanitized[i];
   });
   return result;
 }
