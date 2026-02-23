@@ -9,58 +9,45 @@
  * - decryptPatientInfo  : JWT 필수 (인증 사용자만 복호화 가능)
  * - hashPatientInfo     : anon key 허용 (비인증 ID 조회에서도 사용)
  * - decryptPatientInfoBatch : JWT 필수, 복수 암호문 한 번에 복호화
+ *
+ * JWT 처리:
+ * - requireAuth=true  → supabase.functions.invoke() 사용 (JWT 갱신 자동 처리)
+ * - requireAuth=false → raw fetch + anon key (hash 전용)
  */
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) ?? '';
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? '';
 const CRYPTO_SERVICE_URL = `${SUPABASE_URL}/functions/v1/crypto-service`;
 
-async function getAccessToken(): Promise<string | null> {
-  try {
-    // 순환 의존성 방지를 위해 동적 import
-    const { supabase } = await import('./supabaseClient');
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-
-    // 토큰 만료 확인: getSession()은 만료된 토큰도 그대로 반환함
-    // 페이지 로드 시 Supabase 백그라운드 갱신이 완료되기 전에 만료된 토큰이 반환될 수 있음
-    const now = Math.floor(Date.now() / 1000); // UNIX seconds
-    if (session.expires_at && session.expires_at < now) {
-      // 명시적 갱신 — refresh token으로 새 access token 획득
-      const { data: refreshed, error } = await supabase.auth.refreshSession();
-      if (error || !refreshed.session) return null;
-      return refreshed.session.access_token;
-    }
-
-    return session.access_token;
-  } catch {
-    return null;
-  }
-}
-
 async function callCryptoService(
   op: 'encrypt' | 'decrypt' | 'hash' | 'decrypt_batch',
   payload: { text?: string; texts?: string[] },
   requireAuth = true,
 ): Promise<string | string[]> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_ANON_KEY,
-  };
-
   if (requireAuth) {
-    const token = await getAccessToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    // supabase.functions.invoke()가 세션 토큰 갱신을 자동 처리함
+    // — 만료 토큰, race condition 모두 Supabase 클라이언트 내부에서 해결
+    const { supabase } = await import('./supabaseClient');
+    const { data, error } = await supabase.functions.invoke('crypto-service', {
+      body: { op, ...payload },
+    });
+    if (error) {
+      throw new Error(
+        `[cryptoUtils] crypto-service 오류 (${op}): ${error.message}`,
+      );
     }
-  } else {
-    // hash op: anon key를 Authorization 헤더로도 전달 (Supabase gateway 통과)
-    headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
+    const result = data as { result?: string; results?: string[] };
+    return (result.result ?? result.results) as string | string[];
   }
 
+  // hash op: anon key만으로 호출 (비인증 상태에서도 ID 조회 가능)
   const res = await fetch(CRYPTO_SERVICE_URL, {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    },
     body: JSON.stringify({ op, ...payload }),
   });
 
