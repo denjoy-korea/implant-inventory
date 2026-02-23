@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, TrustedDevice } from '../types';
+import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, TrustedDevice } from '../types';
+import { contactService } from '../services/contactService';
 import { authService } from '../services/authService';
 import PlanBadge from './PlanBadge';
 import { UNLIMITED_DAYS } from '../constants';
@@ -240,11 +241,17 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [isMfaToggling, setIsMfaToggling] = useState(false);
     const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
     const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+    const [lastSignInAt, setLastSignInAt] = useState<string | null>(null);
     // 탈퇴 사유 모달
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
     const [withdrawReasons, setWithdrawReasons] = useState<string[]>([]);
     const [withdrawCustom, setWithdrawCustom] = useState('');
     const [isWithdrawing, setIsWithdrawing] = useState(false);
+    // 인라인 플랜 변경
+    const [showPlanPicker, setShowPlanPicker] = useState(false);
+    const [pickerCycle, setPickerCycle] = useState<'monthly' | 'yearly'>(planState?.billingCycle ?? 'monthly');
+    const [pickerSelectedPlan, setPickerSelectedPlan] = useState<PlanType | null>(null);
+    const [isRequestingPlan, setIsRequestingPlan] = useState(false);
 
     const planName = isUltimatePlan ? 'Ultimate' : (planState ? PLAN_NAMES[planState.plan] : 'Free');
     const billingLabel = planState?.billingCycle === 'yearly' ? '연간' : planState?.billingCycle === 'monthly' ? '월간' : null;
@@ -282,10 +289,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
         setIsLoadingDevices(false);
     }, []);
 
-    // 보안 탭 진입 시 신뢰 기기 목록 로드
+    // 보안 탭 진입 시 신뢰 기기 목록 + 마지막 로그인 시각 로드
     useEffect(() => {
         if (activeTab === 'security') {
             loadTrustedDevices();
+            authService.getLastSignInAt().then(setLastSignInAt);
         }
     }, [activeTab, loadTrustedDevices]);
 
@@ -309,6 +317,29 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
             showToast('신뢰 기기가 제거되었습니다.', 'success');
         } else {
             showToast('기기 제거에 실패했습니다.', 'error');
+        }
+    };
+
+    const handleRequestPlanChange = async () => {
+        if (!pickerSelectedPlan) return;
+        setIsRequestingPlan(true);
+        try {
+            await contactService.submit({
+                hospital_name: hospitalName || '미등록',
+                contact_name: user.name,
+                email: user.email,
+                phone: user.phone || '미등록',
+                weekly_surgeries: '-',
+                inquiry_type: `plan_change_${pickerSelectedPlan}`,
+                content: `[플랜 변경 신청]\n현재 플랜: ${planName} (${billingLabel || '무료'})\n신청 플랜: ${PLAN_NAMES[pickerSelectedPlan]} (${pickerCycle === 'yearly' ? '연간' : '월간'})`,
+            });
+            showToast('플랜 변경 신청이 완료되었습니다. 영업일 기준 1-2일 내 처리됩니다.', 'success');
+            setShowPlanPicker(false);
+            setPickerSelectedPlan(null);
+        } catch {
+            showToast('신청에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+        } finally {
+            setIsRequestingPlan(false);
         }
     };
 
@@ -487,7 +518,105 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                         </div>
                     )}
 
-                    {activeTab === 'plan' && (
+                    {activeTab === 'plan' && showPlanPicker && (() => {
+                        const PLAN_PICKER_ITEMS: { plan: PlanType; label: string; monthlyPrice: number; yearlyPrice: number; tag?: string; features: string[] }[] = [
+                            { plan: 'basic', label: 'Basic', monthlyPrice: 29000, yearlyPrice: 23000, features: ['최대 50품목', '1인 사용', '기본 대시보드', '엑셀 업로드'] },
+                            { plan: 'plus', label: 'Plus', monthlyPrice: 69000, yearlyPrice: 55000, features: ['최대 200품목', '3인 사용', '브랜드 분석', '발주 자동화'] },
+                            { plan: 'business', label: 'Business', monthlyPrice: 129000, yearlyPrice: 103000, tag: '추천', features: ['무제한 품목', '무제한 인원', 'AI 예측 발주', '우선 지원'] },
+                            { plan: 'ultimate', label: 'Ultimate', monthlyPrice: 0, yearlyPrice: 0, tag: '별도 문의', features: ['Business 전체', '감사 로그', '장기 보관', '전담 담당자'] },
+                        ];
+                        return (
+                            <div className="space-y-4">
+                                {/* 헤더 */}
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => { setShowPlanPicker(false); setPickerSelectedPlan(null); }} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                                    </button>
+                                    <h4 className="text-sm font-bold text-slate-700">플랜 선택</h4>
+                                </div>
+
+                                {/* 월간 / 연간 토글 */}
+                                <div className="flex items-center justify-center">
+                                    <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+                                        <button onClick={() => setPickerCycle('monthly')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${pickerCycle === 'monthly' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>월간</button>
+                                        <button onClick={() => setPickerCycle('yearly')} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${pickerCycle === 'yearly' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+                                            연간
+                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">-20%</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 플랜 카드 2x2 */}
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    {PLAN_PICKER_ITEMS.map(({ plan, label, monthlyPrice, yearlyPrice, tag, features }) => {
+                                        const isCurrent = planState?.plan === plan;
+                                        const isSelected = pickerSelectedPlan === plan;
+                                        const price = pickerCycle === 'yearly' ? yearlyPrice : monthlyPrice;
+                                        const isUltimateItem = plan === 'ultimate';
+                                        return (
+                                            <button
+                                                key={plan}
+                                                onClick={() => !isCurrent && setPickerSelectedPlan(isSelected ? null : plan)}
+                                                disabled={isCurrent}
+                                                className={`relative text-left p-3.5 rounded-xl border-2 transition-all ${
+                                                    isCurrent
+                                                        ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                                                        : isSelected
+                                                            ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
+                                                            : 'border-slate-200 bg-white hover:border-indigo-300'
+                                                }`}
+                                            >
+                                                {tag && !isCurrent && (
+                                                    <span className={`absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full ${tag === '추천' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>{tag}</span>
+                                                )}
+                                                {isCurrent && (
+                                                    <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">현재</span>
+                                                )}
+                                                <p className="text-sm font-black text-slate-800 mb-1">{label}</p>
+                                                {isUltimateItem ? (
+                                                    <p className="text-xs text-slate-400 font-medium mb-2">별도 문의</p>
+                                                ) : (
+                                                    <p className="text-xs font-bold text-slate-700 mb-2">
+                                                        {price.toLocaleString('ko-KR')}
+                                                        <span className="text-[10px] font-normal text-slate-400">원/월</span>
+                                                    </p>
+                                                )}
+                                                <ul className="space-y-0.5">
+                                                    {features.map((f, i) => (
+                                                        <li key={i} className="flex items-center gap-1 text-[10px] text-slate-500">
+                                                            <svg className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                                            {f}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* 신청 버튼 영역 */}
+                                {pickerSelectedPlan ? (
+                                    <div className="pt-1">
+                                        <p className="text-[11px] text-slate-500 text-center mb-3">
+                                            <span className="font-bold text-slate-700">{PLAN_NAMES[pickerSelectedPlan]}</span> 플랜 ({pickerCycle === 'yearly' ? '연간' : '월간'}) 변경 신청 시<br />
+                                            영업일 기준 1-2일 내 처리됩니다.
+                                        </p>
+                                        <button
+                                            onClick={handleRequestPlanChange}
+                                            disabled={isRequestingPlan}
+                                            className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isRequestingPlan ? '신청 중...' : `${PLAN_NAMES[pickerSelectedPlan]} 플랜으로 변경 신청`}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <p className="text-[11px] text-slate-400 text-center">변경할 플랜을 선택해 주세요</p>
+                                )}
+                            </div>
+                        );
+                    })()}
+
+                    {activeTab === 'plan' && !showPlanPicker && (
                         <div className="space-y-5">
                             <div className={`rounded-2xl p-5 text-white relative overflow-hidden bg-gradient-to-br ${currentPlanStyle.bg}`}>
                                 <div className="absolute top-0 right-0 w-40 h-40 rounded-full -mr-16 -mt-16" style={{
@@ -593,7 +722,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
 
                             {!isUltimatePlan && (
                                 <div className="flex gap-2">
-                                    <button onClick={onChangePlan} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition-colors">
+                                    <button onClick={() => setShowPlanPicker(true)} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition-colors">
                                         플랜 변경
                                     </button>
                                     <button className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50 transition-colors">
@@ -620,7 +749,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                             </div>
                                             <div>
                                                 <p className="text-sm font-semibold text-slate-700">비밀번호 변경</p>
-                                                <p className="text-[11px] text-slate-400">마지막 변경: 30일 전</p>
+                                                <p className="text-[11px] text-slate-400">재설정 이메일로 변경할 수 있습니다</p>
                                             </div>
                                         </div>
                                         <button
@@ -714,21 +843,19 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                             )}
 
                             <div>
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">로그인 기록</h4>
-                                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-                                    {[
-                                        { device: '현재 기기', time: '지금', active: true },
-                                        { device: 'Chrome · macOS', time: '2시간 전', active: false },
-                                        { device: 'Safari · iOS', time: '1일 전', active: false },
-                                    ].map((log, i) => (
-                                        <div key={i} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50/50 transition-colors">
-                                            <div className="flex items-center gap-2.5">
-                                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${log.active ? 'bg-emerald-500' : 'bg-slate-200'}`} />
-                                                <span className={`text-sm ${log.active ? 'font-semibold text-slate-700' : 'font-medium text-slate-500'}`}>{log.device}</span>
-                                            </div>
-                                            <span className="text-xs text-slate-400">{log.time}</span>
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">마지막 로그인</h4>
+                                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 bg-white">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="w-2 h-2 rounded-full flex-shrink-0 bg-emerald-500" />
+                                            <span className="text-sm font-semibold text-slate-700">현재 세션</span>
                                         </div>
-                                    ))}
+                                        <span className="text-xs text-slate-400">
+                                            {lastSignInAt
+                                                ? new Date(lastSignInAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                                : '알 수 없음'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 

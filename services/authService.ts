@@ -1,6 +1,42 @@
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
+import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
+import { decryptProfile } from './mappers';
+
+/** 평문 여부 확인 (ENCv2 접두사 없으면 평문) */
+const isPlain = (v: string | null | undefined): boolean => !!v && !v.startsWith('ENCv2:');
+
+/** DB 트리거가 생성한 평문 profile PII를 암호화하여 저장 (fire-and-forget) */
+async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
+  try {
+    const updates: Record<string, string | null> = {};
+    const tasks: Promise<void>[] = [];
+
+    if (isPlain(profile.name)) {
+      tasks.push(encryptPatientInfo(profile.name).then((enc) => { updates.name = enc; }));
+    }
+    if (isPlain(profile.email)) {
+      tasks.push(
+        Promise.all([encryptPatientInfo(profile.email), hashPatientInfo(profile.email)])
+          .then(([enc, hash]) => { updates.email = enc; updates.email_hash = hash; }),
+      );
+    }
+    if (isPlain(profile.phone)) {
+      tasks.push(
+        Promise.all([encryptPatientInfo(profile.phone!), hashPatientInfo(profile.phone!)])
+          .then(([enc, hash]) => { updates.phone = enc; updates.phone_hash = hash; }),
+      );
+    }
+
+    await Promise.all(tasks);
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('profiles').update(updates).eq('id', profile.id);
+    }
+  } catch (e) {
+    console.warn('[authService] lazyEncryptProfile failed:', e);
+  }
+}
 
 const TRUSTED_DEVICE_TOKEN_KEY = 'dentweb_trusted_device_token';
 
@@ -191,41 +227,72 @@ export const authService = {
       }
     })();
 
-    // 6. 프로필 조회 — hospital_id가 설정될 때까지 재시도 (최대 5회 × 400ms)
+    // 6. 프로필 조회 + PII 암호화 — hospital_id가 설정될 때까지 재시도 (최대 5회 × 400ms)
     for (let i = 0; i < 5; i++) {
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
-      if (profileData?.hospital_id) return { success: true, profile: profileData as DbProfile };
+      if (profileData?.hospital_id) {
+        await lazyEncryptProfile(profileData as DbProfile);
+        return { success: true, profile: await decryptProfile(profileData as DbProfile) };
+      }
       await new Promise(r => setTimeout(r, 400));
     }
     return { success: true };
   },
 
-  /** 전화번호로 이메일(아이디) 찾기 */
+  /** 전화번호로 이메일(아이디) 찾기 — 해시 조회 우선, 평문 폴백 */
   async findEmailByPhone(phone: string): Promise<{ success: boolean; email?: string; error?: string }> {
-    const { data, error } = await supabase
+    const phoneHash = await hashPatientInfo(phone.trim());
+
+    // 1차: 해시 컬럼으로 조회 (암호화된 레코드)
+    let emailRaw: string | null = null;
+    const { data: hashResult } = await supabase
       .from('profiles')
-      .select('email, name')
-      .eq('phone', phone)
+      .select('email')
+      .eq('phone_hash', phoneHash)
       .maybeSingle();
 
-    if (error || !data) {
-      return { success: false, error: '해당 전화번호로 등록된 계정을 찾을 수 없습니다.' };
+    if (hashResult) {
+      emailRaw = await decryptPatientInfo(hashResult.email);
+    } else {
+      // 2차: 평문 폴백 (암호화 전 레거시 레코드)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('phone', phone)
+        .maybeSingle();
+      if (error || !data) {
+        return { success: false, error: '해당 전화번호로 등록된 계정을 찾을 수 없습니다.' };
+      }
+      emailRaw = data.email;
     }
 
+    if (!emailRaw) return { success: false, error: '해당 전화번호로 등록된 계정을 찾을 수 없습니다.' };
+
     // 이메일 일부 마스킹 (abc@gmail.com → a**@gmail.com)
-    const [local, domain] = data.email.split('@');
+    const [local, domain] = emailRaw.split('@');
     const masked = local.length <= 2
       ? local[0] + '*'.repeat(local.length - 1)
       : local[0] + '*'.repeat(local.length - 2) + local[local.length - 1];
     return { success: true, email: `${masked}@${domain}` };
   },
 
-  /** 이메일 존재 여부 확인 */
+  /** 이메일 존재 여부 확인 — 해시 조회 우선, 평문 폴백 */
   async checkEmailExists(email: string): Promise<boolean> {
+    const emailHash = await hashPatientInfo(email.trim());
+
+    // 1차: 해시 컬럼
+    const { data: hashResult } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email_hash', emailHash)
+      .maybeSingle();
+    if (hashResult) return true;
+
+    // 2차: 평문 폴백 (레거시)
     const { data } = await supabase
       .from('profiles')
       .select('id')
@@ -288,7 +355,7 @@ export const authService = {
     return this.getProfileById();
   },
 
-  /** RPC로 프로필 조회 (RLS 우회, SECURITY DEFINER) */
+  /** RPC로 프로필 조회 (RLS 우회, SECURITY DEFINER) — 읽기 시 PII 복호화 + lazy 암호화 */
   async getProfileById(_userId?: string): Promise<DbProfile | null> {
     const { data, error } = await supabase.rpc('get_my_profile');
 
@@ -296,7 +363,14 @@ export const authService = {
       console.error('[authService] getProfileById failed:', error);
       return null;
     }
-    return data as DbProfile;
+    const profile = data as DbProfile;
+
+    // 평문 PII가 남아있으면 백그라운드에서 암호화하여 저장
+    if (isPlain(profile.name) || isPlain(profile.email) || isPlain(profile.phone)) {
+      void lazyEncryptProfile(profile);
+    }
+
+    return decryptProfile(profile);
   },
 
   /** 비밀번호 재설정 이메일 발송 */
@@ -306,18 +380,28 @@ export const authService = {
     return { success: true };
   },
 
-  /** 프로필 업데이트 */
+  /** 프로필 업데이트 — name·phone은 암호화 후 저장 */
   async updateProfile(updates: Partial<DbProfile>): Promise<DbProfile | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     // 클라이언트에서 role/status/hospital_id 변경을 시도해도 무시
-    const safeUpdates: Partial<Pick<DbProfile, 'name' | 'phone'>> = {};
+    const safeUpdates: Record<string, string | null> = {};
     if (typeof updates.name === 'string') {
-      safeUpdates.name = updates.name;
+      safeUpdates.name = await encryptPatientInfo(updates.name);
     }
     if ('phone' in updates) {
-      safeUpdates.phone = updates.phone ?? null;
+      if (updates.phone) {
+        const [encPhone, phoneHash] = await Promise.all([
+          encryptPatientInfo(updates.phone),
+          hashPatientInfo(updates.phone),
+        ]);
+        safeUpdates.phone = encPhone;
+        safeUpdates.phone_hash = phoneHash;
+      } else {
+        safeUpdates.phone = null;
+        safeUpdates.phone_hash = null;
+      }
     }
     if (Object.keys(safeUpdates).length === 0) {
       return this.getProfileById();
@@ -335,7 +419,7 @@ export const authService = {
       return null;
     }
 
-    return data as DbProfile;
+    return decryptProfile(data as DbProfile);
   },
 
   /** 탈퇴 사유 저장 + 슬랙 알림 (fire-and-forget, 계정 삭제 전 호출) */
@@ -490,5 +574,11 @@ export const authService = {
     const { error } = await supabase.auth.resend({ type: 'signup', email });
     if (error) return { success: false, error: error.message };
     return { success: true };
+  },
+
+  /** 현재 사용자의 마지막 로그인 시각 (auth.users.last_sign_in_at) */
+  async getLastSignInAt(): Promise<string | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.last_sign_in_at ?? null;
   },
 };

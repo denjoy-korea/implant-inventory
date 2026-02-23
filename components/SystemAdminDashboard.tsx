@@ -13,6 +13,7 @@ import { pageViewService } from '../services/pageViewService';
 import SystemAdminManualTab from './system-admin/SystemAdminManualTab';
 import { getErrorMessage } from '../utils/errors';
 import { AdminTab, getAdminTabTitle } from './system-admin/adminTabs';
+import { decryptProfile } from '../services/mappers';
 import { DbHospitalRow, ROLE_MAP } from './system-admin/systemAdminDomain';
 import SystemAdminSidebar from './system-admin/SystemAdminSidebar';
 import SystemAdminOverviewTab, { SystemAdminKpiCard } from './system-admin/tabs/SystemAdminOverviewTab';
@@ -23,8 +24,10 @@ import SystemAdminPlanManagementTab from './system-admin/tabs/SystemAdminPlanMan
 import SystemAdminReviewsTab from './system-admin/tabs/SystemAdminReviewsTab';
 import SystemAdminWaitlistTab from './system-admin/tabs/SystemAdminWaitlistTab';
 import SystemAdminInquiriesTab from './system-admin/tabs/SystemAdminInquiriesTab';
+import SystemAdminPlanChangeTab from './system-admin/tabs/SystemAdminPlanChangeTab';
 import SystemAdminAnalysisLeadsTab, { AnalysisLeadFilter } from './system-admin/tabs/SystemAdminAnalysisLeadsTab';
 import SystemAdminTrafficTab from './system-admin/tabs/SystemAdminTrafficTab';
+import SystemAdminContentTab from './system-admin/tabs/SystemAdminContentTab';
 import {
     PlanAssignModal,
     PlanHospitalsModal,
@@ -84,6 +87,12 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [waitlistLoading, setWaitlistLoading] = useState(false);
     const [waitlistFilter, setWaitlistFilter] = useState<string>('');
     const [waitlistStatusUpdating, setWaitlistStatusUpdating] = useState<string | null>(null);
+
+    // 플랜 변경 신청 state
+    const [planChangeRequests, setPlanChangeRequests] = useState<ContactInquiry[]>([]);
+    const [planChangeLoading, setPlanChangeLoading] = useState(false);
+    const [selectedPlanChange, setSelectedPlanChange] = useState<ContactInquiry | null>(null);
+    const [planChangeStatusUpdating, setPlanChangeStatusUpdating] = useState<string | null>(null);
 
     // 분석 리드 state
     const [analysisLeads, setAnalysisLeads] = useState<AnalysisLead[]>([]);
@@ -175,9 +184,13 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         // 새 함수 실패 시 기존 함수로 fallback
         if (profileRes.error || !profileRes.data || (profileRes.data as DbProfile[]).length === 0) {
             const fallback = await supabase.rpc('get_all_profiles');
-            if (fallback.data) setProfiles(fallback.data as DbProfile[]);
+            if (fallback.data) {
+                const decrypted = await Promise.all((fallback.data as DbProfile[]).map(decryptProfile));
+                setProfiles(decrypted);
+            }
         } else {
-            setProfiles(profileRes.data as DbProfile[]);
+            const decrypted = await Promise.all((profileRes.data as DbProfile[]).map(decryptProfile));
+            setProfiles(decrypted);
         }
 
         if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
@@ -310,6 +323,13 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                 .catch(() => showToast('대기자 목록을 불러오지 못했습니다.', 'error'))
                 .finally(() => setWaitlistLoading(false));
         }
+        if (tab === 'plan_change_requests' && planChangeRequests.length === 0) {
+            setPlanChangeLoading(true);
+            contactService.getPlanChangeRequests()
+                .then(setPlanChangeRequests)
+                .catch(() => showToast('플랜 변경 신청 목록을 불러오지 못했습니다.', 'error'))
+                .finally(() => setPlanChangeLoading(false));
+        }
         if (tab === 'traffic') {
             loadTrafficData(trafficRange);
         }
@@ -383,6 +403,20 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
             showToast('상태 변경에 실패했습니다.', 'error');
         } finally {
             setWaitlistStatusUpdating(null);
+        }
+    };
+
+    const handlePlanChangeStatusChange = async (item: ContactInquiry, status: InquiryStatus) => {
+        setPlanChangeStatusUpdating(item.id);
+        try {
+            await contactService.updateStatus(item.id, status);
+            const updated = { ...item, status };
+            setPlanChangeRequests(prev => prev.map(r => r.id === item.id ? updated : r));
+            setSelectedPlanChange(updated);
+        } catch {
+            showToast('상태 변경에 실패했습니다.', 'error');
+        } finally {
+            setPlanChangeStatusUpdating(null);
         }
     };
 
@@ -490,6 +524,58 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     showToast('삭제 중 오류가 발생했습니다.', 'error');
                 } finally {
                     setDeletingUserId(null);
+                }
+            },
+        });
+    };
+
+    const handleDeactivateUser = (profile: DbProfile) => {
+        setConfirmModal({
+            title: '계정 정지',
+            message: `"${profile.name}" 회원을 일시 정지하시겠습니까?\n\n해당 회원은 로그인은 가능하지만 서비스 접근이 제한됩니다.\n언제든지 복구할 수 있습니다.`,
+            confirmColor: 'indigo',
+            confirmLabel: '정지',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    const { error } = await supabase
+                        .from('profiles')
+                        .update({ status: 'paused' })
+                        .eq('id', profile.id);
+                    if (error) {
+                        showToast('정지에 실패했습니다.', 'error');
+                    } else {
+                        showToast(`${profile.name} 회원이 정지되었습니다.`, 'success');
+                        setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, status: 'paused' as const } : p));
+                    }
+                } catch {
+                    showToast('오류가 발생했습니다.', 'error');
+                }
+            },
+        });
+    };
+
+    const handleReactivateUser = (profile: DbProfile) => {
+        setConfirmModal({
+            title: '계정 복구',
+            message: `"${profile.name}" 회원의 정지를 해제하고 계정을 복구하시겠습니까?`,
+            confirmColor: 'indigo',
+            confirmLabel: '복구',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                try {
+                    const { error } = await supabase
+                        .from('profiles')
+                        .update({ status: 'active' })
+                        .eq('id', profile.id);
+                    if (error) {
+                        showToast('복구에 실패했습니다.', 'error');
+                    } else {
+                        showToast(`${profile.name} 회원이 복구되었습니다.`, 'success');
+                        setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, status: 'active' as const } : p));
+                    }
+                } catch {
+                    showToast('오류가 발생했습니다.', 'error');
                 }
             },
         });
@@ -719,6 +805,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const pendingResetCount = resetRequests.filter(r => r.status === 'pending').length;
     const pendingInquiryCount = inquiries.filter(i => i.status === 'pending').length;
     const pendingWaitlistCount = waitlist.filter(w => w.status === 'pending').length;
+    const pendingPlanChangeCount = planChangeRequests.filter(r => r.status === 'pending').length;
 
     const today = new Date();
     const dateStr = `${today.getFullYear()}. ${today.getMonth() + 1}. ${today.getDate()}.`;
@@ -849,6 +936,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     manualEntriesCount={manualEntries.length}
                     pendingInquiryCount={pendingInquiryCount}
                     pendingWaitlistCount={pendingWaitlistCount}
+                    pendingPlanChangeCount={pendingPlanChangeCount}
                     analysisLeadsTotal={analysisLeadsTotal}
                     onTabChange={handleTabChange}
                     onToggleView={onToggleView}
@@ -885,51 +973,51 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                 <div className="flex-1 flex flex-col min-w-0">
                     <header className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] shadow-sm flex items-center justify-between gap-2 overflow-x-hidden">
                         <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                                {isMobileViewport && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsMobileSidebarOpen(true)}
-                                        className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 active:scale-[0.98] transition-all lg:hidden"
-                                        aria-label="운영자 메뉴 열기"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 7h16M4 12h16M4 17h16" />
-                                        </svg>
-                                    </button>
-                                )}
-                                <span className="hidden sm:inline text-xs text-slate-400 font-medium">{dateStr} {dayStr}</span>
-                                <div className="hidden sm:block h-4 w-px bg-slate-200" />
-                                <h1 className="text-xs sm:text-sm font-bold text-slate-700 truncate whitespace-nowrap leading-tight max-w-[42vw] sm:max-w-none">
-                                    {getAdminTabTitle(activeTab)}
-                                </h1>
-                            </div>
-                            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                                <button onClick={loadData} className="h-9 sm:h-auto px-2 sm:px-0 text-xs text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1 rounded-lg hover:bg-slate-50">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                    <span className="hidden sm:inline">새로고침</span>
-                                </button>
-                                <div className="bg-slate-900 text-white text-[10px] sm:text-xs font-bold py-1.5 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 sm:gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                                    <span className="hidden sm:inline">시스템 정상</span>
-                                    <span className="sm:hidden">정상</span>
-                                </div>
-                                <div className="h-4 w-px bg-slate-200" />
+                            {isMobileViewport && (
                                 <button
-                                    onClick={onGoHome}
-                                    className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all flex items-center gap-1"
+                                    type="button"
+                                    onClick={() => setIsMobileSidebarOpen(true)}
+                                    className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 active:scale-[0.98] transition-all lg:hidden"
+                                    aria-label="운영자 메뉴 열기"
                                 >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" />
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 7h16M4 12h16M4 17h16" />
                                     </svg>
-                                    홈
                                 </button>
-                                <button
-                                    onClick={onLogout}
-                                    className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                >
-                                    로그아웃
-                                </button>
+                            )}
+                            <span className="hidden sm:inline text-xs text-slate-400 font-medium">{dateStr} {dayStr}</span>
+                            <div className="hidden sm:block h-4 w-px bg-slate-200" />
+                            <h1 className="text-xs sm:text-sm font-bold text-slate-700 truncate whitespace-nowrap leading-tight max-w-[42vw] sm:max-w-none">
+                                {getAdminTabTitle(activeTab)}
+                            </h1>
+                        </div>
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                            <button onClick={loadData} className="h-9 sm:h-auto px-2 sm:px-0 text-xs text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1 rounded-lg hover:bg-slate-50">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                <span className="hidden sm:inline">새로고침</span>
+                            </button>
+                            <div className="bg-slate-900 text-white text-[10px] sm:text-xs font-bold py-1.5 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 sm:gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span className="hidden sm:inline">시스템 정상</span>
+                                <span className="sm:hidden">정상</span>
                             </div>
+                            <div className="h-4 w-px bg-slate-200" />
+                            <button
+                                onClick={onGoHome}
+                                className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all flex items-center gap-1"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" />
+                                </svg>
+                                홈
+                            </button>
+                            <button
+                                onClick={onLogout}
+                                className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                                로그아웃
+                            </button>
+                        </div>
                     </header>
 
                     <main className="flex-1 overflow-x-hidden p-3 sm:p-6 max-w-7xl mx-auto w-full space-y-6">
@@ -980,6 +1068,8 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         getHospitalPlan={getHospitalPlan}
                                         onOpenUserDetail={setUserDetailModal}
                                         onDeleteUser={handleDeleteUser}
+                                        onDeactivateUser={handleDeactivateUser}
+                                        onReactivateUser={handleReactivateUser}
                                     />
                                 )}
 
@@ -1042,6 +1132,38 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                     />
                                 )}
 
+                                {activeTab === 'plan_change_requests' && (
+                                    <SystemAdminPlanChangeTab
+                                        requests={planChangeRequests}
+                                        loading={planChangeLoading}
+                                        selected={selectedPlanChange}
+                                        statusUpdating={planChangeStatusUpdating}
+                                        onSelect={setSelectedPlanChange}
+                                        onUpdateStatus={handlePlanChangeStatusChange}
+                                        onDelete={(item) => {
+                                            setConfirmModal({
+                                                title: '신청 삭제',
+                                                message: '이 플랜 변경 신청을 삭제하시겠습니까?',
+                                                confirmColor: 'rose',
+                                                confirmLabel: '삭제',
+                                                onConfirm: async () => {
+                                                    setConfirmModal(null);
+                                                    await contactService.delete(item.id);
+                                                    setPlanChangeRequests(prev => prev.filter(r => r.id !== item.id));
+                                                    if (selectedPlanChange?.id === item.id) setSelectedPlanChange(null);
+                                                },
+                                            });
+                                        }}
+                                        onRefresh={() => {
+                                            setPlanChangeLoading(true);
+                                            contactService.getPlanChangeRequests()
+                                                .then(setPlanChangeRequests)
+                                                .catch(() => showToast('불러오기 실패', 'error'))
+                                                .finally(() => setPlanChangeLoading(false));
+                                        }}
+                                    />
+                                )}
+
                                 {activeTab === 'analysis_leads' && (
                                     <SystemAdminAnalysisLeadsTab
                                         filter={analysisLeadFilter}
@@ -1101,6 +1223,10 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         }}
                                         onDelete={deleteManual}
                                     />
+                                )}
+
+                                {activeTab === 'content' && (
+                                    <SystemAdminContentTab />
                                 )}
                             </>
                         )}
