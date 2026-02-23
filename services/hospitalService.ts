@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact } from '../types';
-import { dbToHospital } from './mappers';
+import { dbToHospital, decryptProfile } from './mappers';
 
 
 export const hospitalService = {
@@ -68,7 +68,7 @@ export const hospitalService = {
     if (error) throw new Error('가입 요청에 실패했습니다.');
   },
 
-  /** 병원 구성원 목록 조회 (active 멤버) */
+  /** 병원 구성원 목록 조회 (active 멤버) — PII 복호화 포함 */
   async getMembers(hospitalId: string): Promise<DbProfile[]> {
     const { data, error } = await supabase
       .from('profiles')
@@ -77,10 +77,10 @@ export const hospitalService = {
       .eq('status', 'active');
 
     if (error) return [];
-    return data as DbProfile[];
+    return Promise.all((data as DbProfile[]).map(decryptProfile));
   },
 
-  /** 가입 대기 멤버 조회 */
+  /** 가입 대기 멤버 조회 — PII 복호화 포함 */
   async getPendingMembers(hospitalId: string): Promise<DbProfile[]> {
     const { data, error } = await supabase
       .from('profiles')
@@ -89,7 +89,7 @@ export const hospitalService = {
       .eq('status', 'pending');
 
     if (error) return [];
-    return data as DbProfile[];
+    return Promise.all((data as DbProfile[]).map(decryptProfile));
   },
 
   /** 멤버 승인 */
@@ -179,7 +179,7 @@ export const hospitalService = {
     if (error) throw new Error('초대 삭제에 실패했습니다.');
   },
 
-  /** readonly 상태 멤버 조회 */
+  /** readonly 상태 멤버 조회 — PII 복호화 포함 */
   async getReadonlyMembers(hospitalId: string): Promise<DbProfile[]> {
     const { data, error } = await supabase
       .from('profiles')
@@ -188,7 +188,7 @@ export const hospitalService = {
       .eq('status', 'readonly');
 
     if (error) return [];
-    return data as DbProfile[];
+    return Promise.all((data as DbProfile[]).map(decryptProfile));
   },
 
   /** 개별 멤버 readonly → active 전환 */
@@ -218,7 +218,8 @@ export const hospitalService = {
       .single();
 
     if (profError || !profile?.email) return null;
-    return profile.email;
+    const { decryptPatientInfo } = await import('./cryptoUtils');
+    return decryptPatientInfo(profile.email);
   },
 
   /** 구성원 방출 + 계정 삭제 (Edge Function 호출) */

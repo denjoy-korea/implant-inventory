@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../services/supabaseClient';
 import { runAnalysis } from '../services/analysisService';
 import { BarChart, DonutChart, ScoreGauge } from './analyze/AnalyzeCharts';
 import {
@@ -26,6 +27,24 @@ interface AnalyzePageProps {
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   const [fixtureFile, setFixtureFile] = useState<File | null>(null);
   const [surgeryFiles, setSurgeryFiles] = useState<File[]>([]);
+  const [demoVideoUrl, setDemoVideoUrl] = useState<string | null>(null);
+  const [isVideoLoading, setIsVideoLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.storage.from('public-assets').list('site', { search: 'analysis-demo.mp4' })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const fileInfo = data.find(f => f.name === 'analysis-demo.mp4');
+          if (fileInfo) {
+            const publicUrl = supabase.storage.from('public-assets').getPublicUrl('site/analysis-demo.mp4').data.publicUrl;
+            const updatedTime = new Date(fileInfo.updated_at).getTime();
+            setDemoVideoUrl(`${publicUrl}?t=${updatedTime}`);
+          }
+        }
+      })
+      .catch((err) => console.error("Error fetching demo video:", err))
+      .finally(() => setIsVideoLoading(false));
+  }, []);
   const [uploadFormatWarning, setUploadFormatWarning] = useState('');
   const reportRef = useRef<HTMLDivElement>(null);
   const {
@@ -284,20 +303,30 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
             </p>
           </div>
 
-          {/* Demo Video */}
+          {/* Demo Video -> Image Replacement */}
           <div className="mb-12">
             <p className="text-sm text-slate-400 mb-2 text-center tracking-wide">▶ DenJOY 재고관리 시스템 실제 운영 사례</p>
-            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-lg">
-              <video
-                src="/analysis-demo.mp4"
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="metadata"
-                poster="/denjoy_logo_full.png"
-                className="w-full"
-              />
+            <div className={`rounded-2xl overflow-hidden border border-slate-200 shadow-lg min-h-[400px] ${!demoVideoUrl && !isVideoLoading ? 'bg-slate-100 flex items-center justify-center p-2 sm:p-4' : 'bg-slate-50 relative'}`}>
+              {isVideoLoading ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                </div>
+              ) : demoVideoUrl ? (
+                <video
+                  src={demoVideoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src="/system-operation.png"
+                  alt="DenJOY 재고관리 시스템 실제 운영 사례"
+                  className="w-full h-auto rounded-xl shadow-sm border border-slate-200 object-contain max-h-[600px]"
+                />
+              )}
             </div>
           </div>
 
@@ -387,13 +416,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 return (
                   <div
                     key={item.label}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold border ${
-                      isDone
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : isWarning
-                          ? 'border-amber-200 bg-amber-50 text-amber-700'
-                          : 'border-slate-200 bg-slate-50 text-slate-500'
-                    }`}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold border ${isDone
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : isWarning
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500'
+                      }`}
                   >
                     <span className="inline-flex items-center gap-1.5">
                       {isDone ? (
@@ -542,19 +570,19 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       : '';
   const leadSuccessCta = wantDetailedAnalysis
     ? {
-        title: '요청 접수 완료',
-        eta: '담당자가 영업일 기준 1일 이내에 연락드립니다.',
-        detail: '요청 내역이 정상 접수되었고 분석 리포트 텍스트는 클립보드에 복사되었습니다.',
-        ctaLabel: '상담 일정 잡기',
-        onClick: onContact,
-      }
+      title: '요청 접수 완료',
+      eta: '담당자가 영업일 기준 1일 이내에 연락드립니다.',
+      detail: '요청 내역이 정상 접수되었고 분석 리포트 텍스트는 클립보드에 복사되었습니다.',
+      ctaLabel: '상담 일정 잡기',
+      onClick: onContact,
+    }
     : {
-        title: '리포트 저장 완료',
-        eta: '정식 서비스 전환 시점에 동일 이메일로 안내를 드립니다.',
-        detail: '결과 요약이 클립보드에 복사되었습니다. 다음 단계로 자동 분석을 바로 시작할 수 있습니다.',
-        ctaLabel: '무료로 시작하기',
-        onClick: onSignup,
-      };
+      title: '리포트 저장 완료',
+      eta: '정식 서비스 전환 시점에 동일 이메일로 안내를 드립니다.',
+      detail: '결과 요약이 클립보드에 복사되었습니다. 다음 단계로 자동 분석을 바로 시작할 수 있습니다.',
+      ctaLabel: '무료로 시작하기',
+      onClick: onSignup,
+    };
 
   return (
     <div ref={reportRef} className="min-h-screen bg-slate-50">
@@ -802,37 +830,37 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
               const totalUsage = report.usagePatterns.fixtureUsageCount + report.usagePatterns.insuranceClaimCount + report.usagePatterns.failUsageCount;
               const monthlyAvgUsage = report.usagePatterns.periodMonths > 0 ? (totalUsage / report.usagePatterns.periodMonths).toFixed(1) : '0';
               return (
-            <div className="bg-slate-50 rounded-2xl p-5">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">임플란트 사용 개수</h3>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-3xl font-black text-slate-900">{totalUsage}</span>
-                <span className="text-base font-bold text-slate-400">개</span>
-                <span className="text-sm text-slate-400">(월평균 {monthlyAvgUsage}개)</span>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></span>
-                    <span className="text-sm text-slate-600">픽스쳐 사용</span>
+                <div className="bg-slate-50 rounded-2xl p-5">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">임플란트 사용 개수</h3>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-3xl font-black text-slate-900">{totalUsage}</span>
+                    <span className="text-base font-bold text-slate-400">개</span>
+                    <span className="text-sm text-slate-400">(월평균 {monthlyAvgUsage}개)</span>
                   </div>
-                  <span className="text-sm font-bold text-slate-800">{report.usagePatterns.fixtureUsageCount}개</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-purple-500"></span>
-                    <span className="text-sm text-slate-600">보험임플란트 청구</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></span>
+                        <span className="text-sm text-slate-600">픽스쳐 사용</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-800">{report.usagePatterns.fixtureUsageCount}개</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-purple-500"></span>
+                        <span className="text-sm text-slate-600">보험임플란트 청구</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-800">{report.usagePatterns.insuranceClaimCount}개</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-rose-500"></span>
+                        <span className="text-sm text-slate-600">수술중 FAIL</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-800">{report.usagePatterns.failUsageCount}개</span>
+                    </div>
                   </div>
-                  <span className="text-sm font-bold text-slate-800">{report.usagePatterns.insuranceClaimCount}개</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-500"></span>
-                    <span className="text-sm text-slate-600">수술중 FAIL</span>
-                  </div>
-                  <span className="text-sm font-bold text-slate-800">{report.usagePatterns.failUsageCount}개</span>
-                </div>
-              </div>
-            </div>
               );
             })()}
           </div>

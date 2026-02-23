@@ -197,6 +197,17 @@ export const contactService = {
     return (data ?? []) as ContactInquiry[];
   },
 
+  /** 플랜 변경 신청 목록 조회 (plan_change_* 만) */
+  async getPlanChangeRequests(): Promise<ContactInquiry[]> {
+    const { data, error } = await supabase
+      .from('contact_inquiries')
+      .select('*')
+      .like('inquiry_type', 'plan_change_%')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as ContactInquiry[];
+  },
+
   /** 대기자 신청 목록 조회 (plan_waitlist_* 만) */
   async getWaitlist(filter?: { plan?: string }): Promise<ContactInquiry[]> {
     let query = supabase
@@ -268,4 +279,11 @@ export const WAITLIST_PLAN_LABELS: Record<string, string> = {
   plan_waitlist_plus:     'Plus',
   plan_waitlist_business: 'Business',
   plan_waitlist_ultimate: 'Ultimate',
+};
+
+export const PLAN_CHANGE_LABELS: Record<string, string> = {
+  plan_change_basic:    '플랜 변경 → Basic',
+  plan_change_plus:     '플랜 변경 → Plus',
+  plan_change_business: '플랜 변경 → Business',
+  plan_change_ultimate: '플랜 변경 → Ultimate',
 };

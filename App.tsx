@@ -16,6 +16,7 @@ const DashboardGuardedContent = lazy(() => import('./components/app/DashboardGua
 const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRouteSection'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
+import AccountSuspendedScreen from './components/AccountSuspendedScreen';
 import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, canAccessTab } from './types';
 import { parseExcelFile, downloadExcelFile } from './services/excelService';
 import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
@@ -77,6 +78,9 @@ const App: React.FC = () => {
   // 후기 팝업 state
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  // localStorage 영속 상태 + 메모리 상태 합산 (새로고침/재로그인 후에도 유지)
+  const _obHid = state.user?.hospitalId;
+  const effectiveDismissed = onboardingDismissed || (_obHid ? onboardingService.isDismissed(_obHid) : false);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
 
   // 대시보드 진입 시 후기 팝업 여부 확인
@@ -338,12 +342,25 @@ const App: React.FC = () => {
     return null;
   }, [state.planState, billableItemCount]);
 
-  const onboardingStep = (() => {
-    if (onboardingDismissed) return null;
+  // 7단계 기준 첫 번째 미완료 단계 계산 (뷰/탭 조건 없이 순수 진행 상태만)
+  const firstIncompleteStep = (() => {
     if (!isHospitalAdmin) return null;
-    if (state.currentView !== 'dashboard') return null;
     if (state.user?.status !== 'active') return null;
     if (state.isLoading) return null;
+    const hid = state.user?.hospitalId ?? '';
+    if (!onboardingService.isWelcomeSeen(hid)) return 1;
+    if (!onboardingService.isFixtureDownloaded(hid)) return 2;
+    if (state.inventory.length === 0) return 3;
+    if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
+    const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
+    if (!hasSurgery) return 5;
+    if (!onboardingService.isFailAuditDone(hid)) return 6;
+    return null;
+  })();
+
+  const onboardingStep = (() => {
+    if (effectiveDismissed) return null;
+    if (state.currentView !== 'dashboard') return null;
     if (
       state.dashboardTab === 'fixture_upload' ||
       state.dashboardTab === 'fixture_edit' ||
@@ -351,16 +368,13 @@ const App: React.FC = () => {
       state.dashboardTab === 'fail_management' ||
       state.dashboardTab === 'inventory_audit'
     ) return null;
-    const hid = state.user?.hospitalId ?? '';
-    if (state.inventory.length === 0) {
-      return onboardingService.isWelcomeSeen(hid) ? 2 : 1;
-    }
-    const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
-    if (!hasSurgery) return 3;
-    if (!onboardingService.isFailAuditDone(hid)) return 4;
-    return null;
+    return firstIncompleteStep;
   })();
   const shouldShowOnboarding = onboardingStep !== null;
+
+  const ONBOARDING_STEP_PROGRESS: Record<number, number> = { 1: 0, 2: 0, 3: 15, 4: 30, 5: 50, 6: 70, 7: 85 };
+  const showOnboardingToast = effectiveDismissed && firstIncompleteStep !== null;
+  const onboardingProgress = firstIncompleteStep ? (ONBOARDING_STEP_PROGRESS[firstIncompleteStep] ?? 0) : 100;
 
   // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
@@ -1646,7 +1660,15 @@ const App: React.FC = () => {
 
       {/* Main Content Wrapper - System Admin has no Header in Dashboard UNLESS simulating User View */}
       <div className="flex-1 flex flex-col min-w-0">
-        {state.currentView === 'dashboard' ? (
+        {state.currentView === 'suspended' ? (
+          <AccountSuspendedScreen
+            userEmail={state.user?.email}
+            onSignOut={async () => {
+              await authService.signOut();
+              setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
+            }}
+          />
+        ) : state.currentView === 'dashboard' ? (
           isSystemAdmin && state.adminViewMode !== 'user' ? (
             /* System Admin Dashboard - Full Screen */
             <ErrorBoundary>
@@ -1821,6 +1843,8 @@ const App: React.FC = () => {
           reviewPopupType={reviewPopupType}
           shouldShowOnboarding={shouldShowOnboarding}
           onboardingStep={onboardingStep}
+          showOnboardingToast={showOnboardingToast}
+          onboardingProgress={onboardingProgress}
           onCloseProfile={() => setState(prev => ({ ...prev, showProfile: false }))}
           onLeaveHospital={handleLeaveHospital}
           onDeleteAccount={handleDeleteAccount}
@@ -1836,7 +1860,13 @@ const App: React.FC = () => {
             await loadHospitalData(state.user);
           }}
           onOnboardingSkip={() => {
+            if (state.user?.hospitalId) onboardingService.markDismissed(state.user.hospitalId);
             setOnboardingDismissed(true);
+          }}
+          onReopenOnboarding={() => {
+            if (state.user?.hospitalId) onboardingService.clearDismissed(state.user.hospitalId);
+            setOnboardingDismissed(false);
+            setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'overview' }));
           }}
           onGoToDataSetup={() => {
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));

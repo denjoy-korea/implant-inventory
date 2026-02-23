@@ -20,6 +20,18 @@ interface SystemAdminTrafficTabProps {
   onResetTrafficData: () => void;
 }
 
+const PAGE_LABELS: Record<string, string> = {
+  landing: '홈',
+  pricing: '요금제',
+  analyze: '분석',
+  contact: '문의',
+  value: '도입효과',
+  login: '로그인',
+  signup: '회원가입',
+};
+const labelPage = (page: string) => PAGE_LABELS[page] ?? page;
+const labelPair = (pair: string) => pair.split(' → ').map(labelPage).join(' → ');
+
 const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
   trafficData,
   trafficLoading,
@@ -91,10 +103,10 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
   const pathList = Object.values(sessionPaths);
 
   const FUNNEL_STEPS = [
-    { label: 'landing', pages: ['landing'], color: 'bg-indigo-500' },
-    { label: 'analyze', pages: ['analyze'], color: 'bg-sky-500' },
-    { label: 'pricing', pages: ['pricing'], color: 'bg-violet-500' },
-    { label: 'signup / login', pages: ['signup', 'login'], color: 'bg-emerald-500' },
+    { label: '홈', pages: ['landing'], color: 'bg-indigo-500' },
+    { label: '분석', pages: ['analyze'], color: 'bg-sky-500' },
+    { label: '요금제', pages: ['pricing'], color: 'bg-violet-500' },
+    { label: '가입/로그인', pages: ['signup', 'login'], color: 'bg-emerald-500' },
   ];
   const funnelCounts = FUNNEL_STEPS.map((step) =>
     pathList.filter((path) => step.pages.some((page) => path.includes(page))).length,
@@ -160,13 +172,13 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
   ]).size;
 
   const eventFunnel = [
-    { key: 'landing_view', label: 'Landing View', count: landingViewSessions },
-    { key: 'pricing_view', label: 'Pricing View', count: pricingViewSessions },
-    { key: 'auth_start', label: 'Auth Start', count: authStartSessions },
-    { key: 'auth_complete', label: 'Auth Complete', count: authCompleteSessions },
-    { key: 'analyze_start', label: 'Analyze Start', count: analyzeStartSessions },
-    { key: 'analyze_complete', label: 'Analyze Complete', count: analyzeCompleteSessions },
-    { key: 'contact_or_waitlist', label: 'Contact / Waitlist Submit', count: conversionSessions },
+    { key: 'landing_view', label: '홈 조회', count: landingViewSessions },
+    { key: 'pricing_view', label: '요금제 조회', count: pricingViewSessions },
+    { key: 'auth_start', label: '인증 시작', count: authStartSessions },
+    { key: 'auth_complete', label: '인증 완료', count: authCompleteSessions },
+    { key: 'analyze_start', label: '분석 시작', count: analyzeStartSessions },
+    { key: 'analyze_complete', label: '분석 완료', count: analyzeCompleteSessions },
+    { key: 'contact_or_waitlist', label: '문의/대기신청', count: conversionSessions },
   ];
 
   const toPct = (numerator: number, denominator: number) => (denominator > 0 ? Math.round((numerator / denominator) * 100) : 0);
@@ -366,7 +378,7 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
               const pageRate = views > 0 ? Math.round((converted / views) * 100) : 0;
               return (
                 <div key={page} className="flex items-center gap-3">
-                  <span className="w-16 text-xs font-bold text-slate-600 shrink-0">{page}</span>
+                  <span className="w-16 text-xs font-bold text-slate-600 shrink-0">{labelPage(page)}</span>
                   <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden relative">
                     <div className="bg-indigo-300 h-full rounded-full absolute" style={{ width: `${Math.round((views / maxPage) * 100)}%` }} />
                     <div className="bg-purple-500 h-full rounded-full absolute" style={{ width: `${Math.round((converted / maxPage) * 100)}%` }} />
@@ -427,7 +439,7 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
           <div className="space-y-2.5">
             {pairRows.map(([pair, count]) => (
               <div key={pair} className="flex items-center gap-3">
-                <span className="w-44 text-xs font-bold text-slate-600 shrink-0 font-mono">{pair}</span>
+                <span className="w-44 text-xs font-bold text-slate-600 shrink-0 font-mono">{labelPair(pair)}</span>
                 <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div className="bg-sky-400 h-full rounded-full" style={{ width: `${Math.round((count / maxPair) * 100)}%` }} />
                 </div>
@@ -445,7 +457,7 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
           <div className="space-y-2">
             {entryRows.map(([page, count]) => (
               <div key={page} className="flex items-center gap-2">
-                <span className="w-20 text-xs font-bold text-slate-600 truncate">{page}</span>
+                <span className="w-20 text-xs font-bold text-slate-600 truncate">{labelPage(page)}</span>
                 <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div className="bg-indigo-400 h-full rounded-full" style={{ width: `${Math.round((count / (entryRows[0]?.[1] ?? 1)) * 100)}%` }} />
                 </div>
@@ -460,7 +472,7 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
           <div className="space-y-2">
             {exitRows.map(([page, count]) => (
               <div key={page} className="flex items-center gap-2">
-                <span className="w-20 text-xs font-bold text-slate-600 truncate">{page}</span>
+                <span className="w-20 text-xs font-bold text-slate-600 truncate">{labelPage(page)}</span>
                 <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div className="bg-rose-400 h-full rounded-full" style={{ width: `${Math.round((count / (exitRows[0]?.[1] ?? 1)) * 100)}%` }} />
                 </div>

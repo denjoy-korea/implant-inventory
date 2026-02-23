@@ -63,6 +63,12 @@ export function useAppState(onNotify?: NotifyFn) {
 
   /** 병원 데이터 로드 (로그인 후 / 세션 복원 시) */
   const loadHospitalData = async (user: User) => {
+    // paused 상태: 서비스 접근 차단 화면으로 라우팅
+    if (user.status === 'paused') {
+      setState(prev => ({ ...prev, user, currentView: 'suspended', isLoading: false }));
+      return;
+    }
+
     if (!user.hospitalId || (user.status !== 'active' && user.status !== 'readonly')) {
       setState(prev => ({
         ...prev,

@@ -136,14 +136,27 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     }
     : undefined;
 
+  const handleNavigate = (targetView: View) => {
+    if (targetView === 'analyze') {
+      const isMobileSize = window.matchMedia('(max-width: 1023px)').matches;
+      const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+      if (isMobileSize || isTouchDevice) {
+        showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
+        return;
+      }
+    }
+    onNavigate(targetView);
+  };
+
   return (
     <div className="h-full flex flex-col">
       <Header
-        onHomeClick={() => (user ? onNavigate('dashboard') : onNavigate('landing'))}
-        onLoginClick={() => onNavigate('login')}
-        onSignupClick={() => onNavigate('signup')}
+        onHomeClick={() => (user ? handleNavigate('dashboard') : handleNavigate('landing'))}
+        onLoginClick={() => handleNavigate('login')}
+        onSignupClick={() => handleNavigate('signup')}
         onLogout={onLogout}
-        onNavigate={onNavigate}
+        onNavigate={handleNavigate}
         onTabNavigate={onTabNavigate}
         onProfileClick={onProfileClick}
         user={user}
@@ -152,32 +165,20 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
       />
       <PublicMobileNav
         currentView={currentView}
-        onNavigate={onNavigate}
-        onAnalyzeClick={() => {
-          const isRealMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-          if (isRealMobileDevice) {
-            return; // 내부 컴포넌트에서 안내 토스트 처리
-          }
-          onNavigate('analyze');
-        }}
+        onNavigate={handleNavigate}
+        onAnalyzeClick={() => handleNavigate('analyze')}
       />
       <main className="flex-1 overflow-x-hidden">
         <ErrorBoundary>
           <Suspense fallback={suspenseFallback}>
             {currentView === 'landing' && (
               <LandingPage
-                onGetStarted={() => onNavigate('login')}
-                onAnalyze={() => {
-                  if (window.matchMedia('(max-width: 1023px)').matches) {
-                    showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
-                    return;
-                  }
-                  onNavigate('analyze');
-                }}
-                onGoToValue={() => onNavigate('value')}
-                onGoToPricing={() => onNavigate('pricing')}
-                onGoToNotices={() => onNavigate('notices')}
-                onGoToContact={() => onNavigate('contact')}
+                onGetStarted={() => handleNavigate('login')}
+                onAnalyze={() => handleNavigate('analyze')}
+                onGoToValue={() => handleNavigate('value')}
+                onGoToPricing={() => handleNavigate('pricing')}
+                onGoToNotices={() => handleNavigate('notices')}
+                onGoToContact={() => handleNavigate('contact')}
               />
             )}
             {currentView === 'login' && (
@@ -185,10 +186,10 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 key="login"
                 type="login"
                 onSuccess={onLoginSuccess}
-                onSwitch={() => onNavigate('signup')}
+                onSwitch={() => handleNavigate('signup')}
                 onMfaRequired={(email) => {
                   onSetMfaPendingEmail(email);
-                  onNavigate('mfa_otp');
+                  handleNavigate('mfa_otp');
                 }}
               />
             )}
@@ -198,7 +199,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onVerified={() => window.location.reload()}
                 onCancel={() => {
                   onSetMfaPendingEmail(undefined);
-                  onNavigate('login');
+                  handleNavigate('login');
                 }}
               />
             )}
@@ -207,8 +208,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 key="signup"
                 type="signup"
                 onSuccess={onLoginSuccess}
-                onSwitch={() => onNavigate('login')}
-                onContact={() => onNavigate('contact')}
+                onSwitch={() => handleNavigate('login')}
+                onContact={() => handleNavigate('contact')}
                 initialPlan={preSelectedPlan}
               />
             )}
@@ -217,14 +218,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 type="invite"
                 inviteInfo={inviteInfo}
                 onSuccess={onLoginSuccess}
-                onSwitch={() => onNavigate('login')}
+                onSwitch={() => handleNavigate('login')}
               />
             )}
             {currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
             {currentView === 'pricing' && (
               <PricingPage
-                onContact={() => onNavigate('contact')}
-                onGoToValue={() => onNavigate('value')}
+                onContact={() => handleNavigate('contact')}
+                onGoToValue={() => handleNavigate('value')}
                 onGetStarted={onGetStartedWithPlan}
                 currentPlan={planState?.plan}
                 isLoggedIn={isLoggedIn}
@@ -237,20 +238,20 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
             )}
             {currentView === 'contact' && (
               <ContactPage
-                onGetStarted={() => onNavigate('signup')}
-                onAnalyze={() => onNavigate('analyze')}
+                onGetStarted={() => handleNavigate('signup')}
+                onAnalyze={() => handleNavigate('analyze')}
               />
             )}
             {currentView === 'value' && (
               <ValuePage
-                onGetStarted={() => onNavigate('signup')}
-                onContact={() => onNavigate('contact')}
+                onGetStarted={() => handleNavigate('signup')}
+                onContact={() => handleNavigate('contact')}
               />
             )}
             {currentView === 'analyze' && (
               <AnalyzePage
-                onSignup={() => onNavigate('signup')}
-                onContact={() => onNavigate('contact')}
+                onSignup={() => handleNavigate('signup')}
+                onContact={() => handleNavigate('contact')}
               />
             )}
             {currentView === 'notices' && (
@@ -261,7 +262,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
               </div>
             )}
             {currentView === 'reviews' && (
-              <ReviewsPage onBack={() => onNavigate('landing')} />
+              <ReviewsPage onBack={() => handleNavigate('landing')} />
             )}
           </Suspense>
         </ErrorBoundary>

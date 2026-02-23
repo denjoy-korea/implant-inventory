@@ -57,7 +57,7 @@ Deno.serve(async (req: Request) => {
     // 호출자가 admin 역할인지 확인
     const { data: callerProfile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, name")
       .eq("id", caller.id)
       .single();
 
@@ -71,7 +71,7 @@ Deno.serve(async (req: Request) => {
     // 대상 유저도 admin이면 삭제 불가
     const { data: targetProfile } = await supabase
       .from("profiles")
-      .select("role, name")
+      .select("role, name, hospital_id")
       .eq("id", targetUserId)
       .single();
 
@@ -80,6 +80,33 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "운영자 계정은 삭제할 수 없습니다." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // 감사 로그를 삭제 전에 기록 (hospital CASCADE 삭제 후엔 FK 위반으로 INSERT 불가)
+    if (targetProfile?.hospital_id) {
+      const { error: logErr } = await supabase.from("operation_logs").insert({
+        hospital_id: targetProfile.hospital_id,
+        user_id: caller.id,
+        user_email: caller.email ?? "",
+        user_name: callerProfile?.name ?? "",
+        action: "account_force_deleted",
+        description: `${targetProfile.name || targetUserId} 계정 강제 삭제`,
+        metadata: {
+          target_user_id: targetUserId,
+          target_role: targetProfile.role,
+          deleted_at: new Date().toISOString(),
+        },
+      });
+      if (logErr) console.warn("[admin-delete-user] audit log failed:", logErr);
+    }
+
+    // master_admin인 경우 병원/워크스페이스 삭제 (CASCADE로 inventory 등 하위 데이터 자동 처리)
+    if (targetProfile?.hospital_id) {
+      await supabase
+        .from("hospitals")
+        .delete()
+        .eq("id", targetProfile.hospital_id)
+        .eq("master_admin_id", targetUserId);
     }
 
     // auth.users 삭제 (profiles는 FK CASCADE로 처리됨)

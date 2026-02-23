@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { User, View, DashboardTab } from '../types';
+import { scrollToElementWithRetry } from '../utils/scroll';
 
 interface HeaderProps {
   onHomeClick: () => void;
@@ -70,7 +71,7 @@ const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => {
                 if (currentView !== 'landing') onNavigate('landing' as View);
-                setTimeout(() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }), currentView !== 'landing' ? 100 : 0);
+                scrollToElementWithRetry('features');
               }}
               className="text-sm font-bold text-slate-500 hover:text-slate-800"
             >

@@ -9,7 +9,9 @@ export type AdminTab =
   | 'analysis_leads'
   | 'inquiries'
   | 'waitlist'
-  | 'traffic';
+  | 'plan_change_requests'
+  | 'traffic'
+  | 'content';
 
 const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   overview: '시스템 개요',
@@ -21,8 +23,10 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   reviews: '고객 후기 관리',
   inquiries: '문의내역 관리',
   waitlist: '대기자 관리',
+  plan_change_requests: '플랜 변경 신청',
   analysis_leads: '분석 리드 관리',
   traffic: '방문자 트래픽',
+  content: '콘텐츠 관리',
 };
 
 export function getAdminTabTitle(tab: AdminTab): string {

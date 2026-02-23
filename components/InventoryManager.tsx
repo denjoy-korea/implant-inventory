@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem } from '../types';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { fixIbsImplant } from '../services/mappers';
@@ -360,12 +360,26 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     [unregisteredFromSurgery]
   );
 
+  const stickyRef = useRef<HTMLDivElement | null>(null);
+  const [stickyHeight, setStickyHeight] = useState(0);
+
+  useEffect(() => {
+    const el = stickyRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setStickyHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* ================================================= */}
       {/* Sticky Header Block                               */}
       {/* ================================================= */}
       <div
+        ref={stickyRef}
         className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
       >
@@ -967,6 +981,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         inventoryDetailUsageTotal={inventoryDetailUsageTotal}
         inventoryDetailCurrentStockTotal={inventoryDetailCurrentStockTotal}
         inventoryDetailVisibleColumnCount={inventoryDetailVisibleColumnCount}
+        stickyTopOffset={stickyHeight}
       />
 
       {/* ================================================= */}

@@ -21,6 +21,7 @@ interface InventoryDetailSectionProps {
   inventoryDetailUsageTotal: number;
   inventoryDetailCurrentStockTotal: number;
   inventoryDetailVisibleColumnCount: number;
+  stickyTopOffset?: number;
 }
 
 const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
@@ -38,6 +39,7 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
   inventoryDetailUsageTotal,
   inventoryDetailCurrentStockTotal,
   inventoryDetailVisibleColumnCount,
+  stickyTopOffset = 0,
 }) => {
   const inventoryDetailColumnFilterRef = useRef<HTMLDivElement | null>(null);
 
@@ -217,7 +219,7 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
         </div>
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 shadow-sm" style={{ top: 'var(--dashboard-header-height, 44px)' }}>
+            <thead className="sticky z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 shadow-sm" style={{ top: `calc(var(--dashboard-header-height, 44px) + ${stickyTopOffset}px)` }}>
               <tr>
                 {inventoryDetailColumnVisibility.manufacturer && (
                   <th className="px-6 pt-2 pb-2 text-[11px] font-black text-slate-500 uppercase tracking-widest">

@@ -150,7 +150,7 @@ export function canAccessTab(
   }
 }
 
-export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices' | 'mfa_otp' | 'reviews';
+export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices' | 'mfa_otp' | 'reviews' | 'suspended';
 
 export interface DiagnosticItem {
   category: string;

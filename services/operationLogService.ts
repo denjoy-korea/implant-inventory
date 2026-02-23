@@ -101,11 +101,14 @@ export const operationLogService = {
 
         if (!profile?.hospital_id) return;
 
+        const { decryptPatientInfo } = await import('./cryptoUtils');
+        const userName = await decryptPatientInfo(profile.name || '');
+
         await supabase.from('operation_logs').insert({
           hospital_id: profile.hospital_id,
           user_id: user.id,
           user_email: user.email || '',
-          user_name: profile.name || '',
+          user_name: userName || '',
           action,
           description,
           metadata: metadata || {},

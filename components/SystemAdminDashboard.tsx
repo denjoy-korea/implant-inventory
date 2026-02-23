@@ -530,6 +530,10 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     };
 
     const handleDeactivateUser = (profile: DbProfile) => {
+        if (profile.role === 'admin') {
+            showToast('운영자 계정은 정지할 수 없습니다.', 'error');
+            return;
+        }
         setConfirmModal({
             title: '계정 정지',
             message: `"${profile.name}" 회원을 일시 정지하시겠습니까?\n\n해당 회원은 로그인은 가능하지만 서비스 접근이 제한됩니다.\n언제든지 복구할 수 있습니다.`,
@@ -547,6 +551,25 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     } else {
                         showToast(`${profile.name} 회원이 정지되었습니다.`, 'success');
                         setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, status: 'paused' as const } : p));
+                        // 감사 로그 (대상 사용자의 hospital_id 사용)
+                        if (profile.hospital_id && currentUserId) {
+                            const adminProfile = profiles.find(p => p.id === currentUserId);
+                            supabase.from('operation_logs').insert({
+                                hospital_id: profile.hospital_id,
+                                user_id: currentUserId,
+                                user_email: adminProfile?.email ?? '',
+                                user_name: adminProfile?.name ?? '',
+                                action: 'account_deactivated',
+                                description: `${profile.name || profile.email} 계정 정지`,
+                                metadata: {
+                                    target_user_id: profile.id,
+                                    target_email: profile.email,
+                                    target_role: profile.role,
+                                },
+                            }).then(({ error: logErr }) => {
+                                if (logErr) console.warn('[audit] deactivate log failed:', logErr);
+                            });
+                        }
                     }
                 } catch {
                     showToast('오류가 발생했습니다.', 'error');
@@ -573,6 +596,25 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     } else {
                         showToast(`${profile.name} 회원이 복구되었습니다.`, 'success');
                         setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, status: 'active' as const } : p));
+                        // 감사 로그 (대상 사용자의 hospital_id 사용)
+                        if (profile.hospital_id && currentUserId) {
+                            const adminProfile = profiles.find(p => p.id === currentUserId);
+                            supabase.from('operation_logs').insert({
+                                hospital_id: profile.hospital_id,
+                                user_id: currentUserId,
+                                user_email: adminProfile?.email ?? '',
+                                user_name: adminProfile?.name ?? '',
+                                action: 'account_reactivated',
+                                description: `${profile.name || profile.email} 계정 복구`,
+                                metadata: {
+                                    target_user_id: profile.id,
+                                    target_email: profile.email,
+                                    target_role: profile.role,
+                                },
+                            }).then(({ error: logErr }) => {
+                                if (logErr) console.warn('[audit] reactivate log failed:', logErr);
+                            });
+                        }
                     }
                 } catch {
                     showToast('오류가 발생했습니다.', 'error');

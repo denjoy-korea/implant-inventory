@@ -3014,137 +3014,137 @@ export const FIXTURE_REFERENCE_BASE: FixtureReferenceRow[] = [
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.0 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.0 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.3 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.3 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.8 × 8.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.8 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.8 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ3.8 × 13"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.0 × 8.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.0 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.0 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.0 × 13"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.5 × 7"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.5 × 8.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.5 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.5 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ4.5 × 13"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.0 × 7"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.0 × 8.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.0 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.0 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.0 × 13"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.5 × 7"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.5 × 8.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.5 × 10"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.5 × 11.5"
   },
   {
     "manufacturer": "디오",
-    "brand": "UF II",
+    "brand": "UF ll",
     "size": "Φ5.5 × 13"
   },
   {

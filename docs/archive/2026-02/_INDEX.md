@@ -8,6 +8,7 @@
 | 백엔드-연동 | 94% | 2026-02-15 | 4 |
 | pricing-policy | 94.2% | 2026-02-15 | 4 |
 | vercel-deployment | 96% | 2026-02-16 | 4 |
+| profiles-pii-encryption | 97% | 2026-02-23 | 3 |
 
 ### 임플란트-재고관리
 
@@ -46,6 +47,18 @@
   - `pricing-policy.design.md` - Design document (1113 lines)
   - `pricing-policy.analysis.md` - Gap Analysis (94.2%)
   - `pricing-policy.report.md` - Completion Report
+
+### profiles-pii-encryption
+
+- **Phase**: Completed
+- **Match Rate**: 97% (0 iterations)
+- **Iteration Count**: 0
+- **Period**: 2026-02-23
+- **Scope**: profiles 테이블 PII(name/email/phone) AES-GCM 암호화, email_hash/phone_hash 해시 컬럼, Lazy Encryption, 버그 4건 수정
+- **Documents**:
+  - `profiles-pii-encryption.plan.md` - Plan document
+  - `profiles-pii-encryption.analysis.md` - Gap Analysis (97%)
+  - `profiles-pii-encryption.report.md` - Completion Report
 
 ### vercel-deployment
 

@@ -25,7 +25,7 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
   useEffect(() => {
     reviewService.getPublicReviews(100)
       .then(setReviews)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -48,6 +48,21 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+
+        {/* 뒤로가기 버튼 */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="group flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors mb-6"
+          >
+            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center group-hover:border-indigo-200 group-hover:bg-indigo-50 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </div>
+            홈으로 돌아가기
+          </button>
+        )}
 
         {/* 평점 요약 */}
         {!isLoading && reviews.length > 0 && (
@@ -96,11 +111,10 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
               <button
                 key={f.value}
                 onClick={() => setRoleFilter(f.value)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                  roleFilter === f.value
+                className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${roleFilter === f.value
                     ? 'bg-indigo-600 text-white border-indigo-600'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
-                }`}
+                  }`}
               >
                 {f.label}
                 {f.value !== 'all' && (

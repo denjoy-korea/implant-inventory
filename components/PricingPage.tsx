@@ -9,6 +9,7 @@ import { pageViewService } from '../services/pageViewService';
 import PricingPaymentModal from './pricing/PricingPaymentModal';
 import PricingTrialConsentModal from './pricing/PricingTrialConsentModal';
 import PricingWaitlistModal from './pricing/PricingWaitlistModal';
+import SectionNavigator from './SectionNavigator';
 
 interface PricingPageProps {
   onGetStarted: (plan?: PlanType) => void;
@@ -200,7 +201,7 @@ const faqs = [
   },
   {
     q: '데이터 보안과 개인정보는 어떻게 관리되나요?',
-    a: '모든 데이터는 암호화되어 안전하게 저장되며, 개인정보보호법에 따라 처리됩니다. 환자 정보는 서버에 저장되지 않으며, 수술 기록과 재고 데이터만 관리합니다.',
+    a: '모든 데이터는 AES-256 암호화되어 안전하게 저장되며, 개인정보보호법에 따라 처리됩니다. 수술 기록에 포함된 환자 정보는 암호화된 상태로 보관되며, 2년 경과 후 자동 파기됩니다.',
   },
   {
     q: '어떤 결제 수단을 지원하나요?',
@@ -436,6 +437,13 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
+      <SectionNavigator sections={[
+        { id: 'pp-hero',    label: '소개' },
+        { id: 'pp-plans',   label: '요금제' },
+        { id: 'pp-compare', label: '비교' },
+        { id: 'pp-faq',     label: 'FAQ' },
+      ]} />
+
       {/* Payment Pending Banner */}
       {pendingPayment && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
@@ -476,7 +484,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       )}
 
       {/* Hero — 손실 회피 + 앵커링 */}
-      <section className="pt-24 pb-10 text-center relative overflow-hidden">
+      <section id="pp-hero" className="pt-24 pb-10 text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-100 rounded-full mix-blend-multiply filter blur-[100px] opacity-50"></div>
           <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-100 rounded-full mix-blend-multiply filter blur-[100px] opacity-50"></div>
@@ -668,7 +676,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       </div>
 
       {/* Billing Toggle */}
-      <div className="flex justify-center items-center gap-4 pb-12">
+      <div id="pp-plans" className="flex justify-center items-center gap-4 pb-12">
         <span className={`text-sm font-bold ${!isYearly ? 'text-slate-900' : 'text-slate-400'}`}>월간 결제</span>
         <button
           onClick={() => setIsYearly(!isYearly)}
@@ -901,7 +909,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       </section>
 
       {/* Feature Comparison Table */}
-      <section className="py-24 bg-white">
+      <section id="pp-compare" className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase mb-2">Compare Plans</h2>
@@ -1012,7 +1020,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       </section>
 
       {/* FAQ Section */}
-      <section className="py-24 bg-slate-50">
+      <section id="pp-faq" className="py-24 bg-slate-50">
         <div className="max-w-3xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-base font-bold text-indigo-600 tracking-wide uppercase mb-2">FAQ</h2>
@@ -1056,7 +1064,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       </section>
 
       {/* CTA */}
-      <section className="py-20 bg-slate-900 text-white text-center relative overflow-hidden">
+      <section id="pp-cta" className="py-20 bg-slate-900 text-white text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-3xl mx-auto px-6 relative z-10">

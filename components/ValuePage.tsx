@@ -4,6 +4,7 @@ import {
   DEFAULT_TRIAL_HIGHLIGHT_TEXT,
   getTrialCopy,
 } from '../utils/trialPolicy';
+import SectionNavigator from './SectionNavigator';
 
 interface ValuePageProps {
   onGetStarted: () => void;
@@ -54,8 +55,16 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans selection:bg-indigo-500 selection:text-white">
 
+      <SectionNavigator sections={[
+        { id: 'vp-hero',    label: '소개' },
+        { id: 'vp-problem', label: '문제' },
+        { id: 'vp-effect',  label: '효과' },
+        { id: 'vp-stats',   label: '수치' },
+        { id: 'vp-review',  label: '후기' },
+      ]} />
+
       {/* ─── Hero: Loss Aversion + Framing ─── */}
-      <section className="relative pt-24 pb-20 overflow-hidden">
+      <section id="vp-hero" className="relative pt-24 pb-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900"></div>
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
@@ -92,7 +101,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       </section>
 
       {/* ─── Pain Points: Loss Aversion ─── */}
-      <section className="py-20 bg-slate-50">
+      <section id="vp-problem" className="py-20 bg-slate-50">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-rose-500 uppercase tracking-widest mb-3">Problem</p>
@@ -159,7 +168,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       </section>
 
       {/* ─── Before vs After: Contrast Effect + Aha! Moment ─── */}
-      <section className="py-20 bg-white">
+      <section id="vp-effect" className="py-20 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-3">Transformation</p>
@@ -253,7 +262,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       </section>
 
       {/* ─── Key Metrics: Framing + Social Proof ─── */}
-      <section className="py-20 bg-slate-900 text-white relative overflow-hidden">
+      <section id="vp-stats" className="py-20 bg-slate-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="relative z-10 max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
@@ -341,7 +350,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       </section>
 
       {/* ─── Social Proof: Testimonials ─── */}
-      <section className="py-20 bg-slate-50">
+      <section id="vp-review" className="py-20 bg-slate-50">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-3">Social Proof</p>

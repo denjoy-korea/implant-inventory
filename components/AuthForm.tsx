@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import LegalModal from './shared/LegalModal';
 import { User, UserRole, Hospital, PlanType, PLAN_PRICING, PLAN_NAMES } from '../types';
 import { getErrorMessage } from '../utils/errors';
 import { planService } from '../services/planService';
@@ -124,6 +125,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   // 이메일 인증 재전송 쿨다운
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isResending, setIsResending] = useState(false);
+
+  // 개인정보보호법 §15: 수집·이용 동의
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [showLegalType, setShowLegalType] = useState<'terms' | 'privacy' | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -350,6 +356,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       if (userType === 'dentist' && !phone) { showToast('연락처를 입력해주세요.', 'error'); return; }
       if (userType === 'dentist' && !bizFile) { showToast('사업자등록증을 첨부해주세요.', 'error'); return; }
       if (!signupSource) { showToast('가입경로를 선택해주세요.', 'error'); return; }
+      if (!agreedToTerms || !agreedToPrivacy) {
+        showToast('이용약관 및 개인정보 처리방침에 동의해주세요.', 'error');
+        return;
+      }
 
       pageViewService.trackEvent(
         'auth_start',
@@ -1012,7 +1022,24 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                   <option value="기타">기타</option>
                 </select>
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full h-12 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+              {/* 개인정보보호법 §15: 수집·이용 동의 체크박스 */}
+              <div className="space-y-2 pt-3 border-t border-slate-100">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-emerald-600 flex-shrink-0" />
+                  <span className="text-sm text-slate-600">
+                    <span className="text-rose-400">*</span>{' '}
+                    <button type="button" onClick={() => setShowLegalType('terms')} className="text-emerald-700 hover:underline font-medium">이용약관</button>에 동의합니다
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={agreedToPrivacy} onChange={(e) => setAgreedToPrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-emerald-600 flex-shrink-0" />
+                  <span className="text-sm text-slate-600">
+                    <span className="text-rose-400">*</span>{' '}
+                    <button type="button" onClick={() => setShowLegalType('privacy')} className="text-emerald-700 hover:underline font-medium">개인정보 처리방침</button>에 동의합니다
+                  </span>
+                </label>
+              </div>
+              <button type="submit" disabled={isSubmitting || !agreedToTerms || !agreedToPrivacy} className="w-full h-12 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSubmitting ? '처리 중...' : '가입완료'}
               </button>
             </form>
@@ -1030,6 +1057,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           {toast.message}
         </div>
       )}
+      {showLegalType && <LegalModal type={showLegalType} onClose={() => setShowLegalType(null)} />}
       </>
     );
   }
@@ -1150,7 +1178,24 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                 <option value="기타">기타</option>
               </select>
             </div>
-            <button type="submit" disabled={isSubmitting} className="w-full h-12 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-[0.98] mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {/* 개인정보보호법 §15: 수집·이용 동의 체크박스 */}
+            <div className="space-y-2 pt-3 border-t border-slate-100">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-indigo-600 flex-shrink-0" />
+                <span className="text-sm text-slate-600">
+                  <span className="text-rose-400">*</span>{' '}
+                  <button type="button" onClick={() => setShowLegalType('terms')} className="text-indigo-600 hover:underline font-medium">이용약관</button>에 동의합니다
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={agreedToPrivacy} onChange={(e) => setAgreedToPrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-indigo-600 flex-shrink-0" />
+                <span className="text-sm text-slate-600">
+                  <span className="text-rose-400">*</span>{' '}
+                  <button type="button" onClick={() => setShowLegalType('privacy')} className="text-indigo-600 hover:underline font-medium">개인정보 처리방침</button>에 동의합니다
+                </span>
+              </label>
+            </div>
+            <button type="submit" disabled={isSubmitting || !agreedToTerms || !agreedToPrivacy} className="w-full h-12 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all active:scale-[0.98] mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
               {isSubmitting ? '처리 중...' : '가입완료'}
             </button>
           </form>
@@ -1168,6 +1213,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         {toast.message}
       </div>
     )}
+    {showLegalType && <LegalModal type={showLegalType} onClose={() => setShowLegalType(null)} />}
 
     {/* 대기 신청 모달 (P1-2) */}
     {waitlistPlan && (

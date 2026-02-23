@@ -10,7 +10,7 @@ interface DbFixtureReferenceRow {
 }
 
 const TABLE_NAME = 'fixture_reference_defaults';
-const STORAGE_KEY = 'fixture_reference_defaults_cache_v1';
+const STORAGE_KEY = 'fixture_reference_defaults_cache_v2';
 const STORAGE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 const SUPABASE_TIMEOUT_MS = 1200;
 
@@ -50,7 +50,8 @@ async function fetchFromSupabase(): Promise<FixtureReferenceRow[]> {
   const queryPromise = supabase
     .from(TABLE_NAME)
     .select('manufacturer, brand, size')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .limit(10000);
 
   const timeoutPromise = new Promise<null>((resolve) => {
     setTimeout(() => resolve(null), SUPABASE_TIMEOUT_MS);

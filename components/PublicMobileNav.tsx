@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View } from '../types';
+import { scrollToElementWithRetry } from '../utils/scroll';
 
 interface PublicMobileNavProps {
     currentView: View;
@@ -31,29 +32,20 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
         return () => window.clearTimeout(timer);
     }, [mobileNotice]);
 
-    const scrollToSection = useCallback((sectionId: string) => {
-        const target = document.getElementById(sectionId);
-        if (!target) return;
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, []);
+
 
     const handleNavClick = (targetView: View, targetSection?: string) => {
         if (currentView !== targetView) {
             onNavigate(targetView);
         }
         if (targetSection) {
-            setTimeout(() => scrollToSection(targetSection), currentView !== targetView ? 100 : 0);
+            scrollToElementWithRetry(targetSection);
         } else {
             setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 0);
         }
     };
 
     const handleAnalyze = () => {
-        const isRealMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-        if (isRealMobileDevice) {
-            setMobileNotice('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.');
-            return;
-        }
         onAnalyzeClick();
     };
 

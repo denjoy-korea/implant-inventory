@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { CLINIC_ROLE_LABELS, HospitalPlanState, User } from '../../types';
 import { ReviewType, ReviewRole } from '../../services/reviewService';
 import ErrorBoundary from '../ErrorBoundary';
+import OnboardingToast from '../onboarding/OnboardingToast';
 
 const OnboardingWizard = lazy(() => import('../OnboardingWizard'));
 const UserProfile = lazy(() => import('../UserProfile'));
@@ -15,6 +16,8 @@ interface AppUserOverlayStackProps {
   reviewPopupType: ReviewType | null;
   shouldShowOnboarding: boolean;
   onboardingStep: number | null;
+  showOnboardingToast: boolean;
+  onboardingProgress: number;
   onCloseProfile: () => void;
   onLeaveHospital: () => void;
   onDeleteAccount: () => void;
@@ -23,6 +26,7 @@ interface AppUserOverlayStackProps {
   onDismissReview: () => void;
   onOnboardingComplete: () => Promise<void> | void;
   onOnboardingSkip: () => void;
+  onReopenOnboarding: () => void;
   onGoToDataSetup: () => void;
   onGoToSurgeryUpload: () => void;
   onGoToFailManagement: () => void;
@@ -36,6 +40,8 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   reviewPopupType,
   shouldShowOnboarding,
   onboardingStep,
+  showOnboardingToast,
+  onboardingProgress,
   onCloseProfile,
   onLeaveHospital,
   onDeleteAccount,
@@ -44,6 +50,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   onDismissReview,
   onOnboardingComplete,
   onOnboardingSkip,
+  onReopenOnboarding,
   onGoToDataSetup,
   onGoToSurgeryUpload,
   onGoToFailManagement,
@@ -104,6 +111,13 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
             onGoToFailManagement={onGoToFailManagement}
           />
         </Suspense>
+      )}
+
+      {showOnboardingToast && !shouldShowOnboarding && (
+        <OnboardingToast
+          progress={onboardingProgress}
+          onClick={onReopenOnboarding}
+        />
       )}
     </>
   );
