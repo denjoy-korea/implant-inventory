@@ -238,21 +238,31 @@ async function verifyAuth(req: Request): Promise<boolean> {
   const token = authHeader.slice(7); // "Bearer " 제거
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const candidateKeys = [
+    Deno.env.get("SUPABASE_ANON_KEY"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  ]
+    .map((v) => (v ?? "").trim())
+    .filter((v, i, arr) => !!v && arr.indexOf(v) === i);
+
+  if (!candidateKeys.length) {
+    console.error("[verifyAuth] API key 환경변수(SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY) 누락");
+    return false;
+  }
 
   try {
-    // Supabase Auth REST API 직접 호출: POST 방식 대신 GET /auth/v1/user 사용
-    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "apikey": anonKey,
-      },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[verifyAuth] Auth API 실패: status=${res.status}, token_prefix=${token.slice(0, 20)}, body=${body.slice(0, 100)}`);
+    // 배포 환경의 secret 주입 편차를 고려해 가능한 키를 순차 시도
+    for (const apiKey of candidateKeys) {
+      const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "apikey": apiKey,
+        },
+      });
+      if (res.ok) return true;
     }
-    return res.ok;
+    console.error("[verifyAuth] Auth API 실패: 모든 API key 시도에서 401/비정상 응답");
+    return false;
   } catch (e) {
     console.error("[verifyAuth] fetch 예외:", e);
     return false;

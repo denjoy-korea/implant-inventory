@@ -25,30 +25,21 @@ async function getValidToken(): Promise<string | null> {
   try {
     const { supabase } = await import('./supabaseClient');
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn('[cryptoUtils] getValidToken: session=null (로그인 필요)');
-      return null;
-    }
+    if (!session) return null;
 
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = session.expires_at ?? 0;
     const isExpired = expiresAt - 10 <= now;
-    console.warn(`[cryptoUtils] token: expires_at=${expiresAt}, now=${now}, expired=${isExpired}, isJWT=${session.access_token.startsWith('eyJ')}`);
 
     // 10초 버퍼: 만료가 임박했거나 이미 만료된 경우 갱신
     if (isExpired) {
       const { data: refreshed, error } = await supabase.auth.refreshSession();
-      if (error || !refreshed.session) {
-        console.warn('[cryptoUtils] token refresh 실패:', error?.message);
-        return null;
-      }
-      console.warn('[cryptoUtils] token refresh 성공');
+      if (error || !refreshed.session) return null;
       return refreshed.session.access_token;
     }
 
     return session.access_token;
-  } catch (e) {
-    console.warn('[cryptoUtils] getValidToken 예외:', e);
+  } catch {
     return null;
   }
 }
@@ -62,9 +53,10 @@ async function callCryptoService(
     'Content-Type': 'application/json',
     'apikey': SUPABASE_ANON_KEY,
   };
+  let token: string | null = null;
 
   if (requireAuth) {
-    const token = await getValidToken();
+    token = await getValidToken();
     if (!token) {
       throw new Error('[cryptoUtils] 인증 세션이 없습니다. 다시 로그인해주세요.');
     }
@@ -74,11 +66,28 @@ async function callCryptoService(
     headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
   }
 
-  const res = await fetch(CRYPTO_SERVICE_URL, {
+  const body = JSON.stringify({ op, ...payload });
+  let res = await fetch(CRYPTO_SERVICE_URL, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ op, ...payload }),
+    body,
   });
+
+  // 토큰이 만료/불일치한 경우 1회 갱신 후 재시도
+  if (requireAuth && res.status === 401) {
+    const { supabase } = await import('./supabaseClient');
+    const { data: refreshed, error } = await supabase.auth.refreshSession();
+    const refreshedToken = !error ? refreshed.session?.access_token : null;
+
+    if (refreshedToken && refreshedToken !== token) {
+      headers['Authorization'] = `Bearer ${refreshedToken}`;
+      res = await fetch(CRYPTO_SERVICE_URL, {
+        method: 'POST',
+        headers,
+        body,
+      });
+    }
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: string };
