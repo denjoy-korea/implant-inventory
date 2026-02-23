@@ -7,6 +7,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://denjoy.info",
   "https://www.denjoy.info",
   "https://app.denjoy.info",
+  "https://inventory.denjoy.info",
   // 개발/프리뷰 환경 (Vercel Preview 및 로컬)
   "http://localhost:5173",
   "http://localhost:3000",
