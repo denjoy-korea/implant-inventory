@@ -1,15 +1,18 @@
 import React from 'react';
 
-export default function Step3FailAudit() {
+interface Props {
+  onGoToFailManagement: () => void;
+}
+
+export default function Step3FailAudit({ onGoToFailManagement }: Props) {
   return (
-    <div className="px-6 py-6">
-      <h2 className="text-xl font-black text-slate-900 mb-1">재고 실사 & FAIL 매칭</h2>
-      <p className="text-sm text-slate-500 mb-5">
-        수술기록의 FAIL 항목을 확인하고<br />
-        실제 재고와 맞춰 데이터를 정확하게 만들어요.
+    <div className="px-5 py-5 flex flex-col h-full">
+      <h2 className="text-lg font-black text-slate-900 mb-0.5">FAIL 재고 정합 처리</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        수술기록의 FAIL 항목을 확인하고 실제 재고와 맞춰 데이터를 정확하게 만들어요.
       </p>
 
-      <div className="space-y-3 mb-5">
+      <div className="space-y-2 mb-4">
         {[
           {
             step: '1',
@@ -31,29 +34,48 @@ export default function Step3FailAudit() {
           },
           {
             step: '3',
-            title: '재고 실사',
-            desc: '실제 재고 수량과 시스템 수량 비교·조정',
+            title: '재고 동기화 완료',
+            desc: '실제 재고 수량과 시스템 수량 최종 확인',
             icon: (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             ),
           },
         ].map(({ step, title, desc, icon }) => (
-          <div key={step} className="flex items-start gap-3 bg-slate-50 rounded-2xl p-4">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div key={step} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {icon}
               </svg>
             </div>
             <div>
-              <div className="text-xs font-black text-indigo-500 mb-0.5">STEP {step}</div>
-              <div className="text-sm font-bold text-slate-800">{title}</div>
-              <div className="text-xs text-slate-500">{desc}</div>
+              <div className="text-[10px] font-black text-indigo-500 leading-none mb-0.5">STEP {step}</div>
+              <div className="text-xs font-bold text-slate-800">{title}</div>
+              <div className="text-[11px] text-slate-500 leading-tight">{desc}</div>
             </div>
           </div>
         ))}
       </div>
 
+      {/* 안내 박스 */}
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 mb-4">
+        <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p className="text-xs font-bold text-amber-700 mb-0.5">FAIL 관리 탭에서 진행</p>
+          <p className="text-[11px] text-amber-600 leading-snug">
+            수술 중 발생한 FAIL 임플란트를 처리하여 재고를 정확하게 유지합니다.
+          </p>
+        </div>
+      </div>
+
+      <button
+        onClick={onGoToFailManagement}
+        className="w-full py-3.5 text-sm font-bold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all mt-auto"
+      >
+        FAIL 관리 진행하기
+      </button>
     </div>
   );
 }

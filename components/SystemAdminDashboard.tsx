@@ -28,6 +28,8 @@ import SystemAdminPlanChangeTab from './system-admin/tabs/SystemAdminPlanChangeT
 import SystemAdminAnalysisLeadsTab, { AnalysisLeadFilter } from './system-admin/tabs/SystemAdminAnalysisLeadsTab';
 import SystemAdminTrafficTab from './system-admin/tabs/SystemAdminTrafficTab';
 import SystemAdminContentTab from './system-admin/tabs/SystemAdminContentTab';
+import SystemAdminConsultationTab from './system-admin/tabs/SystemAdminConsultationTab';
+import { consultationService, ConsultationRequest, ConsultationStatus } from '../services/consultationService';
 import {
     PlanAssignModal,
     PlanHospitalsModal,
@@ -108,6 +110,11 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const [trafficData, setTrafficData] = useState<PageViewRow[]>([]);
     const [trafficLoading, setTrafficLoading] = useState(false);
     const [trafficRange, setTrafficRange] = useState<7 | 14 | 30 | 90>(30);
+
+    // 상담 관리 state
+    const [consultations, setConsultations] = useState<ConsultationRequest[]>([]);
+    const [consultationsLoading, setConsultationsLoading] = useState(false);
+    const [consultationStatusUpdating, setConsultationStatusUpdating] = useState<string | null>(null);
 
     // 플랜 관리 state
     interface PlanCapacity { plan: string; capacity: number; }
@@ -333,6 +340,52 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         if (tab === 'traffic') {
             loadTrafficData(trafficRange);
         }
+        if (tab === 'consultations') {
+            loadConsultations();
+        }
+    };
+
+    const loadConsultations = () => {
+        setConsultationsLoading(true);
+        consultationService.getAll()
+            .then(setConsultations)
+            .catch(() => showToast('상담 목록을 불러오지 못했습니다.', 'error'))
+            .finally(() => setConsultationsLoading(false));
+    };
+
+    const handleConsultationStatusUpdate = async (
+        item: ConsultationRequest,
+        status: ConsultationStatus,
+        adminNotes?: string,
+        scheduledAt?: string | null,
+    ) => {
+        setConsultationStatusUpdating(item.id);
+        try {
+            await consultationService.updateStatus(item.id, status, adminNotes, scheduledAt ?? undefined);
+            setConsultations(prev => prev.map(c => c.id === item.id
+                ? { ...c, status, ...(adminNotes !== undefined ? { admin_notes: adminNotes } : {}), ...(scheduledAt !== undefined ? { scheduled_at: scheduledAt } : {}) }
+                : c
+            ));
+        } catch {
+            showToast('상태 변경에 실패했습니다.', 'error');
+        } finally {
+            setConsultationStatusUpdating(null);
+        }
+    };
+
+    const handleDeleteConsultation = (item: ConsultationRequest) => {
+        setConfirmModal({
+            title: '상담 신청 삭제',
+            message: `${item.name} (${item.hospital_name})의 상담 신청을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.`,
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                await consultationService.delete(item.id);
+                setConsultations(prev => prev.filter(c => c.id !== item.id));
+                showToast('상담 신청이 삭제되었습니다.', 'success');
+            },
+        });
     };
 
     const loadTrafficData = (days: 7 | 14 | 30 | 90) => {
@@ -409,10 +462,24 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
     const handlePlanChangeStatusChange = async (item: ContactInquiry, status: InquiryStatus) => {
         setPlanChangeStatusUpdating(item.id);
         try {
+            // 완료 처리 시 실제 병원 플랜도 변경
+            if (status === 'resolved') {
+                const { success, hospitalId } = await contactService.applyPlanChange(item);
+                if (!success) {
+                    showToast(
+                        hospitalId
+                            ? '플랜 변경에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+                            : '병원 정보를 찾을 수 없습니다. 이메일을 확인해 주세요.',
+                        'error'
+                    );
+                    return;
+                }
+            }
             await contactService.updateStatus(item.id, status);
             const updated = { ...item, status };
             setPlanChangeRequests(prev => prev.map(r => r.id === item.id ? updated : r));
             setSelectedPlanChange(updated);
+            if (status === 'resolved') showToast('플랜이 변경되었습니다.', 'success');
         } catch {
             showToast('상태 변경에 실패했습니다.', 'error');
         } finally {
@@ -1274,6 +1341,17 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
                                 {activeTab === 'content' && (
                                     <SystemAdminContentTab />
+                                )}
+
+                                {activeTab === 'consultations' && (
+                                    <SystemAdminConsultationTab
+                                        consultations={consultations}
+                                        loading={consultationsLoading}
+                                        statusUpdating={consultationStatusUpdating}
+                                        onUpdateStatus={handleConsultationStatusUpdate}
+                                        onDelete={handleDeleteConsultation}
+                                        onRefresh={loadConsultations}
+                                    />
                                 )}
                             </>
                         )}

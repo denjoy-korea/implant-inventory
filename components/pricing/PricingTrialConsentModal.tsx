@@ -1,5 +1,15 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { PlanType } from '../../types';
+import {
+  SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT,
+  TRIAL_CONSENT_HELP_TEXT,
+  TRIAL_CONSENT_LABEL_TEXT,
+  TRIAL_DATA_DELETION_POLICY_TEXT,
+  TRIAL_NO_CARD_REQUIRED_TEXT,
+  TRIAL_START_BUTTON_TEXT,
+  TRIAL_START_TITLE_TEXT,
+} from '../../utils/trialPolicy';
+import LegalModal from '../shared/LegalModal';
 
 interface TrialConsentPlan {
   key: PlanType;
@@ -21,18 +31,91 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
   onClose,
   onConfirm,
 }) => {
+  const [showTerms, setShowTerms] = React.useState(false);
+  const [showPrivacy, setShowPrivacy] = React.useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!plan) return;
+    const previousFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const getFocusable = (): HTMLElement[] =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+    window.setTimeout(() => {
+      getFocusable()[0]?.focus();
+    }, 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (showTerms || showPrivacy) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocused?.focus();
+    };
+  }, [onClose, plan, showPrivacy, showTerms]);
+
   if (!plan) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trial-consent-title"
+        aria-describedby="trial-consent-desc"
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{plan.name}</span>
-            <span className="text-indigo-200 text-xs">플랜</span>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{plan.name}</span>
+                <span className="text-indigo-200 text-xs">플랜</span>
+              </div>
+              <h3 id="trial-consent-title" className="text-lg font-bold">{TRIAL_START_TITLE_TEXT}</h3>
+              <p id="trial-consent-desc" className="text-indigo-200 text-sm mt-0.5">{TRIAL_NO_CARD_REQUIRED_TEXT}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="무료 체험 동의 모달 닫기"
+              className="text-indigo-200 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <h3 className="text-lg font-bold">14일 무료 체험 시작</h3>
-          <p className="text-indigo-200 text-sm mt-0.5">카드 정보 없이 바로 체험할 수 있습니다</p>
         </div>
 
         <div className="p-6 space-y-4">
@@ -54,9 +137,12 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
             <p className="text-xs text-amber-700 leading-relaxed">
-              14일 체험 종료 후 <strong>15일 이내 미구독 시</strong> 업로드된 데이터가 삭제됩니다.
+              {TRIAL_DATA_DELETION_POLICY_TEXT}
             </p>
           </div>
+          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 leading-relaxed">
+            {SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT}
+          </p>
 
           <div className="px-3">
             <label className="flex items-center gap-3 cursor-pointer group py-2 rounded-xl hover:bg-slate-50 transition-colors">
@@ -66,12 +152,17 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
                 onChange={(e) => onToggleConsented(e.target.checked)}
                 className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
               />
-              <span className="text-sm text-slate-700">미구독 시 데이터 삭제 조건을 확인했습니다.</span>
+              <span className="text-sm text-slate-700">{TRIAL_CONSENT_LABEL_TEXT}</span>
             </label>
             {!consented && (
-              <p className="text-xs text-rose-500 mt-1 ml-7">체험 시작 전 데이터 삭제 조건을 확인해 주세요.</p>
+              <p className="text-xs text-rose-500 mt-1 ml-7">{TRIAL_CONSENT_HELP_TEXT}</p>
             )}
-            <p className="text-[11px] text-slate-400 mt-1.5 ml-7">제공하신 정보는 서비스 운영 목적으로만 사용됩니다.</p>
+            <div className="mt-1.5 ml-7 flex items-center gap-2 text-[11px] text-slate-400">
+              <span>제공하신 정보는 서비스 운영 목적으로만 사용됩니다.</span>
+              <button type="button" onClick={() => setShowTerms(true)} className="text-indigo-600 hover:underline">약관</button>
+              <span className="text-slate-300">·</span>
+              <button type="button" onClick={() => setShowPrivacy(true)} className="text-indigo-600 hover:underline">개인정보</button>
+            </div>
           </div>
 
           <div className="flex gap-3">
@@ -93,11 +184,13 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
             >
-              14일 무료 체험 시작하기 →
+              {TRIAL_START_BUTTON_TEXT} →
             </button>
           </div>
         </div>
       </div>
+      {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
+      {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };

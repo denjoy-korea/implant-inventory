@@ -12,6 +12,7 @@ export interface FailBulkSetupModalProps {
   pendingByManufacturer: { manufacturer: string; count: number }[];
   onInitialize: (items: { manufacturer: string; count: number; date: string }[]) => Promise<void>;
   onReconcile: (reconciles: { manufacturer: string; targetCount: number }[], date: string) => Promise<void>;
+  initialTab?: Tab;
 }
 
 type Tab = 'initialize' | 'reconcile';
@@ -33,10 +34,11 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   pendingByManufacturer,
   onInitialize,
   onReconcile,
+  initialTab,
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [tab, setTab] = useState<Tab>(
-    pendingByManufacturer.length > 0 ? 'reconcile' : 'initialize'
+    initialTab ?? (pendingByManufacturer.length > 0 ? 'reconcile' : 'initialize')
   );
   const [step, setStep] = useState<Step>('form');
   const [resultMessage, setResultMessage] = useState('');

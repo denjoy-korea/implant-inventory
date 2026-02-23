@@ -10,6 +10,12 @@ import PricingPaymentModal from './pricing/PricingPaymentModal';
 import PricingTrialConsentModal from './pricing/PricingTrialConsentModal';
 import PricingWaitlistModal from './pricing/PricingWaitlistModal';
 import SectionNavigator from './SectionNavigator';
+import PublicInfoFooter from './shared/PublicInfoFooter';
+import {
+  SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT,
+  TRIAL_OFFER_LABEL,
+  TRIAL_DATA_DELETION_POLICY_TEXT,
+} from '../utils/trialPolicy';
 
 interface PricingPageProps {
   onGetStarted: (plan?: PlanType) => void;
@@ -59,20 +65,20 @@ const plans: Plan[] = [
   },
   {
     name: 'Basic',
-    description: '소규모 팀을 위한 합리적 플랜',
+    description: '개인 사용자를 위한 합리적 플랜',
     monthlyPrice: 29000,
     yearlyPrice: 23000,
     highlight: false,
-    cta: '14일 무료 체험',
+    cta: TRIAL_OFFER_LABEL,
     limit: 80,
-    tag: '팀용',
+    tag: '개인용',
     features: [
       '재고 품목 최대 200개',
       '수술 기록 6개월 보관',
       '수술기록 상시 업로드',
       '기본 재고 현황 대시보드',
       '브랜드별 소모량 분석',
-      '최대 3명 사용자',
+      '1명 사용자',
     ],
   },
   {
@@ -81,9 +87,9 @@ const plans: Plan[] = [
     monthlyPrice: 69000,
     yearlyPrice: 55000,
     highlight: true,
-    cta: '14일 무료 체험',
+    cta: TRIAL_OFFER_LABEL,
     limit: 50,
-    tag: '기업용',
+    tag: '치과의원',
     features: [
       '재고 품목 최대 500개',
       '수술 기록 12개월 보관',
@@ -101,9 +107,9 @@ const plans: Plan[] = [
     monthlyPrice: 129000,
     yearlyPrice: 103000,
     highlight: false,
-    cta: '14일 무료 체험',
+    cta: TRIAL_OFFER_LABEL,
     limit: 20,
-    tag: '기업용',
+    tag: '치과의원, 치과병원',
     features: [
       '재고 품목 무제한',
       '수술 기록 24개월 보관',
@@ -176,7 +182,7 @@ const faqs = [
     a: '네, 기존 데이터는 모두 그대로 유지됩니다. 업그레이드 즉시 추가 기능을 사용하실 수 있습니다.',
   },
   {
-    q: '14일 무료 체험 기간 중 결제가 되나요?',
+    q: `${TRIAL_OFFER_LABEL} 기간 중 결제가 되나요?`,
     a: '아닙니다. 체험 기간 동안은 결제가 발생하지 않으며, 체험 종료 후 유료 전환 의사를 확인한 뒤에만 결제가 진행됩니다. 카드 정보 없이도 체험 가능합니다.',
   },
   {
@@ -184,8 +190,8 @@ const faqs = [
     a: '네, 연간 결제 시 월 결제 대비 약 20% 할인된 가격으로 이용 가능합니다. Plus 플랜 기준 월 69,000원에서 55,000원으로 할인됩니다.',
   },
   {
-    q: '팀용과 기업용의 차이는 무엇인가요?',
-    a: '팀용(Basic)은 3명까지 사용 가능한 소규모 팀 플랜으로, 기본 대시보드와 브랜드별 분석, 상시 업로드를 제공합니다. 기업용(Plus/Business)은 고급 분석 대시보드, 자동 재고 알림, 역할별 권한 관리 등 확장된 협업 기능이 포함됩니다.',
+    q: '개인용과 의원/병원용의 차이는 무엇인가요?',
+    a: '개인용(Basic)은 1인 원장님이나 전담 실장님 등 개인 사용자를 위한 플랜으로, 기본 대시보드와 브랜드별 분석, 상시 업로드를 제공합니다. 의원/병원용(Plus/Business)은 다수의 구성원이 함께 쓰는 플랜으로 고급 분석 대시보드, 자동 재고 알림, 역할별 권한 관리 등 확장된 협업 기능이 포함됩니다.',
   },
   {
     q: '어떤 청구 프로그램을 지원하나요?',
@@ -193,7 +199,7 @@ const faqs = [
   },
   {
     q: '환불 정책은 어떻게 되나요?',
-    a: '사용 일수에 비례하여 환불 처리됩니다. 연간 결제의 경우에도 잔여 일수에 비례하여 환불해 드립니다. 환불 시 기존 데이터는 모두 삭제되며 복구가 불가하오니 신중하게 결정해 주세요.',
+    a: '사용 일수에 비례하여 환불 처리됩니다. 연간 결제도 잔여 일수 기준으로 환불 가능하며, 환불 이후에는 Free 플랜 정책(한도 초과 데이터 읽기 전용)에 따라 서비스가 전환됩니다.',
   },
   {
     q: '결제 기간이 만료되어 갱신하지 못하면 어떻게 되나요?',
@@ -238,9 +244,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer'>('card');
   const [receiptType, setReceiptType] = useState<'cash_receipt' | 'tax_invoice'>('cash_receipt');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentRequestError, setPaymentRequestError] = useState<string | null>(null);
   const { toast, showToast } = useToast();
 
-  // 비로그인 14일 무료 체험 동의 모달
+  // 비로그인 무료 체험 동의 모달
   const [trialConsentPlan, setTrialConsentPlan] = useState<{ key: PlanType; name: string } | null>(null);
   const [trialConsented, setTrialConsented] = useState(false);
   const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
@@ -316,10 +323,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   };
 
   const planResultColors: Record<string, { bg: string; border: string; badge: string; text: string }> = {
-    Free:     { bg: 'bg-slate-50',   border: 'border-slate-200', badge: 'bg-slate-100 text-slate-700',   text: 'text-slate-700' },
-    Basic:    { bg: 'bg-blue-50',    border: 'border-blue-200',  badge: 'bg-blue-100 text-blue-700',     text: 'text-blue-700' },
-    Plus:     { bg: 'bg-indigo-50',  border: 'border-indigo-300',badge: 'bg-indigo-600 text-white',      text: 'text-indigo-700' },
-    Business: { bg: 'bg-purple-50',  border: 'border-purple-300',badge: 'bg-purple-600 text-white',      text: 'text-purple-700' },
+    Free: { bg: 'bg-slate-50', border: 'border-slate-200', badge: 'bg-slate-100 text-slate-700', text: 'text-slate-700' },
+    Basic: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', text: 'text-blue-700' },
+    Plus: { bg: 'bg-indigo-50', border: 'border-indigo-300', badge: 'bg-indigo-600 text-white', text: 'text-indigo-700' },
+    Business: { bg: 'bg-purple-50', border: 'border-purple-300', badge: 'bg-purple-600 text-white', text: 'text-purple-700' },
   };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -337,6 +344,16 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       pageViewService.trackEvent('pricing_waitlist_modal_open', { plan: waitlistPlan.key }, 'pricing');
     }
   }, [waitlistPlan]);
+
+  // 결제 모달 오픈 계측
+  useEffect(() => {
+    if (!selectedPlan || selectedPlan === 'free') return;
+    pageViewService.trackEvent(
+      'pricing_payment_modal_open',
+      { plan: selectedPlan, billing_cycle: isYearly ? 'yearly' : 'monthly' },
+      'pricing',
+    );
+  }, [isYearly, selectedPlan]);
 
   const handleWaitlistSubmit = async () => {
     if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
@@ -378,7 +395,16 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
     setContactPhone(userPhone || '');
     setPaymentMethod('card');
     setReceiptType('cash_receipt');
+    setPaymentRequestError(null);
   }, [userName, userPhone]);
+
+  const handleRecommendAlternativePlan = useCallback(() => {
+    setSelectedPlan(null);
+    setFinderResult('Free');
+    window.setTimeout(() => {
+      document.getElementById('plan-free')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  }, []);
 
   const handleTrialConfirm = useCallback((planKey: PlanType) => {
     setTrialConsentPlan(null);
@@ -392,7 +418,13 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       return;
     }
 
+    pageViewService.trackEvent(
+      'pricing_payment_request_start',
+      { plan: selectedPlan, billing_cycle: isYearly ? 'yearly' : 'monthly', payment_method: paymentMethod },
+      'pricing',
+    );
     setIsSubmitting(true);
+    setPaymentRequestError(null);
     try {
       if (onRequestPayment) {
         const ok = await onRequestPayment(
@@ -404,14 +436,47 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           paymentMethod === 'transfer' ? receiptType : undefined,
         );
         if (ok) {
+          pageViewService.trackEvent(
+            'pricing_payment_request_success',
+            { plan: selectedPlan, billing_cycle: isYearly ? 'yearly' : 'monthly', payment_method: paymentMethod },
+            'pricing',
+          );
           resetPaymentForm();
+        } else {
+          pageViewService.trackEvent(
+            'pricing_payment_request_error',
+            {
+              plan: selectedPlan,
+              billing_cycle: isYearly ? 'yearly' : 'monthly',
+              payment_method: paymentMethod,
+              reason: 'request_rejected',
+            },
+            'pricing',
+          );
+          setPaymentRequestError('결제 요청이 접수되지 않았습니다. 도입 상담 또는 다른 플랜으로 먼저 시작하실 수 있습니다.');
         }
       } else if (onSelectPlan) {
         onSelectPlan(selectedPlan, isYearly ? 'yearly' : 'monthly');
+        pageViewService.trackEvent(
+          'pricing_payment_request_success',
+          { plan: selectedPlan, billing_cycle: isYearly ? 'yearly' : 'monthly', payment_method: paymentMethod, via: 'plan_select' },
+          'pricing',
+        );
         resetPaymentForm();
       }
     } catch {
       showToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+      pageViewService.trackEvent(
+        'pricing_payment_request_error',
+        {
+          plan: selectedPlan,
+          billing_cycle: isYearly ? 'yearly' : 'monthly',
+          payment_method: paymentMethod,
+          reason: 'exception',
+        },
+        'pricing',
+      );
+      setPaymentRequestError('결제 요청 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 도입 상담으로 전환해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
@@ -430,7 +495,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
 
   useEffect(() => {
     supabase.from('hospitals').select('id', { count: 'exact', head: true })
-      .then(({ count }) => { if (count !== null) setHospitalCount(count); }, () => {});
+      .then(({ count }) => { if (count !== null) setHospitalCount(count); }, () => { });
   }, []);
 
   const planNames = ['Free', 'Basic', 'Plus', 'Business'];
@@ -438,10 +503,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
       <SectionNavigator sections={[
-        { id: 'pp-hero',    label: '소개' },
-        { id: 'pp-plans',   label: '요금제' },
+        { id: 'pp-hero', label: '소개' },
+        { id: 'pp-plans', label: '요금제' },
         { id: 'pp-compare', label: '비교' },
-        { id: 'pp-faq',     label: 'FAQ' },
+        { id: 'pp-faq', label: 'FAQ' },
       ]} />
 
       {/* Payment Pending Banner */}
@@ -509,25 +574,29 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           </div>
 
           <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900 mb-5 leading-tight">
-            그 비용의 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">4분의 1</span>로<br />
+            그 비용의 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 animate-pulse-glow">4분의 1</span>로<br />
             전부 해결하세요
           </h1>
           <p className="text-base md:text-lg text-slate-500 max-w-xl mx-auto leading-relaxed mb-3">
             월 29,000원 — <strong className="text-slate-700">하루 967원</strong>이면 충분합니다.
           </p>
           {/* 앵커링: 일 단위 프레이밍 */}
-          <p className="text-xs text-slate-400 mb-8">자판기 음료 한 캔보다 저렴한 금액으로 재고 관리의 모든 고민을 해결하세요</p>
+          <p className="text-xs text-slate-400 mb-8 font-medium">자판기 음료 한 캔보다 저렴한 금액으로 재고 관리의 모든 고민을 해결하세요</p>
 
           {/* 도입효과 보기 버튼 */}
-          <button
-            onClick={() => onGoToValue?.()}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-md hover:-translate-y-0.5"
-          >
-            도입효과 보기
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          <div className="relative group inline-block">
+            <div className="absolute -inset-1 bg-gradient-to-r from-slate-400 to-slate-300 rounded-xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+            <button
+              onClick={() => onGoToValue?.()}
+              className="relative inline-flex items-center gap-2 px-7 py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-xl hover:-translate-y-1 active:scale-95 overflow-hidden z-10"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+              도입효과 보기
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -535,9 +604,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       <section className="max-w-3xl mx-auto px-6 pb-10 w-full">
         <div className="grid grid-cols-3 gap-3">
           {[
-            { icon: '🛡️', title: '14일 무료 체험', desc: '카드 등록 없이\n체험 후 결정' },
+            { icon: '🛡️', title: TRIAL_OFFER_LABEL, desc: '카드 등록 없이\n체험 후 결정' },
             { icon: '🔓', title: '언제든 해지', desc: '약정·위약금 없음\n즉시 해지 가능' },
-            { icon: '💾', title: '데이터 100% 보존', desc: '해지 후에도\n기존 데이터 유지' },
+            { icon: '💾', title: '구독 시 데이터 유지', desc: '유료 해지 후 Free 전환 시\n기존 데이터 유지' },
           ].map((item, i) => (
             <div key={i} className="bg-white border border-slate-100 rounded-xl p-4 text-center shadow-sm">
               <div className="text-xl mb-1.5">{item.icon}</div>
@@ -546,47 +615,54 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
             </div>
           ))}
         </div>
+        <div className="mt-3 space-y-1.5">
+          <p className="text-[11px] text-slate-500">* {TRIAL_DATA_DELETION_POLICY_TEXT}</p>
+          <p className="text-[11px] text-slate-500">{SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT}</p>
+        </div>
       </section>
 
       {/* Plan Finder */}
       <div className="max-w-2xl mx-auto px-6 pb-10 w-full">
         {!showFinder ? (
-          <button
-            onClick={() => setShowFinder(true)}
-            className="w-full relative overflow-hidden rounded-2xl group transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-200"
-          >
-            {/* 그라디언트 배경 */}
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700" />
-            {/* 반짝이는 shine 효과 */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-100%] group-hover:translate-x-[200%] transition-transform duration-700" />
+          <div className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-2xl blur opacity-40 group-hover:opacity-70 transition duration-1000 animate-pulse-glow z-0"></div>
+            <button
+              onClick={() => setShowFinder(true)}
+              className="w-full relative overflow-hidden rounded-2xl group transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-300 z-10"
+            >
+              {/* 그라디언트 배경 */}
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700" />
+              {/* 반짝이는 shine 효과 */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-100%] group-hover:translate-x-[200%] transition-transform duration-700" />
 
-            <div className="relative px-6 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
-                  🎯
+              <div className="relative px-6 py-5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                    🎯
+                  </div>
+                  <div className="text-left">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-base font-black text-white">나에게 맞는 요금제 찾기</p>
+                      <span className="text-[10px] font-bold bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full">30초</span>
+                    </div>
+                    <p className="text-xs text-indigo-200">3가지 질문만 답하면 딱 맞는 플랜을 추천해드려요</p>
+                    {/* 플랜 미리보기 도트 */}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      {['Free', 'Basic', 'Plus', 'Business'].map((p) => (
+                        <span key={p} className="text-[10px] text-white/60 bg-white/10 px-2 py-0.5 rounded-full">{p}</span>
+                      ))}
+                      <span className="text-[10px] text-indigo-300">중 추천</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-base font-black text-white">나에게 맞는 요금제 찾기</p>
-                    <span className="text-[10px] font-bold bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full">30초</span>
-                  </div>
-                  <p className="text-xs text-indigo-200">3가지 질문만 답하면 딱 맞는 플랜을 추천해드려요</p>
-                  {/* 플랜 미리보기 도트 */}
-                  <div className="flex items-center gap-1.5 mt-2">
-                    {['Free', 'Basic', 'Plus', 'Business'].map((p) => (
-                      <span key={p} className="text-[10px] text-white/60 bg-white/10 px-2 py-0.5 rounded-full">{p}</span>
-                    ))}
-                    <span className="text-[10px] text-indigo-300">중 추천</span>
-                  </div>
+                <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                  <svg className="w-4 h-4 text-white group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
               </div>
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                <svg className="w-4 h-4 text-white group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </div>
-          </button>
+            </button>
+          </div>
         ) : (
           <div className="bg-white border border-indigo-100 rounded-2xl p-6 shadow-lg shadow-indigo-50">
             {finderResult ? (
@@ -679,7 +755,11 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       <div id="pp-plans" className="flex justify-center items-center gap-4 pb-12">
         <span className={`text-sm font-bold ${!isYearly ? 'text-slate-900' : 'text-slate-400'}`}>월간 결제</span>
         <button
+          type="button"
           onClick={() => setIsYearly(!isYearly)}
+          role="switch"
+          aria-checked={isYearly}
+          aria-label="연간 결제 전환"
           className={`relative w-14 h-7 rounded-full transition-colors duration-300 ${isYearly ? 'bg-indigo-600' : 'bg-slate-300'}`}
         >
           <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${isYearly ? 'translate-x-7' : 'translate-x-0'}`} />
@@ -687,9 +767,8 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         <span className={`text-sm font-bold ${isYearly ? 'text-slate-900' : 'text-slate-400'}`}>
           연간 결제
         </span>
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border transition-colors duration-300 ${
-          isYearly ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-400 bg-slate-50 border-slate-200'
-        }`}>
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border transition-colors duration-300 ${isYearly ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-400 bg-slate-50 border-slate-200'
+          }`}>
           20% 할인
         </span>
       </div>
@@ -729,179 +808,195 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
             const planKey = plan.name.toLowerCase() as PlanType;
             const isSoldOut = planAvailability[planKey] === false;
             return (
-              <div
-                key={plan.name}
-                id={`plan-${planKey}`}
-                className={`relative rounded-2xl p-7 flex flex-col h-full transition-all duration-300 ${
-                  isSoldOut
+              <div key={plan.name} className="relative h-full flex flex-col group">
+                {plan.highlight && !isSoldOut && (
+                  <div className="absolute -inset-0.5 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-1000 animate-pulse-glow z-0"></div>
+                )}
+                <div
+                  id={`plan-${planKey}`}
+                  className={`relative rounded-3xl p-7 flex flex-col h-full transition-all duration-300 z-10 ${isSoldOut
                     ? 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
                     : plan.highlight
-                      ? 'bg-indigo-600 text-white shadow-2xl shadow-indigo-200 scale-[1.02] ring-2 ring-indigo-600 hover:scale-[1.05] hover:shadow-3xl'
+                      ? 'bg-gradient-to-b from-indigo-600 to-indigo-700 text-white shadow-2xl scale-[1.02] border border-indigo-400/50 hover:scale-[1.04]'
                       : finderResult === plan.name
                         ? 'bg-white border-2 border-indigo-400 shadow-xl ring-2 ring-indigo-200'
-                        : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-300 hover:ring-1 hover:ring-indigo-200'
-                }`}
-              >
-                {isSoldOut && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="bg-rose-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
-                      품절
-                    </span>
-                  </div>
-                )}
-                {!isSoldOut && plan.highlight && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="bg-amber-400 text-amber-900 text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
-                      추천
-                    </span>
-                  </div>
-                )}
-                {isLoggedIn && currentPlan === plan.name.toLowerCase() && (
-                  <div className="absolute -top-3.5 right-4">
-                    <span className="bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-lg">
-                      현재
-                    </span>
-                  </div>
-                )}
+                        : 'bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-2 hover:border-indigo-200 hover:shadow-indigo-100'
+                    }`}
+                >
+                  {isSoldOut && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                      <span className="bg-rose-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
+                        품절
+                      </span>
+                    </div>
+                  )}
+                  {!isSoldOut && plan.highlight && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                      <span className="absolute -inset-1 bg-amber-400 rounded-full blur opacity-40 animate-pulse-glow z-0"></span>
+                      <span className="bg-gradient-to-r from-amber-300 to-yellow-400 text-yellow-900 text-xs font-black px-4 py-1.5 rounded-full shadow-lg relative z-10 border border-yellow-200/50">
+                        추천 플랜
+                      </span>
+                    </div>
+                  )}
+                  {isLoggedIn && currentPlan === plan.name.toLowerCase() && (
+                    <div className="absolute -top-3.5 right-4">
+                      <span className="bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-lg">
+                        현재
+                      </span>
+                    </div>
+                  )}
 
-                <div className="mb-5">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className={`text-lg font-bold ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
-                      {plan.name}
-                    </h3>
-                    {plan.tag && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        plan.highlight
+                  <div className="mb-5">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className={`text-lg font-bold ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
+                        {plan.name}
+                      </h3>
+                      {plan.tag && plan.tag.split(',').map((t, idx) => (
+                        <span key={idx} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${plan.highlight
                           ? 'bg-white/20 text-white'
-                          : plan.tag === '개인용'
+                          : t.trim() === '개인용'
                             ? 'bg-teal-50 text-teal-600 border border-teal-200'
                             : 'bg-violet-50 text-violet-600 border border-violet-200'
-                      }`}>
-                        {plan.tag}
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      plan.highlight
+                          }`}>
+                          {t.trim()}
+                        </span>
+                      ))}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${plan.highlight
                         ? 'bg-white/20 text-white'
                         : 'bg-rose-50 text-rose-600 border border-rose-200'
-                    }`}>
-                      한정 {plan.limit}곳
-                    </span>
+                        }`}>
+                        한정 {plan.limit}곳
+                      </span>
+                    </div>
+                    <p className={`text-xs whitespace-nowrap ${plan.highlight ? 'text-indigo-200' : 'text-slate-500'}`}>
+                      {plan.description}
+                    </p>
                   </div>
-                  <p className={`text-xs whitespace-nowrap ${plan.highlight ? 'text-indigo-200' : 'text-slate-500'}`}>
-                    {plan.description}
-                  </p>
-                </div>
 
-                <div className="mb-5 min-h-[72px]">
-                  {price !== null ? (
-                    <div className="flex items-end gap-1">
-                      <span className={`text-3xl font-black ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
-                        {formatPrice(price)}
-                      </span>
-                      <span className={`text-sm font-medium mb-0.5 ${plan.highlight ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        원/월
-                      </span>
+                  <div className="mb-5 min-h-[72px]">
+                    {price !== null ? (
+                      <div className="flex items-end gap-1">
+                        <span className={`text-3xl font-black ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
+                          {formatPrice(price)}
+                        </span>
+                        <span className={`text-sm font-medium mb-0.5 ${plan.highlight ? 'text-indigo-200' : 'text-slate-400'}`}>
+                          원/월
+                        </span>
+                      </div>
+                    ) : (
+                      <div className={`text-3xl font-black ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
+                        별도 협의
+                      </div>
+                    )}
+                    {isYearly && plan.monthlyPrice !== null && plan.monthlyPrice > 0 && (
+                      <p className={`text-xs mt-1 ${plan.highlight ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        월간 결제 시 {formatPrice(plan.monthlyPrice)}원/월
+                      </p>
+                    )}
+                    {price !== null && price > 0 && (
+                      <p className={`text-xs mt-0.5 ${plan.highlight ? 'text-indigo-300' : 'text-slate-400'}`}>
+                        VAT 별도
+                      </p>
+                    )}
+                  </div>
+
+                  {isSoldOut ? (
+                    <div className="mb-6 space-y-2">
+                      <div className="w-full py-2.5 rounded-xl font-bold text-xs bg-rose-50 text-rose-500 border border-rose-200 text-center">
+                        현재 수용 한도 도달
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            pageViewService.trackEvent('pricing_waitlist_button_click', { plan: planKey }, 'pricing');
+                            setWaitlistPlan({ key: planKey, name: plan.name });
+                          }}
+                          className="w-full py-3 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-700 transition-colors shadow-sm"
+                        >
+                          대기 신청하기 →
+                        </button>
+                        {onContact && (
+                          <button
+                            type="button"
+                            onClick={onContact}
+                            className="w-full py-3 rounded-xl font-bold text-sm border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                          >
+                            도입 상담하기
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 text-center">자리가 나면 가장 먼저 안내해드려요</p>
                     </div>
                   ) : (
-                    <div className={`text-3xl font-black ${plan.highlight ? 'text-white' : 'text-slate-900'}`}>
-                      별도 협의
-                    </div>
-                  )}
-                  {isYearly && plan.monthlyPrice !== null && plan.monthlyPrice > 0 && (
-                    <p className={`text-xs mt-1 ${plan.highlight ? 'text-indigo-200' : 'text-slate-400'}`}>
-                      월간 결제 시 {formatPrice(plan.monthlyPrice)}원/월
-                    </p>
-                  )}
-                  {price !== null && price > 0 && (
-                    <p className={`text-xs mt-0.5 ${plan.highlight ? 'text-indigo-300' : 'text-slate-400'}`}>
-                      VAT 별도
-                    </p>
-                  )}
-                </div>
-
-                {isSoldOut ? (
-                  <div className="mb-6 space-y-2">
-                    <div className="w-full py-2.5 rounded-xl font-bold text-xs bg-rose-50 text-rose-500 border border-rose-200 text-center">
-                      현재 수용 한도 도달
-                    </div>
                     <button
-                      type="button"
                       onClick={() => {
-                        pageViewService.trackEvent('pricing_waitlist_button_click', { plan: planKey }, 'pricing');
-                        setWaitlistPlan({ key: planKey, name: plan.name });
+                        if (isLoggedIn && currentPlan === planKey) return;
+                        pageViewService.trackEvent(
+                          'pricing_plan_select',
+                          {
+                            plan: planKey,
+                            billing_cycle: isYearly ? 'yearly' : 'monthly',
+                            is_logged_in: Boolean(isLoggedIn),
+                          },
+                          'pricing',
+                        );
+                        if (isLoggedIn) {
+                          if (planKey === 'free' && onSelectPlan) {
+                            onSelectPlan(planKey, 'monthly');
+                          } else {
+                            setPaymentRequestError(null);
+                            setSelectedPlan(planKey);
+                          }
+                        } else {
+                          if (plan.cta === TRIAL_OFFER_LABEL) {
+                            setTrialConsented(false);
+                            setTrialConsentPlan({ key: planKey, name: plan.name });
+                          } else {
+                            onGetStarted(planKey);
+                          }
+                        }
                       }}
-                      className="w-full py-3 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-700 transition-colors shadow-sm"
-                    >
-                      대기 신청하기 →
-                    </button>
-                    <p className="text-xs text-slate-400 text-center">자리가 나면 가장 먼저 안내해드려요</p>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (isLoggedIn && currentPlan === planKey) return;
-                      pageViewService.trackEvent(
-                        'pricing_plan_select',
-                        {
-                          plan: planKey,
-                          billing_cycle: isYearly ? 'yearly' : 'monthly',
-                          is_logged_in: Boolean(isLoggedIn),
-                        },
-                        'pricing',
-                      );
-                      if (isLoggedIn) {
-                        if (planKey === 'free' && onSelectPlan) {
-                          onSelectPlan(planKey, 'monthly');
-                        } else {
-                          setSelectedPlan(planKey);
-                        }
-                      } else {
-                        if (plan.cta === '14일 무료 체험') {
-                          setTrialConsented(false);
-                          setTrialConsentPlan({ key: planKey, name: plan.name });
-                        } else {
-                          onGetStarted(planKey);
-                        }
-                      }
-                    }}
-                    disabled={(isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey}
-                    className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 mb-6 ${
-                      (isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey
+                      disabled={(isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey}
+                      className={`relative w-full py-3 rounded-xl font-bold text-sm transition-all duration-300 mb-6 overflow-hidden z-10 group/btn ${(isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                         : plan.highlight
-                          ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
-                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md'
-                    }`}
-                  >
-                    {isLoggedIn && currentPlan === planKey
-                      ? '현재 플랜'
-                      : pendingPayment?.plan === planKey
-                        ? '결제 대기 중...'
-                        : isLoggedIn && currentPlan && currentPlan !== 'free' && planKey === 'free'
-                          ? '다운그레이드'
-                          : plan.cta}
-                  </button>
-                )}
+                          ? 'bg-white text-indigo-600 hover:text-indigo-700 hover:shadow-xl hover:shadow-white/20 active:scale-95 border border-transparent hover:border-indigo-100'
+                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md hover:shadow-xl active:scale-95'
+                        }`}
+                    >
+                      {!((isLoggedIn && currentPlan === planKey) || pendingPayment?.plan === planKey) && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] pointer-events-none"></div>
+                      )}
+                      {isLoggedIn && currentPlan === planKey
+                        ? '현재 플랜'
+                        : pendingPayment?.plan === planKey
+                          ? '결제 대기 중...'
+                          : isLoggedIn && currentPlan && currentPlan !== 'free' && planKey === 'free'
+                            ? '다운그레이드'
+                            : plan.cta}
+                    </button>
+                  )}
 
-                <ul className="space-y-2.5 flex-1">
-                  {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <svg
-                        className={`w-4 h-4 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-indigo-200' : 'text-indigo-600'}`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className={`text-sm leading-snug ${plan.highlight ? 'text-indigo-100' : 'text-slate-600'}`}>
-                        {f}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                  <ul className="space-y-2.5 flex-1">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <svg
+                          className={`w-4 h-4 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-indigo-200' : 'text-indigo-600'}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className={`text-sm leading-snug ${plan.highlight ? 'text-indigo-100' : 'text-slate-600'}`}>
+                          {f}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             );
           })}
@@ -924,9 +1019,8 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   {planNames.map((name, i) => (
                     <th
                       key={name}
-                      className={`text-center py-4 px-3 text-sm font-bold ${
-                        i === 2 ? 'text-indigo-600' : 'text-slate-700'
-                      }`}
+                      className={`text-center py-4 px-3 text-sm font-bold ${i === 2 ? 'text-indigo-600' : 'text-slate-700'
+                        }`}
                     >
                       <div className="flex flex-col items-center gap-1">
                         <span>{name}</span>
@@ -936,8 +1030,14 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                         {i === 2 && (
                           <span className="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">추천</span>
                         )}
-                        {(i === 2 || i === 3) && (
-                          <span className="text-[10px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full border border-violet-200">기업용</span>
+                        {i === 2 && (
+                          <span className="text-[10px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full border border-violet-200">치과의원</span>
+                        )}
+                        {i === 3 && (
+                          <div className="flex gap-1">
+                            <span className="text-[10px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full border border-violet-200">치과의원</span>
+                            <span className="text-[10px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full border border-violet-200">치과병원</span>
+                          </div>
                         )}
                       </div>
                     </th>
@@ -1016,6 +1116,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
               </div>
             ))}
           </div>
+          <p className="mt-6 text-center text-[11px] text-slate-400">
+            * 후기 내용은 사용자 공개 동의 기준으로 게시되며, 성과 표현은 병원별 운영 방식에 따라 달라질 수 있습니다.
+          </p>
         </div>
       </section>
 
@@ -1034,14 +1137,17 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                 className="bg-white rounded-2xl border border-slate-200 overflow-hidden transition-shadow hover:shadow-md"
               >
                 <button
+                  type="button"
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  id={`pricing-faq-trigger-${i}`}
+                  aria-expanded={openFaq === i}
+                  aria-controls={`pricing-faq-panel-${i}`}
                   className="w-full flex items-center justify-between p-6 text-left"
                 >
                   <span className="text-sm font-bold text-slate-800 pr-4">{faq.q}</span>
                   <svg
-                    className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-300 ${
-                      openFaq === i ? 'rotate-180' : ''
-                    }`}
+                    className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-300 ${openFaq === i ? 'rotate-180' : ''
+                      }`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1051,9 +1157,11 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   </svg>
                 </button>
                 <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    openFaq === i ? 'max-h-60 opacity-100' : 'max-h-0 opacity-0'
-                  }`}
+                  id={`pricing-faq-panel-${i}`}
+                  role="region"
+                  aria-labelledby={`pricing-faq-trigger-${i}`}
+                  className={`overflow-hidden transition-all duration-300 ${openFaq === i ? 'max-h-60 opacity-100' : 'max-h-0 opacity-0'
+                    }`}
                 >
                   <p className="px-6 pb-6 text-sm text-slate-500 leading-relaxed">{faq.a}</p>
                 </div>
@@ -1079,19 +1187,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </div>
       </section>
 
-      {/* Footer - 기업정보 */}
-      <footer className="border-t border-slate-200 bg-slate-50 py-8 px-6">
-        <div className="max-w-4xl mx-auto text-xs text-slate-400 leading-relaxed">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
-              <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
-              <p>이메일: admin@denjoy.info</p>
-            </div>
-            <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <PublicInfoFooter showLegalLinks />
 
       <PricingTrialConsentModal
         plan={trialConsentPlan}
@@ -1110,13 +1206,19 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         paymentMethod={paymentMethod}
         receiptType={receiptType}
         isSubmitting={isSubmitting}
-        onDismiss={() => setSelectedPlan(null)}
+        requestError={paymentRequestError}
+        onDismiss={() => {
+          setSelectedPlan(null);
+          setPaymentRequestError(null);
+        }}
         onCancel={resetPaymentForm}
         onContactNameChange={setContactName}
         onContactPhoneChange={setContactPhone}
         onPaymentMethodChange={setPaymentMethod}
         onReceiptTypeChange={setReceiptType}
         onSubmit={handlePaymentSubmit}
+        onRequestConsultation={onContact}
+        onRecommendAlternativePlan={handleRecommendAlternativePlan}
       />
 
       <PricingWaitlistModal
@@ -1131,7 +1233,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
       />
 
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+        <div className={`fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] xl:bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
           {toast.message}
         </div>
       )}

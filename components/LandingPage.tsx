@@ -8,7 +8,7 @@ import {
 import { DashboardPromoMockup } from './DashboardPromoMockup';
 import { supabase } from '../services/supabaseClient';
 import SectionNavigator from './SectionNavigator';
-import LegalModal from './shared/LegalModal';
+import PublicInfoFooter from './shared/PublicInfoFooter';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -61,10 +61,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const stat2 = useCountUp(14, 600);
   const stat3 = useCountUp(5, 600);
   const stat4 = useCountUp(0, 400);
-  const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [mobileNotice, setMobileNotice] = useState<string | null>(null);
   const [featuredReviews, setFeaturedReviews] = useState<UserReview[]>([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselFading, setCarouselFading] = useState(false);
@@ -72,6 +69,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const heroTrialText = trialCopy.heroText;
   const ctaTrialBadgeText = trialCopy.badgeText;
   const ctaTrialFootnoteText = trialCopy.footnoteWithDot;
+  const trialPolicyShortText = trialCopy.trialPolicyShort;
 
   const [mockupVideoUrl, setMockupVideoUrl] = useState<string | null>(null);
   const [isVideoLoading, setIsVideoLoading] = useState(true);
@@ -116,13 +114,16 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
   const handleAnalyzeClick = useCallback(() => {
     if (!onAnalyze) return;
-    const isRealMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-    if (isRealMobileDevice) {
-      setMobileNotice('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.');
-      return;
-    }
     onAnalyze();
   }, [onAnalyze]);
+
+  const handleMobileAnalyzeFallback = useCallback(() => {
+    if (onGoToContact) {
+      onGoToContact();
+      return;
+    }
+    onGetStarted();
+  }, [onGetStarted, onGoToContact]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -138,14 +139,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
     return () => mediaQuery.removeListener(syncViewport);
   }, []);
 
-  useEffect(() => {
-    if (!mobileNotice) return;
-    const timer = window.setTimeout(() => setMobileNotice(null), 2800);
-    return () => window.clearTimeout(timer);
-  }, [mobileNotice]);
-
   return (
-    <div className={`flex flex-col min-h-screen bg-slate-50 font-sans break-keep selection:bg-indigo-500 selection:text-white overflow-x-hidden ${isMobileViewport ? 'pb-24' : ''}`}>
+    <div className="flex flex-col min-h-screen bg-slate-50 font-sans break-keep selection:bg-indigo-500 selection:text-white overflow-x-hidden">
 
       <SectionNavigator sections={[
         { id: 'lp-hero', label: '소개' },
@@ -178,7 +173,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           {/* 프레이밍: 구체적 수치로 가치 제시 */}
           <h1 className="text-[2rem] sm:text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-4 sm:mb-6 leading-[1.14] sm:leading-tight text-balance animate-fade-in-up animation-delay-200">
             임플란트 재고관리,<br className="sm:hidden" /><br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500">
               연 104시간을 돌려드립니다
             </span>
           </h1>
@@ -186,25 +181,26 @@ const LandingPage: React.FC<LandingPageProps> = ({
           {/* 손실 회피: 현재 낭비를 암시 */}
           <p className="mt-3 sm:mt-4 text-[15px] sm:text-lg md:text-2xl leading-relaxed text-slate-600 font-medium max-w-3xl mx-auto text-balance animate-fade-in-up animation-delay-400">
             매주 <strong className="text-rose-500">2시간</strong>씩 엑셀 정리에 쓰는 시간,{' '}
-            <strong className="text-slate-900">5분</strong>으로 바꾸세요.<br className="hidden md:block" />
-            덴트웹 데이터를 업로드하면 나머지는 자동입니다.
+            <strong className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500 font-black">5분</strong>으로 바꾸세요.<br className="hidden md:block" />
+            덴트웹 데이터를 업로드하면 나머지는 <strong className="text-emerald-500 font-black">자동</strong>입니다.
           </p>
 
           {/* 힉스의 법칙: 선택지를 줄여 명확한 행동 유도 */}
           <div className="mt-7 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 animate-fade-in-up animation-delay-400">
-            <button
-              onClick={onGetStarted}
-              className="group relative px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-900 text-white text-base sm:text-lg font-bold rounded-2xl shadow-2xl shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
-            >
-              <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-              <span className="relative flex items-center gap-3">
-                무료로 시작하기
-                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-2xl blur opacity-40 group-hover:opacity-70 transition duration-1000 animate-pulse-glow"></div>
+              <button
+                onClick={onGetStarted}
+                className="relative px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-900 text-white text-base sm:text-lg font-bold rounded-2xl shadow-2xl hover:bg-slate-800 active:scale-95 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3 border border-slate-700/50 min-w-[200px]"
+              >
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                <span className="relative z-10">무료로 시작하기</span>
+                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
-              </span>
-            </button>
-            <span className="text-xs sm:text-sm text-slate-400">카드 정보 불필요 &middot; 1분 가입</span>
+              </button>
+            </div>
+            <span className="text-xs sm:text-sm text-slate-400 font-medium bg-slate-100/50 px-3 py-1.5 rounded-full border border-slate-200/50">카드 정보 불필요 &middot; 1분 가입</span>
           </div>
 
           {/* 피드포워드: 가입 후 얻을 결과 미리보기 */}
@@ -303,13 +299,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 tag: '비생산적 반복 업무',
               },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-black text-sm mb-4 sm:mb-5">
+              <div key={i} className={`bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 hover:border-rose-200 hover:shadow-xl hover:shadow-rose-100/50 hover:-translate-y-2 transition-all duration-300 animate-fade-in-up ${i === 0 ? 'animation-delay-200' : i === 1 ? 'animation-delay-400' : 'animation-delay-[600ms]'}`}>
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-black text-sm mb-4 sm:mb-5 shadow-inner">
                   {item.emoji}
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 text-balance">{item.title}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-3 text-balance group-hover:text-rose-600 transition-colors">{item.title}</h3>
                 <p className="text-sm text-slate-500 leading-relaxed mb-4 text-balance">{item.desc}</p>
-                <span className="text-xs font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full">{item.tag}</span>
+                <span className="text-xs font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100/50">{item.tag}</span>
               </div>
             ))}
           </div>
@@ -361,18 +357,20 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 label: '데이터 관리',
               },
             ].map((item, i) => (
-              <div key={i} className="text-center">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-4 sm:mb-5">
+              <div key={i} className="text-center group">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4 sm:mb-5 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors duration-500">
                   {item.icon}
                 </div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 sm:mb-4">{item.label}</p>
-                <div className="bg-slate-100 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 mb-2.5 sm:mb-3">
+                <div className="bg-slate-50/50 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 mb-2 sm:mb-3 grayscale opacity-60 group-hover:opacity-80 transition-opacity duration-300 border border-slate-100">
                   <p className="text-sm text-slate-400 line-through">{item.before}</p>
                 </div>
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 mx-auto mb-2.5 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-                <div className="bg-indigo-50 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 border border-indigo-100">
+                <div className="py-2 flex justify-center">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-300 group-hover:text-indigo-500 transition-colors duration-300 group-hover:translate-y-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+                <div className="bg-gradient-to-br from-indigo-50 to-white rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 border border-indigo-100/50 group-hover:shadow-lg group-hover:shadow-indigo-100/50 transition-all duration-300 group-hover:border-indigo-200 mt-2">
                   <p className="text-sm text-indigo-700 font-bold">{item.after}</p>
                 </div>
               </div>
@@ -427,10 +425,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Card 2 — 수술 통계 & 임상 분석 (NEW) */}
-            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-emerald-100"></div>
+            <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-emerald-100/50 transition-all duration-500 border border-slate-200 hover:border-emerald-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-emerald-100/50 z-0"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-emerald-50 shadow-sm mb-4 sm:mb-6 text-emerald-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-emerald-100 mb-4 sm:mb-6 text-emerald-600 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
@@ -446,10 +444,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Card 3 — FAIL 완전 추적 */}
-            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-rose-100"></div>
+            <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-rose-100/50 transition-all duration-500 border border-slate-200 hover:border-rose-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-rose-100/50 z-0"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-rose-50 shadow-sm mb-4 sm:mb-6 text-rose-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-rose-100 mb-4 sm:mb-6 text-rose-600 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
@@ -462,10 +460,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Card 4 — 스마트 발주 추천 */}
-            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-amber-100"></div>
+            <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-amber-100/50 transition-all duration-500 border border-slate-200 hover:border-amber-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-amber-100/50 z-0"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-amber-50 shadow-sm mb-4 sm:mb-6 text-amber-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-amber-100 mb-4 sm:mb-6 text-amber-600 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
@@ -478,10 +476,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Card 5 — 재고 실사 & 불일치 감지 */}
-            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-sky-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all group-hover:scale-110 group-hover:bg-sky-100"></div>
+            <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-sky-100/50 transition-all duration-500 border border-slate-200 hover:border-sky-200 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-sky-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-sky-100/50 z-0"></div>
               <div className="relative z-10">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-sky-50 shadow-sm mb-4 sm:mb-6 text-sky-600 group-hover:scale-110 transition-transform duration-300">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-sky-100 mb-4 sm:mb-6 text-sky-600 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                   </svg>
@@ -494,12 +492,12 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Card 6 — 스마트 데이터 정규화 (Wide, col-span-3) */}
-            <div className="group relative p-5 sm:p-8 bg-white rounded-[2rem] hover:shadow-xl transition-all duration-300 border border-slate-200 overflow-hidden md:col-span-3">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-all group-hover:scale-110 group-hover:bg-purple-100"></div>
+            <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-purple-100/50 transition-all duration-500 border border-slate-200 hover:border-purple-200 overflow-hidden md:col-span-3">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-purple-100/50 z-0"></div>
               <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-10">
                 {/* 좌측: 아이콘 + 텍스트 */}
                 <div className="flex items-start gap-4 sm:gap-6 flex-1">
-                  <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-purple-50 shadow-sm text-purple-600 flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-purple-100 text-purple-600 flex-shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                     <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                     </svg>
@@ -553,17 +551,19 @@ const LandingPage: React.FC<LandingPageProps> = ({
               픽스쳐 재고 파일과 수술기록지를 업로드하면, FAIL 관리·보험청구 구분·매칭률 등 6가지 항목을 즉시 진단합니다.
             </p>
             <button
-              onClick={handleAnalyzeClick}
+              onClick={isMobileViewport ? handleMobileAnalyzeFallback : handleAnalyzeClick}
               className="group px-6 sm:px-8 py-3 sm:py-4 bg-white text-emerald-700 text-base sm:text-lg font-black rounded-2xl shadow-2xl shadow-emerald-900/30 hover:shadow-emerald-900/50 hover:-translate-y-1 transition-all duration-300"
             >
               <span className="flex items-center gap-3">
-                무료 분석하기
+                {isMobileViewport ? '도입 문의하기' : '무료 분석하기'}
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </span>
             </button>
-            <p className="text-xs text-emerald-200 mt-3">서버 저장 없음 · 즉시 결과 확인 · 30초 소요</p>
+            <p className="text-xs text-emerald-200 mt-3">
+              {isMobileViewport ? '무료분석은 PC 전용입니다 · 모바일에서는 문의로 안내해 드립니다' : '서버 저장 없음 · 즉시 결과 확인 · 30초 소요'}
+            </p>
           </div>
         </section>
       )}
@@ -608,6 +608,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <div className="text-slate-500 text-xs">무료 플랜으로 바로 시작</div>
             </div>
           </div>
+          <p className="mt-8 text-center text-[11px] text-slate-400">
+            * 절약 시간/처리 시간 수치는 실제 사용자 업로드 샘플 기반 예시이며 병원별 운영 방식에 따라 달라질 수 있습니다.
+          </p>
         </div>
       </section>
 
@@ -787,54 +790,37 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative z-10">
-          <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-amber-500/10 border border-amber-500/20 mb-5 sm:mb-8">
+          <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 mb-5 sm:mb-8 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
             <span className="text-[11px] sm:text-sm font-bold text-amber-300 leading-relaxed text-balance">{ctaTrialBadgeText}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-5xl font-black mb-5 sm:mb-6 leading-tight text-balance">
             지금 시작하면<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
           </h2>
-          <p className="text-slate-400 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance">
+          <p className="text-slate-300 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance font-medium">
             엑셀에 쓰는 시간을 환자에게 쓰세요.
           </p>
           <p className="text-sm text-slate-500 mb-7 sm:mb-10 text-balance">
             {ctaTrialFootnoteText}
           </p>
-          <button
-            onClick={onGetStarted}
-            className="px-7 sm:px-10 py-3 sm:py-4 bg-white text-slate-900 text-base sm:text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
-          >
-            무료로 시작하기
-          </button>
+          <p className="text-xs text-slate-500/90 mb-7 sm:mb-10 text-balance">
+            * {trialPolicyShortText}
+          </p>
+          <div className="relative group inline-block">
+            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition duration-1000"></div>
+            <button
+              onClick={onGetStarted}
+              className="relative px-7 sm:px-10 py-3 sm:py-4 bg-white text-slate-900 text-base sm:text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+            >
+              <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+              <span className="relative z-10">무료로 시작하기</span>
+            </button>
+          </div>
         </div>
       </section>
 
-      {/* Footer - 약관 링크 + 기업정보 */}
-      <footer className="border-t border-slate-200 bg-slate-50">
-        <div className="max-w-4xl mx-auto px-6 pt-6 pb-2 flex justify-end gap-6">
-          <button onClick={() => setShowTerms(true)} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">이용약관</button>
-          <button onClick={() => setShowPrivacy(true)} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">개인정보처리방침</button>
-        </div>
-        <div className="max-w-4xl mx-auto px-6 pb-8 pt-4 text-xs text-slate-400 leading-relaxed">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
-              <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
-              <p>이메일: admin@denjoy.info</p>
-            </div>
-            <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
-
-      {/* 이용약관 모달 */}
-      {showTerms && (
-        <LegalModal type="terms" onClose={() => setShowTerms(false)} />
-      )}
-      {showPrivacy && (
-        <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />
-      )}
+      <PublicInfoFooter showLegalLinks />
     </div>
   );
 };

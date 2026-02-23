@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { parseExcelFile } from '../../services/excelService';
-import { toCanonicalSize } from '../../services/sizeNormalizer';
 
 const PARSING_STEPS = [
   '파일을 읽는 중...',
@@ -38,7 +37,7 @@ function ParsingScreen() {
 }
 
 interface Props {
-  onGoToDataSetup: (file?: File) => void;
+  onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
 }
 
 interface BrandGroup {
@@ -127,19 +126,35 @@ function decodeNumericCode(size: string): string | null {
 
 interface ConversionEdit { d: string; l: string; c: string; componentCount: number; }
 
-// 숫자코드에서 직경/길이 기본값 추출 (순수 함수, 상태 없음)
+// 템플릿(normalSample) + 편집값으로 최종 사이즈 문자열 재구성
+// 예: "Ø3.7x07mm" + {d:'4.2', l:'14'} → "Ø4.2x14mm"
+function reconstructCorrectedSize(edit: ConversionEdit, normalSample: string): string {
+  const vals = [edit.d, edit.l, edit.c];
+  let vi = 0;
+  return normalSample.replace(/\d+\.?\d*/g, () => vals[vi++] ?? '');
+}
+
+// 이상 항목에서 직경/길이/커프 초기값 추출 (순수 함수)
 function computeDefaultEdit(size: string, dominantPattern: string): ConversionEdit {
   const componentCount = (dominantPattern.match(/N/g) || []).length;
-  const digits = size.trim().match(/^(\d{4,6})/)?.[1] ?? '';
-  let d = '', l = '';
-  if (digits.length === 4) {
-    d = (parseInt(digits.substring(0, 2), 10) / 10).toFixed(1);
-    l = String(parseInt(digits.substring(2, 4), 10));
-  } else if (digits.length === 6) {
-    d = (parseInt(digits.substring(2, 4), 10) / 10).toFixed(1);
-    l = String(parseInt(digits.substring(4, 6), 10));
+  // Dentium형 순수 숫자코드 (예: "4510" → D4.5, L10) — 특수 디코딩
+  const numericCodeMatch = size.trim().match(/^(\d{4,6})[A-Za-z]*$/);
+  if (numericCodeMatch) {
+    const digits = numericCodeMatch[1];
+    if (digits.length === 4) {
+      const d = (parseInt(digits.substring(0, 2), 10) / 10).toFixed(1);
+      const l = String(parseInt(digits.substring(2, 4), 10));
+      if (parseFloat(d) > 0 && parseInt(l) > 0) return { d, l, c: '', componentCount };
+    }
+    if (digits.length === 6) {
+      const d = (parseInt(digits.substring(2, 4), 10) / 10).toFixed(1);
+      const l = String(parseInt(digits.substring(4, 6), 10));
+      return { d, l, c: '', componentCount };
+    }
   }
-  return { d, l, c: '', componentCount };
+  // 일반형: 순서대로 숫자 추출 (예: "Ø4.2x14" → ['4.2', '14'])
+  const nums = size.match(/\d+\.?\d*/g) || [];
+  return { d: nums[0] || '', l: nums[1] || '', c: nums[2] || '', componentCount };
 }
 
 function diagnoseAnomaly(size: string, isNumericCode: boolean, dominantPattern?: string): string {
@@ -274,8 +289,15 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   const handleDragLeave = () => setIsDragging(false);
 
   const totalItems = groups.reduce((s, g) => s + g.total, 0);
-  const totalAnomalous = groups.reduce((s, g) => s + g.anomalousCount, 0);
-  const healthScore = totalItems > 0 ? Math.round(((totalItems - totalAnomalous) / totalItems) * 100) : 100;
+  // 승인된 항목은 미해결 이상 항목에서 제외
+  const totalAnomalous = groups.reduce((sum, g) =>
+    sum + g.brands.reduce((bsum, b) =>
+      bsum + Array.from(b.anomalousSizes).filter(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`)).length
+    , 0)
+  , 0);
+  const healthScoreRaw = totalItems > 0 ? Math.round(((totalItems - totalAnomalous) / totalItems) * 100) : 100;
+  // 이상 항목이 남아 있으면 올림으로 100%가 되지 않도록 99 이하로 강제
+  const healthScore = totalAnomalous > 0 ? Math.min(99, healthScoreRaw) : healthScoreRaw;
 
   const healthMeta = healthScore === 100
     ? { label: '완벽', barColor: 'bg-emerald-500', badgeClass: 'text-emerald-700 bg-emerald-100', scoreClass: 'text-emerald-600', borderClass: 'border-emerald-100 bg-emerald-50' }
@@ -285,7 +307,12 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     ? { label: '주의', barColor: 'bg-amber-400', badgeClass: 'text-amber-700 bg-amber-100', scoreClass: 'text-amber-600', borderClass: 'border-amber-100 bg-amber-50' }
     : { label: '점검 필요', barColor: 'bg-red-500', badgeClass: 'text-red-700 bg-red-100', scoreClass: 'text-red-600', borderClass: 'border-red-100 bg-red-50' };
 
-  const anomalousGroups = groups.filter(g => g.anomalousCount > 0);
+  // 승인되지 않은 이상 항목이 남은 제조사만 표시
+  const anomalousGroups = groups.filter(g =>
+    g.brands.some(b =>
+      Array.from(b.anomalousSizes).some(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`))
+    )
+  );
 
   return (
     <div className="px-6 py-6 flex flex-col h-full">
@@ -386,21 +413,24 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                 <div className="flex gap-2.5 bg-indigo-50 border border-indigo-100 rounded-2xl px-3 py-2.5">
                   <span className="text-base shrink-0 mt-0.5">💡</span>
                   <p className="text-[11px] text-indigo-700 leading-relaxed">
-                    의심 항목은 <span className="font-bold">데이터 설정 페이지에서 자동 조정</span>되니 걱정하지 않아도 됩니다.
-                    설정 완료 후 덴트웹에서 <span className="font-bold">파일로부터 복구</span> 기능으로 목록을 업데이트하면 깔끔하게 정리됩니다.
+                    아래 규칙 위반 의심 항목을 확인하고, 필요하면 <span className="font-bold">내용을 수정한 후 승인</span>해 주세요.
+                    모든 항목을 승인해야 저장할 수 있습니다.
                   </p>
                 </div>
                 {anomalousGroups.map((g) => (
                   <div key={g.manufacturer}>
                     <p className="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-2">{g.manufacturer}</p>
                     <div className="space-y-2">
-                      {g.brands.filter(b => b.anomalousSizes.size > 0).map((b) => (
+                      {g.brands.map((b) => {
+                        const unapproved = Array.from(b.anomalousSizes).filter(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`));
+                        if (unapproved.length === 0) return null;
+                        return (
                         <div key={b.brand} className="bg-white border border-amber-200 rounded-2xl overflow-hidden">
                           {/* Brand header */}
                           <div className="flex items-center gap-1.5 px-3 py-2 border-b border-amber-100 bg-amber-50/50">
                             <span className="text-[11px] font-bold text-indigo-600">{b.brand}</span>
                             <span className="text-[10px] text-amber-600 font-bold bg-amber-100 px-1.5 py-0.5 rounded-full ml-auto">
-                              의심 항목 {b.anomalousSizes.size}개
+                              의심 항목 {unapproved.length}개
                             </span>
                           </div>
 
@@ -425,11 +455,11 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                             <div>
                               <p className="text-[10px] font-bold text-amber-600 mb-1.5">규칙 위반 의심 항목</p>
                               <div className="space-y-2">
-                                {Array.from(b.anomalousSizes).map((s) => {
+                                {unapproved.map((s) => {
                                   const approveKey = `${g.manufacturer}:${b.brand}:${s}`;
                                   const approved = approvedItems.has(approveKey);
-                                  // Φ 형식 브랜드에 숫자코드가 혼입된 경우 → 인터랙티브 편집 폼
-                                  const isPhiBrandNumericCode = !b.isNumericCode && NUMERIC_CODE_RE.test(s.trim()) && !!b.dominantPattern;
+                                  // 숫자코드 브랜드 이상 항목 OR Φ/Ø 형식 브랜드 숫자 포함 이상 항목 → 편집 폼
+                                  const isEditableAnomaly = b.isNumericCode || (!b.isNumericCode && /\d/.test(s) && b.normalSamples.length > 0);
                                   return (
                                     <div key={s} className="space-y-1">
                                       {/* 원본 + 진단 */}
@@ -444,35 +474,74 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                                       {/* 변환 행 */}
                                       <div className="flex items-center gap-1.5 pl-1 flex-wrap">
                                         <span className="text-[9px] text-slate-400">저장 시</span>
-                                        {isPhiBrandNumericCode ? (() => {
+                                        {isEditableAnomaly ? (() => {
+                                          if (b.isNumericCode) {
+                                            // 숫자코드 브랜드: 구분자 제거 후 단일 입력 (숫자 + 대문자만 허용)
+                                            const rawDefault = s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
+                                            const def: ConversionEdit = { d: rawDefault, l: '', c: '', componentCount: 1 };
+                                            const edit = conversionEdits.get(approveKey) ?? def;
+                                            const canApprove = edit.d.length >= 4 && /^[0-9A-Z]+$/.test(edit.d);
+                                            return (
+                                              <>
+                                                <span className="text-[9px] text-slate-300">→</span>
+                                                <input
+                                                  type="text"
+                                                  value={edit.d}
+                                                  onChange={e => {
+                                                    const v = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+                                                    updateConversionEdit(approveKey, 'd', v, def);
+                                                  }}
+                                                  className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${edit.d ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
+                                                  style={{ width: `${Math.max(36, edit.d.length * 8 + 4)}px` }}
+                                                />
+                                                <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 수정</span>
+                                                <button
+                                                  onClick={() => { if (canApprove) toggleApprove(approveKey); }}
+                                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${
+                                                    approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
+                                                    : canApprove ? 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
+                                                    : 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                                  }`}
+                                                >
+                                                  {approved ? '✓ 승인완료' : '승인'}
+                                                </button>
+                                              </>
+                                            );
+                                          }
+                                          // Φ/Ø 형식 브랜드: normalSamples[0] 템플릿으로 편집 폼
                                           const def = computeDefaultEdit(s, b.dominantPattern);
                                           const edit = conversionEdits.get(approveKey) ?? def;
-                                          const canApprove = !!edit.d && !!edit.l && (edit.componentCount !== 3 || !!edit.c);
+                                          const getVal = (f: 'd'|'l'|'c') => f === 'd' ? edit.d : f === 'l' ? edit.l : edit.c;
+                                          type TPart = { isInput: false; text: string } | { isInput: true; field: 'd'|'l'|'c' };
+                                          const tParts: TPart[] = [];
+                                          const flds: ('d'|'l'|'c')[] = ['d', 'l', 'c'];
+                                          let rem = b.normalSamples[0] ?? '';
+                                          let fi = 0;
+                                          while (rem.length > 0) {
+                                            const nm = rem.match(/^(\d+\.?\d*)/);
+                                            if (nm) {
+                                              tParts.push({ isInput: true, field: flds[Math.min(fi, 2)] });
+                                              fi++; rem = rem.slice(nm[0].length);
+                                            } else {
+                                              const ni = rem.search(/\d/);
+                                              if (ni < 0) { tParts.push({ isInput: false, text: rem }); break; }
+                                              tParts.push({ isInput: false, text: rem.slice(0, ni) });
+                                              rem = rem.slice(ni);
+                                            }
+                                          }
+                                          const canApprove = !!edit.d && (def.componentCount < 2 || !!edit.l) && (def.componentCount < 3 || !!edit.c);
                                           return (
                                             <>
                                               <span className="text-[9px] text-slate-300">→</span>
-                                              <span className="text-[10px] text-blue-600 font-mono">Φ</span>
-                                              <input type="text" value={edit.d}
-                                                onChange={e => updateConversionEdit(approveKey, 'd', e.target.value, def)}
-                                                className="w-10 text-[10px] text-center font-mono border-b border-blue-300 outline-none py-0.5 bg-transparent text-blue-700"
-                                                placeholder="직경"
-                                              />
-                                              <span className="text-[9px] text-slate-400">×</span>
-                                              <input type="text" value={edit.l}
-                                                onChange={e => updateConversionEdit(approveKey, 'l', e.target.value, def)}
-                                                className="w-8 text-[10px] text-center font-mono border-b border-blue-300 outline-none py-0.5 bg-transparent text-blue-700"
-                                                placeholder="길이"
-                                              />
-                                              {edit.componentCount === 3 && (
-                                                <>
-                                                  <span className="text-[9px] text-slate-400">×</span>
-                                                  <input type="text" value={edit.c}
-                                                    onChange={e => updateConversionEdit(approveKey, 'c', e.target.value, def)}
-                                                    className={`w-8 text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${edit.c ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
-                                                    placeholder="커프"
-                                                  />
-                                                </>
-                                              )}
+                                              {tParts.map((p, i) => p.isInput ? (
+                                                <input key={i} type="text" value={getVal(p.field)}
+                                                  onChange={e => updateConversionEdit(approveKey, p.field, e.target.value, def)}
+                                                  className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${getVal(p.field) ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
+                                                  style={{ width: `${Math.max(22, (getVal(p.field).length || 2) * 7 + 4)}px` }}
+                                                />
+                                              ) : (
+                                                <span key={i} className="text-[10px] text-blue-600 font-mono">{p.text}</span>
+                                              ))}
                                               <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 변환</span>
                                               <button
                                                 onClick={() => { if (canApprove) toggleApprove(approveKey); }}
@@ -486,30 +555,9 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                                               </button>
                                             </>
                                           );
-                                        })() : (() => {
-                                          const fixed = toCanonicalSize(s, g.manufacturer);
-                                          const willChange = fixed !== s;
-                                          return willChange ? (
-                                            <>
-                                              <span className="text-[9px] text-slate-300">→</span>
-                                              <span className={`text-[10px] font-mono font-bold rounded px-1.5 py-0.5 border transition-colors ${approved ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-blue-700 bg-blue-50 border-blue-200'}`}>
-                                                {fixed}
-                                              </span>
-                                              <span className={`text-[9px] transition-colors ${approved ? 'text-emerald-500' : 'text-blue-500'}`}>로 자동 수정</span>
-                                              <button
-                                                onClick={() => toggleApprove(approveKey)}
-                                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${
-                                                  approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
-                                                  : 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
-                                                }`}
-                                              >
-                                                {approved ? '✓ 승인완료' : '승인'}
-                                              </button>
-                                            </>
-                                          ) : (
-                                            <span className="text-[9px] text-slate-400">자동 수정 불가 — 데이터 설정 페이지에서 직접 수정 필요</span>
-                                          );
-                                        })()}
+                                        })() : (
+                                          <span className="text-[9px] text-slate-400">자동 수정 불가 — 데이터 설정 페이지에서 직접 수정 필요</span>
+                                        )}
                                       </div>
                                     </div>
                                   );
@@ -518,7 +566,8 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -553,14 +602,47 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
       )}
 
       {/* Bottom CTA */}
-      {uploadState !== 'parsing' && (
-        <button
-          onClick={() => onGoToDataSetup(uploadedFile ?? undefined)}
-          className="w-full py-3.5 bg-indigo-600 text-white text-sm font-bold rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all shrink-0"
-        >
-          {uploadState === 'done' ? '데이터 설정 페이지에서 저장하기' : '데이터 설정 페이지로 이동'}
-        </button>
-      )}
+      {uploadState !== 'parsing' && (() => {
+        const isBlocked = uploadState === 'idle' || (uploadState === 'done' && healthScore < 100);
+        return (
+          <button
+            disabled={isBlocked}
+            onClick={() => {
+              if (isBlocked) return;
+              const corrections = new Map<string, string>();
+              for (const g of groups) {
+                for (const b of g.brands) {
+                  for (const s of Array.from(b.anomalousSizes)) {
+                    const key = `${g.manufacturer}:${b.brand}:${s}`;
+                    if (!approvedItems.has(key)) continue;
+                    if (b.isNumericCode) {
+                      const d = conversionEdits.get(key)?.d ?? s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
+                      if (d) corrections.set(s, d);
+                    } else {
+                      const edit = conversionEdits.get(key) ?? computeDefaultEdit(s, b.dominantPattern);
+                      const sample = b.normalSamples[0];
+                      if (sample && edit.d) corrections.set(s, reconstructCorrectedSize(edit, sample));
+                    }
+                  }
+                }
+              }
+              onGoToDataSetup(uploadedFile ?? undefined, corrections.size > 0 ? corrections : undefined);
+            }}
+            className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${
+              isBlocked
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
+            }`}
+          >
+            {uploadState === 'idle'
+              ? '파일을 먼저 업로드해 주세요'
+              : uploadState === 'done' && healthScore < 100
+                ? `의심 항목 ${totalAnomalous}개를 모두 승인해야 저장할 수 있습니다`
+                : '데이터 설정 페이지에서 저장하기'
+            }
+          </button>
+        );
+      })()}
     </div>
   );
 }

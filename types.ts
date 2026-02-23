@@ -150,7 +150,7 @@ export function canAccessTab(
   }
 }
 
-export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices' | 'mfa_otp' | 'reviews' | 'suspended';
+export type View = 'landing' | 'login' | 'signup' | 'invite' | 'dashboard' | 'admin_panel' | 'pricing' | 'contact' | 'value' | 'analyze' | 'notices' | 'mfa_otp' | 'reviews' | 'suspended' | 'consultation';
 
 export interface DiagnosticItem {
   category: string;
@@ -519,6 +519,8 @@ export interface DbProfile {
   signup_source?: string | null;
   email_hash?: string | null;
   phone_hash?: string | null;
+  /** H-4: 복호화 실패 시 런타임 플래그. DB에 저장되지 않음. true이면 DB 쓰기 경로에서 차단. */
+  _decryptFailed?: boolean;
 }
 
 /** Supabase inventory 테이블 Row */

@@ -11,7 +11,8 @@ export type AdminTab =
   | 'waitlist'
   | 'plan_change_requests'
   | 'traffic'
-  | 'content';
+  | 'content'
+  | 'consultations';
 
 const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   overview: '시스템 개요',
@@ -27,6 +28,7 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   analysis_leads: '분석 리드 관리',
   traffic: '방문자 트래픽',
   content: '콘텐츠 관리',
+  consultations: '상담 관리',
 };
 
 export function getAdminTabTitle(tab: AdminTab): string {

@@ -107,6 +107,14 @@ const Header: React.FC<HeaderProps> = ({
             >
               무료 분석
             </button>
+            {isSystemAdmin && (
+              <button
+                onClick={() => onNavigate('consultation')}
+                className={`text-sm font-bold ${currentView === 'consultation' ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
+              >
+                상담 일정
+              </button>
+            )}
           </nav>
         )}
         {user && !isPublicView && (
@@ -146,6 +154,14 @@ const Header: React.FC<HeaderProps> = ({
                 className="text-sm font-bold text-slate-500 hover:text-rose-600"
               >
                 회원 관리
+              </button>
+            )}
+            {isSystemAdmin && (
+              <button
+                onClick={() => onNavigate('consultation')}
+                className={`text-sm font-bold ${currentView === 'consultation' ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
+              >
+                상담 일정
               </button>
             )}
           </nav>

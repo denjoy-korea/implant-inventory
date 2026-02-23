@@ -1,3 +1,4 @@
+// G2/D1 — V2 온보딩 전용 (현재 미사용). fixture-upload 방식으로 대체됨. 삭제 금지.
 import React from 'react';
 
 export interface BrandTemplate {

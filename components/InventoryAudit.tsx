@@ -10,13 +10,14 @@ interface InventoryAuditProps {
   hospitalId: string;
   userName?: string;
   onApplied: () => void;
+  onAuditSessionComplete?: () => void;
   showHistory?: boolean;
   onCloseHistory?: () => void;
 }
 
 const MISMATCH_REASONS = ['기록 누락', '수술기록 오입력', '분실', '입고 수량 오류', '기타'] as const;
 
-const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, onApplied, showHistory, onCloseHistory }) => {
+const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory }) => {
   const [activeBrand, setActiveBrand] = useState<string | null>(null);
   const [auditResults, setAuditResults] = useState<Record<string, { matched: boolean; actualCount?: number; reason?: string }>>({});
   const [showAuditSummary, setShowAuditSummary] = useState(false);
@@ -270,6 +271,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         handleAuditClose();
         loadHistory();
         onApplied();
+        onAuditSessionComplete?.();
       } else {
         showToast(`실사 적용 실패: ${error}`, 'error');
       }
@@ -470,13 +472,19 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
             {/* 실사 버튼 */}
             <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
               {!isAuditActive ? (
-                <button
-                  onClick={() => setIsAuditActive(true)}
-                  className="px-5 py-2 text-xs font-black bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-1.5 min-h-11"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                  재고실사진행
-                </button>
+                <div className="relative group">
+                  {/* 럭셔리 글로우 백그라운드 */}
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-xl blur opacity-50 group-hover:opacity-80 transition duration-1000 animate-pulse-glow"></div>
+                  <button
+                    onClick={() => setIsAuditActive(true)}
+                    className="relative px-6 py-2.5 text-[13px] font-black bg-slate-900 text-white rounded-xl shadow-2xl hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-2 min-h-11 border border-slate-700/50 overflow-hidden"
+                  >
+                    {/* 은은한 광택(Shine) 오버레이 */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none"></div>
+                    <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    <span className="tracking-wide">재고실사진행</span>
+                  </button>
+                </div>
               ) : (
                 <>
                   {confirmedItems.length > 0 && (
@@ -760,11 +768,10 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                       type="button"
                       disabled={!isAuditActive}
                       onClick={() => toggleCheck(true)}
-                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${
-                        result?.matched === true
+                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${result?.matched === true
                           ? 'bg-emerald-500 text-white'
                           : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
                     >
                       일치
                     </button>
@@ -772,11 +779,10 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                       type="button"
                       disabled={!isAuditActive}
                       onClick={() => toggleCheck(false)}
-                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${
-                        result?.matched === false
+                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${result?.matched === false
                           ? 'bg-rose-500 text-white'
                           : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
                     >
                       불일치
                     </button>
@@ -830,9 +836,8 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                                 setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                                 confirmItem(item.id);
                               }}
-                              className={`min-h-10 rounded-xl text-xs font-black ${
-                                result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                              }`}
+                              className={`min-h-10 rounded-xl text-xs font-black ${result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }`}
                             >
                               완료
                             </button>

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { AppState, InventoryItem, PlanType, PLAN_LIMITS, User } from '../types';
 import { CompareItem } from '../components/InventoryCompareModal';
 import { fixIbsImplant } from '../services/mappers';
-import { toCanonicalSize } from '../services/sizeNormalizer';
+import { toCanonicalSize, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { inventoryService } from '../services/inventoryService';
 import { operationLogService } from '../services/operationLogService';
 import { buildInventoryDuplicateKey } from '../services/inventoryUtils';
@@ -62,7 +62,7 @@ export function useInventoryCompare({
           id: `sync_${Date.now()}_${idx}`,
           manufacturer: fixed.manufacturer,
           brand: fixed.brand,
-          size: toCanonicalSize(rawSize, fixed.manufacturer),
+          size: isIbsImplantManufacturer(fixed.manufacturer) ? rawSize : toCanonicalSize(rawSize, fixed.manufacturer),
           initialStock: 0,
           stockAdjustment: 0,
           usageCount: 0,

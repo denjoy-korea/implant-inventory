@@ -82,6 +82,13 @@ function renderMarkdownReport({ days, rows, snapshot }) {
   lines.push(`- session_id 누락 row: ${snapshot.missingSessionRows}`);
   lines.push(`- 평균 Time-to-Auth: ${snapshot.avgTimeToAuthMinutes}분`);
   lines.push(`- 평균 Time-to-Value: ${snapshot.avgTimeToValueMinutes}분`);
+  lines.push(`- 결제 모달 오픈 세션: ${snapshot.paymentModalOpenSessions}`);
+  lines.push(`- 결제 요청 성공 세션: ${snapshot.paymentRequestSuccessSessions}`);
+  lines.push(`- 결제 요청 실패 세션: ${snapshot.paymentRequestErrorSessions}`);
+  lines.push(`- 결제 모달 완료율: ${formatPct(snapshot.paymentModalCompletionRate)}`);
+  lines.push(`- 모바일 랜딩 세션: ${snapshot.mobileLandingSessions}`);
+  lines.push(`- 모바일 후속행동 세션: ${snapshot.mobileEngagedSessions}`);
+  lines.push(`- 모바일 이탈률(세션): ${formatPct(snapshot.mobileDropoffRate)}`);
   lines.push('');
   lines.push('## 이벤트 퍼널');
   lines.push('');
@@ -116,13 +123,13 @@ async function main() {
   const days = Math.round(daysArg);
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL ?? getDotEnvValue('VITE_SUPABASE_URL');
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? getDotEnvValue('SUPABASE_SERVICE_ROLE_KEY') ?? null;
 
   if (!supabaseUrl) {
     throw new Error('VITE_SUPABASE_URL is required (env or .env.local).');
   }
   if (!serviceRoleKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required in env for admin snapshot.');
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required (process env or .env.local) for admin snapshot.');
   }
 
   const rows = await fetchPageViews({ supabaseUrl, serviceRoleKey, days });

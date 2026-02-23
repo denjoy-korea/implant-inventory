@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import LegalModal from './shared/LegalModal';
 import { User, UserRole, Hospital, PlanType, PLAN_PRICING, PLAN_NAMES } from '../types';
 import { getErrorMessage } from '../utils/errors';
@@ -12,6 +12,7 @@ import { pageViewService } from '../services/pageViewService';
 import { formatPhone, SIGNUP_PLANS } from './auth/authSignupConfig';
 import AuthSignupPlanSelect from './auth/AuthSignupPlanSelect';
 import AuthSignupRoleSelect from './auth/AuthSignupRoleSelect';
+import { TRIAL_OFFER_LABEL } from '../utils/trialPolicy';
 
 interface InviteInfo {
   token: string;
@@ -118,7 +119,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   const [waitlistPlan, setWaitlistPlan] = useState<{ key: string; name: string } | null>(null);
   const [waitlistName, setWaitlistName] = useState('');
   const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistAgreed, setWaitlistAgreed] = useState(false);
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+  const waitlistDialogRef = useRef<HTMLDivElement>(null);
   const [findPhone, setFindPhone] = useState('');
   const [foundEmail, setFoundEmail] = useState<string | null>(null);
 
@@ -152,6 +155,51 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     }
   }, [type]);
 
+  useEffect(() => {
+    if (!waitlistPlan) return;
+    const previousFocused = document.activeElement as HTMLElement | null;
+    const dialog = waitlistDialogRef.current;
+    if (!dialog) return;
+
+    const getFocusable = (): HTMLElement[] =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+    window.setTimeout(() => getFocusable()[0]?.focus(), 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (showLegalType) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!waitlistSubmitting) setWaitlistPlan(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocused?.focus();
+    };
+  }, [showLegalType, waitlistPlan, waitlistSubmitting]);
+
   // PricingPage에서 플랜 지정 후 넘어온 경우 자동 선택 (P0-2)
   useEffect(() => {
     if (type !== 'signup' || !initialPlan) return;
@@ -181,7 +229,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   }, [type]);
 
   const handleWaitlistSubmit = async () => {
-    if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;
+    if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim() || !waitlistAgreed) return;
     setWaitlistSubmitting(true);
     pageViewService.trackEvent('waitlist_submit_start', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
     try {
@@ -196,6 +244,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
       });
       pageViewService.trackEvent('waitlist_submit', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
       setWaitlistPlan(null);
+      setWaitlistAgreed(false);
       setWaitlistName('');
       setWaitlistEmail('');
     } catch (error) {
@@ -324,7 +373,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
 
     const started = await planService.startTrial(user.hospitalId, pendingTrialPlan);
     if (started) {
-      showToast(`${PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험이 시작되었습니다.`, 'success');
+      showToast(`${PLAN_NAMES[pendingTrialPlan]} ${TRIAL_OFFER_LABEL}이 시작되었습니다.`, 'success');
       return;
     }
 
@@ -491,7 +540,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           setStep('role_selection');
         }}
         onSwitchToLogin={onSwitch}
-        onRequestWaitlist={(plan) => setWaitlistPlan(plan)}
+        onRequestWaitlist={(plan) => {
+          setWaitlistPlan(plan);
+          setWaitlistAgreed(false);
+        }}
       />
     );
   }
@@ -1218,7 +1270,15 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     {/* 대기 신청 모달 (P1-2) */}
     {waitlistPlan && (
       <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)}>
-        <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div
+          ref={waitlistDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-waitlist-title"
+          aria-describedby="auth-waitlist-desc"
+          className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
           <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
             <div className="flex items-center justify-between">
               <div>
@@ -1226,10 +1286,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                   <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">{waitlistPlan.name}</span>
                   <span className="text-slate-300 text-xs">플랜</span>
                 </div>
-                <h3 className="text-base font-bold">대기 신청</h3>
-                <p className="text-slate-300 text-xs mt-0.5">자리가 나면 가장 먼저 연락드릴게요</p>
+                <h3 id="auth-waitlist-title" className="text-base font-bold">대기 신청</h3>
+                <p id="auth-waitlist-desc" className="text-slate-300 text-xs mt-0.5">자리가 나면 가장 먼저 연락드릴게요</p>
               </div>
-              <button onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} className="text-slate-400 hover:text-white transition-colors">
+              <button type="button" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} aria-label="대기 신청 모달 닫기" className="text-slate-400 hover:text-white transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -1243,10 +1303,25 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               <label className="block text-xs font-bold text-slate-500 mb-1.5">이메일 *</label>
               <input type="email" value={waitlistEmail} onChange={e => setWaitlistEmail(e.target.value)} placeholder="example@clinic.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" disabled={waitlistSubmitting} />
             </div>
-            <p className="text-[11px] text-slate-400">제공하신 정보는 대기 순번 연락 목적으로만 사용됩니다.</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={waitlistAgreed}
+                  onChange={(e) => setWaitlistAgreed(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded accent-slate-900 flex-shrink-0"
+                />
+                <span className="text-[11px] text-slate-500 leading-relaxed">제공하신 정보는 대기 순번 안내 연락 목적으로만 사용됩니다.</span>
+              </label>
+              <div className="mt-1 ml-6 flex items-center gap-2 text-[11px]">
+                <button type="button" onClick={() => setShowLegalType('terms')} className="text-indigo-600 hover:underline">이용약관</button>
+                <span className="text-slate-300">·</span>
+                <button type="button" onClick={() => setShowLegalType('privacy')} className="text-indigo-600 hover:underline">개인정보처리방침</button>
+              </div>
+            </div>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} disabled={waitlistSubmitting} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 text-sm font-bold hover:bg-slate-50 transition-colors disabled:opacity-50">취소</button>
-              <button type="button" onClick={handleWaitlistSubmit} disabled={waitlistSubmitting || !waitlistName.trim() || !waitlistEmail.trim()} className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
+              <button type="button" onClick={handleWaitlistSubmit} disabled={waitlistSubmitting || !waitlistName.trim() || !waitlistEmail.trim() || !waitlistAgreed} className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
                 {waitlistSubmitting ? '신청 중...' : '대기 신청하기'}
               </button>
             </div>

@@ -153,6 +153,9 @@ const App: React.FC = () => {
   }, [_handleLeaveHospital, state.user]);
 
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
+  const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
+  const [autoOpenFailBulkModal, setAutoOpenFailBulkModal] = useState(false);
+  const [showOnboardingComplete, setShowOnboardingComplete] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
   const [isFinePointer, setIsFinePointer] = useState(true);
@@ -212,6 +215,15 @@ const App: React.FC = () => {
   const showDashboardSidebar = state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user');
   const showStandardDashboardHeader = state.currentView === 'dashboard' && !(isSystemAdmin && state.adminViewMode !== 'user');
   const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isNarrowViewport;
+  const isPublicBottomNavView =
+    state.currentView === 'landing' ||
+    state.currentView === 'value' ||
+    state.currentView === 'pricing' ||
+    state.currentView === 'contact' ||
+    state.currentView === 'analyze' ||
+    state.currentView === 'notices' ||
+    state.currentView === 'reviews';
+  const showMobilePublicNav = isPublicBottomNavView && isNarrowViewport;
   const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management', 'fail_management'];
   const mobileMoreTabs: DashboardTab[] = ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'];
   const isMoreTabActive = mobileMoreTabs.includes(state.dashboardTab);
@@ -401,7 +413,8 @@ const App: React.FC = () => {
     if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
     const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
     if (!hasSurgery) return 5;
-    if (!onboardingService.isFailAuditDone(hid)) return 6;
+    if (!onboardingService.isInventoryAuditSeen(hid)) return 6;
+    if (!onboardingService.isFailAuditDone(hid)) return 7;
     return null;
   })();
 
@@ -413,7 +426,8 @@ const App: React.FC = () => {
       state.dashboardTab === 'fixture_edit' ||
       state.dashboardTab === 'surgery_database' ||
       state.dashboardTab === 'fail_management' ||
-      state.dashboardTab === 'inventory_audit'
+      state.dashboardTab === 'inventory_audit' ||
+      state.dashboardTab === 'inventory_master'
     ) return null;
     return firstIncompleteStep;
   })();
@@ -1188,6 +1202,8 @@ const App: React.FC = () => {
     } catch (error) {
       showAlertToast('엑셀 파일 처리에 실패했습니다.', 'error');
       setState(prev => ({ ...prev, isLoading: false }));
+    } finally {
+      uploadingTypeRef.current = null;
     }
   };
 
@@ -1627,7 +1643,7 @@ const App: React.FC = () => {
       className="min-h-screen bg-slate-50 flex"
       style={{ ['--dashboard-header-height' as string]: `${dashboardHeaderHeight}px` } as React.CSSProperties}
     >
-      {state.isLoading && state.user && (
+      {state.isLoading && state.user && uploadingTypeRef.current !== null && (
         <FileUploadLoadingOverlay type={uploadingTypeRef.current} />
       )}
 
@@ -1827,6 +1843,15 @@ const App: React.FC = () => {
                           },
                           inventoryMaster: {
                             virtualSurgeryData,
+                            initialShowBaseStockEdit: autoOpenBaseStockEdit,
+                            onBaseStockEditApplied: () => {
+                              const hid = state.user?.hospitalId ?? '';
+                              onboardingService.markInventoryAuditSeen(hid);
+                              onboardingService.clearDismissed(hid);
+                              setOnboardingDismissed(false);
+                              setAutoOpenBaseStockEdit(false);
+                              setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+                            },
                             applyBaseStockBatch,
                             refreshLatestSurgeryUsage,
                             resolveManualSurgeryInput,
@@ -1854,6 +1879,19 @@ const App: React.FC = () => {
                           onAddOrder: handleAddOrder,
                           onUpdateOrderStatus: handleUpdateOrderStatus,
                           onDeleteOrder: handleDeleteOrder,
+                          onAuditSessionComplete: () => {
+                            const hid = state.user?.hospitalId ?? '';
+                            onboardingService.markInventoryAuditSeen(hid);
+                            onboardingService.clearDismissed(hid);
+                            setOnboardingDismissed(false);
+                            setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+                          },
+                          initialShowFailBulkModal: autoOpenFailBulkModal,
+                          onFailBulkModalOpened: () => setAutoOpenFailBulkModal(false),
+                          onFailAuditDone: () => {
+                            onboardingService.markFailAuditDone(state.user?.hospitalId ?? '');
+                            setShowOnboardingComplete(true);
+                          },
                         }}
                       />
                   </Suspense>
@@ -1939,8 +1977,18 @@ const App: React.FC = () => {
               setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'surgery_database' }));
             }
           }}
+          onGoToInventoryAudit={() => {
+            setAutoOpenBaseStockEdit(true);
+            setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'inventory_master' }));
+          }}
           onGoToFailManagement={() => {
+            setAutoOpenFailBulkModal(true);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fail_management' }));
+          }}
+          showOnboardingComplete={showOnboardingComplete}
+          onOnboardingCompleteClose={() => {
+            setShowOnboardingComplete(false);
+            setState(prev => ({ ...prev, dashboardTab: 'overview' }));
           }}
         />
       </Suspense>
@@ -1951,6 +1999,7 @@ const App: React.FC = () => {
         inventoryCompare={inventoryCompare}
         alertToast={alertToast}
         showMobileDashboardNav={showMobileDashboardNav}
+        showMobilePublicNav={showMobilePublicNav}
         onClosePlanLimitModal={closePlanLimitModal}
         onUpgradePlan={() => {
           closePlanLimitModal();

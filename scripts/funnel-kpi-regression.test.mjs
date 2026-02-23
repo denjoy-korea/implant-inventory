@@ -97,3 +97,27 @@ test('waitlist step counts are session-based and ignore rows without session_id'
   assert.equal(steps.pricing_waitlist_submit_success.count, 1);
   assert.equal(steps.pricing_waitlist_modal_open.dropOffPct, 50);
 });
+
+test('payment completion and mobile drop-off metrics are computed from session data', () => {
+  const rows = [
+    row({ session_id: 'm1', event_type: 'landing_view', event_data: { is_mobile: true } }),
+    row({ page: 'signup', session_id: 'm1', event_type: 'auth_start', event_data: { is_mobile: true } }),
+    row({ page: 'pricing', session_id: 'p1', event_type: 'pricing_payment_modal_open', event_data: { is_mobile: false } }),
+    row({ page: 'pricing', session_id: 'p1', event_type: 'pricing_payment_request_success', event_data: { is_mobile: false } }),
+    row({ page: 'pricing', session_id: 'p2', event_type: 'pricing_payment_modal_open', event_data: { is_mobile: false } }),
+    row({ page: 'pricing', session_id: 'p2', event_type: 'pricing_payment_request_error', event_data: { is_mobile: false } }),
+    row({ session_id: 'm2', event_type: 'landing_view', event_data: { is_mobile: true } }),
+    row({ session_id: 'm3', event_type: 'landing_view', event_data: { is_mobile: false } }),
+  ];
+
+  const snapshot = computeTrafficKpiSnapshot(rows);
+
+  assert.equal(snapshot.paymentModalOpenSessions, 2);
+  assert.equal(snapshot.paymentRequestSuccessSessions, 1);
+  assert.equal(snapshot.paymentRequestErrorSessions, 1);
+  assert.equal(snapshot.paymentModalCompletionRate, 50);
+
+  assert.equal(snapshot.mobileLandingSessions, 2);
+  assert.equal(snapshot.mobileEngagedSessions, 1);
+  assert.equal(snapshot.mobileDropoffRate, 50);
+});

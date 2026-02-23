@@ -1,7 +1,6 @@
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbInventoryItem } from '../types';
-import { toCanonicalSize } from './sizeNormalizer';
 
 export const inventoryService = {
   /** 재고 목록 조회 (RLS로 병원 자동 필터) */
@@ -24,19 +23,14 @@ export const inventoryService = {
   async addItem(
     item: Omit<DbInventoryItem, 'id' | 'created_at' | 'updated_at'>
   ): Promise<DbInventoryItem | null> {
-    const normalizedItem = {
-      ...item,
-      size: toCanonicalSize(item.size, item.manufacturer),
-    };
-
     // 중복 등록 사전 차단: 동일 병원/제조사/브랜드/규격이면 기존 레코드를 반환
     const { data: existing, error: existingError } = await supabase
       .from('inventory')
       .select('*')
-      .eq('hospital_id', normalizedItem.hospital_id)
-      .eq('manufacturer', normalizedItem.manufacturer)
-      .eq('brand', normalizedItem.brand)
-      .eq('size', normalizedItem.size)
+      .eq('hospital_id', item.hospital_id)
+      .eq('manufacturer', item.manufacturer)
+      .eq('brand', item.brand)
+      .eq('size', item.size)
       .maybeSingle();
 
     if (existingError) {
@@ -48,7 +42,7 @@ export const inventoryService = {
 
     const { data, error } = await supabase
       .from('inventory')
-      .insert(normalizedItem)
+      .insert(item)
       .select()
       .single();
 
@@ -58,10 +52,10 @@ export const inventoryService = {
         const { data: dup } = await supabase
           .from('inventory')
           .select('*')
-          .eq('hospital_id', normalizedItem.hospital_id)
-          .eq('manufacturer', normalizedItem.manufacturer)
-          .eq('brand', normalizedItem.brand)
-          .eq('size', normalizedItem.size)
+          .eq('hospital_id', item.hospital_id)
+          .eq('manufacturer', item.manufacturer)
+          .eq('brand', item.brand)
+          .eq('size', item.size)
           .maybeSingle();
         if (dup) return dup as DbInventoryItem;
       }
@@ -77,12 +71,6 @@ export const inventoryService = {
     updates: Partial<Pick<DbInventoryItem, 'initial_stock' | 'manufacturer' | 'brand' | 'size'>>
   ): Promise<DbInventoryItem | null> {
     const normalizedUpdates = { ...updates };
-    if (typeof normalizedUpdates.size === 'string') {
-      normalizedUpdates.size = toCanonicalSize(
-        normalizedUpdates.size,
-        normalizedUpdates.manufacturer || ''
-      );
-    }
 
     const { data, error } = await supabase
       .from('inventory')
@@ -117,14 +105,9 @@ export const inventoryService = {
     items: Omit<DbInventoryItem, 'id' | 'created_at' | 'updated_at'>[]
   ): Promise<DbInventoryItem[]> {
     if (items.length === 0) return [];
-    const normalizedItems = items.map(item => ({
-      ...item,
-      size: toCanonicalSize(item.size, item.manufacturer),
-    }));
-
     const { data, error } = await supabase
       .from('inventory')
-      .insert(normalizedItems)
+      .insert(items)
       .select();
 
     if (error) {

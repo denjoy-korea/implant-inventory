@@ -10,7 +10,6 @@ interface PublicMobileNavProps {
 
 export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, onNavigate, onAnalyzeClick }) => {
     const [isMobileViewport, setIsMobileViewport] = useState(false);
-    const [mobileNotice, setMobileNotice] = useState<string | null>(null);
 
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -25,14 +24,6 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
         mediaQuery.addListener(syncViewport);
         return () => mediaQuery.removeListener(syncViewport);
     }, []);
-
-    useEffect(() => {
-        if (!mobileNotice) return;
-        const timer = window.setTimeout(() => setMobileNotice(null), 2800);
-        return () => window.clearTimeout(timer);
-    }, [mobileNotice]);
-
-
 
     const handleNavClick = (targetView: View, targetSection?: string) => {
         if (currentView !== targetView) {
@@ -53,11 +44,7 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
 
     return (
         <>
-            {mobileNotice && (
-                <div className="fixed left-1/2 -translate-x-1/2 bottom-[6.75rem] z-[170] rounded-xl bg-slate-900 text-white text-xs font-bold px-4 py-2 shadow-xl">
-                    {mobileNotice}
-                </div>
-            )}
+
             <nav className="fixed inset-x-0 bottom-0 z-[160] border-t border-slate-200 bg-white/96 backdrop-blur pb-[max(env(safe-area-inset-bottom),0px)] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.1)]">
                 <div className="grid grid-cols-3 gap-1.5 px-3 py-2.5 max-w-md mx-auto">
                     <button
@@ -102,8 +89,7 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
                     >
                         <div className="absolute inset-0 bg-gradient-to-tr from-emerald-100/50 to-emerald-50/10 opacity-0 group-active:opacity-100 transition-opacity"></div>
                         <div className="flex items-center gap-1 z-10">
-                            <span className="text-[12px] font-bold">무료분석</span>
-                            <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1 py-0.5 rounded leading-none">PC</span>
+                            <span className="text-[12px] font-bold">분석 문의</span>
                         </div>
                     </button>
                 </div>

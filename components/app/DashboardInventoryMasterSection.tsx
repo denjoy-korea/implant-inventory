@@ -51,6 +51,8 @@ interface DashboardInventoryMasterSectionProps {
   resolveManualSurgeryInput: (params: ResolveManualSurgeryInputParams) => Promise<ResolveManualSurgeryInputResult>;
   onAddOrder: (order: Order) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  initialShowBaseStockEdit?: boolean;
+  onBaseStockEditApplied?: () => void;
 }
 
 const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionProps> = ({
@@ -66,6 +68,8 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
   resolveManualSurgeryInput,
   onAddOrder,
   showAlertToast,
+  initialShowBaseStockEdit,
+  onBaseStockEditApplied,
 }) => {
   return (
     <InventoryManager
@@ -226,6 +230,8 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
       unregisteredFromSurgery={surgeryUnregisteredItems}
       onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
       onResolveManualInput={resolveManualSurgeryInput}
+      initialShowBaseStockEdit={initialShowBaseStockEdit}
+      onBaseStockEditApplied={onBaseStockEditApplied}
       onQuickOrder={(item) => onAddOrder({
         id: `order_${Date.now()}`,
         type: 'replenishment',

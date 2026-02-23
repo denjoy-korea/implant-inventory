@@ -17,7 +17,7 @@ export const planService = {
   async getHospitalPlan(hospitalId: string): Promise<HospitalPlanState> {
     const { data, error } = await supabase
       .from('hospitals')
-      .select('plan, plan_expires_at, billing_cycle, trial_started_at, trial_used')
+      .select('plan, plan_expires_at, billing_cycle, trial_started_at, trial_used, base_stock_edit_count')
       .eq('id', hospitalId)
       .single();
 
@@ -484,6 +484,7 @@ export const planService = {
     billing_cycle: string | null;
     trial_started_at: string | null;
     trial_used: boolean;
+    base_stock_edit_count?: number; // G5: optional — RPC 반환값에 없을 수 있음
   }): HospitalPlanState {
     const now = new Date();
     const trialStarted = data.trial_started_at ? new Date(data.trial_started_at) : null;
@@ -503,6 +504,25 @@ export const planService = {
       ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
       : UNLIMITED_DAYS;
 
+    // G4: retentionDaysLeft — 유료 만료 후 Free 전환 유저에게만 의미 있음
+    // plan_expires_at === null (항상 free or 진행 중인 trial) → undefined (T1 넛지 불발)
+    let retentionDaysLeft: number | undefined;
+    if (data.plan === 'free' && expiresAt !== null) {
+      const RETENTION_DAYS = PLAN_LIMITS.free.retentionMonths * 30;
+      const retentionEnd = new Date(expiresAt.getTime() + RETENTION_DAYS * 24 * 60 * 60 * 1000);
+      retentionDaysLeft = Math.max(
+        0,
+        Math.ceil((retentionEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      );
+    }
+
+    // G5: uploadLimitExceeded — Free 비트라이얼 유저에게만 의미 있음
+    // base_stock_edit_count가 없으면 undefined (T3 넛지 불발, 허용 가능)
+    let uploadLimitExceeded: boolean | undefined;
+    if (data.plan === 'free' && !isTrialActive && data.base_stock_edit_count !== undefined) {
+      uploadLimitExceeded = (data.base_stock_edit_count ?? 0) >= PLAN_LIMITS.free.maxBaseStockEdits;
+    }
+
     return {
       plan: data.plan as PlanType,
       expiresAt: data.plan_expires_at,
@@ -512,6 +532,8 @@ export const planService = {
       isTrialActive,
       trialDaysRemaining,
       daysUntilExpiry,
+      retentionDaysLeft,
+      uploadLimitExceeded,
     };
   },
 

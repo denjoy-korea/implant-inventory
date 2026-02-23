@@ -76,8 +76,8 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
       {/* ================================================= */}
       {/* Table Card                                        */}
       {/* ================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        <div className="px-4 py-3 rounded-t-2xl border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
           <div className="flex-1 min-w-0" />
           <div className="flex items-center gap-2">
             <div className="relative hidden md:block" ref={inventoryDetailColumnFilterRef}>
@@ -87,8 +87,8 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
                 aria-label="재고 상세 컬럼 필터 열기"
                 title="컬럼 필터"
                 className={`p-2 rounded-lg border transition-all ${showInventoryDetailColumnFilter
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
                   }`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -142,8 +142,8 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
               type="button"
               onClick={onToggleShowOnlyOrderNeededRows}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${showOnlyOrderNeededRows
-                  ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               title="권장량 대비 주문이 필요한 항목만 보기"
             >
@@ -167,9 +167,8 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
               return (
                 <article
                   key={`mobile-inventory-${item.id}`}
-                  className={`rounded-2xl border px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] ${
-                    isLowStock ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white'
-                  }`}
+                  className={`rounded-2xl border px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] ${isLowStock ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white'
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -217,7 +216,7 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
             })
           )}
         </div>
-        <div className="hidden md:block overflow-x-auto">
+        <div className="hidden md:block pb-2">
           <table className="w-full text-left border-collapse">
             <thead className="sticky z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 shadow-sm" style={{ top: `calc(var(--dashboard-header-height, 44px) + ${stickyTopOffset}px)` }}>
               <tr>

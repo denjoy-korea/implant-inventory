@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BillingCycle, PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
+import LegalModal from '../shared/LegalModal';
 
 type PaymentMethod = 'card' | 'transfer';
 type ReceiptType = 'cash_receipt' | 'tax_invoice';
@@ -20,6 +21,9 @@ interface PricingPaymentModalProps {
   onPaymentMethodChange: (value: PaymentMethod) => void;
   onReceiptTypeChange: (value: ReceiptType) => void;
   onSubmit: () => void;
+  requestError?: string | null;
+  onRequestConsultation?: () => void;
+  onRecommendAlternativePlan?: () => void;
 }
 
 function formatPrice(price: number): string {
@@ -42,7 +46,64 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
   onPaymentMethodChange,
   onReceiptTypeChange,
   onSubmit,
+  requestError,
+  onRequestConsultation,
+  onRecommendAlternativePlan,
 }) => {
+  const [agreedToPaymentPolicy, setAgreedToPaymentPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setAgreedToPaymentPolicy(false);
+  }, [selectedPlan, isYearly]);
+
+  useEffect(() => {
+    if (!selectedPlan || selectedPlan === 'free') return;
+    const previousFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const getFocusable = (): HTMLElement[] =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+    window.setTimeout(() => getFocusable()[0]?.focus(), 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (showTerms || showPrivacy) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!isSubmitting) onDismiss();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocused?.focus();
+    };
+  }, [isSubmitting, onDismiss, selectedPlan, showPrivacy, showTerms]);
+
   if (!selectedPlan || selectedPlan === 'free') return null;
 
   const billingCycle: BillingCycle = isYearly ? 'yearly' : 'monthly';
@@ -53,12 +114,34 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4" onClick={() => !isSubmitting && onDismiss()}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pricing-payment-title"
+        aria-describedby="pricing-payment-desc"
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
-          <h3 className="text-lg font-bold">결제 안내</h3>
-          <p className="text-indigo-200 text-sm mt-1">
-            {PLAN_NAMES[selectedPlan]} 플랜으로 변경합니다
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 id="pricing-payment-title" className="text-lg font-bold">결제 안내</h3>
+              <p id="pricing-payment-desc" className="text-indigo-200 text-sm mt-1">
+                {PLAN_NAMES[selectedPlan]} 플랜으로 변경합니다
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => !isSubmitting && onDismiss()}
+              aria-label="결제 모달 닫기"
+              className="text-indigo-200 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-5">
@@ -168,8 +251,9 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">담당자 이름 *</label>
+            <label htmlFor="pricing-payment-contact-name" className="block text-xs font-bold text-slate-500 mb-1">담당자 이름 *</label>
             <input
+              id="pricing-payment-contact-name"
               type="text"
               value={contactName}
               onChange={(e) => onContactNameChange(e.target.value)}
@@ -178,8 +262,9 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">연락처 (결제 문자 수신) *</label>
+            <label htmlFor="pricing-payment-contact-phone" className="block text-xs font-bold text-slate-500 mb-1">연락처 (결제 문자 수신) *</label>
             <input
+              id="pricing-payment-contact-phone"
               type="tel"
               value={contactPhone}
               onChange={(e) => onContactPhoneChange(e.target.value)}
@@ -194,6 +279,61 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               : '결제 요청 후 입력하신 연락처로 계좌이체 안내 문자가 발송됩니다. 입금 확인 후 플랜이 활성화되며, 증빙 서류가 발행됩니다.'}
           </p>
 
+          {onRequestConsultation && (
+            <button
+              type="button"
+              onClick={onRequestConsultation}
+              className="w-full text-left text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+            >
+              결제가 어려우시면 도입 상담으로 전환하기
+            </button>
+          )}
+
+          {requestError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs text-amber-800 leading-relaxed">{requestError}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                {onRecommendAlternativePlan && (
+                  <button
+                    type="button"
+                    onClick={onRecommendAlternativePlan}
+                    className="font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2"
+                  >
+                    Free 플랜 먼저 보기
+                  </button>
+                )}
+                {onRequestConsultation && (
+                  <button
+                    type="button"
+                    onClick={onRequestConsultation}
+                    className="font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2"
+                  >
+                    도입 상담 연결
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToPaymentPolicy}
+                onChange={(event) => setAgreedToPaymentPolicy(event.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded accent-indigo-600 flex-shrink-0"
+              />
+              <span className="text-xs text-slate-600 leading-relaxed">
+                결제 안내와 개인정보 처리에 동의합니다.
+              </span>
+            </label>
+            <div className="mt-2 ml-6 flex items-center gap-2 text-[11px]">
+              <button type="button" onClick={() => setShowTerms(true)} className="text-indigo-600 hover:underline">이용약관</button>
+              <span className="text-slate-300">·</span>
+              <button type="button" onClick={() => setShowPrivacy(true)} className="text-indigo-600 hover:underline">개인정보처리방침</button>
+            </div>
+          </div>
+
           <div className="flex gap-3">
             <button
               onClick={onCancel}
@@ -204,7 +344,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
             </button>
             <button
               onClick={onSubmit}
-              disabled={isSubmitting || !contactName.trim() || !contactPhone.trim()}
+              disabled={isSubmitting || !contactName.trim() || !contactPhone.trim() || !agreedToPaymentPolicy}
               className="flex-1 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '처리 중...' : paymentMethod === 'card' ? '카드결제 요청' : '계좌이체 요청'}
@@ -212,6 +352,8 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
           </div>
         </div>
       </div>
+      {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
+      {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };

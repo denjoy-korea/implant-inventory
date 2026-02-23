@@ -252,6 +252,44 @@ export const contactService = {
     if (data && !data.success) throw new Error(data.error || '답변 발송에 실패했습니다.');
   },
 
+  /**
+   * 플랜 변경 신청 완료 처리: hospital_id 조회 후 실제 플랜 변경
+   * content에 hospital_id가 있으면 사용, 없으면 email로 RPC 조회
+   */
+  async applyPlanChange(item: ContactInquiry): Promise<{ success: boolean; hospitalId: string | null }> {
+    // inquiry_type에서 대상 플랜 파싱 (plan_change_business → business)
+    const planMatch = item.inquiry_type.match(/^plan_change_(.+)$/);
+    const targetPlan = planMatch?.[1];
+    if (!targetPlan) return { success: false, hospitalId: null };
+
+    // content에서 hospital_id 파싱
+    const hospitalIdMatch = item.content.match(/hospital_id:\s*([a-f0-9-]{36})/);
+    let hospitalId = hospitalIdMatch?.[1] ?? null;
+
+    // content에 없으면 email로 admin RPC 조회
+    if (!hospitalId) {
+      const { data } = await supabase.rpc('admin_get_hospital_id_by_email', { p_email: item.email });
+      hospitalId = (data as string | null) ?? null;
+    }
+
+    if (!hospitalId) return { success: false, hospitalId: null };
+
+    // content에서 청구 주기 파싱 (신청 플랜: Business (월간) → monthly)
+    const cycleMatch = item.content.match(/신청 플랜:.+?\(([^)]+)\)/);
+    const cycleRaw = cycleMatch?.[1]?.trim();
+    const billingCycle = cycleRaw === '연간' ? 'yearly' : 'monthly';
+
+    // change_hospital_plan RPC 호출 (admin은 _can_manage_hospital 통과)
+    const { data: changed, error } = await supabase.rpc('change_hospital_plan', {
+      p_hospital_id: hospitalId,
+      p_plan: targetPlan,
+      p_billing_cycle: targetPlan === 'free' || targetPlan === 'ultimate' ? null : billingCycle,
+    });
+
+    if (error) throw error;
+    return { success: Boolean(changed), hospitalId };
+  },
+
   /** 삭제 */
   async delete(id: string): Promise<void> {
     const { error } = await supabase

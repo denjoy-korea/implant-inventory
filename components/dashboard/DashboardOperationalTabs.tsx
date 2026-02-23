@@ -42,6 +42,10 @@ interface DashboardOperationalTabsProps {
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => Promise<void>;
+  onAuditSessionComplete?: () => void;
+  initialShowFailBulkModal?: boolean;
+  onFailBulkModalOpened?: () => void;
+  onFailAuditDone?: () => void;
 }
 
 const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
@@ -67,6 +71,10 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onUpdateOrderStatus,
   onDeleteOrder,
   onQuickOrder,
+  onAuditSessionComplete,
+  initialShowFailBulkModal,
+  onFailBulkModalOpened,
+  onFailAuditDone,
 }) => {
   return (
     <>
@@ -79,6 +87,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
               void onLoadHospitalData(user);
             }
           }}
+          onAuditSessionComplete={onAuditSessionComplete}
           showHistory={showAuditHistory}
           onCloseHistory={onCloseAuditHistory}
         />
@@ -105,7 +114,10 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           hospitalId={user?.hospitalId}
           onBulkSetupComplete={async () => {
             if (user) await onLoadHospitalData(user);
+            onFailAuditDone?.();
           }}
+          initialShowBulkModal={initialShowFailBulkModal}
+          onInitialModalOpened={onFailBulkModalOpened}
         />
       )}
       {dashboardTab === 'order_management' && (

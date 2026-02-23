@@ -3,6 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { contactService } from '../services/contactService';
 import { pageViewService } from '../services/pageViewService';
+import LegalModal from './shared/LegalModal';
+import PublicInfoFooter from './shared/PublicInfoFooter';
+import { BUSINESS_INFO } from '../utils/businessInfo';
 
 interface ContactPageProps {
   onGetStarted: () => void;
@@ -15,9 +18,26 @@ type SubmittedForm = typeof EMPTY_FORM & { requestId: string | null };
 const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) => {
   useEffect(() => { window.scrollTo(0, 0); }, []);
   const { toast, showToast } = useToast();
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<SubmittedForm | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 1279px)');
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+    syncViewport();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncViewport);
+      return () => mediaQuery.removeEventListener('change', syncViewport);
+    }
+    mediaQuery.addListener(syncViewport);
+    return () => mediaQuery.removeListener(syncViewport);
+  }, []);
 
   const set = (key: keyof typeof EMPTY_FORM, value: string | boolean) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -163,12 +183,20 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                       >
                         무료로 시작하기 →
                       </button>
-                      {onAnalyze && (
+                      {onAnalyze && !isMobileViewport && (
                         <button
                           onClick={onAnalyze}
                           className="w-full mt-3 py-2.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
                         >
                           또는 무료 데이터 건강도 진단 보기
+                        </button>
+                      )}
+                      {onAnalyze && isMobileViewport && (
+                        <button
+                          onClick={onGetStarted}
+                          className="w-full mt-3 py-2.5 text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2"
+                        >
+                          모바일에서는 회원가입으로 바로 시작하기
                         </button>
                       )}
                     </div>
@@ -186,19 +214,20 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">병원명 <span className="text-rose-500">*</span></label>
-                      <input type="text" required placeholder="OO치과의원" value={form.hospitalName} onChange={e => set('hospitalName', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
+                      <label htmlFor="contact-hospital-name" className="block text-sm font-bold text-slate-700 mb-1.5">병원명 <span className="text-rose-500">*</span></label>
+                      <input id="contact-hospital-name" type="text" required placeholder="OO치과의원" value={form.hospitalName} onChange={e => set('hospitalName', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">담당자명 <span className="text-rose-500">*</span></label>
-                      <input type="text" required placeholder="홍길동" value={form.contactName} onChange={e => set('contactName', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
+                      <label htmlFor="contact-person-name" className="block text-sm font-bold text-slate-700 mb-1.5">담당자명 <span className="text-rose-500">*</span></label>
+                      <input id="contact-person-name" type="text" required placeholder="홍길동" value={form.contactName} onChange={e => set('contactName', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">이메일 <span className="text-rose-500">*</span></label>
+                      <label htmlFor="contact-email" className="block text-sm font-bold text-slate-700 mb-1.5">이메일 <span className="text-rose-500">*</span></label>
                       <input
-                        type="text"
+                        id="contact-email"
+                        type="email"
                         required
                         placeholder="name@naver.com"
                         value={form.email}
@@ -214,14 +243,15 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">직위</label>
-                      <input type="text" placeholder="원장 / 실장 / 매니저" value={form.role} onChange={e => set('role', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
+                      <label htmlFor="contact-role" className="block text-sm font-bold text-slate-700 mb-1.5">직위</label>
+                      <input id="contact-role" type="text" placeholder="원장 / 실장 / 매니저" value={form.role} onChange={e => set('role', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">연락처 <span className="text-rose-500">*</span></label>
+                      <label htmlFor="contact-phone" className="block text-sm font-bold text-slate-700 mb-1.5">연락처 <span className="text-rose-500">*</span></label>
                       <input
+                        id="contact-phone"
                         type="tel"
                         required
                         inputMode="numeric"
@@ -233,8 +263,8 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">주간 임플란트 수술 건수 <span className="text-rose-500">*</span></label>
-                      <select required value={form.weeklySurgeries} onChange={e => set('weeklySurgeries', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-slate-700 bg-white">
+                      <label htmlFor="contact-weekly-surgeries" className="block text-sm font-bold text-slate-700 mb-1.5">주간 임플란트 수술 건수 <span className="text-rose-500">*</span></label>
+                      <select id="contact-weekly-surgeries" required value={form.weeklySurgeries} onChange={e => set('weeklySurgeries', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-slate-700 bg-white">
                         <option value="">선택해 주세요</option>
                         <option>주 5건 미만</option>
                         <option>주 5~15건</option>
@@ -244,8 +274,8 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">문의 유형 <span className="text-rose-500">*</span></label>
-                    <select required value={form.inquiryType} onChange={e => set('inquiryType', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-slate-700 bg-white">
+                    <label htmlFor="contact-inquiry-type" className="block text-sm font-bold text-slate-700 mb-1.5">문의 유형 <span className="text-rose-500">*</span></label>
+                    <select id="contact-inquiry-type" required value={form.inquiryType} onChange={e => set('inquiryType', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow text-slate-700 bg-white">
                       <option value="">선택해 주세요</option>
                       <option>도입 상담</option>
                       <option>요금제 안내</option>
@@ -256,21 +286,28 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">상세 내용 <span className="text-rose-500">*</span></label>
-                    <textarea required rows={5} placeholder="궁금하신 점을 자유롭게 작성해 주세요." value={form.content} onChange={e => set('content', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none" />
+                    <label htmlFor="contact-content" className="block text-sm font-bold text-slate-700 mb-1.5">상세 내용 <span className="text-rose-500">*</span></label>
+                    <textarea id="contact-content" required rows={5} placeholder="궁금하신 점을 자유롭게 작성해 주세요." value={form.content} onChange={e => set('content', e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none" />
                   </div>
                   <div className="flex items-start gap-2 pt-1">
                     <input type="checkbox" id="agree" checked={form.agree} onChange={e => set('agree', e.target.checked)} className="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    <label htmlFor="agree" className="text-xs text-slate-500 leading-relaxed">
-                      개인정보 수집 및 이용에 동의합니다. 수집된 정보는 문의 응대 목적으로만 사용됩니다.
-                    </label>
+                    <div className="text-xs text-slate-500 leading-relaxed">
+                      <label htmlFor="agree" className="cursor-pointer">
+                        개인정보 수집 및 이용에 동의합니다. 수집된 정보는 문의 응대 목적으로만 사용됩니다.
+                      </label>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <button type="button" onClick={() => setShowPrivacy(true)} className="text-indigo-600 hover:underline">개인정보처리방침</button>
+                        <span className="text-slate-300">·</span>
+                        <button type="button" onClick={() => setShowTerms(true)} className="text-indigo-600 hover:underline">이용약관</button>
+                      </div>
+                    </div>
                   </div>
                   <button type="submit" disabled={submitting} className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 mt-2 disabled:opacity-60">
                     {submitting ? '전송 중...' : '문의 보내기'}
                   </button>
                 </form>
                 <p className="text-xs text-slate-400 mt-4 text-center">
-                  기술 지원이 필요하시면 <span className="text-indigo-600 font-medium">admin@denjoy.info</span>로 이메일을 보내주세요.
+                  기술 지원이 필요하시면 <span className="text-indigo-600 font-medium">{BUSINESS_INFO.supportEmail}</span>로 이메일을 보내주세요.
                 </p>
                 </>
                 )}
@@ -307,25 +344,15 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
         </div>
       </section>
 
-      {/* Footer - 기업정보 */}
-      <footer className="border-t border-slate-200 bg-slate-50 py-8 px-6">
-        <div className="max-w-4xl mx-auto text-xs text-slate-400 leading-relaxed">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
-              <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
-              <p>이메일: admin@denjoy.info</p>
-            </div>
-            <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <PublicInfoFooter showLegalLinks />
     </div>
     {toast && (
-      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+      <div className={`fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] xl:bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
         {toast.message}
       </div>
     )}
+    {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
+    {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
     </>
   );
 };

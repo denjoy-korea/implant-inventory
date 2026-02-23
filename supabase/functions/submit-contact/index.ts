@@ -25,15 +25,6 @@ type ErrorCode =
   | "db_error"
   | "internal_error";
 
-const jsonResponse = (
-  status: number,
-  body: { success: boolean; error_code?: ErrorCode; error?: string; request_id: string },
-) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-
 const asTrimmedString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
@@ -41,8 +32,18 @@ const isWaitlistInquiry = (inquiryType: string): boolean =>
   inquiryType.startsWith("plan_waitlist_");
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
+  const jsonResponse = (
+    status: number,
+    body: { success: boolean; error_code?: ErrorCode; error?: string; request_id: string },
+  ) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
-    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
@@ -50,7 +51,6 @@ Deno.serve(async (req: Request) => {
 
   let payload: ContactPayload;
   try {
-    const corsHeaders = getCorsHeaders(req);
     payload = await req.json();
   } catch {
     return jsonResponse(400, {

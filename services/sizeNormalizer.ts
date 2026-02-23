@@ -262,7 +262,22 @@ export function getSizeMatchKey(raw: string, manufacturer?: string): string {
 export function toCanonicalSize(raw: string, manufacturer?: string): string {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return '';
-  if (!isIbsImplantManufacturer(manufacturer)) return trimmed;
+
+  // 숫자코드 제조사 (Dentium, 포인트 등): 잘못된 문자 자동 제거
+  // e.g. "40*07" → "4007", "40 07" → "4007"
+  if (isNumericCodeManufacturer(manufacturer || '') && !/^[0-9A-Za-z]+$/.test(trimmed)) {
+    const cleaned = trimmed.replace(/[^0-9A-Za-z]/g, '');
+    if (/^\d+[A-Za-z]*$/.test(cleaned)) return cleaned;
+  }
+
+  if (!isIbsImplantManufacturer(manufacturer)) {
+    // Φ 포맷 브랜드: 구분자(×/x/X) 앞뒤 공백 정규화
+    // e.g. "Φ4.5 ×8.5" → "Φ4.5 × 8.5", "Φ4.0×10×1.8" → "Φ4.0 × 10 × 1.8"
+    if (/^[Φφ]/.test(trimmed)) {
+      return trimmed.replace(/\s*[×xX]\s*/g, ' × ').replace(/\s+/g, ' ').trim();
+    }
+    return trimmed;
+  }
 
   // IBS 변환 대상 표기만 보정 (불필요한 숫자코드 변환 방지)
   const isConvertible =

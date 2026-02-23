@@ -1,8 +1,9 @@
 import React, { Suspense, lazy } from 'react';
-import { CLINIC_ROLE_LABELS, HospitalPlanState, User } from '../../types';
+import { CLINIC_ROLE_LABELS, HospitalPlanState, InventoryItem, User } from '../../types';
 import { ReviewType, ReviewRole } from '../../services/reviewService';
 import ErrorBoundary from '../ErrorBoundary';
 import OnboardingToast from '../onboarding/OnboardingToast';
+import OnboardingCompleteModal from '../OnboardingCompleteModal';
 
 const OnboardingWizard = lazy(() => import('../OnboardingWizard'));
 const UserProfile = lazy(() => import('../UserProfile'));
@@ -13,6 +14,7 @@ interface AppUserOverlayStackProps {
   showProfile: boolean;
   planState: HospitalPlanState | null;
   hospitalName: string;
+  inventory: InventoryItem[];
   reviewPopupType: ReviewType | null;
   shouldShowOnboarding: boolean;
   onboardingStep: number | null;
@@ -27,9 +29,12 @@ interface AppUserOverlayStackProps {
   onOnboardingComplete: () => Promise<void> | void;
   onOnboardingSkip: () => void;
   onReopenOnboarding: () => void;
-  onGoToDataSetup: () => void;
-  onGoToSurgeryUpload: () => void;
+  onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
+  onGoToSurgeryUpload: (file?: File) => void;
+  onGoToInventoryAudit: () => void;
   onGoToFailManagement: () => void;
+  showOnboardingComplete: boolean;
+  onOnboardingCompleteClose: () => void;
 }
 
 const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
@@ -37,6 +42,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   showProfile,
   planState,
   hospitalName,
+  inventory,
   reviewPopupType,
   shouldShowOnboarding,
   onboardingStep,
@@ -53,7 +59,10 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   onReopenOnboarding,
   onGoToDataSetup,
   onGoToSurgeryUpload,
+  onGoToInventoryAudit,
   onGoToFailManagement,
+  showOnboardingComplete,
+  onOnboardingCompleteClose,
 }) => {
   return (
     <>
@@ -104,10 +113,12 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
             hospitalId={user.hospitalId ?? ''}
             hospitalName={hospitalName ?? user.name}
             initialStep={onboardingStep ?? 1}
+            inventory={inventory}
             onComplete={onOnboardingComplete}
             onSkip={onOnboardingSkip}
             onGoToDataSetup={onGoToDataSetup}
             onGoToSurgeryUpload={onGoToSurgeryUpload}
+            onGoToInventoryAudit={onGoToInventoryAudit}
             onGoToFailManagement={onGoToFailManagement}
           />
         </Suspense>
@@ -118,6 +129,10 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
           progress={onboardingProgress}
           onClick={onReopenOnboarding}
         />
+      )}
+
+      {showOnboardingComplete && (
+        <OnboardingCompleteModal onClose={onOnboardingCompleteClose} />
       )}
     </>
   );

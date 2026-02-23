@@ -9,6 +9,11 @@
 | pricing-policy | 94.2% | 2026-02-15 | 4 |
 | vercel-deployment | 96% | 2026-02-16 | 4 |
 | profiles-pii-encryption | 97% | 2026-02-23 | 3 |
+| crypto-security-hardening | 99.5% | 2026-02-23 | 4 |
+| crypto-phase2-authorization | 98% | 2026-02-23 | 4 |
+| profiles-pii-encryption | 97% | 2026-02-23 | 3 |
+| product-strategy-gaps | 100% | 2026-02-24 | 4 |
+| surgery-dashboard-upgrade | 97% | 2026-02-24 | 4 |
 
 ### 임플란트-재고관리
 
@@ -72,3 +77,29 @@
   - `vercel-deployment.design.md` - Design document
   - `vercel-deployment.analysis.md` - Gap Analysis (96%)
   - `vercel-deployment.report.md` - Completion Report
+
+### surgery-dashboard-upgrade
+
+- **Phase**: Completed
+- **Match Rate**: 97% (0 iterations)
+- **Iteration Count**: 0
+- **Period**: 2026-02-24
+- **Scope**: 수술기록 대시보드 프로덕션 그레이드 업그레이드 — 18개 서브컴포넌트 분리, FDI 치아 히트맵, 선형 회귀 추세선, 진행율 기반 MoM 비교, 접근성(aria-label) 전면 적용, useCountUp 애니메이션, +11개 추가 기능
+- **Documents**:
+  - `surgery-dashboard-upgrade.plan.md` - Plan document
+  - `surgery-dashboard-upgrade.design.md` - Design document
+  - `surgery-dashboard-upgrade.analysis.md` - Gap Analysis (97%)
+  - `surgery-dashboard-upgrade.report.md` - Completion Report
+
+### product-strategy-gaps
+
+- **Phase**: Completed
+- **Match Rate**: 100% (0 iterations)
+- **Iteration Count**: 0
+- **Period**: 2026-02-24
+- **Scope**: G4 retentionDaysLeft (T1 넛지 활성화), G5 uploadLimitExceeded (T3 넛지 활성화), G2 D1 dead code 공식 문서화
+- **Documents**:
+  - `product-strategy-gaps.plan.md` - Plan document
+  - `product-strategy-gaps.design.md` - Design document
+  - `product-strategy-gaps.analysis.md` - Gap Analysis (100%)
+  - `product-strategy-gaps.report.md` - Completion Report

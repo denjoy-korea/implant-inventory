@@ -202,35 +202,54 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                             </div>
                         </div>
                     ) : (
-                        <div className="divide-y divide-slate-100">
+                        <div className={`p-3 sm:p-4 ${filteredNotices.length > 0 ? 'space-y-3' : ''}`}>
                             {isLoading ? (
                                 <div className="p-8 text-center text-slate-400 text-xs">불러오는 중...</div>
                             ) : filteredNotices.length === 0 ? (
-                                <div className="p-8 text-center text-slate-400 text-xs">
-                                    {filterCategory === 'all' ? '등록된 소식이 없습니다.' : `${filterCategory} 카테고리에 등록된 소식이 없습니다.`}
+                                <div className="py-16 text-center relative overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white shadow-[inset_0_0_20px_rgba(0,0,0,0.01)]">
+                                    <div className="relative z-10 flex flex-col items-center">
+                                        <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mx-auto mb-4 shadow-sm animate-pulse">
+                                            <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-sm font-bold text-slate-700 tracking-tight mb-1">
+                                            {filterCategory === 'all' ? '새로운 업데이트 준비 중' : `${filterCategory} 소식 준비 중`}
+                                        </h3>
+                                        <p className="text-xs text-slate-500 max-w-[200px] leading-relaxed mx-auto">
+                                            더 나은 서비스를 위해 언제나 노력하고 있습니다. 잠시만 기다려주세요!
+                                        </p>
+                                    </div>
                                 </div>
                             ) : (
-                                filteredNotices.map((notice) => {
+                                filteredNotices.map((notice, i) => {
                                     const catStyle = getCategoryStyle(notice.category);
                                     return (
-                                        <div key={notice.id} className={`p-4 hover:bg-slate-50 transition-colors ${notice.isImportant ? 'bg-indigo-50/30' : ''}`}>
-                                            <div className="flex justify-between items-start mb-1">
-                                                <div className="flex items-center gap-2 min-w-0">
+                                        <div
+                                            key={notice.id}
+                                            className={`group p-4 rounded-xl border transition-all duration-300 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-md ${notice.isImportant ? 'bg-indigo-50/40 border-indigo-100 shadow-indigo-100/20' : 'bg-white border-slate-100 shadow-sm hover:border-slate-200'}`}
+                                            style={{ animationDelay: `${i * 50}ms` }}
+                                        >
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-wrap flex-1 items-center gap-2 min-w-0 pr-3">
                                                     {notice.category && (
-                                                        <span className={`px-1.5 py-0.5 ${catStyle.bg} ${catStyle.color} text-[10px] font-bold rounded flex-shrink-0`}>{notice.category}</span>
+                                                        <span className={`px-2 py-0.5 ${catStyle.bg} ${catStyle.color} text-[10px] font-bold rounded-md flex-shrink-0`}>{notice.category}</span>
                                                     )}
                                                     {notice.isImportant && (
-                                                        <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded flex-shrink-0">중요</span>
+                                                        <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-md flex-shrink-0">중요</span>
                                                     )}
-                                                    <h4 className={`text-sm font-bold truncate ${notice.isImportant ? 'text-slate-800' : 'text-slate-700'}`}>{notice.title}</h4>
+                                                    <h4 className={`text-sm font-bold break-words w-full sm:w-auto mt-1 sm:mt-0 ${notice.isImportant ? 'text-indigo-900 group-hover:text-indigo-700' : 'text-slate-800 xl:truncate'}`}>{notice.title}</h4>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                                                    <span className="text-[10px] text-slate-400 whitespace-nowrap">{formatDate(notice.date)}</span>
+                                                <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                                                    <span className={`text-[10px] font-medium whitespace-nowrap ${notice.isImportant ? 'text-indigo-400' : 'text-slate-400'}`}>{formatDate(notice.date)}</span>
                                                     {isAdmin && (
                                                         <button
+                                                            type="button"
                                                             onClick={() => setDeleteTarget(notice.id)}
+                                                            aria-label={`${notice.title} 공지 삭제`}
                                                             disabled={isSaving}
-                                                            className="px-1.5 py-0.5 text-[10px] font-medium text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors disabled:opacity-50"
+                                                            className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
                                                         >
                                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -239,7 +258,7 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="notice-content text-xs text-slate-500 leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(notice.content) }} />
+                                            <div className="notice-content text-xs text-slate-600 leading-relaxed max-w-none mt-2" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(notice.content) }} />
                                         </div>
                                     );
                                 })
@@ -287,11 +306,11 @@ const NoticeBoard: React.FC<NoticeBoardProps> = ({ isAdmin, fullPage = false }) 
                     </div>
                 </div>
             )}
-        {toast && (
-            <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                {toast.message}
-            </div>
-        )}
+            {toast && (
+                <div className={`fixed ${fullPage ? 'bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] xl:bottom-6' : 'bottom-6'} left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                    {toast.message}
+                </div>
+            )}
         </>
     );
 };

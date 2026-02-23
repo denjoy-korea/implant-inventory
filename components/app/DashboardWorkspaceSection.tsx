@@ -35,6 +35,8 @@ interface FixtureEditBindings {
 
 interface InventoryMasterBindings {
   virtualSurgeryData: ExcelData | null;
+  initialShowBaseStockEdit?: boolean;
+  onBaseStockEditApplied?: () => void;
   applyBaseStockBatch: (changes: Array<{ id: string; initialStock: number; nextCurrentStock: number }>) => Promise<void>;
   refreshLatestSurgeryUsage: () => Promise<Record<string, number> | null>;
   resolveManualSurgeryInput: (params: {
@@ -84,6 +86,10 @@ export interface DashboardWorkspaceSectionProps {
   onAddOrder: (order: Order) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
+  onAuditSessionComplete?: () => void;
+  initialShowFailBulkModal?: boolean;
+  onFailBulkModalOpened?: () => void;
+  onFailAuditDone?: () => void;
 }
 
 const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
@@ -112,6 +118,10 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onAddOrder,
   onUpdateOrderStatus,
   onDeleteOrder,
+  onAuditSessionComplete,
+  initialShowFailBulkModal,
+  onFailBulkModalOpened,
+  onFailAuditDone,
 }) => {
   const buildQuickOrder = (item: InventoryItem): Order => ({
     id: `order_${Date.now()}`,
@@ -252,6 +262,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           effectivePlan={effectivePlan}
           billableItemCount={billableItemCount}
           virtualSurgeryData={inventoryMaster.virtualSurgeryData}
+          initialShowBaseStockEdit={inventoryMaster.initialShowBaseStockEdit}
+          onBaseStockEditApplied={inventoryMaster.onBaseStockEditApplied}
           surgeryUnregisteredItems={surgeryUnregisteredItems}
           applyBaseStockBatch={inventoryMaster.applyBaseStockBatch}
           refreshLatestSurgeryUsage={inventoryMaster.refreshLatestSurgeryUsage}
@@ -290,6 +302,10 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onUpdateOrderStatus={onUpdateOrderStatus}
         onDeleteOrder={onDeleteOrder}
         onQuickOrder={(item) => onAddOrder(buildQuickOrder(item))}
+        onAuditSessionComplete={onAuditSessionComplete}
+        initialShowFailBulkModal={initialShowFailBulkModal}
+        onFailBulkModalOpened={onFailBulkModalOpened}
+        onFailAuditDone={onFailAuditDone}
       />
     </div>
   );

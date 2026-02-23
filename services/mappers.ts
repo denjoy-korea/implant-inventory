@@ -16,22 +16,50 @@ import {
 } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, decryptPatientInfoBatch, hashPatientInfo } from './cryptoUtils';
 
+const isEncryptedPII = (value: string | null | undefined): value is string =>
+  !!value && (value.startsWith('ENCv2:') || value.startsWith('ENC:'));
+
+function sanitizeEncryptedProfileField(
+  field: 'email' | 'name' | 'phone',
+  value: string | null,
+): string | null {
+  if (!isEncryptedPII(value)) return value;
+  if (field === 'name') return '사용자';
+  return '';
+}
+
 /** profiles PII 필드(name·email·phone) 복호화 — 평문(ENCv2 접두사 없음)은 그대로 반환 */
 export async function decryptProfile(db: DbProfile): Promise<DbProfile> {
   try {
-    const [email, name, phone] = await Promise.all([
-      decryptPatientInfo(db.email),
-      decryptPatientInfo(db.name),
-      db.phone ? decryptPatientInfo(db.phone) : Promise.resolve(db.phone),
+    const [emailRaw, nameRaw, phoneRaw] = await decryptPatientInfoBatch([
+      db.email,
+      db.name,
+      db.phone ?? '',
     ]);
-    return { ...db, email, name, phone };
+    const email = sanitizeEncryptedProfileField('email', emailRaw);
+    const name = sanitizeEncryptedProfileField('name', nameRaw);
+    const phone = db.phone === null
+      ? null
+      : sanitizeEncryptedProfileField('phone', phoneRaw);
+
+    if (isEncryptedPII(emailRaw) || isEncryptedPII(nameRaw) || (db.phone !== null && isEncryptedPII(phoneRaw))) {
+      console.warn('[decryptProfile] 일부 필드 복호화 미완료, 안전값으로 대체:', { id: db.id });
+    }
+    return { ...db, email: email ?? '', name: name ?? '사용자', phone };
   } catch (e) {
-    // Edge Function 실패 시 원본 반환 — 로그인 자체는 차단하지 않음
-    console.warn('[decryptProfile] 복호화 실패, 원본 반환:', e);
-    return db;
+    // Edge Function 실패 시에도 암호문을 UI에 노출하지 않음
+    // H-4: _decryptFailed=true 플래그로 DB 쓰기 경로에서 이 객체를 저장하지 못하도록 차단
+    console.warn('[decryptProfile] 복호화 실패, 안전값 반환:', e);
+    return {
+      ...db,
+      email: (sanitizeEncryptedProfileField('email', db.email) ?? ''),
+      name: (sanitizeEncryptedProfileField('name', db.name) ?? '사용자'),
+      phone: sanitizeEncryptedProfileField('phone', db.phone),
+      _decryptFailed: true,
+    };
   }
 }
-import { toCanonicalSize } from './sizeNormalizer';
+import { toCanonicalSize, isIbsImplantManufacturer } from './sizeNormalizer';
 
 // ============================================
 // IBS Implant 제조사/브랜드 위치 교정
@@ -68,7 +96,7 @@ export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
     id: db.id,
     manufacturer,
     brand,
-    size: toCanonicalSize(db.size, manufacturer),
+    size: isIbsImplantManufacturer(manufacturer) ? db.size : toCanonicalSize(db.size, manufacturer),
     initialStock: db.initial_stock,
     stockAdjustment: adj,
     usageCount: 0,
@@ -80,6 +108,7 @@ export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
 /** DbSurgeryRecord → ExcelRow (기존 수술기록지 포맷 호환) */
 export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
   const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+  const dbSize = db.size || '';
   return {
     '날짜': db.date || '',
     '환자정보': await decryptPatientInfo(db.patient_info || ''),
@@ -89,7 +118,7 @@ export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
     '구분': db.classification,
     '제조사': manufacturer,
     '브랜드': brand,
-    '규격(SIZE)': toCanonicalSize(db.size || '', manufacturer),
+    '규격(SIZE)': isIbsImplantManufacturer(manufacturer) ? dbSize : toCanonicalSize(dbSize, manufacturer),
     '골질': db.bone_quality || '',
     '초기고정': db.initial_fixation || '',
     _id: db.id,
@@ -106,6 +135,7 @@ export async function dbToExcelRowBatch(records: DbSurgeryRecord[]): Promise<Exc
   const decrypted = await decryptPatientInfoBatch(patientInfos);
   return records.map((db, i) => {
     const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+    const dbSize = db.size || '';
     return {
       '날짜': db.date || '',
       '환자정보': decrypted[i],
@@ -115,7 +145,7 @@ export async function dbToExcelRowBatch(records: DbSurgeryRecord[]): Promise<Exc
       '구분': db.classification,
       '제조사': manufacturer,
       '브랜드': brand,
-      '규격(SIZE)': toCanonicalSize(db.size || '', manufacturer),
+      '규격(SIZE)': isIbsImplantManufacturer(manufacturer) ? dbSize : toCanonicalSize(dbSize, manufacturer),
       '골질': db.bone_quality || '',
       '초기고정': db.initial_fixation || '',
       _id: db.id,
@@ -156,10 +186,11 @@ export function dbToHospital(db: DbHospital): Hospital {
 export function dbToUser(db: DbProfile): User {
   return {
     id: db.id,
-    email: db.email,
-    name: db.name,
-    phone: db.phone,
+    email: sanitizeEncryptedProfileField('email', db.email) ?? '',
+    name: sanitizeEncryptedProfileField('name', db.name) ?? '사용자',
+    phone: sanitizeEncryptedProfileField('phone', db.phone),
     role: db.role,
+    clinicRole: db.clinic_role ?? null,
     hospitalId: db.hospital_id || '',
     status: db.status,
     permissions: db.permissions ?? null,
@@ -181,7 +212,7 @@ export function inventoryToDb(
     hospital_id: hospitalId,
     manufacturer,
     brand,
-    size: toCanonicalSize(item.size, manufacturer),
+    size: isIbsImplantManufacturer(manufacturer) ? item.size : toCanonicalSize(item.size, manufacturer),
     initial_stock: item.initialStock,
     stock_adjustment: item.stockAdjustment ?? 0,
   };
@@ -194,7 +225,8 @@ export async function excelRowToDbSurgery(
 ): Promise<Omit<DbSurgeryRecord, 'id' | 'created_at'>> {
   const patientRaw = row['환자정보'] ? String(row['환자정보']) : '';
   const { manufacturer, brand } = fixIbsImplant(String(row['제조사'] ?? ''), String(row['브랜드'] ?? ''));
-  const canonicalSize = toCanonicalSize(String(row['규격(SIZE)'] ?? ''), manufacturer);
+  const rawSize = String(row['규격(SIZE)'] ?? '');
+  const size = isIbsImplantManufacturer(manufacturer) ? rawSize : toCanonicalSize(rawSize, manufacturer);
   return {
     hospital_id: hospitalId,
     date: row['날짜'] ? String(row['날짜']) : null,
@@ -206,7 +238,7 @@ export async function excelRowToDbSurgery(
     classification: String(row['구분'] ?? '') || '식립',
     manufacturer: manufacturer || null,
     brand: brand || null,
-    size: canonicalSize || null,
+    size: size || null,
     bone_quality: row['골질'] ? String(row['골질']) : null,
     initial_fixation: row['초기고정'] ? String(row['초기고정']) : null,
   };

@@ -331,7 +331,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                 phone: user.phone || '미등록',
                 weekly_surgeries: '-',
                 inquiry_type: `plan_change_${pickerSelectedPlan}`,
-                content: `[플랜 변경 신청]\n현재 플랜: ${planName} (${billingLabel || '무료'})\n신청 플랜: ${PLAN_NAMES[pickerSelectedPlan]} (${pickerCycle === 'yearly' ? '연간' : '월간'})`,
+                content: `[플랜 변경 신청]\n현재 플랜: ${planName} (${billingLabel || '무료'})\n신청 플랜: ${PLAN_NAMES[pickerSelectedPlan]} (${pickerCycle === 'yearly' ? '연간' : '월간'})\nhospital_id: ${user.hospitalId ?? ''}`,
             });
             showToast('플랜 변경 신청이 완료되었습니다. 영업일 기준 1-2일 내 처리됩니다.', 'success');
             setShowPlanPicker(false);
@@ -439,7 +439,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                 </div>
 
                 {/* 탭 콘텐츠 */}
-                <div className="flex-1 overflow-y-auto px-6 py-5">
+                <div className="flex-1 overflow-y-auto px-6 py-4">
 
                     {activeTab === 'info' && (
                         <div className="space-y-5">
@@ -526,7 +526,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                             { plan: 'ultimate', label: 'Ultimate', monthlyPrice: 0, yearlyPrice: 0, tag: '별도 문의', features: ['Business 전체', '감사 로그', '장기 보관', '전담 담당자'] },
                         ];
                         return (
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 {/* 헤더 */}
                                 <div className="flex items-center gap-2">
                                     <button onClick={() => { setShowPlanPicker(false); setPickerSelectedPlan(null); }} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
@@ -558,7 +558,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 key={plan}
                                                 onClick={() => !isCurrent && setPickerSelectedPlan(isSelected ? null : plan)}
                                                 disabled={isCurrent}
-                                                className={`relative text-left p-3.5 rounded-xl border-2 transition-all ${
+                                                className={`relative text-left p-3 rounded-xl border-2 transition-all ${
                                                     isCurrent
                                                         ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
                                                         : isSelected
@@ -572,11 +572,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 {isCurrent && (
                                                     <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">현재</span>
                                                 )}
-                                                <p className="text-sm font-black text-slate-800 mb-1">{label}</p>
+                                                <p className="text-sm font-black text-slate-800 mb-0.5">{label}</p>
                                                 {isUltimateItem ? (
-                                                    <p className="text-xs text-slate-400 font-medium mb-2">별도 문의</p>
+                                                    <p className="text-xs text-slate-400 font-medium mb-1">별도 문의</p>
                                                 ) : (
-                                                    <p className="text-xs font-bold text-slate-700 mb-2">
+                                                    <p className="text-xs font-bold text-slate-700 mb-1">
                                                         {price.toLocaleString('ko-KR')}
                                                         <span className="text-[10px] font-normal text-slate-400">원/월</span>
                                                     </p>
@@ -596,15 +596,15 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
 
                                 {/* 신청 버튼 영역 */}
                                 {pickerSelectedPlan ? (
-                                    <div className="pt-1">
-                                        <p className="text-[11px] text-slate-500 text-center mb-3">
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 text-center mb-2">
                                             <span className="font-bold text-slate-700">{PLAN_NAMES[pickerSelectedPlan]}</span> 플랜 ({pickerCycle === 'yearly' ? '연간' : '월간'}) 변경 신청 시<br />
                                             영업일 기준 1-2일 내 처리됩니다.
                                         </p>
                                         <button
                                             onClick={handleRequestPlanChange}
                                             disabled={isRequestingPlan}
-                                            className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {isRequestingPlan ? '신청 중...' : `${PLAN_NAMES[pickerSelectedPlan]} 플랜으로 변경 신청`}
                                         </button>

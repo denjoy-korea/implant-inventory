@@ -14,8 +14,9 @@ import {
   statusColorMap,
 } from './analyze/analyzeHelpers';
 import { useAnalyzeStateMachine } from './analyze/useAnalyzeStateMachine';
-import { DEFAULT_TRIAL_OFFER_TEXT, getBetaTrialOfferText } from '../utils/trialPolicy';
+import { getTrialCopy } from '../utils/trialPolicy';
 import { pageViewService } from '../services/pageViewService';
+import PublicInfoFooter from './shared/PublicInfoFooter';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
@@ -77,10 +78,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     updateLeadRegion,
     updateLeadContact,
   } = useAnalyzeStateMachine({ reportRef });
-  const betaTrialOfferText = getBetaTrialOfferText();
-  const analyzeTrialFootnoteText = betaTrialOfferText
-    ? `카드 정보 불필요 · 1분 가입 · ${DEFAULT_TRIAL_OFFER_TEXT} · ${betaTrialOfferText}`
-    : `카드 정보 불필요 · 1분 가입 · ${DEFAULT_TRIAL_OFFER_TEXT}`;
+  const trialCopy = getTrialCopy();
+  const analyzeTrialFootnoteText = `${trialCopy.footnoteWithDot} · ${trialCopy.trialPolicyShort}`;
 
   const fixtureDrop = useRef<HTMLDivElement>(null);
   const surgeryDrop = useRef<HTMLDivElement>(null);
@@ -182,7 +181,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     }, 400);
 
     try {
-      const result = await runAnalysis(fixtureFile, surgeryFiles);
+      // 분석이 너무 빨리 끝나면 오히려 신뢰도가 떨어질 수 있으므로, 
+      // 체감상 꼼꼼히 검토하는 느낌을 주기 위해 최소 2.5초의 인위적 지연을 추가합니다.
+      const [result] = await Promise.all([
+        runAnalysis(fixtureFile, surgeryFiles),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
       clearInterval(progressInterval);
       pageViewService.trackEvent(
         'analyze_complete',
@@ -266,9 +270,13 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   }, [leadEmail, leadHospital, leadRegion, leadContact, wantDetailedAnalysis, report, isSubmittingLead]);
 
   const hasAnyUploadedFile = Boolean(fixtureFile) || surgeryFiles.length > 0;
-  const uploadRequirements: { label: string; status: 'done' | 'pending' | 'warning' }[] = [
+  const uploadRequirements: { label: string; detail?: string; status: 'done' | 'pending' | 'warning' }[] = [
     { label: '재고 목록 파일 업로드', status: fixtureFile ? 'done' : 'pending' },
-    { label: '수술기록 파일 1개 이상 업로드', status: surgeryFiles.length > 0 ? 'done' : 'pending' },
+    {
+      label: '수술기록 파일 1개 이상 업로드',
+      detail: '* 6개월 이상 데이터 권장 (분석 정확도 향상)',
+      status: surgeryFiles.length > 0 ? 'done' : 'pending',
+    },
     {
       label: '엑셀 형식(.xlsx/.xls) 확인',
       status: uploadFormatWarning ? 'warning' : hasAnyUploadedFile ? 'done' : 'pending',
@@ -286,20 +294,20 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
         <div className="max-w-4xl mx-auto px-6 py-20">
           {/* Hero */}
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 mb-6">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+          <div className="text-center mb-16 animate-fade-in-up">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 mb-6 shadow-sm">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse-glow"></span>
               <span className="text-sm font-bold text-emerald-700">무료 데이터 품질 진단</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 leading-tight">
+            <h1 className="text-4xl md:text-6xl font-black text-slate-900 mb-6 leading-tight tracking-tight">
               우리 병원 임플란트 데이터,<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 animate-pulse-glow">
                 얼마나 잘 관리되고 있을까요?
               </span>
             </h1>
-            <p className="text-lg text-slate-500 max-w-lg mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-slate-500 max-w-xl mx-auto leading-relaxed font-medium">
               픽스쳐 재고 파일과 수술기록지를 업로드하면,<br />
-              데이터 품질을 6가지 항목으로 진단해드립니다.
+              데이터 품질을 6가지 항목으로 정밀히 진단해드립니다.
             </p>
           </div>
 
@@ -337,7 +345,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
               ref={fixtureDrop}
               onDrop={(e) => handleDrop(e, 'fixture')}
               onDragOver={handleDragOver}
-              className={`relative rounded-2xl border-2 border-dashed p-8 text-center transition-all ${fixtureFile ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30'}`}
+              className={`group relative rounded-3xl border-2 border-dashed p-8 text-center transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${fixtureFile ? 'border-emerald-400 bg-emerald-50/50 shadow-emerald-100/50' : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/20 hover:shadow-emerald-100/40'}`}
             >
               <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -352,7 +360,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                   <span className="text-emerald-700 font-semibold">{fixtureFile.name}</span>
-                  <button onClick={() => setFixtureFile(null)} className="text-slate-400 hover:text-rose-500 ml-1">
+                  <button
+                    type="button"
+                    onClick={() => setFixtureFile(null)}
+                    aria-label="업로드한 재고 목록 파일 삭제"
+                    className="text-slate-400 hover:text-rose-500 ml-1"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -371,7 +384,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
               ref={surgeryDrop}
               onDrop={(e) => handleDrop(e, 'surgery')}
               onDragOver={handleDragOver}
-              className={`relative rounded-2xl border-2 border-dashed p-8 text-center transition-all ${surgeryFiles.length > 0 ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30'}`}
+              className={`group relative rounded-3xl border-2 border-dashed p-8 text-center transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${surgeryFiles.length > 0 ? 'border-indigo-400 bg-indigo-50/50 shadow-indigo-100/50' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/20 hover:shadow-indigo-100/40'}`}
             >
               <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -388,7 +401,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                       <span className="text-indigo-700 font-medium text-xs">{f.name}</span>
-                      <button onClick={() => removeSurgeryFile(i)} className="text-slate-400 hover:text-rose-500">
+                      <button
+                        type="button"
+                        onClick={() => removeSurgeryFile(i)}
+                        aria-label={`업로드한 수술기록 파일 ${f.name} 삭제`}
+                        className="text-slate-400 hover:text-rose-500"
+                      >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     </div>
@@ -416,7 +434,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 return (
                   <div
                     key={item.label}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold border ${isDone
+                    className={`rounded-xl px-3 py-2.5 text-xs font-semibold border flex flex-col justify-center ${isDone
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                       : isWarning
                         ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -439,6 +457,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                       )}
                       {item.label}
                     </span>
+                    {item.detail && (
+                      <span className={`block mt-1 pl-5 text-[10.5px] font-medium tracking-tight ${isDone ? 'text-emerald-600/80' : 'text-slate-400'}`}>
+                        {item.detail}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -474,14 +497,22 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           )}
 
           {/* Analyze Button */}
-          <div className="text-center">
-            <button
-              onClick={handleAnalyze}
-              disabled={isAnalyzeDisabled}
-              className="px-10 py-4 bg-slate-900 text-white text-lg font-bold rounded-2xl shadow-2xl shadow-slate-900/20 hover:shadow-slate-900/40 hover:-translate-y-1 transition-all duration-300 disabled:opacity-40 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
-            >
-              분석 시작
-            </button>
+          <div className="text-center mt-12">
+            <div className="relative inline-block group">
+              {!isAnalyzeDisabled && (
+                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-indigo-400 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-1000 animate-pulse-glow z-0"></div>
+              )}
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzeDisabled}
+                className={`relative px-12 py-4.5 text-lg font-black rounded-2xl transition-all duration-300 overflow-hidden z-10 ${isAnalyzeDisabled ? 'bg-slate-200 text-slate-400 shadow-none hover:translate-y-0 cursor-not-allowed' : 'bg-slate-900 text-white shadow-2xl hover:shadow-slate-900/40 hover:-translate-y-1 active:scale-95'}`}
+              >
+                {!isAnalyzeDisabled && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                )}
+                분석 시작
+              </button>
+            </div>
             {isAnalyzeDisabled ? (
               <p className="mt-3 text-sm text-amber-700 font-semibold">
                 분석 시작을 위해 {analyzeDisabledReasons.join(' / ')}
@@ -498,19 +529,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           </div>
         </div>
 
-        {/* Footer - 기업정보 */}
-        <footer className="border-t border-slate-200 bg-slate-50 py-8 px-6">
-          <div className="max-w-4xl mx-auto text-xs text-slate-400 leading-relaxed">
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-              <div>
-                <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
-                <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
-                <p>이메일: admin@denjoy.info</p>
-              </div>
-              <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
-            </div>
-          </div>
-        </footer>
+        <PublicInfoFooter showLegalLinks />
       </div>
     );
   }
@@ -521,32 +540,36 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     const offset = circumference - (progress / 100) * circumference;
 
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex items-center justify-center">
-        <div className="text-center px-6">
-          <div className="relative w-40 h-40 mx-auto mb-8">
-            <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
-              <circle cx="70" cy="70" r="60" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center px-6 text-white">
+          <div className="relative w-48 h-48 mx-auto mb-10">
+            {/* 배경 블러 효과 */}
+            <div className="absolute inset-0 bg-indigo-500 rounded-full blur-[60px] opacity-40 animate-pulse-glow"></div>
+
+            <svg viewBox="0 0 140 140" className="relative w-full h-full -rotate-90 z-10 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+              <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="6" />
               <circle
                 cx="70" cy="70" r="60" fill="none"
                 stroke="url(#progressGradient)" strokeWidth="8"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={offset}
-                className="transition-all duration-300"
+                className="transition-all duration-300 drop-shadow-[0_0_10px_rgba(99,102,241,0.8)]"
               />
               <defs>
                 <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#6366f1" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
+                  <stop offset="0%" stopColor="#38bdf8" />
+                  <stop offset="50%" stopColor="#818cf8" />
+                  <stop offset="100%" stopColor="#c084fc" />
                 </linearGradient>
               </defs>
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl font-black text-slate-800">{Math.round(progress)}%</span>
+              <span className="text-3xl font-black text-white z-20 drop-shadow-md">{Math.round(progress)}%</span>
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-3">데이터를 분석하고 있습니다</h2>
-          <p className="text-slate-500 text-sm animate-pulse">{processingMsg}</p>
+          <h2 className="text-2xl font-black text-white mb-3">데이터를 분석하고 있습니다</h2>
+          <p className="text-indigo-200 text-sm animate-pulse">{processingMsg}</p>
         </div>
       </div>
     );
@@ -588,16 +611,22 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     <div ref={reportRef} className="min-h-screen bg-slate-50">
 
       {/* Section 1: Overall Score */}
-      <section className="bg-slate-900 text-white pt-12 pb-16">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 mb-6">
-            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span className="text-xs text-slate-400">분석 데이터는 서버에 저장되지 않습니다</span>
+      <section className="bg-slate-900 text-white pt-16 pb-20 relative overflow-hidden">
+        {/* 장식용 글로우 배경 */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-indigo-500/20 blur-[120px] rounded-full pointer-events-none"></div>
+
+        <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-800/80 backdrop-blur-md border border-slate-700/50 mb-8 shadow-xl">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-medium text-slate-300">분석 데이터는 서버에 저장되지 않고 보호됩니다</span>
           </div>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">데이터 품질 진단 결과</p>
-          <ScoreGauge score={report.dataQualityScore} color={grade.color} />
+          <h2 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-emerald-400 uppercase tracking-[0.2em] mb-6">데이터 품질 진단 결과</h2>
+          <div className="relative inline-block drop-shadow-[0_0_30px_rgba(52,211,153,0.3)]">
+            <ScoreGauge score={report.dataQualityScore} color={grade.color} />
+          </div>
           <div className="mt-6 inline-flex items-center gap-3">
             <span className={`px-4 py-2 rounded-full text-base font-black ${colors.bg} text-white`}>
               {grade.label}등급
@@ -605,7 +634,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
             <span className="text-lg text-slate-200 font-medium">{grade.text}</span>
           </div>
           {/* Summary stats */}
-          <div className="mt-10 grid grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="mt-12 grid grid-cols-3 md:grid-cols-6 gap-4">
             {[
               { label: '전체 품목', value: report.summary.totalFixtureItems },
               { label: '사용 품목', value: report.summary.activeItems },
@@ -614,9 +643,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
               { label: '미등록 품목', value: report.summary.surgeryOnlyItems },
               { label: '표기 변형', value: report.summary.nameVariants },
             ].map((s, i) => (
-              <div key={i} className="bg-slate-800 rounded-xl py-3 px-2">
-                <div className="text-2xl font-black text-white tabular-nums">{s.value}</div>
-                <div className="text-[11px] text-slate-400 mt-1 font-medium">{s.label}</div>
+              <div key={i} className="bg-slate-800/60 backdrop-blur-sm rounded-2xl py-4 px-2 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 transition-colors shadow-lg">
+                <div className="text-3xl font-black text-white tabular-nums drop-shadow-md">{s.value}</div>
+                <div className="text-[11px] text-slate-400 mt-1.5 font-bold uppercase tracking-wider">{s.label}</div>
               </div>
             ))}
           </div>
@@ -649,34 +678,46 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       </section>
 
       {/* Section 2: Diagnostic Results */}
-      <section className="py-12 bg-white">
+      <section className="py-16 bg-slate-50 relative">
         <div className="max-w-4xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-8">진단 결과</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">상세 진단 결과</h2>
+            <p className="text-slate-500 font-medium">6가지 핵심 지표를 바탕으로 데이터 품질을 평가했습니다.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {report.diagnostics.map((d, i) => {
               const sc = statusColorMap[d.status];
               return (
-                <div key={i} className={`rounded-2xl border ${sc.border} ${sc.bg} p-6`}>
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className={`w-8 h-8 rounded-lg ${sc.iconBg} flex items-center justify-center font-bold text-sm flex-shrink-0`}>
-                      {sc.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-400 uppercase">{d.category}</span>
-                        <span className={`text-xs font-bold ${sc.text}`}>{d.score}/{d.maxScore}점</span>
+                <div key={i} className={`group rounded-3xl border ${sc.border} ${sc.bg} p-7 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 relative overflow-hidden bg-white`}>
+                  <div className={`absolute -inset-0.5 bg-gradient-to-br ${d.status === 'good' ? 'from-emerald-500 to-teal-500' : d.status === 'warning' ? 'from-amber-400 to-orange-400' : 'from-rose-500 to-red-500'} rounded-3xl blur opacity-0 group-hover:opacity-15 transition duration-500 z-0`}></div>
+
+                  <div className="relative z-10">
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className={`w-10 h-10 rounded-xl ${sc.iconBg} flex items-center justify-center font-bold text-base flex-shrink-0 shadow-sm border border-white`}>
+                        {sc.icon}
                       </div>
-                      <h3 className={`text-sm font-bold ${sc.text} mb-1`}>{d.title}</h3>
-                      <p className="text-xs text-slate-500 leading-relaxed">{d.detail}</p>
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{d.category}</span>
+                          <span className={`text-sm font-black ${sc.text} bg-white px-2.5 py-0.5 rounded-full shadow-sm border ${sc.border}`}>{d.score}/{d.maxScore}점</span>
+                        </div>
+                        <h3 className={`text-base font-black ${sc.text} mb-2`}>{d.title}</h3>
+                        <p className="text-xs text-slate-600 leading-relaxed font-medium">{d.detail}</p>
+                      </div>
                     </div>
+                    {d.items && d.items.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 pl-14">
+                        <ul className="space-y-1.5">
+                          {d.items.map((item, j) => (
+                            <li key={j} className="text-xs text-slate-500 flex items-start gap-2">
+                              <span className="w-1 h-1 rounded-full bg-slate-300 mt-1.5 flex-shrink-0"></span>
+                              <span className="leading-snug">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                  {d.items && d.items.length > 0 && (
-                    <div className="mt-2 pl-11">
-                      {d.items.map((item, j) => (
-                        <p key={j} className="text-xs text-slate-400">- {item}</p>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -685,17 +726,25 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       </section>
 
       {/* Section 3: Matching Analysis */}
-      <section className="py-12 bg-slate-50">
+      <section className="py-20 bg-white">
         <div className="max-w-4xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">매칭 분석</h2>
-          <p className="text-sm text-slate-500 mb-8">수술기록과 재고 목록 간 불일치 현황 (제조사별)</p>
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 mb-4 shadow-sm border border-indigo-100">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">수술기록 ↔ 재고목록 매칭 분석</h2>
+            <p className="text-slate-500 font-medium">실제 사용된 임플란트가 시스템에 얼마나 잘 등록되어 있는지 확인합니다.</p>
+          </div>
 
           {report.unmatchedItems.length === 0 ? (
-            <div className="text-center py-10 bg-white rounded-2xl border border-slate-200">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            <div className="text-center py-16 bg-gradient-to-b from-emerald-50 to-white rounded-3xl border border-emerald-100 shadow-xl shadow-emerald-900/5">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4 animate-bounce">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               </div>
-              <p className="text-emerald-700 font-bold">모든 품목이 매칭됩니다</p>
+              <p className="text-xl text-emerald-800 font-black mb-2 tracking-tight">완벽합니다! 모든 데이터가 일치합니다.</p>
+              <p className="text-sm text-emerald-600/80 font-medium">재고 누수 없이 매우 우수하게 관리되고 있습니다.</p>
             </div>
           ) : (() => {
             type MfrStat = { fixtureOnly: number; surgeryOnly: number };
@@ -712,26 +761,33 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
             const totalSurgeryOnly = report.unmatchedItems.filter(i => i.source === 'surgery_only').length;
 
             return (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* Summary cards */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center">
-                    <div className="text-3xl font-black text-slate-800">{report.unmatchedItems.length}</div>
-                    <div className="text-xs text-slate-500 mt-1">총 불일치</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="bg-slate-50 rounded-3xl p-6 text-center shadow-inner border border-slate-100">
+                    <div className="text-4xl font-black text-slate-800 mb-1">{report.unmatchedItems.length}</div>
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">총 불일치 건수</div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-blue-200 p-5 text-center">
-                    <div className="text-3xl font-black text-blue-600">{totalFixtureOnly}</div>
-                    <div className="text-xs text-blue-500 mt-1">재고목록만</div>
+                  <div className="bg-blue-50/50 rounded-3xl p-6 text-center border border-blue-100 hover:shadow-lg hover:shadow-blue-900/5 transition-all">
+                    <div className="text-4xl font-black text-blue-600 mb-1">{totalFixtureOnly}</div>
+                    <div className="text-xs font-bold text-blue-500 uppercase tracking-widest">수술기록 누락 (Dead Stock 후보)</div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-amber-200 p-5 text-center">
-                    <div className="text-3xl font-black text-amber-600">{totalSurgeryOnly}</div>
-                    <div className="text-xs text-amber-500 mt-1">수술기록만</div>
+                  <div className="bg-amber-50/50 rounded-3xl p-6 text-center border border-amber-100 hover:shadow-lg hover:shadow-amber-900/5 transition-all">
+                    <div className="text-4xl font-black text-amber-600 mb-1">{totalSurgeryOnly}</div>
+                    <div className="text-xs font-bold text-amber-500 uppercase tracking-widest">재고등록 누락 (미등록 사용)</div>
                   </div>
                 </div>
 
                 {/* Manufacturer bar chart */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-6">
-                  <h3 className="text-sm font-bold text-slate-600 mb-5 uppercase tracking-wider">제조사별 불일치 현황</h3>
+                <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xl shadow-slate-200/40">
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">제조사별 불일치 비중 (Top)</h3>
+                  </div>
                   <div className="space-y-4">
                     {entries.map(([mfr, counts]) => {
                       const total = counts.fixtureOnly + counts.surgeryOnly;
@@ -784,12 +840,14 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       </section>
 
       {/* Section 4: Usage Patterns */}
-      <section className="py-12 bg-white">
+      <section className="py-20 bg-slate-50 border-t border-slate-100">
         <div className="max-w-4xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">사용 패턴 분석</h2>
-          <p className="text-sm text-slate-500 mb-6">
-            분석기간 : {report.usagePatterns.periodMonths}개월
-          </p>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">수술 기록 분석 리포트</h2>
+            <p className="text-slate-500 font-medium whitespace-pre-line">
+              {`최근 ${report.usagePatterns.periodMonths}개월간의 수술 데이터에서 파악된 임플란트 소모 및 사용 패턴입니다.\n정밀한 발주 시기 예측과 재고 최적화에 활용할 수 있습니다.`}
+            </p>
+          </div>
 
           {/* Surgery & Implant Stats */}
           <div className="grid grid-cols-2 gap-4 mb-8">
@@ -865,10 +923,13 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
             })()}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
             {/* Top Used Items */}
-            <div className="bg-slate-50 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-slate-600 mb-5 uppercase tracking-wider">TOP 사용 품목</h3>
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-lg shadow-slate-200/50">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">TOP 사용 품목 (Best 5)</h3>
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-md">핵심 관리 대상</span>
+              </div>
               {report.usagePatterns.topUsedItems.length > 0 ? (
                 <BarChart
                   items={report.usagePatterns.topUsedItems.slice(0, 5).map(t => ({
@@ -878,12 +939,15 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                   maxValue={Math.max(...report.usagePatterns.topUsedItems.map(t => t.count))}
                 />
               ) : (
-                <p className="text-sm text-slate-400">수술기록 데이터가 부족합니다.</p>
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <svg className="w-10 h-10 mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" /></svg>
+                  <p className="text-sm font-medium">수술기록 데이터가 부족합니다.</p>
+                </div>
               )}
             </div>
             {/* Manufacturer Distribution */}
-            <div className="bg-slate-50 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-slate-600 mb-5 uppercase tracking-wider">제조사별 분포</h3>
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-lg shadow-slate-200/50">
+              <h3 className="text-sm font-black text-slate-800 mb-8 uppercase tracking-widest">제조사별 소모 비중</h3>
               <DonutChart data={report.usagePatterns.manufacturerDistribution} />
             </div>
           </div>
@@ -891,16 +955,20 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       </section>
 
       {/* Section 5: Recommendations */}
-      <section className="py-12 bg-slate-50">
+      <section className="py-20 bg-white">
         <div className="max-w-4xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">개선 권장사항</h2>
-          <div className="space-y-3">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">개선 권장사항 요약</h2>
+            <p className="text-slate-500 font-medium">진단 결과를 바탕으로 한 시스템 도입 시 최우선 해결 과제입니다.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {report.recommendations.map((rec, i) => (
-              <div key={i} className="flex gap-4 bg-white rounded-xl p-5 border border-slate-200">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                  {i + 1}
+              <div key={i} className="flex gap-4 bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                <div className="relative w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-base flex-shrink-0 shadow-md">
+                  <span className="relative z-10">{i + 1}</span>
+                  <div className="absolute inset-0 rounded-xl bg-indigo-400 blur-sm opacity-50 z-0"></div>
                 </div>
-                <p className="text-sm text-slate-700 leading-relaxed">{rec}</p>
+                <p className="text-sm text-slate-700 leading-relaxed font-medium pt-1">{rec}</p>
               </div>
             ))}
           </div>
@@ -950,7 +1018,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 <p className="text-sm text-slate-500">최소 입력(이메일)만으로 결과 저장이 가능합니다.</p>
               </div>
               <div className="space-y-3 max-w-sm mx-auto">
+                <label htmlFor="analyze-lead-email" className="block text-xs font-bold text-slate-500 mb-1">
+                  이메일 주소 *
+                </label>
                 <input
+                  id="analyze-lead-email"
                   type="email"
                   value={leadEmail}
                   onChange={(e) => updateLeadEmail(e.target.value)}
@@ -997,21 +1069,33 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                         </div>
                       ))}
                     </div>
+                    <label htmlFor="analyze-lead-hospital" className="block text-xs font-bold text-slate-500 mb-1">
+                      병원명 *
+                    </label>
                     <input
+                      id="analyze-lead-hospital"
                       type="text"
                       value={leadHospital}
                       onChange={(e) => updateLeadHospital(e.target.value)}
                       placeholder="병원명 *"
                       className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadHospital ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
+                    <label htmlFor="analyze-lead-region" className="block text-xs font-bold text-slate-500 mb-1">
+                      지역 *
+                    </label>
                     <input
+                      id="analyze-lead-region"
                       type="text"
                       value={leadRegion}
                       onChange={(e) => updateLeadRegion(e.target.value)}
                       placeholder="지역 (예: 서울 강남구) *"
                       className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${leadRegion ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}
                     />
+                    <label htmlFor="analyze-lead-contact" className="block text-xs font-bold text-slate-500 mb-1">
+                      연락처 *
+                    </label>
                     <input
+                      id="analyze-lead-contact"
                       type="tel"
                       value={leadContact}
                       onChange={(e) => updateLeadContact(e.target.value)}
@@ -1073,17 +1157,27 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       </section>
 
       {/* Section 6: Next Action */}
-      <section className="py-16 bg-slate-900 text-white">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-3xl font-black mb-3">이 진단을 매일 자동으로 받아보세요</h2>
-          <p className="text-slate-400 mb-8">DenJOY가 수술기록을 업로드할 때마다 재고를 자동 관리하고, 데이터 품질을 유지합니다.</p>
-          <button
-            onClick={onSignup}
-            className="px-10 py-4 bg-white text-slate-900 text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
-          >
-            무료로 시작하기
-          </button>
-          <p className="text-xs text-slate-500 mt-3">{analyzeTrialFootnoteText}</p>
+      <section className="py-24 bg-gradient-to-b from-slate-900 to-indigo-950 text-white relative overflow-hidden">
+        {/* 장식용 글로우 */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-1/2 bg-indigo-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+
+        <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight">
+            이 진단을 매일 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">자동으로</span> 받아보세요
+          </h2>
+          <p className="text-lg text-indigo-200 mb-10 font-medium">DenJOY가 수술기록을 업로드할 때마다 재고를 자동 관리하고, 최고의 데이터 품질을 유지합니다.</p>
+
+          <div className="relative group inline-block mb-3">
+            <div className="absolute -inset-1 bg-gradient-to-r from-white/40 via-purple-300/40 to-indigo-300/40 rounded-2xl blur opacity-30 group-hover:opacity-70 transition duration-1000"></div>
+            <button
+              onClick={onSignup}
+              className="relative px-12 py-4 bg-white text-indigo-900 text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/40 active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+              무료로 시작하기
+            </button>
+          </div>
+          <p className="text-xs text-indigo-300/70">{analyzeTrialFootnoteText}</p>
           <button
             onClick={onContact}
             className="mt-4 text-sm text-slate-400 hover:text-white underline underline-offset-2 transition-colors"
@@ -1092,6 +1186,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           </button>
         </div>
       </section>
+      <PublicInfoFooter showLegalLinks />
     </div>
   );
 };

@@ -21,6 +21,22 @@ const PUBLIC_PAGES = new Set([
 
 type EventData = Record<string, unknown>;
 
+function getClientContext(): EventData {
+  try {
+    if (typeof window === 'undefined') return {};
+    const viewportWidth = typeof window.innerWidth === 'number' ? window.innerWidth : null;
+    const isMobile = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 1279px)').matches
+      : (typeof viewportWidth === 'number' ? viewportWidth <= 1279 : null);
+    return {
+      is_mobile: isMobile,
+      viewport_width: viewportWidth,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export const pageViewService = {
   /** 페이지 뷰 기록 (fire-and-forget, 실패 시 조용히 무시) */
   track(page: string): void {
@@ -28,7 +44,7 @@ export const pageViewService = {
     supabase.from('page_views').insert({
       page,
       event_type: `${page}_view`,
-      event_data: null,
+      event_data: getClientContext(),
       session_id: getSessionId(),
       referrer: document.referrer || null,
     }).then(undefined, () => {});
@@ -60,10 +76,11 @@ export const pageViewService = {
    */
   trackEvent(event_type: string, event_data?: EventData, page = 'pricing'): void {
     const normalizedPage = PUBLIC_PAGES.has(page) ? page : 'landing';
+    const context = getClientContext();
     supabase.from('page_views').insert({
       page: normalizedPage,
       event_type,
-      event_data: event_data ?? null,
+      event_data: event_data ? { ...event_data, ...context } : context,
       session_id: getSessionId(),
       referrer: document.referrer || null,
     }).then(undefined, () => {});

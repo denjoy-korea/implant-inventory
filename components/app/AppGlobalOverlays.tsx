@@ -30,6 +30,7 @@ interface AppGlobalOverlaysProps {
   inventoryCompare: InventoryCompareState | null;
   alertToast: Toast | null;
   showMobileDashboardNav: boolean;
+  showMobilePublicNav: boolean;
   onClosePlanLimitModal: () => void;
   onUpgradePlan: () => void;
   onCloseConfirmModal: () => void;
@@ -43,12 +44,14 @@ const AppGlobalOverlays: React.FC<AppGlobalOverlaysProps> = ({
   inventoryCompare,
   alertToast,
   showMobileDashboardNav,
+  showMobilePublicNav,
   onClosePlanLimitModal,
   onUpgradePlan,
   onCloseConfirmModal,
   onConfirmInventoryCompare,
   onCancelInventoryCompare,
 }) => {
+  const shouldLiftToastForBottomNav = showMobileDashboardNav || showMobilePublicNav;
   return (
     <>
       {planLimitModal && (
@@ -120,7 +123,7 @@ const AppGlobalOverlays: React.FC<AppGlobalOverlaysProps> = ({
 
       {alertToast && (
         <div
-          style={showMobileDashboardNav ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
+          style={shouldLiftToastForBottomNav ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}
           className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${alertToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
             }`}
         >

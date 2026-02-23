@@ -50,6 +50,8 @@ interface InventoryManagerProps {
     appliedBrand: string;
     appliedSize: string;
   }>;
+  initialShowBaseStockEdit?: boolean;
+  onBaseStockEditApplied?: () => void;
 }
 
 const InventoryManager: React.FC<InventoryManagerProps> = ({
@@ -68,6 +70,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   unregisteredFromSurgery = [],
   onRefreshLatestSurgeryUsage,
   onResolveManualInput,
+  initialShowBaseStockEdit,
+  onBaseStockEditApplied,
 }) => {
   const maxEdits = PLAN_LIMITS[plan].maxBaseStockEdits;
   const isUnlimited = maxEdits === Infinity;
@@ -100,6 +104,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     isUnlimited,
   });
   const isEditExhausted = !isUnlimited && editCount >= maxEdits;
+
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (initialShowBaseStockEdit && !isEditExhausted) {
+      setShowEditNotice(true);
+      autoOpenedRef.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 수술중FAIL_ / 보험청구 항목 제외한 실제 표시 대상 */
   const visibleInventory = useMemo(() => {
@@ -1055,7 +1068,13 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           onBulkUpdateStocks={onBulkUpdateStocks}
           onUpdateStock={onUpdateStock}
           onClose={() => setShowBaseStockModal(false)}
-          onAfterSave={handleBaseStockSaved}
+          onAfterSave={(serverCount) => {
+            handleBaseStockSaved(serverCount);
+            if (autoOpenedRef.current) {
+              autoOpenedRef.current = false;
+              onBaseStockEditApplied?.();
+            }
+          }}
         />
       )}
 

@@ -37,6 +37,8 @@ interface FailManagerProps {
   isReadOnly?: boolean;
   hospitalId?: string;
   onBulkSetupComplete?: () => Promise<void>;
+  initialShowBulkModal?: boolean;
+  onInitialModalOpened?: () => void;
 }
 
 interface MonthlyFailDatum {
@@ -48,7 +50,7 @@ interface MonthlyFailDatum {
 // ============================================================
 // COMPONENT
 // ============================================================
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened }) => {
   const { toast, showToast } = useToast();
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
@@ -95,6 +97,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (initialShowBulkModal) {
+      setIsBulkModalOpen(true);
+      onInitialModalOpened?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -1171,6 +1181,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           pendingByManufacturer={pendingByManufacturer}
           onInitialize={handleBulkInitialize}
           onReconcile={handleBulkReconcile}
+          initialTab={initialShowBulkModal ? 'reconcile' : undefined}
         />
       )}
 

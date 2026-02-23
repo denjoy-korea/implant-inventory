@@ -30,6 +30,13 @@ function avgMinutes(values) {
   return Math.round(total / values.length);
 }
 
+function isMobileRow(row) {
+  const data = row?.event_data;
+  if (!data || typeof data !== 'object') return false;
+  const mobile = data.is_mobile;
+  return mobile === true || mobile === 1 || mobile === 'true';
+}
+
 export function computeTrafficKpiSnapshot(rows) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const missingSessionRows = safeRows.filter((row) => !row.session_id).length;
@@ -52,11 +59,35 @@ export function computeTrafficKpiSnapshot(rows) {
   const analyzeCompleteSessions = uniqueSessionCountByEvent('analyze_complete');
   const contactSubmitSessions = uniqueSessionCountByEvent('contact_submit');
   const waitlistSubmitSessions = uniqueSessionCountByEvent('waitlist_submit');
+  const paymentModalOpenSessions = uniqueSessionCountByEvent('pricing_payment_modal_open');
+  const paymentRequestSuccessSessions = uniqueSessionCountByEvent('pricing_payment_request_success');
+  const paymentRequestErrorSessions = uniqueSessionCountByEvent('pricing_payment_request_error');
+  const paymentModalCompletionRate = toPct(paymentRequestSuccessSessions, paymentModalOpenSessions);
 
   const conversionSessions = getUniqueSessionCount(
     safeRows,
     (row) => row.event_type === 'contact_submit' || row.event_type === 'waitlist_submit',
   );
+
+  const mobileLandingSessions = getUniqueSessionCount(
+    safeRows,
+    (row) => isMobileRow(row) && (row.event_type === 'landing_view' || row.page === 'landing'),
+  );
+  const mobileEngagedSessions = getUniqueSessionCount(
+    safeRows,
+    (row) =>
+      isMobileRow(row)
+      && (
+        row.event_type === 'pricing_view'
+        || row.event_type === 'auth_start'
+        || row.event_type === 'contact_submit'
+        || row.event_type === 'waitlist_submit'
+        || row.event_type === 'analyze_start'
+      ),
+  );
+  const mobileDropoffRate = mobileLandingSessions > 0
+    ? Math.max(0, 100 - toPct(mobileEngagedSessions, mobileLandingSessions))
+    : 0;
 
   const eventFunnel = [
     { key: 'landing_view', label: 'Landing View', count: landingViewSessions },
@@ -125,6 +156,13 @@ export function computeTrafficKpiSnapshot(rows) {
     contactSubmitSessions,
     waitlistSubmitSessions,
     conversionSessions,
+    paymentModalOpenSessions,
+    paymentRequestSuccessSessions,
+    paymentRequestErrorSessions,
+    paymentModalCompletionRate,
+    mobileLandingSessions,
+    mobileEngagedSessions,
+    mobileDropoffRate,
     avgTimeToAuthMinutes: avgMinutes(timeToAuthMinutes),
     avgTimeToValueMinutes: avgMinutes(timeToValueMinutes),
     eventFunnel: eventFunnelWithCvr,

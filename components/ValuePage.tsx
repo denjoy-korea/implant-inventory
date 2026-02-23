@@ -5,6 +5,7 @@ import {
   getTrialCopy,
 } from '../utils/trialPolicy';
 import SectionNavigator from './SectionNavigator';
+import PublicInfoFooter from './shared/PublicInfoFooter';
 
 interface ValuePageProps {
   onGetStarted: () => void;
@@ -51,16 +52,17 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
   const trialCopy = getTrialCopy();
   const ctaTrialBadgeText = trialCopy.badgeText;
   const ctaTrialFootnoteText = trialCopy.footnoteWithPipe;
+  const trialPolicyShortText = trialCopy.trialPolicyShort;
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans selection:bg-indigo-500 selection:text-white">
 
       <SectionNavigator sections={[
-        { id: 'vp-hero',    label: '소개' },
+        { id: 'vp-hero', label: '소개' },
         { id: 'vp-problem', label: '문제' },
-        { id: 'vp-effect',  label: '효과' },
-        { id: 'vp-stats',   label: '수치' },
-        { id: 'vp-review',  label: '후기' },
+        { id: 'vp-effect', label: '효과' },
+        { id: 'vp-stats', label: '수치' },
+        { id: 'vp-review', label: '후기' },
       ]} />
 
       {/* ─── Hero: Loss Aversion + Framing ─── */}
@@ -72,24 +74,30 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
             <span className="w-2 h-2 bg-rose-400 rounded-full animate-pulse"></span>
             <span className="text-sm font-bold text-rose-300">지금 이 순간에도 시간이 낭비되고 있습니다</span>
           </div>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight mb-6">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-tight mb-6 text-slate-100 animate-fade-in-up animation-delay-200">
             아직도 엑셀로<br />
-            임플란트 재고를 관리하시나요?
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">
+              임플란트 재고를 관리하시나요?
+            </span>
           </h1>
-          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-4">
+          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-4 animate-fade-in-up animation-delay-400">
             매주 <span className="text-rose-400 font-black">2시간</span>, 연간{' '}
             <span className="text-rose-400 font-black">104시간</span>을
           </p>
-          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-12">
+          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-12 animate-fade-in-up animation-delay-600">
             재고 확인과 발주에 쓰고 있다면, <span className="text-white font-bold">이미 늦었습니다.</span>
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={onGetStarted}
-              className="px-8 py-4 bg-white text-slate-900 font-black text-lg rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
-            >
-              무료로 체험하기
-            </button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-[800ms]">
+            <div className="relative group inline-block">
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-2xl blur opacity-40 group-hover:opacity-70 transition duration-1000 animate-pulse-glow"></div>
+              <button
+                onClick={onGetStarted}
+                className="relative w-full px-8 py-4 bg-white text-slate-900 font-black text-lg rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 overflow-hidden"
+              >
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                <span className="relative z-10">무료로 체험하기</span>
+              </button>
+            </div>
             <button
               onClick={onContact}
               className="px-8 py-4 bg-transparent text-white font-bold text-lg rounded-2xl border-2 border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300"
@@ -152,13 +160,13 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                 metric: '이직 원인 1위',
               },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-2xl p-7 border border-slate-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center mb-5">
+              <div key={i} className={`bg-white rounded-[2rem] p-7 sm:p-8 border border-slate-200 hover:border-rose-200 hover:shadow-xl hover:shadow-rose-100/50 hover:-translate-y-2 transition-all duration-500 animate-fade-in-up group`} style={{ animationDelay: `${(i % 4 + 1) * 200}ms` }}>
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300 shadow-inner">
                   {item.icon}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">{item.title}</h3>
+                <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-rose-600 transition-colors">{item.title}</h3>
                 <p className="text-sm text-slate-500 leading-relaxed mb-4">{item.desc}</p>
-                <div className="text-xs font-black text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full inline-block">
+                <div className="text-xs font-black text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full inline-block border border-rose-100/50">
                   {item.metric}
                 </div>
               </div>
@@ -287,6 +295,9 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               </div>
             ))}
           </div>
+          <p className="mt-7 text-center text-[11px] text-slate-400">
+            * 성과 수치는 공개 사례 및 운영 시뮬레이션 기준 예시이며, 병원별 진료량과 운영 프로세스에 따라 달라질 수 있습니다.
+          </p>
         </div>
       </section>
 
@@ -405,6 +416,9 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               </div>
             ))}
           </div>
+          <p className="mt-6 text-center text-[11px] text-slate-400">
+            * 후기는 사용자 공개 동의 기반으로 게재되며, 일부 표현은 이해를 돕기 위한 요약 문구가 포함될 수 있습니다.
+          </p>
         </div>
       </section>
 
@@ -426,12 +440,15 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               { title: 'FAIL 교환 관리', desc: '수술 중 FAIL 발생부터 교환 접수, 입고 확인까지 전 과정 추적', tag: 'FAIL' },
               { title: '역할별 권한 관리', desc: '원장/매니저/스탭 역할에 따라 접근 가능한 메뉴와 기능을 구분', tag: '보안' },
             ].map((item, i) => (
-              <div key={i} className="group p-7 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                  {item.tag}
-                </span>
-                <h3 className="text-lg font-bold text-slate-900 mt-4 mb-2">{item.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed">{item.desc}</p>
+              <div key={i} className="group p-7 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-2xl hover:shadow-indigo-100/50 hover:-translate-y-2 transition-all duration-500 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-indigo-100/50 z-0"></div>
+                <div className="relative z-10">
+                  <span className="text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-wider shadow-sm">
+                    {item.tag}
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900 mt-5 mb-3 group-hover:text-indigo-600 transition-colors">{item.title}</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">{item.desc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -443,27 +460,35 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800"></div>
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-15"></div>
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center text-white">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8">
+          <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 mb-8 shadow-[0_0_15px_rgba(245,158,11,0.2)] justify-center">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            <span className="text-sm font-bold text-amber-200">{ctaTrialBadgeText}</span>
+            <span className="text-[11px] sm:text-sm font-bold text-amber-200 leading-relaxed text-balance">{ctaTrialBadgeText}</span>
           </div>
-          <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight">
-            지금 시작하면<br />{DEFAULT_TRIAL_HIGHLIGHT_TEXT}
+          <h2 className="text-3xl md:text-5xl font-black mb-6 leading-tight text-balance">
+            지금 시작하면<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
           </h2>
-          <p className="text-indigo-200 text-lg mb-4 leading-relaxed">
+          <p className="text-indigo-200 text-lg mb-4 leading-relaxed font-medium">
             엑셀에 쓰는 시간을 환자에게 쓰세요.<br />
             더 이상 재고 걱정에 시간을 낭비하지 마세요.
           </p>
-          <p className="text-sm text-indigo-300 mb-10">
+          <p className="text-sm text-indigo-300 mb-10 text-balance">
             {ctaTrialFootnoteText}
           </p>
+          <p className="text-xs text-indigo-300/90 mb-10 text-balance">
+            * {trialPolicyShortText}
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={onGetStarted}
-              className="px-10 py-4 bg-white text-indigo-700 font-black text-lg rounded-2xl shadow-2xl hover:shadow-white/30 hover:-translate-y-1 transition-all duration-300"
-            >
-              무료로 시작하기
-            </button>
+            <div className="relative group inline-block">
+              <div className="absolute -inset-1 bg-gradient-to-r from-white/40 via-purple-300/40 to-indigo-300/40 rounded-2xl blur opacity-30 group-hover:opacity-70 transition duration-1000"></div>
+              <button
+                onClick={onGetStarted}
+                className="relative w-full sm:w-auto px-10 py-4 bg-white text-indigo-800 font-black text-lg rounded-2xl shadow-2xl hover:shadow-white/40 active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+              >
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                <span className="relative z-10">무료로 시작하기</span>
+              </button>
+            </div>
             <button
               onClick={onContact}
               className="px-10 py-4 bg-transparent text-white font-bold text-lg rounded-2xl border-2 border-white/30 hover:border-white/50 hover:bg-white/5 transition-all duration-300"
@@ -474,19 +499,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
         </div>
       </section>
 
-      {/* Footer - 기업정보 */}
-      <footer className="border-t border-slate-200 bg-slate-50 py-8 px-6">
-        <div className="max-w-4xl mx-auto text-xs text-slate-400 leading-relaxed">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <p className="font-semibold text-slate-500 mb-1">디앤조이(DenJOY)</p>
-              <p>대표: 맹준호 | 사업자등록번호: 528-22-01076</p>
-              <p>이메일: admin@denjoy.info</p>
-            </div>
-            <p className="md:text-right text-slate-300">&copy; {new Date().getFullYear()} DenJOY. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <PublicInfoFooter showLegalLinks />
     </div>
   );
 };

@@ -9,6 +9,7 @@
     "lint": "npm run typecheck && node scripts/lint-check.mjs",
     "test": "node --test scripts/*.test.mjs",
     "test:funnel": "node --test scripts/funnel-kpi-regression.test.mjs",
+    "test:legalux": "node --test scripts/legal-ux-hardening.test.mjs",
     "report:traffic": "node scripts/admin-traffic-snapshot.mjs 30",
     "smoke:ops": "node scripts/operational-smoke-checklist.mjs",
     "smoke:edge": "node scripts/check-edge-functions.mjs",

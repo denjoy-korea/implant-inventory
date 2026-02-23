@@ -15,18 +15,15 @@ function read(relPath) {
   return readFileSync(fullPath, 'utf8');
 }
 
-test('crypto utils use AES-GCM with legacy compatibility', () => {
+test('crypto utils delegate encryption to crypto-service edge function', () => {
   const src = read('services/cryptoUtils.ts');
-  assert.match(src, /const ENC_V2_PREFIX = 'ENCv2:'/);
-  assert.match(src, /const ENC_V1_PREFIX = 'ENC:'/);
-  assert.match(src, /name:\s*'AES-GCM'/);
-  assert.match(src, /legacyDecryptXor/);
+  assert.match(src, /const CRYPTO_SERVICE_URL = `\$\{SUPABASE_URL\}\/functions\/v1\/crypto-service`/);
+  assert.match(src, /async function callCryptoService/);
 });
 
-test('crypto utils do not fall back to supabase anon key for encryption', () => {
+test('crypto utils use anon key only for api gateway routing', () => {
   const src = read('services/cryptoUtils.ts');
-  // VITE_SUPABASE_ANON_KEY is a public key and must not be used as an encryption secret
-  assert.doesNotMatch(src, /VITE_SUPABASE_ANON_KEY/);
+  assert.match(src, /'apikey': SUPABASE_ANON_KEY/);
 });
 
 test('order service uses transactional RPC with compatibility fallback', () => {
@@ -137,11 +134,9 @@ test('free plan max item limit is 100', () => {
   assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*100[\s\S]*?\}/m);
 });
 
-test('crypto utils throw in production when encryption key is missing', () => {
+test('crypto utils request auth token for encryption and decryption', () => {
   const src = read('services/cryptoUtils.ts');
-  // Must throw (not just warn) when PROD and key is missing
-  assert.match(src, /import\.meta\.env\.PROD/);
-  assert.match(src, /throw new Error/);
+  assert.match(src, /headers\['Authorization'\] = `Bearer \$\{token\}`/);
 });
 
 test('gemini api key is not injected into client bundle via vite define', () => {

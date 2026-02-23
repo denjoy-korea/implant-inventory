@@ -9,9 +9,6 @@ import Step4UploadGuide from './onboarding/Step4UploadGuide';
 import Step6InventoryAudit from './onboarding/Step6InventoryAudit';
 import Step3FailAudit from './onboarding/Step3FailAudit';
 
-// 덴트웹 다운로드 안내 단계 — "다음" 버튼 숨김 (단계 내부에서 직접 진행)
-const DOWNLOAD_STEPS = new Set([2, 4]);
-
 // 각 단계 진입 시 표시할 진행률 (단계별 완료 후 사용자가 확정할 값)
 const STEP_PROGRESS: Record<number, number> = {
   1: 0,
@@ -69,9 +66,8 @@ export default function OnboardingWizard({
     goToStep(2);
   };
 
-  // Step 7: FAIL 관리 화면으로 이동 + 완료 기록
+  // Step 7: FAIL 관리 화면으로 이동 (완료 기록은 실제 재고 정리 완료 후 App에서 처리)
   const handleFailAuditNext = () => {
-    onboardingService.markFailAuditDone(hospitalId);
     onGoToFailManagement();
   };
 
@@ -121,16 +117,7 @@ export default function OnboardingWizard({
             </div>
           </div>
 
-          {DOWNLOAD_STEPS.has(step) ? (
-            <span className="text-xs text-slate-300 w-8 text-right" />
-          ) : (
-            <button
-              onClick={handleNext}
-              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              다음
-            </button>
-          )}
+          <span className="w-8" />
         </div>
 
         {/* Step Content */}
@@ -148,8 +135,8 @@ export default function OnboardingWizard({
           {step === 3 && <Step2FixtureUpload onGoToDataSetup={onGoToDataSetup} />}
           {step === 4 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
           {step === 5 && <Step4UploadGuide inventory={inventory} onGoToSurgeryUpload={onGoToSurgeryUpload} />}
-          {step === 6 && <Step6InventoryAudit onGoToInventoryAudit={onGoToInventoryAudit} />}
-          {step === 7 && <Step3FailAudit />}
+          {step === 6 && <Step6InventoryAudit onGoToBaseStockEdit={onGoToInventoryAudit} />}
+          {step === 7 && <Step3FailAudit onGoToFailManagement={handleFailAuditNext} />}
         </div>
       </div>
     </div>

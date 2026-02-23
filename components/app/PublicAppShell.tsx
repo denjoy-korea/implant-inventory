@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
 import ErrorBoundary from '../ErrorBoundary';
+import PublicInfoFooter from '../shared/PublicInfoFooter';
 import {
   BillingCycle,
   DashboardTab,
@@ -26,6 +27,7 @@ const NoticeBoard = lazy(() => import('../NoticeBoard'));
 const AdminPanel = lazy(() => import('../AdminPanel'));
 const MfaOtpScreen = lazy(() => import('../MfaOtpScreen'));
 const ReviewsPage = lazy(() => import('../ReviewsPage'));
+const ConsultationPage = lazy(() => import('../ConsultationPage'));
 
 interface InviteInfo {
   token: string;
@@ -78,6 +80,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   showAlertToast,
 }) => {
   const isLoggedIn = !!user;
+  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
+  const hasPublicMobileNav = publicViews.includes(currentView);
 
   const handlePlanSelect = user?.hospitalId
     ? async (plan: PlanType, billing: BillingCycle) => {
@@ -149,6 +153,17 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     onNavigate(targetView);
   };
 
+  const handleAnalyzeEntry = () => {
+    const isMobileSize = window.matchMedia('(max-width: 1023px)').matches;
+    const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (isMobileSize || isTouchDevice) {
+      showAlertToast('무료분석은 PC에서 이용 가능합니다. 문의 페이지로 안내합니다.', 'info');
+      onNavigate('contact');
+      return;
+    }
+    onNavigate('analyze');
+  };
+
   return (
     <div className="h-full flex flex-col">
       <Header
@@ -166,14 +181,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
       <PublicMobileNav
         currentView={currentView}
         onNavigate={handleNavigate}
-        onAnalyzeClick={() => handleNavigate('analyze')}
+        onAnalyzeClick={handleAnalyzeEntry}
       />
-      <main className="flex-1 overflow-x-hidden">
+      <main className={`flex-1 overflow-x-hidden ${hasPublicMobileNav ? 'pb-24 xl:pb-0' : ''}`}>
         <ErrorBoundary>
           <Suspense fallback={suspenseFallback}>
             {currentView === 'landing' && (
               <LandingPage
-                onGetStarted={() => handleNavigate('login')}
+                onGetStarted={() => handleNavigate('signup')}
                 onAnalyze={() => handleNavigate('analyze')}
                 onGoToValue={() => handleNavigate('value')}
                 onGoToPricing={() => handleNavigate('pricing')}
@@ -251,18 +266,24 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
             {currentView === 'analyze' && (
               <AnalyzePage
                 onSignup={() => handleNavigate('signup')}
-                onContact={() => handleNavigate('contact')}
+                onContact={() => handleNavigate('consultation')}
               />
             )}
             {currentView === 'notices' && (
-              <div className="max-w-3xl mx-auto py-12 px-6">
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">업데이트 소식</h1>
-                <p className="text-slate-500 mb-8">DenJOY 서비스의 새로운 기능과 개선 사항을 확인하세요.</p>
-                <NoticeBoard isAdmin={isSystemAdmin} fullPage />
-              </div>
+              <>
+                <div className="max-w-3xl mx-auto py-12 px-6">
+                  <h1 className="text-3xl font-bold text-slate-900 mb-2">업데이트 소식</h1>
+                  <p className="text-slate-500 mb-8">DenJOY 서비스의 새로운 기능과 개선 사항을 확인하세요.</p>
+                  <NoticeBoard isAdmin={isSystemAdmin} fullPage />
+                </div>
+                <PublicInfoFooter showLegalLinks />
+              </>
             )}
             {currentView === 'reviews' && (
               <ReviewsPage onBack={() => handleNavigate('landing')} />
+            )}
+            {currentView === 'consultation' && (
+              <ConsultationPage onBack={() => handleNavigate('analyze')} />
             )}
           </Suspense>
         </ErrorBoundary>

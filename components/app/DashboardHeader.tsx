@@ -49,6 +49,12 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 }) => {
   const today = new Date();
   const dateLabel = `${today.getFullYear()}. ${today.getMonth() + 1}. ${today.getDate()}. ${['일', '월', '화', '수', '목', '금', '토'][today.getDay()]}요일`;
+  const isEncryptedPII = (value: string | null | undefined): boolean =>
+    !!value && (value.startsWith('ENCv2:') || value.startsWith('ENC:'));
+  const userDisplayName = user
+    ? (isEncryptedPII(user.name) || !user.name ? '사용자' : user.name)
+    : '';
+  const userInitial = userDisplayName.charAt(0) || '사';
 
   return (
     <header ref={dashboardHeaderRef} className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 md:sticky md:top-0 z-[100] shadow-sm flex items-center justify-between gap-2 overflow-x-hidden">
@@ -157,8 +163,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               onClick={onOpenProfile}
               className="flex items-center gap-2 hover:bg-slate-50 px-2 py-1 rounded-lg transition-colors"
             >
-              <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[11px]">{user.name.charAt(0)}</div>
-              <span className="text-sm font-medium text-slate-600">{user.name}님</span>
+              <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[11px]">{userInitial}</div>
+              <span className="text-sm font-medium text-slate-600">{userDisplayName}님</span>
             </button>
             {isUltimatePlan ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-50 text-violet-600">
@@ -219,7 +225,7 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             className="h-11 w-11 rounded-xl border border-slate-200 bg-white text-indigo-600 flex items-center justify-center font-bold text-xs"
             aria-label="내 정보"
           >
-            {user.name.charAt(0)}
+            {userInitial}
           </button>
         )}
         <button

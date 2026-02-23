@@ -2,7 +2,23 @@ import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact } from '../types';
 import { dbToHospital, decryptProfile } from './mappers';
+import { encryptPatientInfo } from './cryptoUtils';
 
+// C-4: hospitals.phone 평문 감지 헬퍼
+function isPlainHospitalPhone(v: string | null): v is string {
+  if (!v) return false;
+  return !v.startsWith('ENCv2:') && !v.startsWith('ENC:');
+}
+
+// C-4: 기존 평문 phone 백그라운드 lazy 암호화 — 실패해도 서비스 중단 없음
+async function lazyEncryptHospitalPhone(hospitalId: string, plainPhone: string): Promise<void> {
+  try {
+    const encPhone = await encryptPatientInfo(plainPhone);
+    await supabase.from('hospitals').update({ phone: encPhone }).eq('id', hospitalId);
+  } catch (e) {
+    console.warn('[lazyEncryptHospitalPhone] 암호화 실패:', hospitalId, e);
+  }
+}
 
 export const hospitalService = {
   /** 현재 사용자의 병원 정보 조회 */
@@ -25,7 +41,14 @@ export const hospitalService = {
       .single();
 
     if (error) return null;
-    return data as DbHospital;
+    const hospital = data as DbHospital;
+
+    // C-4 lazy encrypt: 평문 phone 감지 시 백그라운드 암호화 (기존 데이터 자동 마이그레이션)
+    if (isPlainHospitalPhone(hospital.phone)) {
+      void lazyEncryptHospitalPhone(hospital.id, hospital.phone);
+    }
+
+    return hospital;
   },
 
   /** 병원 검색 (Staff가 가입할 병원 찾기) */

@@ -1,6 +1,12 @@
 import React from 'react';
 import { PlanType, PLAN_NAMES } from '../../types';
 import { SIGNUP_PLANS } from './authSignupConfig';
+import {
+  SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT,
+  TRIAL_CONSENT_LABEL_TEXT,
+  TRIAL_DATA_DELETION_POLICY_TEXT,
+  TRIAL_OFFER_LABEL,
+} from '../../utils/trialPolicy';
 
 interface WaitlistPlan {
   key: string;
@@ -48,7 +54,7 @@ const AuthSignupPlanSelect: React.FC<AuthSignupPlanSelectProps> = ({
               <span className="text-lg font-bold tracking-tight">DenJOY</span>
             </div>
             <h2 className="text-[22px] font-bold leading-snug mb-3">
-              14일 무료 체험으로<br />부담 없이 시작하세요.
+              {TRIAL_OFFER_LABEL}으로<br />부담 없이 시작하세요.
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
               카드 정보 없이도<br />체험 가능합니다.
@@ -118,7 +124,7 @@ const AuthSignupPlanSelect: React.FC<AuthSignupPlanSelectProps> = ({
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-slate-800">{plan.price}</p>
                     <p className="text-[10px] text-indigo-500 font-medium mt-0.5">
-                      {plan.trial ? '14일 무료 체험' : '무료로 시작'}
+                      {plan.trial ? TRIAL_OFFER_LABEL : '무료로 시작'}
                     </p>
                   </div>
                   <svg className={`w-4 h-4 flex-shrink-0 ${pendingTrialPlan === plan.key ? 'text-indigo-500' : 'text-slate-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -138,21 +144,21 @@ const AuthSignupPlanSelect: React.FC<AuthSignupPlanSelectProps> = ({
                   <span className="text-xs font-bold">무료 체험 조건 안내</span>
                 </div>
                 <ul className="text-xs text-amber-700 space-y-0.5 pl-5 list-disc">
-                  <li>14일 동안 모든 기능을 제한 없이 사용해볼 수 있습니다.</li>
-                  <li>체험 종료 후 구독을 시작하면 데이터는 그대로 유지됩니다.</li>
-                  <li>구독을 시작하지 않으면 15일 후 업로드 데이터가 자동 정리됩니다.</li>
+                  <li>{TRIAL_OFFER_LABEL} 동안 모든 기능을 제한 없이 사용해볼 수 있습니다.</li>
+                  <li>{SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT}</li>
+                  <li>{TRIAL_DATA_DELETION_POLICY_TEXT}</li>
                 </ul>
               </div>
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={trialConsented} onChange={e => onChangeTrialConsented(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0" />
-                <span className="text-xs text-slate-600 leading-relaxed">위 내용을 확인하였으며, 미구독 시 데이터 삭제에 동의합니다.</span>
+                <span className="text-xs text-slate-600 leading-relaxed">위 내용을 확인하였으며, {TRIAL_CONSENT_LABEL_TEXT}</span>
               </label>
               <button
                 disabled={!trialConsented}
                 onClick={onContinueAfterTrialConsent}
                 className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${trialConsented ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
               >
-                {PLAN_NAMES[pendingTrialPlan]} 14일 무료 체험 시작 →
+                {PLAN_NAMES[pendingTrialPlan]} {TRIAL_OFFER_LABEL} 시작 →
               </button>
             </div>
           )}

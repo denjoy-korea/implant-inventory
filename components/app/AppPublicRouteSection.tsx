@@ -53,7 +53,7 @@ const AppPublicRouteSection: React.FC<AppPublicRouteSectionProps> = ({
             });
           }}
           onSetMfaPendingEmail={(email) => setState(prev => ({ ...prev, mfaPendingEmail: email }))}
-          onGetStartedWithPlan={(plan?: PlanType) => setState(prev => ({ ...prev, currentView: state.user ? 'dashboard' : 'signup', preSelectedPlan: plan }))}
+          onGetStartedWithPlan={(plan?: PlanType) => setState(prev => ({ ...prev, currentView: prev.user ? 'dashboard' : 'signup', preSelectedPlan: plan }))}
           onPlanStateActivated={(planState: HospitalPlanState) => setState(prev => ({ ...prev, planState, currentView: 'dashboard', dashboardTab: 'overview' }))}
           showAlertToast={showAlertToast}
         />

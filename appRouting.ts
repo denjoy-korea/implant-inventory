@@ -6,6 +6,7 @@ export const VIEW_HASH: Record<View, string> = {
   admin_panel: 'admin', pricing: 'pricing', contact: 'contact',
   value: 'value', analyze: 'analyze', notices: 'notices', mfa_otp: 'mfa', reviews: 'reviews',
   suspended: '',  // landing과 동일한 hash — URL로 직접 진입 불가, 항상 loadHospitalData가 결정
+  consultation: 'consultation',
 };
 
 export const TAB_HASH: Record<DashboardTab, string> = {
