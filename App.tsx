@@ -18,8 +18,8 @@ const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboar
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
 import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, canAccessTab } from './types';
-import { parseExcelFile, downloadExcelFile } from './services/excelService';
-import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
+// excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
+import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
 import { authService } from './services/authService';
 import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
@@ -59,10 +59,55 @@ declare global {
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1360;
 const MOBILE_VIEWPORT_MAX_WIDTH = 767;
 
+const SURGERY_UPLOAD_STEPS = [
+  '파일을 읽는 중...',
+  '수술기록 분석 중...',
+  '재고 마스터와 비교 중...',
+  '데이터 등록 중...',
+];
+const FIXTURE_UPLOAD_STEPS = [
+  '파일을 읽는 중...',
+  '재료 목록 파싱 중...',
+  '데이터 처리 중...',
+  '잠시만 기다려 주세요...',
+];
+
+function FileUploadLoadingOverlay({ type }: { type: UploadType | null }) {
+  const steps = type === 'surgery' ? SURGERY_UPLOAD_STEPS : FIXTURE_UPLOAD_STEPS;
+  const [stepIndex, setStepIndex] = React.useState(0);
+  const [visible, setVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setStepIndex(i => (i + 1) % steps.length);
+        setVisible(true);
+      }, 300);
+    }, 700);
+    return () => clearInterval(interval);
+  }, [steps.length]);
+
+  return (
+    <div className="fixed inset-0 z-[300] bg-white/70 backdrop-blur-sm flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4 bg-white rounded-3xl shadow-2xl border border-slate-100 px-12 py-9">
+        <div className="w-11 h-11 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+        <p
+          className="text-sm text-slate-600 font-medium text-center min-w-[9rem] transition-all duration-300"
+          style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(5px)' }}
+        >
+          {steps[stepIndex]}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
   const dashboardHeaderRef = useRef<HTMLElement>(null);
+  const uploadingTypeRef = useRef<UploadType | null>(null);
 
   const { toast: alertToast, showToast: showAlertToast } = useToast(3500);
 
@@ -346,11 +391,13 @@ const App: React.FC = () => {
   const firstIncompleteStep = (() => {
     if (!isHospitalAdmin) return null;
     if (state.user?.status !== 'active') return null;
-    if (state.isLoading) return null;
     const hid = state.user?.hospitalId ?? '';
+    // Step 1은 localStorage만 체크 — DB 로딩 완료 전에도 즉시 표시 가능
     if (!onboardingService.isWelcomeSeen(hid)) return 1;
+    // 이후 단계는 DB 데이터 필요 → 로딩 완료 후 체크
+    if (state.isLoading) return null;
     if (!onboardingService.isFixtureDownloaded(hid)) return 2;
-    if (state.inventory.length === 0) return 3;
+    if (state.inventory.length === 0 && !state.fixtureData) return 3;
     if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
     const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
     if (!hasSurgery) return 5;
@@ -956,7 +1003,8 @@ const App: React.FC = () => {
     }
   }, [setState, showAlertToast, state.inventory]);
 
-  const handleFileUpload = async (file: File, type: UploadType) => {
+  const handleFileUpload = async (file: File, type: UploadType, sizeCorrections?: Map<string, string>) => {
+    uploadingTypeRef.current = type;
     setState(prev => ({ ...prev, isLoading: true }));
     try {
       // 수술기록 업로드 빈도 제한 체크
@@ -973,6 +1021,7 @@ const App: React.FC = () => {
         }
       }
 
+      const { parseExcelFile } = await import('./services/excelService');
       const parsed = await parseExcelFile(file);
       if (type === 'surgery') {
         const targetSheetName = '수술기록지';
@@ -1055,7 +1104,7 @@ const App: React.FC = () => {
               '갯수': quantity,
               '제조사': fixedMfr.manufacturer,
               '브랜드': fixedMfr.brand,
-              '규격(SIZE)': toCanonicalSize(size, fixedMfr.manufacturer),
+              '규격(SIZE)': isIbsImplantManufacturer(fixedMfr.manufacturer) ? size : toCanonicalSize(size, fixedMfr.manufacturer),
               '골질': row['골질'] || boneQuality,
               '초기고정': row['초기고정'] || initialFixation,
             };
@@ -1123,7 +1172,7 @@ const App: React.FC = () => {
                 ...row,
                 '제조사': fixed.manufacturer,
                 '브랜드': fixed.brand,
-                '규격(SIZE)': toCanonicalSize(rawSize, fixed.manufacturer),
+                '규격(SIZE)': sizeCorrections?.get(rawSize.trim()) ?? (isIbsImplantManufacturer(fixed.manufacturer) ? rawSize : toCanonicalSize(rawSize, fixed.manufacturer)),
               };
             }),
           };
@@ -1452,6 +1501,7 @@ const App: React.FC = () => {
         try {
           const now = new Date();
           const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+          const { downloadExcelFile } = await import('./services/excelService');
           await downloadExcelFile(
             fixtureData,
             selectedIndices,
@@ -1577,6 +1627,10 @@ const App: React.FC = () => {
       className="min-h-screen bg-slate-50 flex"
       style={{ ['--dashboard-header-height' as string]: `${dashboardHeaderHeight}px` } as React.CSSProperties}
     >
+      {state.isLoading && state.user && (
+        <FileUploadLoadingOverlay type={uploadingTypeRef.current} />
+      )}
+
       {isOffline && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[240] px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-black shadow-lg">
           오프라인 모드: 연결 후 자동 동기화됩니다.
@@ -1840,6 +1894,7 @@ const App: React.FC = () => {
           showProfile={state.showProfile}
           planState={state.planState}
           hospitalName={state.hospitalName}
+          inventory={state.inventory}
           reviewPopupType={reviewPopupType}
           shouldShowOnboarding={shouldShowOnboarding}
           onboardingStep={onboardingStep}
@@ -1868,11 +1923,21 @@ const App: React.FC = () => {
             setOnboardingDismissed(false);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'overview' }));
           }}
-          onGoToDataSetup={() => {
-            setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));
+          onGoToDataSetup={(file?: File, sizeCorrections?: Map<string, string>) => {
+            if (file) {
+              setState(prev => ({ ...prev, currentView: 'dashboard' }));
+              handleFileUpload(file, 'fixture', sizeCorrections);
+            } else {
+              setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));
+            }
           }}
-          onGoToSurgeryUpload={() => {
-            setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'surgery_database' }));
+          onGoToSurgeryUpload={(file?: File) => {
+            if (file) {
+              setState(prev => ({ ...prev, currentView: 'dashboard' }));
+              handleFileUpload(file, 'surgery');
+            } else {
+              setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'surgery_database' }));
+            }
           }}
           onGoToFailManagement={() => {
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fail_management' }));

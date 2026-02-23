@@ -4,28 +4,37 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => {
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
-      plugins: [tailwindcss(), react()],
-      // AI API keys must NOT be injected into the client bundle via define.
-      // Call external AI APIs through a server-side route (e.g. Supabase Edge Function).
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
-      },
-      build: {
-        rollupOptions: {
-          output: {
-            manualChunks: {
-              vendor: ['react', 'react-dom'],
-              supabase: ['@supabase/supabase-js'],
-            },
+  return {
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+    plugins: [tailwindcss(), react()],
+    // AI API keys must NOT be injected into the client bundle via define.
+    // Call external AI APIs through a server-side route (e.g. Supabase Edge Function).
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+      }
+    },
+    build: {
+      chunkSizeWarningLimit: 800,
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('react')) return 'react-vendor';
+              if (id.includes('@supabase')) return 'supabase-vendor';
+              if (id.includes('lucide')) return 'lucide-icons';
+              if (id.includes('framer-motion')) return 'framer-motion';
+              if (id.includes('recharts')) return 'recharts';
+              if (id.includes('date-fns')) return 'date-fns';
+            if (id.includes('xlsx')) return 'xlsx-vendor';
+              return 'vendor';
+            }
           },
         },
       },
-    };
+    },
+  };
 });
