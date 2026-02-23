@@ -227,16 +227,20 @@ async function hashText(text: string): Promise<string> {
 }
 
 // ── JWT 검증 헬퍼 ─────────────────────────────────────────────────────────
+// SUPABASE_ANON_KEY 시크릿 설정 오류 가능성 배제:
+// service_role key로 admin 클라이언트 생성 후 사용자 JWT를 명시적으로 전달하여 검증
 async function verifyAuth(req: Request): Promise<boolean> {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return false;
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7); // "Bearer " 제거
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const authClient = createClient(supabaseUrl, anonKey, {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: authHeader } },
   });
-  const { data: { user }, error } = await authClient.auth.getUser();
+  // admin.auth.getUser(token): token을 Authorization: Bearer <token>으로 전달하여 검증
+  const { data: { user }, error } = await adminClient.auth.getUser(token);
   return !error && !!user;
 }
 
