@@ -8,8 +8,36 @@ import { decryptProfile } from './mappers';
 const isPlain = (v: string | null | undefined): boolean =>
   !!v && !v.startsWith('ENCv2:') && !v.startsWith('ENC:');
 
+// H-5: 동일 profile.id에 대한 중복 동시 호출 방지 (race condition → 이중 암호화 시도)
+const _lazyEncryptInFlight = new Set<string>();
+
+// H-7: Slack 알림에서 PII 마스킹 헬퍼
+function maskNameForLog(name: string): string {
+  if (!name) return '***';
+  return name[0] + '**';
+}
+function maskEmailForLog(email: string): string {
+  const atIdx = email.lastIndexOf('@');
+  if (atIdx <= 0) return '***@***.***';
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx + 1);
+  const masked = local.length <= 1
+    ? local
+    : local[0] + '*'.repeat(Math.min(local.length - 1, 3));
+  return `${masked}@${domain}`;
+}
+
 /** DB 트리거가 생성한 평문 profile PII를 암호화하여 저장 (fire-and-forget) */
 async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
+  // H-5: 이미 진행 중인 암호화 작업이 있으면 건너뜀
+  if (_lazyEncryptInFlight.has(profile.id)) return;
+  _lazyEncryptInFlight.add(profile.id);
+  // H-4: 복호화 실패 플래그가 있으면 placeholder 값('사용자' 등)으로 DB를 덮어쓰지 않도록 차단
+  if (profile._decryptFailed) {
+    console.error('[lazyEncryptProfile] _decryptFailed=true인 profile 쓰기 차단:', profile.id);
+    _lazyEncryptInFlight.delete(profile.id);
+    return;
+  }
   try {
     const updates: Record<string, string | null> = {};
     const tasks: Promise<void>[] = [];
@@ -54,6 +82,8 @@ async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
     }
   } catch (e) {
     console.warn('[authService] lazyEncryptProfile failed:', e);
+  } finally {
+    _lazyEncryptInFlight.delete(profile.id); // H-5: 완료 후 in-flight 해제
   }
 }
 
@@ -118,13 +148,13 @@ export const authService = {
 
     // 이메일 인증 대기 상태 (Supabase "Confirm email" ON)
     if (!authData.session) {
-      // 슬랙 가입 알림 (fire-and-forget)
+      // 슬랙 가입 알림 (fire-and-forget) — H-7: PII 마스킹 후 전송
       (async () => {
         try {
           await supabase.functions.invoke('notify-signup', {
             body: {
-              name,
-              email,
+              name: maskNameForLog(name),
+              email: maskEmailForLog(email),
               role: signupRole,
               hospitalName: signupRole === 'master' ? hospitalName : undefined,
               signupSource: signupSource || undefined,
@@ -140,12 +170,17 @@ export const authService = {
     // 2. 전화번호 / 가입경로 profiles에 저장 (phone은 최초 저장 시 암호화)
     const profileUpdates: Record<string, any> = {};
     if (phone) {
-      const [encPhone, phoneHash] = await Promise.all([
-        encryptPatientInfo(phone),
-        hashPatientInfo(phone),
-      ]);
-      profileUpdates.phone = encPhone;
-      profileUpdates.phone_hash = phoneHash;
+      try {
+        const [encPhone, phoneHash] = await Promise.all([
+          encryptPatientInfo(phone),
+          hashPatientInfo(phone),
+        ]);
+        profileUpdates.phone = encPhone;
+        profileUpdates.phone_hash = phoneHash;
+      } catch (e) {
+        // H-3: 암호화 실패 시 평문 저장 없이 계속 진행 — lazy encrypt가 이후 처리
+        console.warn('[authService] signUp: phone encryption failed, skipping:', e);
+      }
     }
     if (signupSource) profileUpdates.signup_source = signupSource;
     if (Object.keys(profileUpdates).length > 0) {
@@ -154,12 +189,14 @@ export const authService = {
 
     // 3. Master(치과 회원) - 병원 생성
     if (signupRole === 'master' && hospitalName) {
+      // C-4: hospitals.phone — profileUpdates.phone 재사용 (M-3: 이중 암호화 호출 제거)
+      const encHospitalPhone = profileUpdates.phone ?? null;
       const { data: hospital, error: hospError } = await supabase
         .from('hospitals')
         .insert({
           name: hospitalName,
           master_admin_id: userId,
-          phone: phone || null,
+          phone: encHospitalPhone,
         })
         .select()
         .single();
@@ -206,12 +243,14 @@ export const authService = {
 
     // 4. Staff(개인 회원/담당자) - 개인 워크스페이스 생성
     if (signupRole === 'staff') {
+      // C-4: hospitals.phone — profileUpdates.phone 재사용 (M-3: 이중 암호화 호출 제거)
+      const encWorkspacePhone = profileUpdates.phone ?? null;
       const { data: workspace, error: wsError } = await supabase
         .from('hospitals')
         .insert({
           name: `${name}의 워크스페이스`,
           master_admin_id: userId,
-          phone: phone || null,
+          phone: encWorkspacePhone,
         })
         .select()
         .single();
@@ -236,13 +275,13 @@ export const authService = {
       }
     }
 
-    // 5. 슬랙 가입 알림 (fire-and-forget)
+    // 5. 슬랙 가입 알림 (fire-and-forget) — H-7: PII 마스킹 후 전송
     (async () => {
       try {
         await supabase.functions.invoke('notify-signup', {
           body: {
-            name,
-            email,
+            name: maskNameForLog(name),
+            email: maskEmailForLog(email),
             role: signupRole,
             hospitalName: signupRole === 'master' ? hospitalName : undefined,
             signupSource: signupSource || undefined,
@@ -299,10 +338,19 @@ export const authService = {
     if (!emailRaw) return { success: false, error: '해당 전화번호로 등록된 계정을 찾을 수 없습니다.' };
 
     // 이메일 일부 마스킹 (abc@gmail.com → a**@gmail.com)
-    const [local, domain] = emailRaw.split('@');
-    const masked = local.length <= 2
-      ? local[0] + '*'.repeat(local.length - 1)
-      : local[0] + '*'.repeat(local.length - 2) + local[local.length - 1];
+    // W-7/W-8 fix: @ 없는 값이나 local 길이 0에서 undefined 반환하는 버그 방어
+    const atIdx = emailRaw.lastIndexOf('@');
+    if (atIdx <= 0) {
+      // @ 이 없거나 맨 앞인 경우 — 데이터 손상, 안전하게 마스킹
+      return { success: true, email: '***@***.***' };
+    }
+    const local = emailRaw.slice(0, atIdx);
+    const domain = emailRaw.slice(atIdx + 1);
+    const masked = local.length === 1
+      ? local[0]                                                         // 1글자: 그대로
+      : local.length <= 3
+        ? local[0] + '*'.repeat(local.length - 1)                       // 2~3글자: 첫 글자만 노출
+        : local[0] + '*'.repeat(local.length - 2) + local[local.length - 1]; // 4글자+: 첫·끝 노출
     return { success: true, email: `${masked}@${domain}` };
   },
 
