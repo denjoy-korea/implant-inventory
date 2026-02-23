@@ -268,8 +268,9 @@ function buildHtml(parsed: ParsedReport, hospitalName: string | null, isDetailed
 
 // ── 메인 핸들러 ──────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") const corsHeaders = getCorsHeaders(req);
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: getCorsHeaders(req) });
+  }
 
   try {
     const corsHeaders = getCorsHeaders(req);
@@ -350,6 +351,6 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ success: true, email_sent: true, id: emailData.id }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     console.error("[send-analysis-report] error:", err);
-    return new Response(JSON.stringify({ error: "서버 오류" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "서버 오류" }), { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
   }
 });
