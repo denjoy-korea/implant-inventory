@@ -20,7 +20,19 @@ async function getAccessToken(): Promise<string | null> {
     // 순환 의존성 방지를 위해 동적 import
     const { supabase } = await import('./supabaseClient');
     const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ?? null;
+    if (!session) return null;
+
+    // 토큰 만료 확인: getSession()은 만료된 토큰도 그대로 반환함
+    // 페이지 로드 시 Supabase 백그라운드 갱신이 완료되기 전에 만료된 토큰이 반환될 수 있음
+    const now = Math.floor(Date.now() / 1000); // UNIX seconds
+    if (session.expires_at && session.expires_at < now) {
+      // 명시적 갱신 — refresh token으로 새 access token 획득
+      const { data: refreshed, error } = await supabase.auth.refreshSession();
+      if (error || !refreshed.session) return null;
+      return refreshed.session.access_token;
+    }
+
+    return session.access_token;
   } catch {
     return null;
   }
