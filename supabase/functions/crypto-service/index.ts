@@ -16,7 +16,6 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // ── 상수 ──────────────────────────────────────────────────────────────────
 const ENC_V2_PREFIX = "ENCv2:";
@@ -227,21 +226,37 @@ async function hashText(text: string): Promise<string> {
 }
 
 // ── JWT 검증 헬퍼 ─────────────────────────────────────────────────────────
-// SUPABASE_ANON_KEY 시크릿 설정 오류 가능성 배제:
-// service_role key로 admin 클라이언트 생성 후 사용자 JWT를 명시적으로 전달하여 검증
+// Supabase JS 클라이언트 의존 제거: Supabase Auth REST API 직접 호출로 JWT 검증
+// createClient() 방식은 SUPABASE_SERVICE_ROLE_KEY 미주입 시 undefined 키로 생성되어
+// getUser()가 항상 실패하는 버그가 있음.
 async function verifyAuth(req: Request): Promise<boolean> {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return false;
+  if (!authHeader?.startsWith("Bearer ")) {
+    console.error("[verifyAuth] Authorization header 없음 또는 Bearer 형식 아님");
+    return false;
+  }
   const token = authHeader.slice(7); // "Bearer " 제거
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  // admin.auth.getUser(token): token을 Authorization: Bearer <token>으로 전달하여 검증
-  const { data: { user }, error } = await adminClient.auth.getUser(token);
-  return !error && !!user;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  try {
+    // Supabase Auth REST API 직접 호출: POST 방식 대신 GET /auth/v1/user 사용
+    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "apikey": anonKey,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[verifyAuth] Auth API 실패: status=${res.status}, token_prefix=${token.slice(0, 20)}, body=${body.slice(0, 100)}`);
+    }
+    return res.ok;
+  } catch (e) {
+    console.error("[verifyAuth] fetch 예외:", e);
+    return false;
+  }
 }
 
 // ── 메인 핸들러 ───────────────────────────────────────────────────────────

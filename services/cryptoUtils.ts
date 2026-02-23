@@ -25,18 +25,30 @@ async function getValidToken(): Promise<string | null> {
   try {
     const { supabase } = await import('./supabaseClient');
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
+    if (!session) {
+      console.warn('[cryptoUtils] getValidToken: session=null (로그인 필요)');
+      return null;
+    }
 
     const now = Math.floor(Date.now() / 1000);
+    const expiresAt = session.expires_at ?? 0;
+    const isExpired = expiresAt - 10 <= now;
+    console.warn(`[cryptoUtils] token: expires_at=${expiresAt}, now=${now}, expired=${isExpired}, isJWT=${session.access_token.startsWith('eyJ')}`);
+
     // 10초 버퍼: 만료가 임박했거나 이미 만료된 경우 갱신
-    if (session.expires_at && session.expires_at - 10 <= now) {
+    if (isExpired) {
       const { data: refreshed, error } = await supabase.auth.refreshSession();
-      if (error || !refreshed.session) return null;
+      if (error || !refreshed.session) {
+        console.warn('[cryptoUtils] token refresh 실패:', error?.message);
+        return null;
+      }
+      console.warn('[cryptoUtils] token refresh 성공');
       return refreshed.session.access_token;
     }
 
     return session.access_token;
-  } catch {
+  } catch (e) {
+    console.warn('[cryptoUtils] getValidToken 예외:', e);
     return null;
   }
 }
