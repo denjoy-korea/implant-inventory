@@ -15,6 +15,16 @@ import {
   DEFAULT_WORK_DAYS,
 } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
+
+/** profiles PII 필드(name·email·phone) 복호화 — 평문(ENCv2 접두사 없음)은 그대로 반환 */
+export async function decryptProfile(db: DbProfile): Promise<DbProfile> {
+  const [email, name, phone] = await Promise.all([
+    decryptPatientInfo(db.email),
+    decryptPatientInfo(db.name),
+    db.phone ? decryptPatientInfo(db.phone) : Promise.resolve(db.phone),
+  ]);
+  return { ...db, email, name, phone };
+}
 import { toCanonicalSize } from './sizeNormalizer';
 
 // ============================================

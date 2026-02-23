@@ -517,6 +517,8 @@ export interface DbProfile {
   session_token?: string | null;
   mfa_enabled?: boolean;
   signup_source?: string | null;
+  email_hash?: string | null;
+  phone_hash?: string | null;
 }
 
 /** Supabase inventory 테이블 Row */

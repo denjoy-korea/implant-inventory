@@ -4,8 +4,9 @@ import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 import { decryptProfile } from './mappers';
 
-/** 평문 여부 확인 (ENCv2 접두사 없으면 평문) */
-const isPlain = (v: string | null | undefined): boolean => !!v && !v.startsWith('ENCv2:');
+/** 평문 여부 확인 (ENCv2/ENC v1 접두사 없으면 평문) */
+const isPlain = (v: string | null | undefined): boolean =>
+  !!v && !v.startsWith('ENCv2:') && !v.startsWith('ENC:');
 
 /** DB 트리거가 생성한 평문 profile PII를 암호화하여 저장 (fire-and-forget) */
 async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
@@ -21,11 +22,29 @@ async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
         Promise.all([encryptPatientInfo(profile.email), hashPatientInfo(profile.email)])
           .then(([enc, hash]) => { updates.email = enc; updates.email_hash = hash; }),
       );
+    } else if (profile.email && !profile.email_hash) {
+      // 이미 암호화됐지만 hash 누락 — 복호화 후 해시만 보정
+      tasks.push(
+        decryptPatientInfo(profile.email).then(async (plain) => {
+          if (plain && !plain.startsWith('ENCv2:') && !plain.startsWith('ENC:')) {
+            updates.email_hash = await hashPatientInfo(plain);
+          }
+        }),
+      );
     }
     if (isPlain(profile.phone)) {
       tasks.push(
         Promise.all([encryptPatientInfo(profile.phone!), hashPatientInfo(profile.phone!)])
           .then(([enc, hash]) => { updates.phone = enc; updates.phone_hash = hash; }),
+      );
+    } else if (profile.phone && !profile.phone_hash) {
+      // 이미 암호화됐지만 hash 누락 — 복호화 후 해시만 보정
+      tasks.push(
+        decryptPatientInfo(profile.phone).then(async (plain) => {
+          if (plain && !plain.startsWith('ENCv2:') && !plain.startsWith('ENC:')) {
+            updates.phone_hash = await hashPatientInfo(plain);
+          }
+        }),
       );
     }
 
@@ -118,9 +137,16 @@ export const authService = {
       return { success: true, emailConfirmationRequired: true };
     }
 
-    // 2. 전화번호 / 가입경로 profiles에 저장
+    // 2. 전화번호 / 가입경로 profiles에 저장 (phone은 최초 저장 시 암호화)
     const profileUpdates: Record<string, any> = {};
-    if (phone) profileUpdates.phone = phone;
+    if (phone) {
+      const [encPhone, phoneHash] = await Promise.all([
+        encryptPatientInfo(phone),
+        hashPatientInfo(phone),
+      ]);
+      profileUpdates.phone = encPhone;
+      profileUpdates.phone_hash = phoneHash;
+    }
     if (signupSource) profileUpdates.signup_source = signupSource;
     if (Object.keys(profileUpdates).length > 0) {
       await supabase.from('profiles').update(profileUpdates).eq('id', userId);
@@ -365,8 +391,14 @@ export const authService = {
     }
     const profile = data as DbProfile;
 
-    // 평문 PII가 남아있으면 백그라운드에서 암호화하여 저장
-    if (isPlain(profile.name) || isPlain(profile.email) || isPlain(profile.phone)) {
+    // 평문 PII 또는 hash 누락 시 백그라운드에서 암호화/보정
+    if (
+      isPlain(profile.name) ||
+      isPlain(profile.email) ||
+      isPlain(profile.phone) ||
+      (profile.email && !profile.email_hash) ||
+      (profile.phone && !profile.phone_hash)
+    ) {
       void lazyEncryptProfile(profile);
     }
 

@@ -214,6 +214,7 @@ export async function decryptPatientInfo(encrypted: string): Promise<string> {
       return new TextDecoder().decode(decrypted);
     }
   } catch {
+    console.error('[cryptoUtils] decryptPatientInfo: 복호화 실패 — VITE_PATIENT_DATA_KEY 불일치 또는 데이터 손상 가능성');
     return encrypted;
   }
 }

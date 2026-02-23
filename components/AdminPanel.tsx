@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { DbProfile, UserRole } from '../types';
+import { decryptProfile } from '../services/mappers';
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   admin: { label: '운영자', color: 'bg-rose-50 text-rose-600' },
@@ -32,7 +33,10 @@ const AdminPanel: React.FC = () => {
       supabase.from('hospitals').select('id, name'),
     ]);
 
-    if (profileRes.data) setProfiles(profileRes.data as DbProfile[]);
+    if (profileRes.data) {
+      const decrypted = await Promise.all((profileRes.data as DbProfile[]).map(decryptProfile));
+      setProfiles(decrypted);
+    }
     if (hospitalRes.data) {
       const map: Record<string, string> = {};
       hospitalRes.data.forEach((h: { id: string; name: string }) => { map[h.id] = h.name; });
