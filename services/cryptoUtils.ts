@@ -89,9 +89,30 @@ export async function decryptPatientInfoBatch(
   encryptedList: string[],
 ): Promise<string[]> {
   if (!encryptedList.length) return [];
-  return callCryptoService(
+
+  // 암호화된 항목의 인덱스와 값만 추출
+  const encryptedIndices: number[] = [];
+  const encryptedValues: string[] = [];
+  encryptedList.forEach((s, i) => {
+    if (s.startsWith('ENCv2:') || s.startsWith('ENC:')) {
+      encryptedIndices.push(i);
+      encryptedValues.push(s);
+    }
+  });
+
+  // 모두 평문이면 Edge Function 호출 없이 즉시 반환
+  if (!encryptedValues.length) return encryptedList;
+
+  const decryptedValues = await callCryptoService(
     'decrypt_batch',
-    { texts: encryptedList },
+    { texts: encryptedValues },
     true,
-  ) as Promise<string[]>;
+  ) as string[];
+
+  // 원본 순서 복원 (평문은 그대로, 암호문은 복호화 결과로 교체)
+  const result = [...encryptedList];
+  encryptedIndices.forEach((origIdx, i) => {
+    result[origIdx] = decryptedValues[i];
+  });
+  return result;
 }

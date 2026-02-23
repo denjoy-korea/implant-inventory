@@ -14,7 +14,7 @@ import {
   OrderStatus,
   DEFAULT_WORK_DAYS,
 } from '../types';
-import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
+import { encryptPatientInfo, decryptPatientInfo, decryptPatientInfoBatch, hashPatientInfo } from './cryptoUtils';
 
 /** profiles PII 필드(name·email·phone) 복호화 — 평문(ENCv2 접두사 없음)은 그대로 반환 */
 export async function decryptProfile(db: DbProfile): Promise<DbProfile> {
@@ -94,6 +94,33 @@ export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
     '초기고정': db.initial_fixation || '',
     _id: db.id,
   };
+}
+
+/**
+ * DbSurgeryRecord[] → ExcelRow[] 배치 변환
+ * patient_info 복호화를 1회 Edge Function 호출로 처리 (N+1 방지)
+ */
+export async function dbToExcelRowBatch(records: DbSurgeryRecord[]): Promise<ExcelRow[]> {
+  if (!records.length) return [];
+  const patientInfos = records.map(r => r.patient_info || '');
+  const decrypted = await decryptPatientInfoBatch(patientInfos);
+  return records.map((db, i) => {
+    const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+    return {
+      '날짜': db.date || '',
+      '환자정보': decrypted[i],
+      '치아번호': db.tooth_number || '',
+      '갯수': db.quantity,
+      '수술기록': db.surgery_record || '',
+      '구분': db.classification,
+      '제조사': manufacturer,
+      '브랜드': brand,
+      '규격(SIZE)': toCanonicalSize(db.size || '', manufacturer),
+      '골질': db.bone_quality || '',
+      '초기고정': db.initial_fixation || '',
+      _id: db.id,
+    };
+  });
 }
 
 /** DbOrder + DbOrderItem[] → Order */

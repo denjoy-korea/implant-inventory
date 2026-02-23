@@ -13,8 +13,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
 ]);
 
-/** Vercel 프리뷰 URL 패턴 */
-const VERCEL_PREVIEW_RE = /^https:\/\/[\w-]+-[\w-]+\.vercel\.app$/;
+/** Vercel 프리뷰 URL 패턴 (implant-stock-pro 프로젝트만 허용) */
+const VERCEL_PREVIEW_RE = /^https:\/\/implant-stock-[\w]+-headals-projects-042f32e0\.vercel\.app$/;
 
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("Origin") ?? "";

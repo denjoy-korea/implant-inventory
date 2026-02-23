@@ -20,7 +20,7 @@ import { orderService } from '../services/orderService';
 import { hospitalService } from '../services/hospitalService';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
-import { dbToInventoryItem, dbToExcelRow, dbToOrder, dbToUser } from '../services/mappers';
+import { dbToInventoryItem, dbToExcelRow, dbToExcelRowBatch, dbToOrder, dbToUser } from '../services/mappers';
 import { supabase } from '../services/supabaseClient';
 import { pageViewService } from '../services/pageViewService';
 
@@ -117,7 +117,7 @@ export function useAppState(onNotify?: NotifyFn) {
       }
 
       const inventory = inventoryData.map(dbToInventoryItem);
-      const surgeryRows = await Promise.all(surgeryData.map(dbToExcelRow));
+      const surgeryRows = await dbToExcelRowBatch(surgeryData);
       const orders = ordersData.map(dbToOrder);
 
       // 기존 레코드 중 patient_info_hash 없는 것 백필 (028 마이그레이션 이후 1회성)

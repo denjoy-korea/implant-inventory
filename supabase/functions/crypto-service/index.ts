@@ -254,6 +254,15 @@ Deno.serve(async (req: Request) => {
         });
       }
       case "decrypt_batch": {
+        if ((texts?.length ?? 0) > 500) {
+          return new Response(
+            JSON.stringify({ error: "배치 크기는 최대 500개입니다." }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
         const results = await Promise.all(
           (texts ?? []).map(decryptText),
         );
