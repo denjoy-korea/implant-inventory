@@ -796,16 +796,21 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
     const handleStartTrial = async (hospitalId: string) => {
         setTrialSaving(hospitalId);
-        const now = new Date().toISOString();
-        const { error } = await supabase
-            .from('hospitals')
-            .update({ trial_started_at: now, trial_used: false })
-            .eq('id', hospitalId);
-        if (error) {
-            showToast('체험 시작 실패: ' + error.message, 'error');
+        // start_hospital_trial RPC: plan='plus', trial_started_at=now, trial_used=false, plan_expires_at=NULL 설정
+        // 직접 DB 업데이트 대신 RPC 사용 → plan 필드도 'plus'로 올바르게 설정됨
+        const { data, error } = await supabase.rpc('start_hospital_trial', {
+            p_hospital_id: hospitalId,
+            p_plan: 'plus',
+        });
+        if (error || !data) {
+            showToast('체험 시작 실패: ' + (error?.message || '체험이 이미 시작되었거나 리셋이 필요합니다'), 'error');
         } else {
-            setHospitals(prev => prev.map(h => h.id === hospitalId ? { ...h, trial_started_at: now, trial_used: false } : h));
-            showToast('14일 무료 체험이 시작됐습니다.', 'success');
+            const now = new Date().toISOString();
+            setHospitals(prev => prev.map(h => h.id === hospitalId
+                ? { ...h, trial_started_at: now, trial_used: false, plan: 'plus', plan_expires_at: null, billing_cycle: null }
+                : h
+            ));
+            showToast('14일 무료 체험(Plus)이 시작됐습니다.', 'success');
         }
         setTrialSaving(null);
     };
