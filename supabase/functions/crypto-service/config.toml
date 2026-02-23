@@ -1,0 +1,6 @@
+# crypto-service Edge Function 설정
+# verify_jwt = false: Kong 게이트웨이 레벨 JWT 검증 비활성화
+# JWT 검증은 Edge Function 내부의 verifyAuth() 함수에서 직접 처리
+# (hash op: 비인증 허용 / decrypt|encrypt: 사용자 JWT 필수)
+[functions.crypto-service]
+verify_jwt = false
