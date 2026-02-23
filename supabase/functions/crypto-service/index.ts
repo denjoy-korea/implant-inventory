@@ -101,6 +101,35 @@ async function getLegacyAesKey(): Promise<CryptoKey> {
   return cachedLegacyKeyPromise;
 }
 
+// LEGACY_SALT PBKDF2 키 (VITE_PATIENT_DATA_KEY 미설정 시 기본값으로 암호화된 데이터 복호화용)
+let cachedLegacySaltKeyPromise: Promise<CryptoKey> | null = null;
+
+async function getLegacySaltAesKey(): Promise<CryptoKey> {
+  if (cachedLegacySaltKeyPromise) return cachedLegacySaltKeyPromise;
+  cachedLegacySaltKeyPromise = (async () => {
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(LEGACY_SALT),
+      "PBKDF2",
+      false,
+      ["deriveKey"],
+    );
+    return crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: PBKDF2_SALT_BYTES,
+        iterations: PBKDF2_ITERATIONS,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"],
+    );
+  })();
+  return cachedLegacySaltKeyPromise;
+}
+
 // ── 암호화 ────────────────────────────────────────────────────────────────
 async function encryptText(text: string): Promise<string> {
   if (!text) return "";
@@ -169,8 +198,19 @@ async function decryptText(encrypted: string): Promise<string> {
       );
       return new TextDecoder().decode(dec);
     } catch {
-      console.error("[crypto-service] decryptText: 복호화 실패");
-      return encrypted;
+      // 3차: LEGACY_SALT PBKDF2 키 (VITE_PATIENT_DATA_KEY 미설정 시 기본값으로 암호화된 데이터)
+      try {
+        const legacySaltKey = await getLegacySaltAesKey();
+        const dec = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv },
+          legacySaltKey,
+          cipherBytes,
+        );
+        return new TextDecoder().decode(dec);
+      } catch {
+        console.error("[crypto-service] decryptText: 복호화 실패 (모든 키 시도 완료)");
+        return encrypted;
+      }
     }
   }
 }
