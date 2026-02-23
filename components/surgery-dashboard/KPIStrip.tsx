@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SparklineData } from './shared';
 
 // Mini sparkline with aria-label
@@ -73,13 +73,25 @@ interface KPIStripProps {
   animDailyAvg: number;
   animRecentDailyAvg: number;
   sparkline: SparklineData;
+  /** 마일스톤 계산용 실제 총 식립 건수 */
+  totalPlacement?: number;
   /** 월 평균 진료일수 (공휴일 반영 후). 미전달 시 25일 표시 */
   avgWorkDaysPerMonth?: number;
   /** 진행율 기반 전월 대비 델타 */
   progressAwareDeltas?: ProgressAwareDeltas;
 }
 
-export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline, avgWorkDaysPerMonth, progressAwareDeltas }: KPIStripProps) {
+const MILESTONES = [100, 300, 500, 1000, 2000, 3000, 5000, 10000];
+
+function getMilestoneInfo(count: number): { next: number | null; reached: number | null } {
+  const reached = [...MILESTONES].reverse().find(m => count >= m) ?? null;
+  const next = MILESTONES.find(m => m > count) ?? null;
+  return { next, reached };
+}
+
+export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, animClaim, animDailyAvg, animRecentDailyAvg, sparkline, totalPlacement, avgWorkDaysPerMonth, progressAwareDeltas }: KPIStripProps) {
+  const milestone = useMemo(() => getMilestoneInfo(totalPlacement ?? 0), [totalPlacement]);
+
   // 최근 1개월 vs 전체 일평균 차이 (소수점 1자리 기준)
   const recentRaw = animRecentDailyAvg / 10;
   const dailyRaw = animDailyAvg / 10;
@@ -114,6 +126,22 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
           <div className="mt-3">
             <MiniSparkline data={m.sparkData} color={m.sparkColor} id={m.sparkId} height={24} width={80} />
           </div>
+          {/* 누적 식립 마일스톤 배지 (총 식립 카드만) */}
+          {i === 0 && (totalPlacement ?? 0) > 0 && (
+            <div className="mt-2">
+              {milestone.reached && milestone.next === null ? (
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                  {milestone.reached.toLocaleString()}건 달성!
+                </span>
+              ) : milestone.next ? (
+                <span className="inline-flex items-center gap-1 text-[9px] font-medium text-indigo-500 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">
+                  다음 마일스톤 {milestone.next.toLocaleString()}건
+                  <span className="text-indigo-400">({(milestone.next - (totalPlacement ?? 0)).toLocaleString()}건 남음)</span>
+                </span>
+              ) : null}
+            </div>
+          )}
           {i >= 1 && i <= 3 && useProgress && progressAwareDeltas!.isPartialMonth && (
             <div className="relative group/kpitip mt-1.5">
               <p className="text-[9px] text-slate-400 cursor-help underline decoration-dashed decoration-slate-300 underline-offset-2 inline-block">

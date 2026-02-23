@@ -545,6 +545,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
           animDailyAvg={animDailyAvg}
           animRecentDailyAvg={animRecentDailyAvg}
           sparkline={kpiStats.sparkline}
+          totalPlacement={kpiStats.classificationStats['식립']}
           avgWorkDaysPerMonth={avgWorkDaysPerMonth}
           progressAwareDeltas={progressAwareDeltas}
         />
