@@ -871,7 +871,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                     회원 탈퇴
                                 </button>
                                 <p className="text-[11px] text-center text-slate-300 mt-2">
-                                    탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다
+                                    개인정보(이름, 연락처, 환자정보)가 즉시 파기되며 복구할 수 없습니다
                                 </p>
                             </div>
                         </div>
@@ -897,6 +897,14 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                     <div className="px-6 pt-6 pb-5">
                         <h3 className="text-base font-bold text-slate-800 mb-1">회원 탈퇴</h3>
                         <p className="text-sm text-slate-500">탈퇴 사유를 선택해주세요. 서비스 개선에 활용됩니다.</p>
+                        <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                            <p className="text-[11px] font-semibold text-amber-700 mb-1">개인정보 처리 안내</p>
+                            <ul className="space-y-0.5">
+                                <li className="text-[11px] text-amber-600">• 이름·연락처·환자정보는 탈퇴 즉시 파기됩니다.</li>
+                                <li className="text-[11px] text-amber-600">• 결제 기록은 전자상거래법에 따라 5년간 보관됩니다.</li>
+                                <li className="text-[11px] text-amber-600">• 탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다.</li>
+                            </ul>
+                        </div>
                     </div>
 
                     <div className="px-6 pb-5 space-y-2">

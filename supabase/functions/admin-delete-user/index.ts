@@ -100,6 +100,32 @@ Deno.serve(async (req: Request) => {
       if (logErr) console.warn("[admin-delete-user] audit log failed:", logErr);
     }
 
+    // PII 익명화: surgery_records (hospital이 있는 경우)
+    if (targetProfile?.hospital_id) {
+      const { error: srErr } = await supabase
+        .from("surgery_records")
+        .update({
+          patient_info: null,
+          patient_info_hash: null,
+          anonymized_at: new Date().toISOString(),
+        })
+        .eq("hospital_id", targetProfile.hospital_id)
+        .is("anonymized_at", null);
+      if (srErr) console.warn("[admin-delete-user] surgery_records anonymization failed:", srErr);
+    }
+
+    // PII 익명화: profiles
+    const { error: profErr } = await supabase
+      .from("profiles")
+      .update({
+        name: "[강제탈퇴]",
+        phone: null,
+        email_hash: null,
+        phone_hash: null,
+      })
+      .eq("id", targetUserId);
+    if (profErr) console.warn("[admin-delete-user] profiles anonymization failed:", profErr);
+
     // master_admin인 경우 병원/워크스페이스 삭제 (CASCADE로 inventory 등 하위 데이터 자동 처리)
     if (targetProfile?.hospital_id) {
       await supabase

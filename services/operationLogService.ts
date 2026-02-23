@@ -36,12 +36,15 @@ export type OperationAction =
   | 'member_invite'
   | 'member_kick'
   | 'member_permission_update'
-  | 'surgery_upload';
+  | 'surgery_upload'
+  | 'account_self_deleted'
+  | 'account_force_deleted'
+  | 'account_deactivated';
 
 export interface OperationLog {
   id: string;
-  hospitalId: string;
-  userId: string;
+  hospitalId: string | null;
+  userId: string | null;
   userEmail: string;
   userName: string;
   action: OperationAction;
@@ -154,8 +157,8 @@ export const operationLogService = {
 
     const logs: OperationLog[] = (data || []).map((row: Record<string, unknown>) => ({
       id: row.id as string,
-      hospitalId: row.hospital_id as string,
-      userId: row.user_id as string,
+      hospitalId: (row.hospital_id as string) ?? null,
+      userId: (row.user_id as string) ?? null,
       userEmail: row.user_email as string,
       userName: row.user_name as string,
       action: row.action as OperationAction,

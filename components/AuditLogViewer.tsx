@@ -21,6 +21,9 @@ const ACTION_LABELS: Record<OperationAction, { label: string; color: string; bg:
   member_kick: { label: '멤버 방출', color: 'text-pink-700', bg: 'bg-pink-100' },
   surgery_upload: { label: '수술기록 업로드', color: 'text-purple-700', bg: 'bg-purple-100' },
   member_permission_update: { label: '권한 수정', color: 'text-indigo-700', bg: 'bg-indigo-100' },
+  account_self_deleted: { label: '자발적 탈퇴', color: 'text-rose-700', bg: 'bg-rose-100' },
+  account_force_deleted: { label: '강제 삭제', color: 'text-red-700', bg: 'bg-red-100' },
+  account_deactivated: { label: '계정 비활성화', color: 'text-gray-700', bg: 'bg-gray-100' },
 };
 
 const PAGE_SIZE = 50;
