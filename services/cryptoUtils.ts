@@ -86,18 +86,24 @@ async function callCryptoService(
     body,
   });
 
-  // 토큰이 만료/불일치한 경우 1회 갱신 후 재시도
-  // H-6 fix: refreshSession()을 직접 호출하지 않고 getValidToken()을 재호출해
-  // _refreshingPromise mutex를 통해 refresh_token 이중 소비를 방지한다
+  // 401 수신 시: 서버 측 인증 거부 → 세션 강제 갱신 후 1회 재시도
+  // (클라이언트 기준 토큰이 유효해 보여도 서버가 거부할 수 있으므로
+  //  refreshSession()으로 무조건 새 access_token을 발급받아 재시도)
   if (requireAuth && res.status === 401) {
-    const refreshedToken = await getValidToken();
-    if (refreshedToken && refreshedToken !== token) {
-      headers['Authorization'] = `Bearer ${refreshedToken}`;
-      res = await fetch(CRYPTO_SERVICE_URL, {
-        method: 'POST',
-        headers,
-        body,
-      });
+    try {
+      const { supabase: sb } = await import('./supabaseClient');
+      const { data } = await sb.auth.refreshSession();
+      const freshToken = data?.session?.access_token;
+      if (freshToken) {
+        headers['Authorization'] = `Bearer ${freshToken}`;
+        res = await fetch(CRYPTO_SERVICE_URL, {
+          method: 'POST',
+          headers,
+          body,
+        });
+      }
+    } catch {
+      // refresh 실패 시 원래 응답으로 계속 진행
     }
   }
 
