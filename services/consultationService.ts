@@ -49,6 +49,11 @@ export const consultationService = {
       .from('consultation_requests')
       .insert(data);
     if (error) throw error;
+
+    // 노션 DB 연동 (fire-and-forget — 실패해도 신청 흐름에 영향 없음)
+    supabase.functions.invoke('notify-consultation', { body: data }).catch((err) => {
+      console.warn('[consultationService] notify-consultation invoke failed:', err);
+    });
   },
 
   async getAll(): Promise<ConsultationRequest[]> {

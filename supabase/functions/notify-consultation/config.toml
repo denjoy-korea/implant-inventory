@@ -1,0 +1,2 @@
+[functions.notify-consultation]
+verify_jwt = false
