@@ -30,7 +30,7 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const isSystemAdmin = user?.role === 'admin';
   const isHospitalAdmin = user?.role === 'master' || isSystemAdmin;
-  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
+  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews', 'consultation'];
   const isPublicView = publicViews.includes(currentView);
 
   return (
