@@ -160,8 +160,9 @@ Deno.serve(async (req: Request) => {
       properties["지역"]      = { rich_text: [{ text: { content: region       || "" } }] };
       properties["상태"]      = { status:    { name: "접수됨" } };
       properties["신청 일시"] = { date:      { start: new Date().toISOString() } };
-      if (preferred_date)      properties["선호 날짜"]  = { date:   { start: preferred_date } };
-      if (preferred_time_slot) properties["선호 시간대"] = { select: { name: TIME_SLOT_KO[preferred_time_slot] ?? preferred_time_slot } };
+      if (preferred_date)      properties["선호 날짜"]  = { date:      { start: preferred_date } };
+      if (preferred_time_slot) properties["선호 시간대"] = { select:    { name: TIME_SLOT_KO[preferred_time_slot] ?? preferred_time_slot } };
+      if (notes)               properties["추가 요청"]  = { rich_text: [{ text: { content: notes.slice(0, 2000) } }] };
     }
 
     // ── 5. Notion API 호출 ──
@@ -193,7 +194,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     console.error("[notify-consultation] error:", err);
-    return new Response(JSON.stringify({ success: false }), {
+    return new Response(JSON.stringify({ success: false, reason: "internal_error" }), {
       status: 200,
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
