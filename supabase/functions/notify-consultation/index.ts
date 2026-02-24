@@ -88,7 +88,7 @@ Deno.serve(async (req: Request) => {
     const dbId        = await decryptENCv2(rowMap["notion_consultation_db_id"], patientDataKey);
 
     // ── 3. 요청 데이터 파싱 ──
-    const { name, email, hospital_name, region, contact, preferred_date, preferred_time_slot, notes } =
+    const { name, email, hospital_name, region, contact, preferred_date, preferred_time_slot } =
       await req.json();
 
     // ── 4. Notion 페이지 properties 구성 ──
@@ -98,13 +98,12 @@ Deno.serve(async (req: Request) => {
       "이메일":   { email:     email   || null },
       "연락처":   { phone_number: contact || null },
       "지역":     { rich_text: [{ text: { content: region       || "" } }] },
-      "상태":     { select:    { name: "접수됨" } },
+      "상태":     { status:    { name: "접수됨" } },
       "신청 일시":{ date:      { start: new Date().toISOString() } },
     };
 
     if (preferred_date)      properties["선호 날짜"]  = { date:   { start: preferred_date } };
     if (preferred_time_slot) properties["선호 시간대"] = { select: { name: TIME_SLOT_KO[preferred_time_slot] ?? preferred_time_slot } };
-    if (notes)               properties["추가 요청"]  = { rich_text: [{ text: { content: notes.slice(0, 2000) } }] };
 
     // ── 5. Notion API 호출 ──
     const notionRes = await fetch("https://api.notion.com/v1/pages", {
