@@ -179,6 +179,7 @@ export function dbToHospital(db: DbHospital): Hospital {
     masterAdminId: db.master_admin_id || '',
     createdAt: db.created_at,
     workDays: db.work_days ?? DEFAULT_WORK_DAYS,
+    onboardingFlags: db.onboarding_flags ?? 0,
   };
 }
 

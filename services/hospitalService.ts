@@ -63,6 +63,7 @@ export const hospitalService = {
       masterAdminId: '',
       createdAt: h.created_at,
       workDays: DEFAULT_WORK_DAYS,
+      onboardingFlags: 0,
     }));
   },
 
@@ -70,12 +71,20 @@ export const hospitalService = {
   async getHospitalById(hospitalId: string): Promise<Hospital | null> {
     const { data, error } = await supabase
       .from('hospitals')
-      .select('id, name, master_admin_id, created_at, work_days')
+      .select('id, name, master_admin_id, created_at, work_days, onboarding_flags')
       .eq('id', hospitalId)
       .single();
 
     if (error || !data) return null;
     return dbToHospital(data as DbHospital);
+  },
+
+  /** 온보딩 플래그 OR 업데이트 (fire-and-forget 용) */
+  async updateOnboardingFlags(hospitalId: string, flags: number): Promise<void> {
+    await supabase
+      .from('hospitals')
+      .update({ onboarding_flags: flags })
+      .eq('id', hospitalId);
   },
 
   /** 병원 가입 요청 (Staff → 병원) */

@@ -104,6 +104,8 @@ export interface Hospital {
   masterAdminId: string; // email of the master admin
   createdAt: string;
   workDays: number[];    // 진료 요일 배열 (기본: 월~금 [1,2,3,4,5])
+  /** 온보딩 완료 단계 비트마스크 (1=welcome,2=fixture,4=surgery,8=auditSeen,16=failAudit) */
+  onboardingFlags: number;
 }
 
 export interface User {
@@ -435,6 +437,8 @@ export interface DbHospital {
   updated_at: string;
   /** 진료 요일 배열: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토 (기본: [1,2,3,4,5]) */
   work_days: number[];
+  /** 온보딩 완료 단계 비트마스크 (1=welcome,2=fixture,4=surgery,8=auditSeen,16=failAudit) */
+  onboarding_flags: number;
 }
 
 /** 구성원 세부 권한 */

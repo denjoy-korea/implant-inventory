@@ -23,6 +23,7 @@ import { resetService } from '../services/resetService';
 import { dbToInventoryItem, dbToExcelRow, dbToExcelRowBatch, dbToOrder, dbToUser } from '../services/mappers';
 import { supabase } from '../services/supabaseClient';
 import { pageViewService } from '../services/pageViewService';
+import { onboardingService } from '../services/onboardingService';
 
 const INITIAL_STATE: AppState = {
   fixtureData: null,
@@ -124,6 +125,11 @@ export function useAppState(onNotify?: NotifyFn) {
       surgeryService.backfillPatientInfoHash(user.hospitalId).catch(() => {});
 
       const wasReset = await resetService.checkScheduledReset(user.hospitalId);
+
+      // DB에 저장된 온보딩 완료 플래그를 localStorage에 동기화 (다른 기기/브라우저 지원)
+      if (hospitalData?.onboardingFlags) {
+        onboardingService.syncFromDbFlags(user.hospitalId, hospitalData.onboardingFlags);
+      }
 
       setState(prev => ({
         ...prev,
