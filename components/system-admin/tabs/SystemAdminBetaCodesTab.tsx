@@ -22,10 +22,16 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   const [distributedTo, setDistributedTo] = useState('');
   const [distributedContact, setDistributedContact] = useState('');
   const [note, setNote] = useState('');
+  const [usageMode, setUsageMode] = useState<'single' | 'unlimited'>('single');
   const [editDistributedTo, setEditDistributedTo] = useState('');
   const [editDistributedContact, setEditDistributedContact] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [editUsageMode, setEditUsageMode] = useState<'single' | 'unlimited'>('single');
   const { toast, showToast } = useToast();
+
+  const usageModeLabel = (mode: 'single' | 'unlimited') => (
+    mode === 'unlimited' ? '무제한' : '1회용'
+  );
 
   const loadCodes = useCallback(async () => {
     setLoading(true);
@@ -55,11 +61,13 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         distributedTo,
         distributedContact,
         note,
+        usageMode,
       });
       setCodes((prev) => [created, ...prev]);
       setDistributedTo('');
       setDistributedContact('');
       setNote('');
+      setUsageMode('single');
       try {
         await navigator.clipboard.writeText(created.code);
         showToast(`코드 생성 완료: ${created.code} (클립보드 복사됨)`, 'success');
@@ -104,6 +112,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     setEditDistributedTo(row.distributed_to || '');
     setEditDistributedContact(row.distributed_contact || '');
     setEditNote(row.note || '');
+    setEditUsageMode(row.usage_mode || 'single');
   };
 
   const handleCancelEdit = () => {
@@ -111,6 +120,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     setEditDistributedTo('');
     setEditDistributedContact('');
     setEditNote('');
+    setEditUsageMode('single');
   };
 
   const handleSaveEdit = async (rowId: string) => {
@@ -120,6 +130,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         distributedTo: editDistributedTo,
         distributedContact: editDistributedContact,
         note: editNote,
+        usageMode: editUsageMode,
       });
       setCodes((prev) => prev.map((item) => (item.id === rowId ? updated : item)));
       showToast('배포 대상 정보가 저장되었습니다.', 'success');
@@ -191,7 +202,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
             value={distributedTo}
             onChange={(event) => setDistributedTo(event.target.value)}
@@ -210,6 +221,14 @@ const SystemAdminBetaCodesTab: React.FC = () => {
             placeholder="메모 (선택)"
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           />
+          <select
+            value={usageMode}
+            onChange={(event) => setUsageMode(event.target.value === 'unlimited' ? 'unlimited' : 'single')}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="single">1회용 코드</option>
+            <option value="unlimited">무제한 코드</option>
+          </select>
         </div>
       </div>
 
@@ -236,6 +255,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 text-left font-bold">코드</th>
                   <th className="px-4 py-3 text-left font-bold">배포 대상</th>
+                  <th className="px-4 py-3 text-left font-bold">사용정책</th>
                   <th className="px-4 py-3 text-left font-bold">상태</th>
                   <th className="px-4 py-3 text-left font-bold">검증</th>
                   <th className="px-4 py-3 text-left font-bold">생성일</th>
@@ -280,6 +300,14 @@ const SystemAdminBetaCodesTab: React.FC = () => {
                               placeholder="메모"
                               className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                             />
+                            <select
+                              value={editUsageMode}
+                              onChange={(event) => setEditUsageMode(event.target.value === 'unlimited' ? 'unlimited' : 'single')}
+                              className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                            >
+                              <option value="single">1회용 코드</option>
+                              <option value="unlimited">무제한 코드</option>
+                            </select>
                           </div>
                         ) : (
                           <>
@@ -287,6 +315,18 @@ const SystemAdminBetaCodesTab: React.FC = () => {
                             <p className="text-[11px] text-slate-500">{row.distributed_contact || '-'}</p>
                             {row.note && <p className="text-[11px] text-slate-500 mt-0.5">{row.note}</p>}
                           </>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${
+                          row.usage_mode === 'unlimited'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {usageModeLabel(row.usage_mode || 'single')}
+                        </span>
+                        {row.usage_mode === 'single' && row.used_at && (
+                          <p className="mt-1 text-[10px] text-rose-500 font-semibold">사용 완료</p>
                         )}
                       </td>
                       <td className="px-4 py-3">

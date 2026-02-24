@@ -8,7 +8,7 @@ interface Props {
 export default function OnboardingToast({ progress, onClick }: Props) {
   return (
     <div
-      className="fixed bottom-6 right-6 z-[200] cursor-pointer group"
+      className="fixed bottom-[160px] right-4 md:bottom-32 md:right-8 z-[200] cursor-pointer group"
       onClick={onClick}
     >
       <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/80 border border-slate-100 px-4 py-3 flex items-center gap-3 w-[260px] hover:shadow-xl hover:border-indigo-100 transition-all duration-200">

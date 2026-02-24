@@ -30,7 +30,7 @@ interface AppUserOverlayStackProps {
   onOnboardingSkip: () => void;
   onReopenOnboarding: () => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
-  onGoToSurgeryUpload: (file?: File) => void;
+  onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
   onGoToInventoryAudit: () => void;
   onGoToFailManagement: () => void;
   showOnboardingComplete: boolean;

@@ -29,7 +29,7 @@ interface Props {
   onComplete: () => void;
   onSkip: () => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
-  onGoToSurgeryUpload: (file?: File) => void;
+  onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
   onGoToInventoryAudit: () => void;
   onGoToFailManagement: () => void;
 }
@@ -134,7 +134,13 @@ export default function OnboardingWizard({
           {step === 2 && <Step2DenwebFixtureDownload onNext={handleNext} />}
           {step === 3 && <Step2FixtureUpload onGoToDataSetup={onGoToDataSetup} />}
           {step === 4 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
-          {step === 5 && <Step4UploadGuide inventory={inventory} onGoToSurgeryUpload={onGoToSurgeryUpload} />}
+          {step === 5 && (
+            <Step4UploadGuide
+              inventory={inventory}
+              onGoToSurgeryUpload={onGoToSurgeryUpload}
+              onUploaded={() => goToStep(6)}
+            />
+          )}
           {step === 6 && <Step6InventoryAudit onGoToBaseStockEdit={onGoToInventoryAudit} />}
           {step === 7 && <Step3FailAudit onGoToFailManagement={handleFailAuditNext} />}
         </div>

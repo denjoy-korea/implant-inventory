@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
-import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact } from '../types';
+import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact, BillingProgram } from '../types';
 import { dbToHospital, decryptProfile } from './mappers';
 import { encryptPatientInfo } from './cryptoUtils';
 
@@ -64,19 +64,50 @@ export const hospitalService = {
       createdAt: h.created_at,
       workDays: DEFAULT_WORK_DAYS,
       onboardingFlags: 0,
+      billingProgram: null,
     }));
   },
 
   /** 병원 ID로 단건 조회 */
   async getHospitalById(hospitalId: string): Promise<Hospital | null> {
-    const { data, error } = await supabase
+    const baseSelect = 'id, name, master_admin_id, created_at, work_days, onboarding_flags';
+    const selectWithProgram = `${baseSelect}, billing_program`;
+
+    let { data, error } = await supabase
       .from('hospitals')
-      .select('id, name, master_admin_id, created_at, work_days, onboarding_flags')
+      .select(selectWithProgram)
       .eq('id', hospitalId)
       .single();
 
+    // 롤아웃 중 migration 미적용 환경 대응: billing_program 컬럼이 없어도 기본 정보는 조회
+    if (error && (error.code === '42703' || /billing_program/i.test(error.message || ''))) {
+      const fallback = await supabase
+        .from('hospitals')
+        .select(baseSelect)
+        .eq('id', hospitalId)
+        .single();
+      data = fallback.data ? { ...fallback.data, billing_program: null } : null;
+      error = fallback.error;
+    }
+
     if (error || !data) return null;
     return dbToHospital(data as DbHospital);
+  },
+
+  /** 병원 청구프로그램 설정 */
+  async updateBillingProgram(hospitalId: string, billingProgram: BillingProgram): Promise<void> {
+    const { error } = await supabase
+      .from('hospitals')
+      .update({ billing_program: billingProgram })
+      .eq('id', hospitalId);
+
+    if (error) {
+      console.error('[hospitalService] updateBillingProgram failed:', error);
+      if (error.code === '42703' || /billing_program/i.test(error.message || '')) {
+        throw new Error('DB에 billing_program 컬럼이 없습니다. 최신 마이그레이션을 먼저 적용해주세요.');
+      }
+      throw new Error('청구프로그램 저장에 실패했습니다.');
+    }
   },
 
   /** 온보딩 플래그 OR 업데이트 (fire-and-forget 용) */

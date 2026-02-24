@@ -5,10 +5,10 @@ import { useAppState } from './hooks/useAppState';
 import Sidebar from './components/Sidebar';
 import NewDataModal from './components/NewDataModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import BillingProgramGate from './components/BillingProgramGate';
 import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
 import AppGlobalOverlays from './components/app/AppGlobalOverlays';
 import DashboardHeader from './components/app/DashboardHeader';
-import KakaoChannelButton from './components/KakaoChannelButton';
 import type { NudgeType } from './components/UpgradeNudge';
 import type { LimitType } from './components/PlanLimitToast';
 
@@ -18,16 +18,17 @@ const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRoute
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, canAccessTab } from './types';
+import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
 import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
 import { authService } from './services/authService';
 import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
 import { orderService } from './services/orderService';
+import { hospitalService } from './services/hospitalService';
 import { planService } from './services/planService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
-import { dbToExcelRow, dbToOrder, fixIbsImplant } from './services/mappers';
+import { dbToExcelRowBatch, dbToOrder, fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { onboardingService } from './services/onboardingService';
@@ -90,7 +91,7 @@ function FileUploadLoadingOverlay({ type }: { type: UploadType | null }) {
   }, [steps.length]);
 
   return (
-    <div className="fixed inset-0 z-[300] bg-white/70 backdrop-blur-sm flex items-center justify-center">
+    <div className="fixed inset-0 z-[340] bg-white/70 backdrop-blur-sm flex items-center justify-center">
       <div className="flex flex-col items-center gap-4 bg-white rounded-3xl shadow-2xl border border-slate-100 px-12 py-9">
         <div className="w-11 h-11 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
         <p
@@ -127,7 +128,11 @@ const App: React.FC = () => {
   // localStorage 영속 상태 + 메모리 상태 합산 (새로고침/재로그인 후에도 유지)
   const _obHid = state.user?.hospitalId;
   const effectiveDismissed = onboardingDismissed || (_obHid ? onboardingService.isDismissed(_obHid) : false);
+  const onboardingAutoResumeRef = useRef<string | null>(null);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
+  const [billingProgramSaving, setBillingProgramSaving] = useState(false);
+  const [billingProgramError, setBillingProgramError] = useState('');
+  const [forcedOnboardingStep, setForcedOnboardingStep] = useState<number | null>(null);
 
   // 대시보드 진입 시 후기 팝업 여부 확인
   useEffect(() => {
@@ -152,6 +157,28 @@ const App: React.FC = () => {
   const handleLeaveHospital = useCallback(() => {
     if (state.user) _handleLeaveHospital(state.user);
   }, [_handleLeaveHospital, state.user]);
+
+  const handleSelectBillingProgram = useCallback(async (program: BillingProgram) => {
+    if (!state.user?.hospitalId) return;
+    setBillingProgramSaving(true);
+    setBillingProgramError('');
+    try {
+      await hospitalService.updateBillingProgram(state.user.hospitalId, program);
+      setState(prev => ({ ...prev, hospitalBillingProgram: program }));
+      showAlertToast('청구프로그램 설정이 저장되었습니다.', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '청구프로그램 저장에 실패했습니다.';
+      setBillingProgramError(message);
+    } finally {
+      setBillingProgramSaving(false);
+    }
+  }, [setState, showAlertToast, state.user?.hospitalId]);
+
+  const handleRefreshBillingProgram = useCallback(async () => {
+    if (!state.user) return;
+    setBillingProgramError('');
+    await loadHospitalData(state.user);
+  }, [loadHospitalData, state.user]);
 
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
   const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
@@ -213,8 +240,19 @@ const App: React.FC = () => {
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
-  const showDashboardSidebar = state.currentView === 'dashboard' && (!isSystemAdmin || state.adminViewMode === 'user');
-  const showStandardDashboardHeader = state.currentView === 'dashboard' && !(isSystemAdmin && state.adminViewMode !== 'user');
+  const requiresBillingProgramSetup = (
+    state.currentView === 'dashboard' &&
+    !!state.user?.hospitalId &&
+    (state.user?.status === 'active' || state.user?.status === 'readonly') &&
+    !isSystemAdmin &&
+    !state.hospitalBillingProgram
+  );
+  const showDashboardSidebar = state.currentView === 'dashboard'
+    && !requiresBillingProgramSetup
+    && (!isSystemAdmin || state.adminViewMode === 'user');
+  const showStandardDashboardHeader = state.currentView === 'dashboard'
+    && !requiresBillingProgramSetup
+    && !(isSystemAdmin && state.adminViewMode !== 'user');
   const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isNarrowViewport;
   const isPublicBottomNavView =
     state.currentView === 'landing' ||
@@ -228,6 +266,12 @@ const App: React.FC = () => {
   const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management', 'fail_management'];
   const mobileMoreTabs: DashboardTab[] = ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'];
   const isMoreTabActive = mobileMoreTabs.includes(state.dashboardTab);
+
+  useEffect(() => {
+    if (requiresBillingProgramSetup) return;
+    if (billingProgramError) setBillingProgramError('');
+    if (billingProgramSaving) setBillingProgramSaving(false);
+  }, [billingProgramError, billingProgramSaving, requiresBillingProgramSetup]);
 
   // Dev convenience: expose maintenance helpers for one-off operations.
   useEffect(() => {
@@ -245,10 +289,10 @@ const App: React.FC = () => {
   }, [state.currentView, isSystemAdmin]);
 
   useEffect(() => {
-    if (state.user && (state.currentView === 'login' || state.currentView === 'signup')) {
+    if (!state.isLoading && state.user && (state.currentView === 'login' || state.currentView === 'signup')) {
       setState(prev => ({ ...prev, currentView: 'dashboard' }));
     }
-  }, [state.user, state.currentView]);
+  }, [state.isLoading, state.user, state.currentView]);
 
   // 공개 페이지 뷰 트래킹
   useEffect(() => {
@@ -402,6 +446,7 @@ const App: React.FC = () => {
 
   // 7단계 기준 첫 번째 미완료 단계 계산 (뷰/탭 조건 없이 순수 진행 상태만)
   const firstIncompleteStep = (() => {
+    if (requiresBillingProgramSetup) return null;
     if (!isHospitalAdmin) return null;
     if (state.user?.status !== 'active') return null;
     const hid = state.user?.hospitalId ?? '';
@@ -420,6 +465,7 @@ const App: React.FC = () => {
   })();
 
   const onboardingStep = (() => {
+    if (forcedOnboardingStep !== null) return forcedOnboardingStep;
     if (effectiveDismissed) return null;
     if (state.currentView !== 'dashboard') return null;
     if (
@@ -435,8 +481,47 @@ const App: React.FC = () => {
   const shouldShowOnboarding = onboardingStep !== null;
 
   const ONBOARDING_STEP_PROGRESS: Record<number, number> = { 1: 0, 2: 0, 3: 15, 4: 30, 5: 50, 6: 70, 7: 85 };
-  const showOnboardingToast = effectiveDismissed && firstIncompleteStep !== null;
+  const showOnboardingToast = (
+    state.currentView === 'dashboard' &&
+    firstIncompleteStep !== null &&
+    !shouldShowOnboarding
+  );
   const onboardingProgress = firstIncompleteStep ? (ONBOARDING_STEP_PROGRESS[firstIncompleteStep] ?? 0) : 100;
+
+  // 병원/사용자 컨텍스트가 바뀌면 세션 자동 재개 상태를 초기화
+  useEffect(() => {
+    const hid = state.user?.hospitalId ?? null;
+    if (!hid) {
+      onboardingAutoResumeRef.current = null;
+      return;
+    }
+    if (onboardingAutoResumeRef.current && onboardingAutoResumeRef.current !== hid) {
+      onboardingAutoResumeRef.current = null;
+    }
+  }, [state.user?.hospitalId]);
+
+  // 새로고침/재로그인 후 대시보드 진입 시 미완료 온보딩을 중앙에서 즉시 재개
+  useEffect(() => {
+    if (state.currentView !== 'dashboard') return;
+    if (state.isLoading) return;
+    if (!state.user?.hospitalId) return;
+    if (!firstIncompleteStep) return;
+    if (requiresBillingProgramSetup) return;
+    if (state.user.status !== 'active') return;
+    if (onboardingAutoResumeRef.current === state.user.hospitalId) return;
+
+    onboardingAutoResumeRef.current = state.user.hospitalId;
+    onboardingService.clearDismissed(state.user.hospitalId);
+    setOnboardingDismissed(false);
+    setForcedOnboardingStep(firstIncompleteStep);
+  }, [
+    firstIncompleteStep,
+    requiresBillingProgramSetup,
+    state.currentView,
+    state.isLoading,
+    state.user?.hospitalId,
+    state.user?.status,
+  ]);
 
   // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
@@ -1018,10 +1103,17 @@ const App: React.FC = () => {
     }
   }, [setState, showAlertToast, state.inventory]);
 
-  const handleFileUpload = async (file: File, type: UploadType, sizeCorrections?: Map<string, string>) => {
+  const handleFileUpload = async (file: File, type: UploadType, sizeCorrections?: Map<string, string>): Promise<boolean> => {
     uploadingTypeRef.current = type;
     setState(prev => ({ ...prev, isLoading: true }));
     try {
+      const billingProgram = state.hospitalBillingProgram ?? 'dentweb';
+      if (billingProgram !== 'dentweb') {
+        showAlertToast('현재 선택한 청구프로그램의 업로드 로직은 준비 중입니다. 덴트웹 설정 후 이용해 주세요.', 'info');
+        setState(prev => ({ ...prev, isLoading: false }));
+        return false;
+      }
+
       // 수술기록 업로드 빈도 제한 체크
       if (type === 'surgery' && state.user?.hospitalId) {
         const lastUpload = await surgeryService.getLastUploadDate(state.user.hospitalId);
@@ -1032,7 +1124,7 @@ const App: React.FC = () => {
           const planLabel = effectivePlan === 'free' ? '무료 플랜은 월 1회' : '베이직 플랜은 주 1회';
           showAlertToast(`${planLabel} 수술기록 업로드가 가능합니다. 다음 업로드 가능일: ${formatted}`, 'error');
           setState(prev => ({ ...prev, isLoading: false }));
-          return;
+          return false;
         }
       }
 
@@ -1133,12 +1225,12 @@ const App: React.FC = () => {
               // 전부 중복 → UI에 아무것도 추가하지 않고 알림만
               showAlertToast(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`, 'info');
               setState(prev => ({ ...prev, isLoading: false }));
-              return;
+              return true;
             }
 
             if (inserted > 0) {
               // DB에 실제 저장된 레코드만 UI에 반영
-              const savedRows = await Promise.all(savedRecords.map(dbToExcelRow));
+              const savedRows = await dbToExcelRowBatch(savedRecords);
               newSurgeryMaster[targetSheetName] = [
                 ...(newSurgeryMaster[targetSheetName] || []),
                 ...savedRows,
@@ -1154,15 +1246,20 @@ const App: React.FC = () => {
                 'surgery_upload',
                 `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
               );
+              return true;
             }
+            setState(prev => ({ ...prev, isLoading: false }));
+            return false;
           } else {
             // 비로그인 상태: DB 저장 없이 로컬 상태만 (레거시 동작)
             newSurgeryMaster[targetSheetName] = [...(newSurgeryMaster[targetSheetName] || []), ...cleanedRows];
             setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
+            return true;
           }
         } else {
           showAlertToast("'수술기록지' 시트를 찾을 수 없습니다.", 'error');
           setState(prev => ({ ...prev, isLoading: false }));
+          return false;
         }
       } else {
         // 픽스쳐 데이터: IBS Implant 제조사/브랜드 교정 후 저장
@@ -1199,10 +1296,12 @@ const App: React.FC = () => {
         });
         setState(prev => ({ ...prev, isLoading: false, fixtureData: fixedParsed, fixtureFileName: file.name, selectedFixtureIndices: initialIndices, dashboardTab: 'fixture_edit' }));
         operationLogService.logOperation('raw_data_upload', `픽스쳐 데이터 업로드 (${file.name})`);
+        return true;
       }
     } catch (error) {
       showAlertToast('엑셀 파일 처리에 실패했습니다.', 'error');
       setState(prev => ({ ...prev, isLoading: false }));
+      return false;
     } finally {
       uploadingTypeRef.current = null;
     }
@@ -1500,6 +1599,18 @@ const App: React.FC = () => {
     effectivePlan,
     billableItemCount,
     showAlertToast,
+    onAppliedSuccess: () => {
+      const hid = state.user?.hospitalId ?? '';
+      if (hid) {
+        onboardingService.markWelcomeSeen(hid);
+        onboardingService.markFixtureDownloaded(hid);
+        onboardingService.markSurgeryDownloaded(hid);
+        onboardingService.clearDismissed(hid);
+      }
+      setOnboardingDismissed(false);
+      setForcedOnboardingStep(5);
+      setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+    },
   });
 
   const requestFixtureExcelDownload = useCallback(() => {
@@ -1535,7 +1646,7 @@ const App: React.FC = () => {
   const requestApplyFixtureToInventory = useCallback(() => {
     setConfirmModal({
       title: '재고 마스터 반영',
-      message: '현재 설정 상태를 재고 마스터에 반영합니다.\n반영 후 재고 현황 페이지로 이동합니다.',
+      message: '현재 설정 상태를 재고 마스터에 반영합니다.\n반영 후 수술기록 업로드 가이드로 이동합니다.',
       tip: '엑셀 다운로드를 아직 하지 않으셨다면 먼저 다운로드해주세요.',
       confirmLabel: '반영하기',
       confirmColor: 'indigo',
@@ -1740,7 +1851,19 @@ const App: React.FC = () => {
             }}
           />
         ) : state.currentView === 'dashboard' ? (
-          isSystemAdmin && state.adminViewMode !== 'user' ? (
+          requiresBillingProgramSetup ? (
+            <BillingProgramGate
+              canConfigure={isHospitalMaster}
+              isSaving={billingProgramSaving}
+              errorMessage={billingProgramError}
+              onSubmit={handleSelectBillingProgram}
+              onRefresh={handleRefreshBillingProgram}
+              onSignOut={async () => {
+                await authService.signOut();
+                setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
+              }}
+            />
+          ) : isSystemAdmin && state.adminViewMode !== 'user' ? (
             /* System Admin Dashboard - Full Screen */
             <ErrorBoundary>
               <Suspense fallback={suspenseFallback}>
@@ -1950,15 +2073,18 @@ const App: React.FC = () => {
           onDismissReview={() => setReviewPopupType(null)}
           onOnboardingComplete={async () => {
             if (!state.user) return;
+            setForcedOnboardingStep(null);
             setOnboardingDismissed(true);
             await loadHospitalData(state.user);
           }}
           onOnboardingSkip={() => {
             if (state.user?.hospitalId) onboardingService.markDismissed(state.user.hospitalId);
+            setForcedOnboardingStep(null);
             setOnboardingDismissed(true);
           }}
           onReopenOnboarding={() => {
             if (state.user?.hospitalId) onboardingService.clearDismissed(state.user.hospitalId);
+            setForcedOnboardingStep(null);
             setOnboardingDismissed(false);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'overview' }));
           }}
@@ -1970,19 +2096,22 @@ const App: React.FC = () => {
               setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));
             }
           }}
-          onGoToSurgeryUpload={(file?: File) => {
+          onGoToSurgeryUpload={async (file?: File) => {
             if (file) {
               setState(prev => ({ ...prev, currentView: 'dashboard' }));
-              handleFileUpload(file, 'surgery');
+              return await handleFileUpload(file, 'surgery');
             } else {
               setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'surgery_database' }));
+              return false;
             }
           }}
           onGoToInventoryAudit={() => {
+            setForcedOnboardingStep(null);
             setAutoOpenBaseStockEdit(true);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'inventory_master' }));
           }}
           onGoToFailManagement={() => {
+            setForcedOnboardingStep(null);
             setAutoOpenFailBulkModal(true);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fail_management' }));
           }}
@@ -2010,7 +2139,6 @@ const App: React.FC = () => {
         onConfirmInventoryCompare={handleConfirmApplyToInventory}
         onCancelInventoryCompare={cancelInventoryCompare}
       />
-      <KakaoChannelButton />
     </div>
   );
 };

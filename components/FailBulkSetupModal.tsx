@@ -12,7 +12,6 @@ export interface FailBulkSetupModalProps {
   pendingByManufacturer: { manufacturer: string; count: number }[];
   onInitialize: (items: { manufacturer: string; count: number; date: string }[]) => Promise<void>;
   onReconcile: (reconciles: { manufacturer: string; targetCount: number }[], date: string) => Promise<void>;
-  initialTab?: Tab;
 }
 
 type Tab = 'initialize' | 'reconcile';
@@ -34,11 +33,12 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   pendingByManufacturer,
   onInitialize,
   onReconcile,
-  initialTab,
 }) => {
   const today = new Date().toISOString().split('T')[0];
+  const totalSystemFailCount = pendingByManufacturer.reduce((sum, item) => sum + (item.count || 0), 0);
+  const hasSystemFailRecords = totalSystemFailCount > 0;
   const [tab, setTab] = useState<Tab>(
-    initialTab ?? (pendingByManufacturer.length > 0 ? 'reconcile' : 'initialize')
+    hasSystemFailRecords ? 'reconcile' : 'initialize'
   );
   const [step, setStep] = useState<Step>('form');
   const [resultMessage, setResultMessage] = useState('');
@@ -54,6 +54,15 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   const [reconcileInputs, setReconcileInputs] = useState<Record<string, string>>({});
 
   // ── 탭 전환 시 초기값 설정
+  useEffect(() => {
+    if (!isOpen) return;
+    setTab(hasSystemFailRecords ? 'reconcile' : 'initialize');
+    setStep('form');
+    setResultMessage('');
+    setInitRows([{ id: Date.now().toString(), manufacturer: '', count: '' }]);
+    setReconcileInputs({});
+  }, [isOpen, hasSystemFailRecords]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (tab === 'reconcile') {
@@ -77,7 +86,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
 
   const handleClose = () => {
     setStep('form');
-    setTab(pendingByManufacturer.length > 0 ? 'reconcile' : 'initialize');
+    setTab(hasSystemFailRecords ? 'reconcile' : 'initialize');
     setInitRows([{ id: Date.now().toString(), manufacturer: '', count: '' }]);
     setReconcileInputs({});
     setResultMessage('');
@@ -394,7 +403,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 실제 보유 수량을 입력하면, 차이만큼 자동으로 처리됩니다.
               </div>
 
-              {pendingByManufacturer.length === 0 ? (
+              {!hasSystemFailRecords ? (
                 <div className="text-center py-8 text-sm text-slate-400">
                   미처리 FAIL 데이터가 없습니다.<br />
                   <span className="text-xs mt-1 block">"초기화 등록" 탭을 사용하세요.</span>
@@ -479,7 +488,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 onClick={handlePreview}
                 disabled={
                   (tab === 'initialize' && validInitItems.length === 0) ||
-                  (tab === 'reconcile' && (pendingByManufacturer.length === 0 || changedReconcileRows.length === 0))
+                  (tab === 'reconcile' && (!hasSystemFailRecords || changedReconcileRows.length === 0))
                 }
                 className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >

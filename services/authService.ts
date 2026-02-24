@@ -3,6 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 import { decryptProfile } from './mappers';
+import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
 /** 평문 여부 확인 (ENCv2/ENC v1 접두사 없으면 평문) */
 const isPlain = (v: string | null | undefined): boolean =>
@@ -127,8 +128,21 @@ export const authService = {
       role: signupRole,
       phone: phone || '',
     };
-    if (betaInviteCode) {
-      userMetadata.beta_invite_code = betaInviteCode;
+    const normalizedBetaInviteCode = normalizeBetaInviteCode(betaInviteCode || '');
+    if (normalizedBetaInviteCode) {
+      userMetadata.beta_invite_code = normalizedBetaInviteCode;
+    } else if (import.meta.env.DEV) {
+      const devFallbackInviteCode = normalizeBetaInviteCode((import.meta.env.VITE_DEV_BETA_INVITE_CODE as string | undefined) || '');
+      if (devFallbackInviteCode) {
+        userMetadata.beta_invite_code = devFallbackInviteCode;
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      const devBypassToken = String((import.meta.env.VITE_DEV_SIGNUP_BYPASS_TOKEN as string | undefined) || '').trim();
+      if (devBypassToken) {
+        userMetadata.beta_dev_bypass_token = devBypassToken;
+      }
     }
 
     // 1. Supabase Auth 회원가입
@@ -670,5 +684,49 @@ export const authService = {
   async getLastSignInAt(): Promise<string | null> {
     const { data: { user } } = await supabase.auth.getUser();
     return user?.last_sign_in_at ?? null;
+  },
+
+  // ── 소셜 로그인 / 계정 연동 ────────────────────────────────
+
+  /** 소셜 로그인 (로그인 페이지에서 사용) */
+  async signInWithSocial(provider: 'google' | 'kakao'): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 소셜 계정 연동 (프로필 보안 탭에서 사용) */
+  async linkSocialProvider(provider: 'google' | 'kakao'): Promise<{ success: boolean; error?: string }> {
+    // 연동 완료 후 보안 탭으로 복귀하기 위해 쿼리 파라미터 전달
+    const redirectTo = `${window.location.origin}?link_success=${provider}`;
+    const { error } = await supabase.auth.linkIdentity({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 소셜 계정 연동 해제 */
+  async unlinkSocialProvider(identityId: string): Promise<{ success: boolean; error?: string }> {
+    const { data: identitiesData, error: listError } = await supabase.auth.getUserIdentities();
+    if (listError || !identitiesData) return { success: false, error: listError?.message ?? '연동 정보를 불러올 수 없습니다.' };
+    const identity = identitiesData.identities.find(i => i.id === identityId);
+    if (!identity) return { success: false, error: '연동 계정을 찾을 수 없습니다.' };
+    const { error } = await supabase.auth.unlinkIdentity(identity);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 연동된 소셜 계정 목록 조회 */
+  async getLinkedIdentities(): Promise<{ id: string; provider: string }[]> {
+    const { data, error } = await supabase.auth.getUserIdentities();
+    if (error || !data) return [];
+    return data.identities
+      .filter(i => i.provider !== 'email')
+      .map(i => ({ id: i.id, provider: i.provider }));
   },
 };

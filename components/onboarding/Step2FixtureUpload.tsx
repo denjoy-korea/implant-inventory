@@ -247,6 +247,11 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   };
 
   const processFile = useCallback(async (file: File) => {
+    setErrorMsg('');
+    setApprovedItems(new Set());
+    setConversionEdits(new Map());
+    setGroups([]);
+
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       setErrorMsg('.xlsx 또는 .xls 파일만 업로드할 수 있습니다.');
       setUploadState('error');
@@ -373,6 +378,13 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
             </svg>
             <p className="text-xs text-green-700 font-medium flex-1 truncate">{fileName}</p>
             <span className="text-xs text-green-600 font-bold shrink-0">{groups.length}개 제조사 · {totalItems}개 사이즈</span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[11px] font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg px-2 py-1 hover:bg-indigo-50 transition-colors shrink-0"
+            >
+              파일 교체하기
+            </button>
           </div>
 
           {/* Health score */}

@@ -3,6 +3,7 @@ import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
 import ErrorBoundary from '../ErrorBoundary';
 import PublicInfoFooter from '../shared/PublicInfoFooter';
+import KakaoChannelButton from '../KakaoChannelButton';
 import {
   BillingCycle,
   DashboardTab,
@@ -166,6 +167,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
 
   return (
     <div className="h-full flex flex-col">
+      <KakaoChannelButton />
       <Header
         onHomeClick={() => (user ? handleNavigate('dashboard') : handleNavigate('landing'))}
         onLoginClick={() => handleNavigate('login')}

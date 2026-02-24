@@ -146,20 +146,37 @@ export const surgeryService = {
 
     // ── 배치 insert (Supabase 최대 1000건)
     const BATCH_SIZE = 500;
+    const INSERT_CONCURRENCY = 3;
     const results: DbSurgeryRecord[] = [];
+    const batches: Array<{ index: number; rows: typeof newRows }> = [];
 
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
-      const batch = newRows.slice(i, i + BATCH_SIZE);
-      const { data, error } = await supabase
-        .from('surgery_records')
-        .insert(batch)
-        .select();
+      batches.push({
+        index: i / BATCH_SIZE,
+        rows: newRows.slice(i, i + BATCH_SIZE),
+      });
+    }
 
-      if (error) {
-        console.error(`[surgeryService] Batch insert failed (batch ${i / BATCH_SIZE}):`, error);
-        continue;
-      }
-      if (data) results.push(...(data as DbSurgeryRecord[]));
+    for (let i = 0; i < batches.length; i += INSERT_CONCURRENCY) {
+      const wave = batches.slice(i, i + INSERT_CONCURRENCY);
+      const waveResults = await Promise.all(
+        wave.map(async ({ index, rows }) => {
+          const { data, error } = await supabase
+            .from('surgery_records')
+            .insert(rows)
+            .select();
+
+          if (error) {
+            console.error(`[surgeryService] Batch insert failed (batch ${index}):`, error);
+            return [] as DbSurgeryRecord[];
+          }
+          return (data as DbSurgeryRecord[]) ?? [];
+        })
+      );
+
+      waveResults.forEach((batchRows) => {
+        if (batchRows.length > 0) results.push(...batchRows);
+      });
     }
 
     return { records: results, inserted: results.length, skipped };

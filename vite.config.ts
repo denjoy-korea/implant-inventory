@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(() => {
   return {
     server: {
-      port: 3000,
+      port: 3001,
       host: '0.0.0.0',
     },
     plugins: [tailwindcss(), react()],
@@ -29,7 +29,7 @@ export default defineConfig(() => {
               if (id.includes('framer-motion')) return 'framer-motion';
               if (id.includes('recharts')) return 'recharts';
               if (id.includes('date-fns')) return 'date-fns';
-            if (id.includes('xlsx')) return 'xlsx-vendor';
+              if (id.includes('xlsx')) return 'xlsx-vendor';
               return 'vendor';
             }
           },

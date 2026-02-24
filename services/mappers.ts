@@ -180,6 +180,7 @@ export function dbToHospital(db: DbHospital): Hospital {
     createdAt: db.created_at,
     workDays: db.work_days ?? DEFAULT_WORK_DAYS,
     onboardingFlags: db.onboarding_flags ?? 0,
+    billingProgram: db.billing_program ?? null,
   };
 }
 

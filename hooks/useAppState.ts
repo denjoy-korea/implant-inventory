@@ -49,6 +49,7 @@ const INITIAL_STATE: AppState = {
   hospitalName: '',
   hospitalMasterAdminId: '',
   hospitalWorkDays: DEFAULT_WORK_DAYS,
+  hospitalBillingProgram: null,
 };
 
 type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
@@ -66,7 +67,16 @@ export function useAppState(onNotify?: NotifyFn) {
   const loadHospitalData = async (user: User) => {
     // paused 상태: 서비스 접근 차단 화면으로 라우팅
     if (user.status === 'paused') {
-      setState(prev => ({ ...prev, user, currentView: 'suspended', isLoading: false }));
+      setState(prev => ({
+        ...prev,
+        user,
+        currentView: 'suspended',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
+        isLoading: false,
+      }));
       return;
     }
 
@@ -76,6 +86,10 @@ export function useAppState(onNotify?: NotifyFn) {
         user,
         currentView: 'dashboard',
         dashboardTab: 'overview',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
         isLoading: false,
       }));
       return;
@@ -144,6 +158,7 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalName: hospitalData?.name || '',
         hospitalMasterAdminId: hospitalData?.masterAdminId || '',
         hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: hospitalData?.billingProgram ?? null,
         isLoading: false,
       }));
 
@@ -156,6 +171,10 @@ export function useAppState(onNotify?: NotifyFn) {
         ...prev,
         user,
         currentView: 'dashboard',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
         isLoading: false,
       }));
     }
@@ -181,6 +200,10 @@ export function useAppState(onNotify?: NotifyFn) {
         surgeryMaster: {},
         orders: [],
         fixtureData: null,
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
         showProfile: false,
       }));
       notify('초기화되었습니다. 새로운 병원을 찾아주세요.', 'info');
@@ -250,6 +273,32 @@ export function useAppState(onNotify?: NotifyFn) {
     }
   };
 
+  /**
+   * SIGNED_IN 직후 profile.hospital_id가 트랜잭션 지연으로 비어 있는 경우가 있어
+   * 짧게 재시도한 뒤 안정화된 프로필을 반환한다.
+   */
+  const waitForSignedInProfile = async () => {
+    const maxAttempts = 8;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const profile = await authService.getProfileById();
+      if (!profile) {
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        continue;
+      }
+
+      const hasHospitalLink = Boolean(profile.hospital_id);
+      const canMissHospitalTemporarily = profile.role === 'admin' || profile.status === 'pending';
+      if (hasHospitalLink || canMissHospitalTemporarily || attempt === maxAttempts - 1) {
+        return profile;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return null;
+  };
+
   // 세션 초기화 및 Auth 상태 변경 구독
   useEffect(() => {
     const initSession = async () => {
@@ -258,8 +307,15 @@ export function useAppState(onNotify?: NotifyFn) {
         setState(prev => ({ ...prev, isLoading: false }));
       }, LOAD_TIMEOUT_MS);
       try {
-        // 이메일 인증 링크 처리: ?token_hash=xxx&type=signup
+        // 소셜 계정 연동 완료 처리: ?link_success=google|kakao
         const urlParams = new URLSearchParams(window.location.search);
+        const linkSuccess = urlParams.get('link_success');
+        if (linkSuccess) {
+          window.history.replaceState({}, '', window.location.pathname);
+          localStorage.setItem('_link_success_provider', linkSuccess);
+        }
+
+        // 이메일 인증 링크 처리: ?token_hash=xxx&type=signup
         const tokenHash = urlParams.get('token_hash');
         const tokenType = urlParams.get('type');
         if (tokenHash && tokenType === 'signup') {
@@ -309,6 +365,10 @@ export function useAppState(onNotify?: NotifyFn) {
             const user = dbToUser(profile);
             await loadHospitalData(user);
             startSessionPolling();
+            // 소셜 연동 완료 후 복귀 시 프로필 모달 자동 오픈
+            if (localStorage.getItem('_link_success_provider')) {
+              setState(prev => ({ ...prev, showProfile: true }));
+            }
             return;
           }
         }
@@ -338,6 +398,10 @@ export function useAppState(onNotify?: NotifyFn) {
           orders: [],
           surgeryMaster: {},
           fixtureData: null,
+          hospitalName: '',
+          hospitalMasterAdminId: '',
+          hospitalWorkDays: DEFAULT_WORK_DAYS,
+          hospitalBillingProgram: null,
           isLoading: false,
         }));
       }
@@ -345,7 +409,7 @@ export function useAppState(onNotify?: NotifyFn) {
       // fire-and-forget: 콜백을 즉시 반환해 signInWithPassword 블로킹 방지
       if (event === 'SIGNED_IN') {
         void (async () => {
-          const profile = await authService.getProfileById();
+          const profile = await waitForSignedInProfile();
           if (profile) {
             const user = dbToUser(profile);
             // 이메일 인증 완료 후 트라이얼 플랜 적용 (이메일 인증 ON 경로)
@@ -355,6 +419,16 @@ export function useAppState(onNotify?: NotifyFn) {
               await planService.startTrial(user.hospitalId, pendingPlan);
             }
             await loadHospitalData(user);
+            // 소셜 로그인 시 세션 토큰 발급 (이메일 로그인은 signIn()에서 발급)
+            if (!localStorage.getItem(SESSION_TOKEN_KEY)) {
+              try {
+                const token = crypto.randomUUID();
+                await supabase.rpc('set_session_token', { p_token: token });
+                localStorage.setItem(SESSION_TOKEN_KEY, token);
+              } catch (e) {
+                console.warn('[useAppState] social login session token setup failed:', e);
+              }
+            }
             startSessionPolling();
           }
         })();

@@ -16,6 +16,7 @@ interface UseInventoryCompareParams {
   effectivePlan: PlanType;
   billableItemCount: number;
   showAlertToast: (msg: string, type: ToastType) => void;
+  onAppliedSuccess?: () => void;
 }
 
 interface UseInventoryCompareReturn {
@@ -35,6 +36,7 @@ export function useInventoryCompare({
   effectivePlan,
   billableItemCount,
   showAlertToast,
+  onAppliedSuccess,
 }: UseInventoryCompareParams): UseInventoryCompareReturn {
   const [planLimitModal, setPlanLimitModal] = useState<{ currentCount: number; newCount: number; maxItems: number } | null>(null);
   const [inventoryCompare, setInventoryCompare] = useState<{
@@ -131,9 +133,10 @@ export function useInventoryCompare({
             const match = saved.find(s => s.manufacturer === item.manufacturer && s.brand === item.brand && s.size === item.size);
             return match ? { ...item, id: match.id } : item;
           });
-          setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsWithDbId], dashboardTab: 'inventory_master' }));
+          setState(prev => ({ ...prev, inventory: [...prev.inventory, ...itemsWithDbId] }));
           showAlertToast(`${saved.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
           operationLogService.logOperation('data_processing', `재고 마스터 반영 ${saved.length}건`, { count: saved.length });
+          onAppliedSuccess?.();
         } else {
           console.error('[useInventoryCompare] bulkInsert 실패: 0개 저장됨. hospitalId:', user!.hospitalId);
           showAlertToast('서버 저장 실패 — 다시 시도해주세요.', 'error');
@@ -144,10 +147,11 @@ export function useInventoryCompare({
       }
     } else {
       // 로그인 전(로컬 전용): 바로 상태에 반영
-      setState(prev => ({ ...prev, inventory: [...prev.inventory, ...newItems], dashboardTab: 'inventory_master' }));
+      setState(prev => ({ ...prev, inventory: [...prev.inventory, ...newItems] }));
       showAlertToast(`${newItems.length}개 품목을 재고 마스터에 반영했습니다.`, 'success');
+      onAppliedSuccess?.();
     }
-  }, [inventoryCompare, user, showAlertToast, setState]);
+  }, [inventoryCompare, user, showAlertToast, setState, onAppliedSuccess]);
 
   const cancelInventoryCompare = useCallback(() => setInventoryCompare(null), []);
   const closePlanLimitModal = useCallback(() => setPlanLimitModal(null), []);

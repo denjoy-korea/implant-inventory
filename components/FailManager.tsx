@@ -1181,7 +1181,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           pendingByManufacturer={pendingByManufacturer}
           onInitialize={handleBulkInitialize}
           onReconcile={handleBulkReconcile}
-          initialTab={initialShowBulkModal ? 'reconcile' : undefined}
         />
       )}
 

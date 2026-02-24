@@ -19,32 +19,33 @@ interface ExcelData {
   activeSheetName: string;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status: number, cors: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "Method not allowed" }, 405, corsHeaders);
   }
 
   let parsedBody: unknown;
   try {
-    const corsHeaders = getCorsHeaders(req);
     parsedBody = await req.json();
   } catch {
-    return jsonResponse({ error: "Invalid JSON body" }, 400);
+    return jsonResponse({ error: "Invalid JSON body" }, 400, corsHeaders);
   }
 
   if (typeof parsedBody !== "object" || parsedBody === null || Array.isArray(parsedBody)) {
-    return jsonResponse({ error: "Body must be an object" }, 400);
+    return jsonResponse({ error: "Body must be an object" }, 400, corsHeaders);
   }
 
   const body = parsedBody as Record<string, unknown>;
@@ -52,18 +53,18 @@ Deno.serve(async (req: Request) => {
   const filename = typeof body.filename === "string" ? body.filename : "";
 
   if (!fileBase64) {
-    return jsonResponse({ error: "fileBase64 is required" }, 400);
+    return jsonResponse({ error: "fileBase64 is required" }, 400, corsHeaders);
   }
 
   let fileBytes: Uint8Array;
   try {
     fileBytes = Uint8Array.from(atob(fileBase64), (c) => c.charCodeAt(0));
   } catch {
-    return jsonResponse({ error: "fileBase64 디코딩 실패: 유효한 base64 문자열이 아닙니다." }, 400);
+    return jsonResponse({ error: "fileBase64 디코딩 실패: 유효한 base64 문자열이 아닙니다." }, 400, corsHeaders);
   }
 
   if (fileBytes.byteLength > MAX_FILE_SIZE) {
-    return jsonResponse({ error: "파일 크기가 2MB를 초과합니다." }, 413);
+    return jsonResponse({ error: "파일 크기가 2MB를 초과합니다." }, 413, corsHeaders);
   }
 
   try {
@@ -104,12 +105,13 @@ Deno.serve(async (req: Request) => {
       activeSheetName: workbook.SheetNames[0],
     };
 
-    return jsonResponse(result);
+    return jsonResponse(result, 200, corsHeaders);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse(
       { error: `엑셀 파싱 실패: ${message}`, filename },
       500,
+      corsHeaders,
     );
   }
 });

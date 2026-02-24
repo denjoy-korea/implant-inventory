@@ -50,7 +50,8 @@ interface AnalysisResult {
 
 interface Props {
   inventory: InventoryItem[];
-  onGoToSurgeryUpload: (file?: File) => void;
+  onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
+  onUploaded: () => void;
 }
 
 // 수술기록지 시트의 "수술기록" 필드에서 제조사/브랜드/규격 추출
@@ -200,13 +201,14 @@ function analyzeSurgeryRows(
   };
 }
 
-export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload }: Props) {
+export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUploaded }: Props) {
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -258,7 +260,7 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload }: Pro
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
 
-  const isBlocked = uploadState !== 'done';
+  const isBlocked = uploadState !== 'done' || isSubmitting;
 
   return (
     <div className="px-6 py-6 flex flex-col h-full">
@@ -381,14 +383,25 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload }: Pro
       {uploadState !== 'parsing' && (
         <button
           disabled={isBlocked}
-          onClick={() => { if (!isBlocked) onGoToSurgeryUpload(uploadedFile ?? undefined); }}
+          onClick={async () => {
+            if (isBlocked) return;
+            setIsSubmitting(true);
+            try {
+              const ok = await onGoToSurgeryUpload(uploadedFile ?? undefined);
+              if (ok) onUploaded();
+            } finally {
+              setIsSubmitting(false);
+            }
+          }}
           className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all mt-4 shrink-0 ${
             isBlocked
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
               : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
           }`}
         >
-          {uploadState === 'idle' || uploadState === 'error'
+          {isSubmitting
+            ? '업로드 중...'
+            : uploadState === 'idle' || uploadState === 'error'
             ? '파일을 먼저 업로드해 주세요'
             : '수술기록 업로드하기'}
         </button>

@@ -106,6 +106,8 @@ export interface Hospital {
   workDays: number[];    // 진료 요일 배열 (기본: 월~금 [1,2,3,4,5])
   /** 온보딩 완료 단계 비트마스크 (1=welcome,2=fixture,4=surgery,8=auditSeen,16=failAudit) */
   onboardingFlags: number;
+  /** 워크스페이스에서 사용하는 청구프로그램 */
+  billingProgram: BillingProgram | null;
 }
 
 export interface User {
@@ -222,6 +224,12 @@ export interface AnalysisReport {
 }
 export type DashboardTab = 'overview' | 'fixture_upload' | 'fixture_edit' | 'inventory_master' | 'inventory_audit' | 'surgery_upload' | 'surgery_database' | 'fail_management' | 'order_management' | 'member_management' | 'settings' | 'audit_log';
 export type UploadType = 'fixture' | 'surgery';
+export type BillingProgram = 'dentweb' | 'oneclick';
+
+export const BILLING_PROGRAM_LABELS: Record<BillingProgram, string> = {
+  dentweb: '덴트웹 (DentWeb)',
+  oneclick: '원클릭 (OneClick)',
+};
 
 export interface ParsedSize {
   diameter: number | null;
@@ -258,6 +266,8 @@ export interface AppState {
   hospitalMasterAdminId: string;
   /** 병원별 진료 요일 설정 (기본: 월~금 [1,2,3,4,5]) */
   hospitalWorkDays: number[];
+  /** 병원별 청구프로그램 (선택 전이면 null) */
+  hospitalBillingProgram: BillingProgram | null;
   /** MFA OTP 검증 대기 중인 이메일 */
   mfaPendingEmail?: string;
   /** PricingPage에서 플랜 선택 후 회원가입으로 넘어온 경우 */
@@ -428,6 +438,7 @@ export interface DbHospital {
   master_admin_id: string | null;
   phone: string | null;
   biz_file_url: string | null;
+  billing_program: BillingProgram | null;
   plan: PlanType;
   plan_expires_at: string | null;
   billing_cycle: BillingCycle | null;

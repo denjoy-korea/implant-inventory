@@ -7,10 +7,13 @@ export interface BetaInviteCodeRow {
   distributed_to: string | null;
   distributed_contact: string | null;
   note: string | null;
+  usage_mode: 'single' | 'unlimited';
   is_active: boolean;
   verify_count: number;
   last_verified_at: string | null;
   expires_at: string | null;
+  used_at: string | null;
+  used_by: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -26,12 +29,14 @@ interface CreateBetaCodeParams {
   distributedContact?: string;
   note?: string;
   expiresAt?: string | null;
+  usageMode?: 'single' | 'unlimited';
 }
 
 interface UpdateBetaCodeMetaParams {
   distributedTo?: string;
   distributedContact?: string;
   note?: string;
+  usageMode?: 'single' | 'unlimited';
 }
 
 function buildRandomSegment(length: number): string {
@@ -90,6 +95,7 @@ export const betaInviteService = {
     const distributedContact = String(params.distributedContact || '').trim();
     const note = String(params.note || '').trim();
     const expiresAt = params.expiresAt ?? null;
+    const usageMode: 'single' | 'unlimited' = params.usageMode === 'unlimited' ? 'unlimited' : 'single';
     const { data: authData } = await supabase.auth.getUser();
     const createdBy = authData.user?.id || null;
 
@@ -102,6 +108,7 @@ export const betaInviteService = {
           distributed_to: distributedTo || null,
           distributed_contact: distributedContact || null,
           note: note || null,
+          usage_mode: usageMode,
           expires_at: expiresAt,
           created_by: createdBy,
         })
@@ -126,6 +133,7 @@ export const betaInviteService = {
     const distributedTo = String(params.distributedTo || '').trim();
     const distributedContact = String(params.distributedContact || '').trim();
     const note = String(params.note || '').trim();
+    const usageMode: 'single' | 'unlimited' = params.usageMode === 'unlimited' ? 'unlimited' : 'single';
 
     const { data, error } = await supabase
       .from('beta_invite_codes')
@@ -133,6 +141,10 @@ export const betaInviteService = {
         distributed_to: distributedTo || null,
         distributed_contact: distributedContact || null,
         note: note || null,
+        usage_mode: usageMode,
+        used_at: usageMode === 'unlimited' ? null : undefined,
+        used_by: usageMode === 'unlimited' ? null : undefined,
+        is_active: usageMode === 'unlimited' ? true : undefined,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
