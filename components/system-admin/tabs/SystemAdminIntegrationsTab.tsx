@@ -874,7 +874,6 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const maskValue = (v: string) => v.length <= 8 ? '••••••••' : v.slice(0, 4) + '••••••••' + v.slice(-4);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -923,10 +922,9 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">API Key <span className="text-rose-500">*</span></label>
                 <div className="relative">
                   <input
-                    type="text"
-                    value={keyMasked && apiKey ? maskValue(apiKey) : apiKey}
-                    onChange={e => { if (!keyMasked) setApiKey(e.target.value); }}
-                    onFocus={() => setKeyMasked(false)}
+                    type={keyMasked ? 'password' : 'text'}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
                     placeholder="솔라피 API Key"
                     className="w-full text-xs font-mono px-3 py-2.5 pr-10 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 focus:border-[#0066FF] bg-slate-50 placeholder-slate-300"
                   />
@@ -949,10 +947,9 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">API Secret <span className="text-rose-500">*</span></label>
                 <div className="relative">
                   <input
-                    type="text"
-                    value={secretMasked && apiSecret ? maskValue(apiSecret) : apiSecret}
-                    onChange={e => { if (!secretMasked) setApiSecret(e.target.value); }}
-                    onFocus={() => setSecretMasked(false)}
+                    type={secretMasked ? 'password' : 'text'}
+                    value={apiSecret}
+                    onChange={e => setApiSecret(e.target.value)}
                     placeholder="솔라피 API Secret"
                     className="w-full text-xs font-mono px-3 py-2.5 pr-10 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 focus:border-[#0066FF] bg-slate-50 placeholder-slate-300"
                   />
