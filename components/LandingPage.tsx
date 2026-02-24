@@ -72,22 +72,12 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const trialPolicyShortText = trialCopy.trialPolicyShort;
 
   const [mockupVideoUrl, setMockupVideoUrl] = useState<string | null>(null);
-  const [isVideoLoading, setIsVideoLoading] = useState(true);
 
   useEffect(() => {
-    supabase.storage.from('public-assets').list('site', { search: 'landing-mockup.mp4' })
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          const fileInfo = data.find(f => f.name === 'landing-mockup.mp4');
-          if (fileInfo) {
-            const publicUrl = supabase.storage.from('public-assets').getPublicUrl('site/landing-mockup.mp4').data.publicUrl;
-            const updatedTime = new Date(fileInfo.updated_at).getTime();
-            setMockupVideoUrl(`${publicUrl}?t=${updatedTime}`);
-          }
-        }
-      })
-      .catch((err) => console.error("Error fetching landing mockup video:", err))
-      .finally(() => setIsVideoLoading(false));
+    const { data } = supabase.storage.from('public-assets').getPublicUrl('site/landing-mockup.mp4');
+    if (data?.publicUrl) {
+      setMockupVideoUrl(`${data.publicUrl}?t=${Date.now()}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -224,12 +214,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <div className="mt-10 sm:mt-20 relative z-10 w-full max-w-4xl sm:max-w-6xl mx-auto px-3 sm:px-4 perspective-1000 animate-fade-in-up animation-delay-400">
           <div className="relative rounded-2xl bg-slate-900/5 p-1.5 sm:p-2 backdrop-blur-xl ring-1 ring-slate-900/10 shadow-2xl transform rotate-x-6 sm:rotate-x-12 hover:rotate-x-0 transition-transform duration-700 ease-out-back origin-center">
             <div className="rounded-xl bg-white shadow-inner overflow-hidden border border-slate-200/50 aspect-[16/9] flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 relative">
-              {isVideoLoading ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-20">
-                  <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                </div>
-              ) : null}
-              {mockupVideoUrl && !isVideoLoading ? (
+              {mockupVideoUrl ? (
                 <video
                   src={mockupVideoUrl}
                   autoPlay
@@ -237,6 +222,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   muted
                   playsInline
                   className="w-full h-full object-cover"
+                  onError={() => setMockupVideoUrl(null)}
                 />
               ) : (
                 <DashboardPromoMockup />
