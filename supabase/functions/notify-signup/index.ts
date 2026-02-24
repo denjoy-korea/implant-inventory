@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 const ROLE_LABELS: Record<string, string> = {
   master: "🏥 치과 원장",
@@ -15,9 +16,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders = getCorsHeaders(req);
-    const webhookUrl = Deno.env.get("SLACK_MEMBER_WEBHOOK_URL");
+    const webhookUrl = await getSlackWebhookUrl("멤버알림");
     if (!webhookUrl) {
-      console.error("[notify-signup] SLACK_WEBHOOK_URL not configured");
+      console.warn("[notify-signup] 멤버알림 채널 미등록 — 슬랙 관리 UI에서 채널을 추가하세요");
       return new Response(JSON.stringify({ success: false, reason: "not configured" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

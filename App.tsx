@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
 import AppGlobalOverlays from './components/app/AppGlobalOverlays';
 import DashboardHeader from './components/app/DashboardHeader';
+import KakaoChannelButton from './components/KakaoChannelButton';
 import type { NudgeType } from './components/UpgradeNudge';
 import type { LimitType } from './components/PlanLimitToast';
 
@@ -143,8 +144,8 @@ const App: React.FC = () => {
         } else if (status.can6Month && !reviewService.isSnoozed(user.id, '6month')) {
           setReviewPopupType('6month');
         }
-      }).catch(() => {});
-    }).catch(() => {});
+      }).catch(() => { });
+    }).catch(() => { });
   }, [state.user, state.currentView, reviewPopupType]);
 
   // UserProfile expects () => void; hook expects (user: User) so wrap with current user
@@ -1802,98 +1803,98 @@ const App: React.FC = () => {
                   <Suspense fallback={suspenseFallback}>
                     {/* Dashboard routing based on Approval Status */}
                     <DashboardGuardedContent
-                        state={state}
-                        setState={setState}
-                        isSystemAdmin={isSystemAdmin}
-                        loadHospitalData={loadHospitalData}
-                        onLogoutToLanding={async () => {
-                          await authService.signOut();
-                          setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
-                        }}
-                        workspaceProps={{
-                          effectivePlan,
-                          isHospitalAdmin,
-                          isHospitalMaster,
-                          isSystemAdmin,
-                          isReadOnly,
-                          activeNudge,
-                          planLimitToast,
-                          billableItemCount,
-                          surgeryUnregisteredItems,
-                          showAuditHistory,
-                          fixtureEdit: {
-                            enabledManufacturers,
-                            hasSavedPoint,
-                            isDirtyAfterSave,
-                            restoreToast,
-                            saveToast,
-                            formattedSavedAt,
-                            fixtureRestoreDiffCount,
-                            restorePanelRef,
-                            onManufacturerToggle: handleManufacturerToggle,
-                            onBulkToggle: handleBulkToggle,
-                            onLengthToggle: handleLengthToggle,
-                            onRestoreToSavedPoint: handleRestoreToSavedPoint,
-                            onSaveSettings: handleSaveSettings,
-                            onUpdateFixtureCell: (idx, col, val) => handleUpdateCell(idx, col, val, 'fixture'),
-                            onFixtureSheetChange: (name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } })),
-                            onExpandFailClaim: handleExpandFailClaim,
-                            onRequestFixtureExcelDownload: requestFixtureExcelDownload,
-                            onRequestApplyFixtureToInventory: requestApplyFixtureToInventory,
-                          },
-                          inventoryMaster: {
-                            virtualSurgeryData,
-                            initialShowBaseStockEdit: autoOpenBaseStockEdit,
-                            onBaseStockEditApplied: () => {
-                              const hid = state.user?.hospitalId ?? '';
-                              onboardingService.markInventoryAuditSeen(hid);
-                              onboardingService.clearDismissed(hid);
-                              setOnboardingDismissed(false);
-                              setAutoOpenBaseStockEdit(false);
-                              setState(prev => ({ ...prev, dashboardTab: 'overview' }));
-                            },
-                            applyBaseStockBatch,
-                            refreshLatestSurgeryUsage,
-                            resolveManualSurgeryInput,
-                            onShowAlertToast: showAlertToast,
-                          },
-                          onLoadHospitalData: loadHospitalData,
-                          onGoToPricing: () => setState(prev => ({ ...prev, currentView: 'pricing' })),
-                          onDismissPlanLimitToast: () => setPlanLimitToast(null),
-                          onUpgradeFromPlanLimitToast: () => {
-                            setPlanLimitToast(null);
-                            setState(prev => ({ ...prev, currentView: 'pricing' }));
-                          },
-                          onStartOverviewTrial: async () => {
-                            if (state.user?.hospitalId) {
-                              const ok = await planService.startTrial(state.user.hospitalId);
-                              if (ok) {
-                                const ps = await planService.getHospitalPlan(state.user.hospitalId);
-                                setState(prev => ({ ...prev, planState: ps }));
-                              }
-                            }
-                          },
-                          onFixtureUploadClick: () => fixtureFileRef.current?.click(),
-                          onSurgeryUploadClick: () => surgeryFileRef.current?.click(),
-                          onCloseAuditHistory: () => setShowAuditHistory(false),
-                          onAddOrder: handleAddOrder,
-                          onUpdateOrderStatus: handleUpdateOrderStatus,
-                          onDeleteOrder: handleDeleteOrder,
-                          onAuditSessionComplete: () => {
+                      state={state}
+                      setState={setState}
+                      isSystemAdmin={isSystemAdmin}
+                      loadHospitalData={loadHospitalData}
+                      onLogoutToLanding={async () => {
+                        await authService.signOut();
+                        setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
+                      }}
+                      workspaceProps={{
+                        effectivePlan,
+                        isHospitalAdmin,
+                        isHospitalMaster,
+                        isSystemAdmin,
+                        isReadOnly,
+                        activeNudge,
+                        planLimitToast,
+                        billableItemCount,
+                        surgeryUnregisteredItems,
+                        showAuditHistory,
+                        fixtureEdit: {
+                          enabledManufacturers,
+                          hasSavedPoint,
+                          isDirtyAfterSave,
+                          restoreToast,
+                          saveToast,
+                          formattedSavedAt,
+                          fixtureRestoreDiffCount,
+                          restorePanelRef,
+                          onManufacturerToggle: handleManufacturerToggle,
+                          onBulkToggle: handleBulkToggle,
+                          onLengthToggle: handleLengthToggle,
+                          onRestoreToSavedPoint: handleRestoreToSavedPoint,
+                          onSaveSettings: handleSaveSettings,
+                          onUpdateFixtureCell: (idx, col, val) => handleUpdateCell(idx, col, val, 'fixture'),
+                          onFixtureSheetChange: (name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } })),
+                          onExpandFailClaim: handleExpandFailClaim,
+                          onRequestFixtureExcelDownload: requestFixtureExcelDownload,
+                          onRequestApplyFixtureToInventory: requestApplyFixtureToInventory,
+                        },
+                        inventoryMaster: {
+                          virtualSurgeryData,
+                          initialShowBaseStockEdit: autoOpenBaseStockEdit,
+                          onBaseStockEditApplied: () => {
                             const hid = state.user?.hospitalId ?? '';
                             onboardingService.markInventoryAuditSeen(hid);
                             onboardingService.clearDismissed(hid);
                             setOnboardingDismissed(false);
+                            setAutoOpenBaseStockEdit(false);
                             setState(prev => ({ ...prev, dashboardTab: 'overview' }));
                           },
-                          initialShowFailBulkModal: autoOpenFailBulkModal,
-                          onFailBulkModalOpened: () => setAutoOpenFailBulkModal(false),
-                          onFailAuditDone: () => {
-                            onboardingService.markFailAuditDone(state.user?.hospitalId ?? '');
-                            setShowOnboardingComplete(true);
-                          },
-                        }}
-                      />
+                          applyBaseStockBatch,
+                          refreshLatestSurgeryUsage,
+                          resolveManualSurgeryInput,
+                          onShowAlertToast: showAlertToast,
+                        },
+                        onLoadHospitalData: loadHospitalData,
+                        onGoToPricing: () => setState(prev => ({ ...prev, currentView: 'pricing' })),
+                        onDismissPlanLimitToast: () => setPlanLimitToast(null),
+                        onUpgradeFromPlanLimitToast: () => {
+                          setPlanLimitToast(null);
+                          setState(prev => ({ ...prev, currentView: 'pricing' }));
+                        },
+                        onStartOverviewTrial: async () => {
+                          if (state.user?.hospitalId) {
+                            const ok = await planService.startTrial(state.user.hospitalId);
+                            if (ok) {
+                              const ps = await planService.getHospitalPlan(state.user.hospitalId);
+                              setState(prev => ({ ...prev, planState: ps }));
+                            }
+                          }
+                        },
+                        onFixtureUploadClick: () => fixtureFileRef.current?.click(),
+                        onSurgeryUploadClick: () => surgeryFileRef.current?.click(),
+                        onCloseAuditHistory: () => setShowAuditHistory(false),
+                        onAddOrder: handleAddOrder,
+                        onUpdateOrderStatus: handleUpdateOrderStatus,
+                        onDeleteOrder: handleDeleteOrder,
+                        onAuditSessionComplete: () => {
+                          const hid = state.user?.hospitalId ?? '';
+                          onboardingService.markInventoryAuditSeen(hid);
+                          onboardingService.clearDismissed(hid);
+                          setOnboardingDismissed(false);
+                          setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+                        },
+                        initialShowFailBulkModal: autoOpenFailBulkModal,
+                        onFailBulkModalOpened: () => setAutoOpenFailBulkModal(false),
+                        onFailAuditDone: () => {
+                          onboardingService.markFailAuditDone(state.user?.hospitalId ?? '');
+                          setShowOnboardingComplete(true);
+                        },
+                      }}
+                    />
                   </Suspense>
                 </ErrorBoundary>
               </main>
@@ -2009,7 +2010,8 @@ const App: React.FC = () => {
         onConfirmInventoryCompare={handleConfirmApplyToInventory}
         onCancelInventoryCompare={cancelInventoryCompare}
       />
-    </div >
+      <KakaoChannelButton />
+    </div>
   );
 };
 

@@ -4,6 +4,7 @@ export type AdminTab =
   | 'users'
   | 'reset_requests'
   | 'manual'
+  | 'beta_invites'
   | 'plan_management'
   | 'reviews'
   | 'analysis_leads'
@@ -21,6 +22,7 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   users: '전체 회원 관리',
   reset_requests: '초기화 요청 관리',
   manual: '사용자 매뉴얼',
+  beta_invites: '베타 코드 관리',
   plan_management: '플랜 관리',
   reviews: '고객 후기 관리',
   inquiries: '문의내역 관리',

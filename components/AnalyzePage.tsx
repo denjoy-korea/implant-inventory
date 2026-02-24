@@ -28,6 +28,7 @@ interface AnalyzePageProps {
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
   const [fixtureFile, setFixtureFile] = useState<File | null>(null);
   const [surgeryFiles, setSurgeryFiles] = useState<File[]>([]);
+  const [sizeFormatDetailItems, setSizeFormatDetailItems] = useState<string[] | null>(null);
   const [demoVideoUrl, setDemoVideoUrl] = useState<string | null>(null);
   const [isVideoLoading, setIsVideoLoading] = useState(true);
 
@@ -687,6 +688,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {report.diagnostics.map((d, i) => {
               const sc = statusColorMap[d.status];
+              const isSizeFormatDiagnostic = d.category === '사이즈 포맷 일관성';
               return (
                 <div key={i} className={`group rounded-3xl border ${sc.border} ${sc.bg} p-7 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 relative overflow-hidden bg-white`}>
                   <div className={`absolute -inset-0.5 bg-gradient-to-br ${d.status === 'good' ? 'from-emerald-500 to-teal-500' : d.status === 'warning' ? 'from-amber-400 to-orange-400' : 'from-rose-500 to-red-500'} rounded-3xl blur opacity-0 group-hover:opacity-15 transition duration-500 z-0`}></div>
@@ -705,7 +707,20 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                         <p className="text-xs text-slate-600 leading-relaxed font-medium">{d.detail}</p>
                       </div>
                     </div>
-                    {d.items && d.items.length > 0 && (
+                    {isSizeFormatDiagnostic && d.items && d.items.length > 0 ? (
+                      <div className="mt-4 pt-4 border-t border-slate-100 pl-14">
+                        <button
+                          type="button"
+                          onClick={() => setSizeFormatDetailItems(d.items || [])}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          상세보기
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : d.items && d.items.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-100 pl-14">
                         <ul className="space-y-1.5">
                           {d.items.map((item, j) => (
@@ -724,6 +739,59 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           </div>
         </div>
       </section>
+
+      {sizeFormatDetailItems && (
+        <div className="fixed inset-0 z-[140] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900">사이즈 포맷 혼용 상세</h3>
+                <p className="text-xs text-slate-500 mt-1">브랜드별 혼용 포맷과 실제 예시 규격을 확인하세요.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSizeFormatDetailItems(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                aria-label="닫기"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto">
+              <ul className="space-y-3">
+                {sizeFormatDetailItems.map((item, idx) => {
+                  const [groupRaw = '', formatsRaw = '', examplesRaw = ''] = item.split(' | ').map(part => part.trim());
+                  const group = groupRaw || item;
+                  const formats = formatsRaw.replace(/^포맷:\s*/, '') || '-';
+                  const examples = examplesRaw.replace(/^예시:\s*/, '') || '-';
+                  return (
+                    <li key={idx} className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+                      <p className="text-sm font-bold text-slate-800">{group}</p>
+                      <p className="text-xs text-slate-600 mt-1">
+                        <span className="font-bold text-slate-700">포맷</span>: {formats}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        <span className="font-bold text-slate-700">예시</span>: {examples}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-100 bg-white flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSizeFormatDetailItems(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Section 3: Matching Analysis */}
       <section className="py-20 bg-white">

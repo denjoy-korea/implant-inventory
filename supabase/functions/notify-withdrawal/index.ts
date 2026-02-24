@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -9,7 +10,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders = getCorsHeaders(req);
-    const webhookUrl = Deno.env.get("SLACK_MEMBER_WEBHOOK_URL");
+    const webhookUrl = await getSlackWebhookUrl("멤버알림");
     if (!webhookUrl) {
       return new Response(JSON.stringify({ success: false }), {
         status: 200,

@@ -120,6 +120,12 @@ const SystemAdminSidebar: React.FC<SystemAdminSidebarProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                 <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">회원 계정 마스터</span>
               </button>
+              <button onClick={() => onTabChange('beta_invites')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm duration-200 group ${activeTab === 'beta_invites' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0h-2m6-10V7a2 2 0 00-2-2h-1m-4 0H8a2 2 0 00-2 2v2m10 0H8m8 0v2.586a1 1 0 01-.293.707l-1.414 1.414a1 1 0 01-.707.293H10.414a1 1 0 01-.707-.293L8.293 12.293A1 1 0 018 11.586V9m8 0H8" />
+                </svg>
+                <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">베타 코드 관리</span>
+              </button>
               <button onClick={() => onTabChange('plan_management')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm duration-200 group ${activeTab === 'plan_management' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">플랜 관리 및 권한 할당</span>

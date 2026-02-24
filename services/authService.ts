@@ -99,6 +99,7 @@ interface SignupParams {
   bizFile?: File;
   signupSource?: string;
   trialPlan?: PlanType;
+  betaInviteCode?: string;
 }
 
 interface AuthResult {
@@ -111,7 +112,7 @@ interface AuthResult {
 export const authService = {
   /** 이메일/비밀번호 회원가입 */
   async signUp(params: SignupParams): Promise<AuthResult> {
-    const { email, password, name, role, hospitalName, phone, bizFile, signupSource, trialPlan } = params;
+    const { email, password, name, role, hospitalName, phone, bizFile, signupSource, trialPlan, betaInviteCode } = params;
     if (role === 'admin') {
       return { success: false, error: '운영자 계정은 직접 가입할 수 없습니다.' };
     }
@@ -121,12 +122,21 @@ export const authService = {
         ? role
         : 'staff';
 
+    const userMetadata: Record<string, string> = {
+      name,
+      role: signupRole,
+      phone: phone || '',
+    };
+    if (betaInviteCode) {
+      userMetadata.beta_invite_code = betaInviteCode;
+    }
+
     // 1. Supabase Auth 회원가입
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { name, role: signupRole, phone: phone || '' },
+        data: userMetadata,
         emailRedirectTo: window.location.origin,
       },
     });

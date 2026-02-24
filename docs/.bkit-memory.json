@@ -1,11 +1,11 @@
 {
-  "sessionCount": 112,
+  "sessionCount": 115,
   "lastSession": {
-    "startedAt": "2026-02-23T19:07:43.062Z",
+    "startedAt": "2026-02-24T07:16:13.306Z",
     "platform": "claude",
     "level": "Dynamic"
   },
-  "currentFeature": "withdrawal-process",
-  "currentPhase": "plan",
-  "matchRate": 0
+  "currentFeature": "notion-integration",
+  "currentPhase": "check",
+  "matchRate": 95
 }

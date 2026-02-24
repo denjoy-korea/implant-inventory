@@ -327,7 +327,20 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0]; // YYYY-MM-DD
 
     return inventory
-      .filter(i => !i.manufacturer.startsWith('수술중FAIL_') && i.manufacturer !== '보험청구')
+      .filter(i => {
+        const manufacturer = String(i.manufacturer || '');
+        const brand = String(i.brand || '');
+        const lowerManufacturer = manufacturer.toLowerCase();
+        const isFailCategory = manufacturer.startsWith('수술중FAIL_')
+          || lowerManufacturer.includes('수술중fail')
+          || lowerManufacturer.includes('fail_')
+          || lowerManufacturer.includes('수술중 fail');
+        const isInsuranceCategory = manufacturer === '보험청구'
+          || brand === '보험청구'
+          || manufacturer.includes('보험임플란트')
+          || brand.includes('보험임플란트');
+        return !isFailCategory && !isInsuranceCategory;
+      })
       .map(i => {
         const neverUsed = i.usageCount === 0;
         const lastDate = i.lastUsedDate ?? null;

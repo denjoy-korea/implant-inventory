@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 
@@ -172,7 +173,7 @@ Deno.serve(async (req: Request) => {
 
     // 대기자 신청 → 전용 Slack 채널
     if (waitlist) {
-      const waitlistWebhook = Deno.env.get("SLACK_WAITLIST_WEBHOOK_URL");
+      const waitlistWebhook = await getSlackWebhookUrl("대기자알림");
       if (waitlistWebhook) {
         const planLabel: Record<string, string> = {
           plan_waitlist_basic: "Basic",
@@ -212,7 +213,7 @@ Deno.serve(async (req: Request) => {
 
     // 일반 문의 → 기존 Slack 채널 (실패해도 200 반환)
     if (!waitlist) {
-      const webhookUrl = Deno.env.get("SLACK_WEBHOOK_URL");
+      const webhookUrl = await getSlackWebhookUrl("문의알림");
       if (webhookUrl) {
         const slackBody = {
           blocks: [

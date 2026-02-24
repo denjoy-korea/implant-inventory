@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 const TIME_SLOT_KO: Record<string, string> = {
   morning:   "오전 (9시–12시)",
@@ -91,7 +92,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── 1. system_integrations에서 Notion 설정 로드 ──
+    // ── 1. 요청 데이터 파싱 ──
+    const { name, email, hospital_name, region, contact, preferred_date, preferred_time_slot, notes } =
+      await req.json();
+
+    // ── 2. system_integrations에서 Notion 설정 로드 ──
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: rows } = await adminClient
@@ -102,30 +107,60 @@ Deno.serve(async (req: Request) => {
     const rowMap: Record<string, string> = {};
     for (const row of rows ?? []) rowMap[row.key] = row.value;
 
-    if (!rowMap["notion_api_token"] || !rowMap["notion_consultation_db_id"]) {
-      console.warn("[notify-consultation] Notion not configured in system_integrations — skipping");
-      return new Response(JSON.stringify({ success: false, reason: "not_configured" }), {
+    const notionEnabled = !!(rowMap["notion_api_token"] && rowMap["notion_consultation_db_id"]);
+
+    // ── 3. 복호화 ──
+    let notionToken = "";
+    let dbId = "";
+    let fieldMappings: Record<string, string> | null = null;
+
+    if (notionEnabled) {
+      notionToken = await decryptENCv2(rowMap["notion_api_token"], patientDataKey);
+      dbId        = await decryptENCv2(rowMap["notion_consultation_db_id"], patientDataKey);
+
+      if (rowMap["notion_field_mappings"]) {
+        const mappingJson = await decryptENCv2(rowMap["notion_field_mappings"], patientDataKey).catch(() => null);
+        if (mappingJson) fieldMappings = JSON.parse(mappingJson) as Record<string, string>;
+      }
+    }
+
+    // ── 4. Slack 알림 (문의알림 채널, fire-and-forget) ──
+    const now = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+    getSlackWebhookUrl("문의알림").then(slackUrl => {
+      if (!slackUrl) return;
+      const fields: { type: string; text: string }[] = [
+        { type: "mrkdwn", text: `*병원명*\n${hospital_name || "—"}` },
+        { type: "mrkdwn", text: `*이름*\n${name || "—"}` },
+        { type: "mrkdwn", text: `*연락처*\n${contact || "—"}` },
+        { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
+      ];
+      if (preferred_date)      fields.push({ type: "mrkdwn", text: `*선호 날짜*\n${preferred_date}` });
+      if (preferred_time_slot) fields.push({ type: "mrkdwn", text: `*선호 시간대*\n${TIME_SLOT_KO[preferred_time_slot] ?? preferred_time_slot}` });
+      if (region)              fields.push({ type: "mrkdwn", text: `*지역*\n${region}` });
+
+      const slackBody: Record<string, unknown> = {
+        blocks: [
+          { type: "header", text: { type: "plain_text", text: "📋 새 상담 신청이 접수되었습니다!" } },
+          { type: "section", fields },
+          ...(notes ? [{ type: "section", text: { type: "mrkdwn", text: `*추가 요청*\n${notes.slice(0, 300)}` } }] : []),
+          { type: "context", elements: [{ type: "mrkdwn", text: `⏰ ${now} (KST)` }] },
+        ],
+      };
+      fetch(slackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(slackBody),
+      }).catch(err => console.warn("[notify-consultation] Slack failed:", err));
+    }).catch(() => {});
+
+    // ── 5. Notion 미설정 시 종료 ──
+    if (!notionEnabled) {
+      console.warn("[notify-consultation] Notion not configured — skipping Notion");
+      return new Response(JSON.stringify({ success: true, notion: false }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // ── 2. 복호화 ──
-    const notionToken = await decryptENCv2(rowMap["notion_api_token"], patientDataKey);
-    const dbId        = await decryptENCv2(rowMap["notion_consultation_db_id"], patientDataKey);
-
-    // 저장된 매핑 복호화 (없으면 null → fallback)
-    let fieldMappings: Record<string, string> | null = null;
-    if (rowMap["notion_field_mappings"]) {
-      const mappingJson = await decryptENCv2(rowMap["notion_field_mappings"], patientDataKey).catch(() => null);
-      if (mappingJson) {
-        fieldMappings = JSON.parse(mappingJson) as Record<string, string>;
-      }
-    }
-
-    // ── 3. 요청 데이터 파싱 ──
-    const { name, email, hospital_name, region, contact, preferred_date, preferred_time_slot, notes } =
-      await req.json();
 
     // 앱 필드값 매핑 (preferred_time_slot은 한국어 변환)
     const fieldValues: Record<string, unknown> = {
@@ -185,7 +220,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const now = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
     console.log(`[notify-consultation] Notion row created — ${hospital_name} / ${name} / ${now} KST`);
 
     return new Response(JSON.stringify({ success: true }), {

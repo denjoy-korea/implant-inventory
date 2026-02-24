@@ -92,7 +92,12 @@ function getErrorStatus(error: unknown): number | null {
 }
 
 export function classifyAnalyzeError(error: unknown): string {
-  const message = getErrorMessage(error).toLowerCase();
+  const rawMessage = getErrorMessage(error);
+  const message = rawMessage.toLowerCase();
+
+  if (rawMessage.includes('파일 구분 오류')) {
+    return rawMessage;
+  }
 
   if (message.includes('xlsx') || message.includes('xls') || message.includes('zip') || message.includes('format') || message.includes('file')) {
     return '형식 오류: .xlsx 또는 .xls 엑셀 파일인지 확인해주세요.';

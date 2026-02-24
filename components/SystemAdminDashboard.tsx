@@ -20,6 +20,7 @@ import SystemAdminOverviewTab, { SystemAdminKpiCard } from './system-admin/tabs/
 import SystemAdminHospitalsTab from './system-admin/tabs/SystemAdminHospitalsTab';
 import SystemAdminResetRequestsTab from './system-admin/tabs/SystemAdminResetRequestsTab';
 import SystemAdminUsersTab from './system-admin/tabs/SystemAdminUsersTab';
+import SystemAdminBetaCodesTab from './system-admin/tabs/SystemAdminBetaCodesTab';
 import SystemAdminPlanManagementTab from './system-admin/tabs/SystemAdminPlanManagementTab';
 import SystemAdminReviewsTab from './system-admin/tabs/SystemAdminReviewsTab';
 import SystemAdminWaitlistTab from './system-admin/tabs/SystemAdminWaitlistTab';
@@ -1186,6 +1187,10 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         onDeactivateUser={handleDeactivateUser}
                                         onReactivateUser={handleReactivateUser}
                                     />
+                                )}
+
+                                {activeTab === 'beta_invites' && (
+                                    <SystemAdminBetaCodesTab />
                                 )}
 
                                 {/* 사용자 매뉴얼 탭 */}

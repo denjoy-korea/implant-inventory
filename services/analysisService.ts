@@ -1,9 +1,11 @@
-import { AnalysisReport, DiagnosticItem, UnmatchedItem, ExcelRow, SurgeryRow } from '../types';
+import { AnalysisReport, DiagnosticItem, UnmatchedItem, ExcelRow, SurgeryRow, InventoryItem } from '../types';
 import { parseExcelFile } from './excelService';
-import { getSizeMatchKey, toCanonicalSize } from './sizeNormalizer';
+import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './sizeNormalizer';
 import { fixIbsImplant } from './mappers';
 import { normalizeSurgery as normalize } from './normalizationService';
 import { DAYS_PER_MONTH } from '../constants';
+import { buildInventoryDuplicateKey } from './inventoryUtils';
+import { buildBrandSizeFormatIndex, isListBasedSurgeryInput } from './surgeryUnregisteredUtils';
 import {
   getSurgeryClassification,
   getSurgeryQuantity,
@@ -12,6 +14,49 @@ import {
   getSurgerySize,
   parseSurgeryDate,
 } from './surgeryParser';
+
+function collectSheetHeaders(
+  sheet: { columns?: string[]; rows?: ExcelRow[] } | undefined,
+  sampleLimit = 30
+): Set<string> {
+  const headers = new Set<string>();
+  if (!sheet) return headers;
+
+  (sheet.columns || []).forEach((col) => {
+    const key = String(col || '').trim();
+    if (key) headers.add(key);
+  });
+
+  (sheet.rows || []).slice(0, sampleLimit).forEach((row) => {
+    Object.keys(row || {}).forEach((key) => {
+      const trimmed = String(key || '').trim();
+      if (trimmed) headers.add(trimmed);
+    });
+  });
+
+  return headers;
+}
+
+function hasAnyHeader(headers: Set<string>, candidates: string[]): boolean {
+  return candidates.some((candidate) => headers.has(candidate));
+}
+
+function isLikelySurgerySheet(sheet: { columns?: string[]; rows?: ExcelRow[] } | undefined): boolean {
+  const headers = collectSheetHeaders(sheet);
+  const hasManufacturer = hasAnyHeader(headers, ['제조사', 'Manufacturer']);
+  const hasBrand = hasAnyHeader(headers, ['브랜드', 'Brand']);
+  const hasSurgeryHint = hasAnyHeader(headers, ['수술기록', '구분', '치아번호', '환자정보', '날짜', '수술일']);
+  return hasManufacturer && hasBrand && hasSurgeryHint;
+}
+
+function isLikelyFixtureSheet(sheet: { columns?: string[]; rows?: ExcelRow[] } | undefined): boolean {
+  const headers = collectSheetHeaders(sheet);
+  const hasManufacturer = hasAnyHeader(headers, ['제조사', 'Manufacturer']);
+  const hasBrand = hasAnyHeader(headers, ['브랜드', 'Brand']);
+  const hasSize = hasAnyHeader(headers, ['규격(SIZE)', '규격', '사이즈', 'Size', 'size']);
+  const hasStrongSurgeryHint = hasAnyHeader(headers, ['수술기록', '치아번호', '환자정보']);
+  return hasManufacturer && hasBrand && hasSize && !hasStrongSurgeryHint;
+}
 
 // Parse surgery records (extracted from App.tsx handleFileUpload)
 function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
@@ -80,7 +125,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
       '갯수': quantity,
       '제조사': fixed.manufacturer,
       '브랜드': fixed.brand,
-      '규격(SIZE)': toCanonicalSize(size, fixed.manufacturer)
+      '규격(SIZE)': isIbsImplantManufacturer(fixed.manufacturer) ? size : toCanonicalSize(size, fixed.manufacturer)
     };
   });
 }
@@ -133,39 +178,98 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   const fixtureData = await parseExcelFile(fixtureFile);
   const fixtureSheet = fixtureData.sheets[fixtureData.activeSheetName];
   const fixtureRows = fixtureSheet?.rows || [];
+  if (!fixtureSheet || fixtureRows.length === 0) {
+    throw new Error('데이터 오류: 재고 목록 파일에 분석 가능한 데이터가 없습니다.');
+  }
+  if (fixtureData.sheets['수술기록지'] && isLikelySurgerySheet(fixtureData.sheets['수술기록지'])) {
+    throw new Error('파일 구분 오류: 재고 목록 칸에 수술기록지 파일이 업로드되었습니다.');
+  }
+  if (!isLikelyFixtureSheet(fixtureSheet)) {
+    throw new Error('파일 구분 오류: 재고 목록 파일 형식이 아닙니다. 제조사/브랜드/규격 열을 확인해주세요.');
+  }
 
   // 2. Parse surgery files
   let allSurgeryRows: SurgeryRow[] = [];
   for (const file of surgeryFiles) {
     const surgeryData = await parseExcelFile(file);
     const targetSheet = surgeryData.sheets['수술기록지'];
-    if (targetSheet) {
-      const parsed = parseSurgeryRows(targetSheet.rows);
-      allSurgeryRows = [...allSurgeryRows, ...parsed];
+    if (!targetSheet) {
+      throw new Error(`파일 구분 오류: "${file.name}" 파일에 '수술기록지' 시트가 없습니다.`);
     }
+    if (!isLikelySurgerySheet(targetSheet)) {
+      throw new Error(`파일 구분 오류: "${file.name}" 파일이 수술기록지 형식이 아닙니다.`);
+    }
+    const parsed = parseSurgeryRows(targetSheet.rows);
+    if (parsed.length === 0) {
+      throw new Error(`데이터 오류: "${file.name}" 수술기록지에 분석 가능한 행이 없습니다.`);
+    }
+    allSurgeryRows = [...allSurgeryRows, ...parsed];
   }
 
   // 3. Build fixture item set
-  const isInsuranceRow = (row: ExcelRow) => Object.values(row).some(v => String(v).includes('보험임플란트'));
+  const hasInsuranceText = (text: string) => text.includes('보험임플란트') || text.includes('보험청구');
+  const isInsuranceRow = (row: ExcelRow) => Object.values(row).some(v => hasInsuranceText(String(v)));
   const isFailRow = (row: ExcelRow) => {
     const mfr = String(row['제조사'] || row['Manufacturer'] || '').toLowerCase();
-    return mfr.includes('수술중fail') || mfr.includes('fail_');
+    return mfr.includes('수술중fail') || mfr.includes('fail_') || mfr.includes('수술중 fail');
   };
-  const fixtureItems = fixtureRows.map(row => {
+  const fixtureItemsRaw = fixtureRows.map(row => {
     const fixedMfr = fixIbsImplant(
       String(row['제조사'] || row['Manufacturer'] || ''),
       String(row['브랜드'] || row['Brand'] || '')
     );
+    const rawSize = String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || '');
+    const normalizedSize = isIbsImplantManufacturer(fixedMfr.manufacturer)
+      ? rawSize
+      : toCanonicalSize(rawSize, fixedMfr.manufacturer);
+    const insuranceRow = isInsuranceRow(row)
+      || hasInsuranceText(fixedMfr.manufacturer)
+      || hasInsuranceText(fixedMfr.brand);
     return {
       manufacturer: fixedMfr.manufacturer,
       brand: fixedMfr.brand,
-      size: String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || ''),
+      size: normalizedSize,
       isActive: row['사용안함'] !== true,
-      isInsurance: isInsuranceRow(row),
+      isInsurance: insuranceRow,
       isFail: isFailRow(row),
       raw: row,
     };
   });
+
+  // 워크스페이스 반영 시와 동일하게 (제조사+브랜드+규격) 중복 품목은 1건으로 축약
+  const fixtureItemMap = new Map<string, typeof fixtureItemsRaw[number]>();
+  fixtureItemsRaw.forEach(item => {
+    const key = buildInventoryDuplicateKey({
+      manufacturer: item.manufacturer,
+      brand: item.brand,
+      size: item.size,
+    });
+    const existing = fixtureItemMap.get(key);
+    if (!existing) {
+      fixtureItemMap.set(key, item);
+      return;
+    }
+    fixtureItemMap.set(key, {
+      ...existing,
+      isActive: existing.isActive || item.isActive,
+      isInsurance: existing.isInsurance || item.isInsurance,
+      isFail: existing.isFail || item.isFail,
+    });
+  });
+  const fixtureItems = Array.from(fixtureItemMap.values());
+  const activeFixtureItems = fixtureItems.filter(f => f.isActive && !f.isInsurance && !f.isFail);
+  const formatIndexSeed: InventoryItem[] = activeFixtureItems.map((item, idx) => ({
+    id: `analysis_fixture_${idx}`,
+    manufacturer: item.manufacturer,
+    brand: item.brand,
+    size: item.size,
+    initialStock: 0,
+    stockAdjustment: 0,
+    usageCount: 0,
+    currentStock: 0,
+    recommendedStock: 0,
+  }));
+  const formatIndex = buildBrandSizeFormatIndex(formatIndexSeed);
 
   // 4. Build surgery item usage map
   const surgeryUsageMap = new Map<string, { manufacturer: string; brand: string; size: string; count: number }>();
@@ -180,6 +284,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     const b = fixedSurgery.brand;
     const s = getSurgerySize(row);
     const qty = getSurgeryQuantity(row);
+    if (!isListBasedSurgeryInput(formatIndex, m, b, s)) return;
     const key = `${normalize(m)}|${normalize(b)}|${getSizeMatchKey(s, m)}`;
     const existing = surgeryUsageMap.get(key);
     if (existing) {
@@ -252,8 +357,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     const sB = normalize(sItem.brand);
     const sS = getSizeMatchKey(sItem.size, sItem.manufacturer);
 
-    const found = fixtureItems.some(fItem => {
-      if (fItem.isInsurance || fItem.isFail) return false; // 보험임플란트/FAIL 픽스쳐는 매칭 대상 제외
+    const found = activeFixtureItems.some(fItem => {
       const fM = normalize(fItem.manufacturer);
       const fB = normalize(fItem.brand);
       const fS = getSizeMatchKey(fItem.size, fItem.manufacturer);
@@ -288,7 +392,6 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   });
 
   // --- Diagnostic 4: Fixture→Surgery Utilization Rate (20 pts) ---
-  const activeFixtureItems = fixtureItems.filter(f => f.isActive && !f.isInsurance && !f.isFail);
   let fixtureUsedCount = 0;
   const fixtureOnlyItems: UnmatchedItem[] = [];
 
@@ -382,7 +485,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     return 'Other';
   }
 
-  const sizeFormatByGroup = new Map<string, { formats: Set<string>; display: string }>();
+  const sizeFormatByGroup = new Map<string, { formats: Map<string, Set<string>>; display: string }>();
   allItems.forEach(row => {
     const m = String(row['제조사'] || row['Manufacturer'] || '').trim();
     const b = String(row['브랜드'] || row['Brand'] || '').trim();
@@ -391,15 +494,23 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     const groupKey = `${normalize(m)}|${normalize(b)}`;
     const fmt = detectSizeFormat(size);
     if (!sizeFormatByGroup.has(groupKey)) {
-      sizeFormatByGroup.set(groupKey, { formats: new Set(), display: `${m} ${b}`.trim() });
+      sizeFormatByGroup.set(groupKey, { formats: new Map(), display: `${m} ${b}`.trim() });
     }
-    sizeFormatByGroup.get(groupKey)!.formats.add(fmt);
+    const group = sizeFormatByGroup.get(groupKey)!;
+    if (!group.formats.has(fmt)) {
+      group.formats.set(fmt, new Set());
+    }
+    group.formats.get(fmt)!.add(size);
   });
 
   const inconsistentGroups: string[] = [];
   sizeFormatByGroup.forEach((val) => {
     if (val.formats.size > 1) {
-      inconsistentGroups.push(`${val.display} (${Array.from(val.formats).join(', ')})`);
+      const formats = Array.from(val.formats.keys());
+      const examples = Array.from(val.formats.entries())
+        .flatMap(([fmt, sizes]) => Array.from(sizes).slice(0, 2).map((sample) => `${fmt}: ${sample}`))
+        .slice(0, 6);
+      inconsistentGroups.push(`${val.display} | 포맷: ${formats.join(', ')} | 예시: ${examples.join(' / ')}`);
     }
   });
 
@@ -414,7 +525,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     detail: inconsistentCount === 0
       ? '각 제조사/브랜드별 사이즈 표기 방식이 일관되게 관리되고 있습니다.'
       : '같은 제조사+브랜드 내에서 서로 다른 사이즈 표기 방식(예: Φ5.0×8.5 vs 5.0×8.5)이 혼용되고 있습니다. 매칭에는 영향 없지만, 데이터 관리 품질을 위해 표기법을 통일하세요.',
-    items: inconsistentGroups.slice(0, 5),
+    items: inconsistentGroups.slice(0, 20),
   });
 
   // ========== USAGE PATTERNS ==========
@@ -510,7 +621,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   const unmatchedItems: UnmatchedItem[] = [...surgeryOnlyItems, ...fixtureOnlyItems];
 
   // ========== SUMMARY ==========
-  const nonFailFixtureItems = fixtureItems.filter(f => !f.isFail);
+  const nonFailFixtureItems = fixtureItems.filter(f => !f.isFail && !f.isInsurance);
   const summary = {
     totalFixtureItems: nonFailFixtureItems.length,
     activeItems: activeFixtureItems.length,

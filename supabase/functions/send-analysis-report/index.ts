@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 // ── 리포트 텍스트 파서 ──────────────────────────────────────────────
 interface DiagItem { status: "good" | "warning" | "critical"; category: string; subtitle: string; score: string; detail: string; }
@@ -293,7 +294,7 @@ Deno.serve(async (req: Request) => {
     if (dbError) console.error("[send-analysis-report] DB error:", dbError);
 
     // 2. 슬랙 알림 (실패해도 계속 진행)
-    const webhookUrl = Deno.env.get("SLACK_ANALYSIS_WEBHOOK_URL");
+    const webhookUrl = await getSlackWebhookUrl("분석알림");
     if (webhookUrl) {
       const now = new Date().toLocaleString("ko-KR", {
         timeZone: "Asia/Seoul", year: "numeric", month: "2-digit",

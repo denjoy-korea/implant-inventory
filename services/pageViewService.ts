@@ -92,14 +92,15 @@ export const pageViewService = {
     if (error) throw error;
   },
 
-  /** 관리자용: 최근 N일 데이터 조회 */
+  /** 관리자용: 최근 N일 데이터 조회 (최대 50,000행) */
   async getRecent(days = 90): Promise<{ page: string; session_id: string | null; user_id: string | null; referrer: string | null; event_type: string | null; event_data: Record<string, unknown> | null; created_at: string }[]> {
     const since = new Date(Date.now() - days * 86400_000).toISOString();
     const { data, error } = await supabase
       .from('page_views')
       .select('page, session_id, user_id, referrer, event_type, event_data, created_at')
       .gte('created_at', since)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(50000);
     if (error) throw error;
     return (data ?? []) as { page: string; session_id: string | null; user_id: string | null; referrer: string | null; event_type: string | null; event_data: Record<string, unknown> | null; created_at: string }[];
   },
