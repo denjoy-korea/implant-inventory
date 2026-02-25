@@ -25,20 +25,15 @@ export interface OnboardingStockItem {
   quantity: number;
 }
 
-/** hospitals.onboarding_flags를 OR 비트 업데이트 (fire-and-forget) */
+/** hospitals.onboarding_flags를 원자적 OR 비트 업데이트 (fire-and-forget)
+ *  SEC-W3: SELECT→UPDATE 패턴 제거, DB 단일 UPDATE로 race condition 방지
+ */
 async function persistFlag(hospitalId: string, flag: number): Promise<void> {
   try {
-    // 현재 값을 먼저 읽어 OR 연산 후 저장
-    const { data } = await supabase
-      .from('hospitals')
-      .select('onboarding_flags')
-      .eq('id', hospitalId)
-      .single();
-    const current: number = (data as { onboarding_flags?: number } | null)?.onboarding_flags ?? 0;
-    await supabase
-      .from('hospitals')
-      .update({ onboarding_flags: current | flag })
-      .eq('id', hospitalId);
+    await supabase.rpc('set_onboarding_flag', {
+      p_hospital_id: hospitalId,
+      p_flag: flag,
+    });
   } catch (e) {
     // DB 저장 실패는 무시 — localStorage가 fallback
     console.warn('[onboardingService] persistFlag failed:', e);
