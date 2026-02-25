@@ -523,20 +523,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedUpUser.role }, 'signup');
         onSuccess(signedUpUser);
       } else {
-        // profile 없으면 가입 정보로 자동 로그인 시도
-        const loginResult = await authService.signIn(email, password);
-        if (loginResult.success && loginResult.profile) {
-          const signedInUser = dbToUser(loginResult.profile);
-          await maybeStartTrialForSignup(signedInUser);
-          localStorage.removeItem('_pending_trial_plan');
-          pageViewService.trackEvent('auth_complete', { mode: 'signup', user_role: signedInUser.role }, 'signup');
-          onSuccess(signedInUser);
-        } else {
-          localStorage.removeItem('_pending_trial_plan');
-          pageViewService.trackEvent('auth_error', { mode: 'signup', reason: loginResult.error || 'post_signup_signin_failed' }, 'signup');
-          showToast('회원가입 완료! 로그인해주세요.', 'success');
-          onSwitch();
+        // signUp()이 profile을 반환하지 못한 경우 (예외적 상황 또는 타이밍 이슈)
+        // setup_profile_hospital RPC가 이미 hospital_id를 설정했으므로
+        // 새로고침으로 initSession이 정상 세션을 감지해 대시보드로 진입
+        if (pendingTrialPlan && pendingTrialPlan !== 'free') {
+          // 트라이얼 플랜은 signUp() 내부에서 이미 시작했으나 방어적으로 한번 더 시도
+          const freshProfile = await authService.getCurrentProfile().catch(() => null);
+          if (freshProfile?.hospital_id) {
+            await planService.startTrial(freshProfile.hospital_id, pendingTrialPlan).catch(() => null);
+          }
         }
+        localStorage.removeItem('_pending_trial_plan');
+        pageViewService.trackEvent('auth_complete', { mode: 'signup', note: 'reload_fallback' }, 'signup');
+        window.location.reload();
       }
 
     } else {
@@ -1328,14 +1327,17 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                       <button type="button" onClick={() => setShowLegalType('terms')} className="text-emerald-700 hover:underline font-medium">이용약관</button>에 동의합니다
                     </span>
                   </label>
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input type="checkbox" checked={agreedToPrivacy} onChange={(e) => setAgreedToPrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-emerald-600 flex-shrink-0" />
-                    <span className="text-sm text-slate-600">
-                      <span className="text-rose-400">*</span>{' '}
-                      <button type="button" onClick={() => setShowLegalType('privacy')} className="text-emerald-700 hover:underline font-medium">개인정보 처리방침</button>에 동의합니다
-                    </span>
-                  </label>
-                </div>
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={agreedToPrivacy} onChange={(e) => setAgreedToPrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-emerald-600 flex-shrink-0" />
+                  <span className="text-sm text-slate-600">
+                    <span className="text-rose-400">*</span>{' '}
+                    <button type="button" onClick={() => setShowLegalType('privacy')} className="text-emerald-700 hover:underline font-medium">개인정보 처리방침</button>에 동의합니다
+                  </span>
+                </label>
+                <p className="ml-7 text-xs text-slate-500 leading-relaxed">
+                  서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
+                </p>
+              </div>
                 <button type="submit" disabled={isSubmitting || !agreedToTerms || !agreedToPrivacy} className="relative w-full h-14 bg-slate-900 text-white font-bold rounded-xl mt-4 hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group shadow-lg shadow-slate-900/10">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
                   <span className="relative flex items-center justify-center gap-2 text-[15px]">
@@ -1542,6 +1544,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                     <button type="button" onClick={() => setShowLegalType('privacy')} className="text-indigo-600 hover:underline font-medium">개인정보 처리방침</button>에 동의합니다
                   </span>
                 </label>
+                <p className="ml-7 text-xs text-slate-500 leading-relaxed">
+                  서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
+                </p>
               </div>
               <button type="submit" disabled={isSubmitting || !agreedToTerms || !agreedToPrivacy} className="relative w-full h-14 bg-slate-900 text-white font-bold rounded-xl mt-4 hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group shadow-lg shadow-slate-900/10">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
@@ -1624,6 +1629,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                   <span className="text-slate-300">·</span>
                   <button type="button" onClick={() => setShowLegalType('privacy')} className="text-indigo-600 hover:underline">개인정보처리방침</button>
                 </div>
+                <p className="mt-1 ml-6 text-[11px] text-slate-500 leading-relaxed">
+                  서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
+                </p>
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => !waitlistSubmitting && setWaitlistPlan(null)} disabled={waitlistSubmitting} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-500 text-sm font-bold hover:bg-slate-50 transition-colors disabled:opacity-50">취소</button>

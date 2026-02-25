@@ -123,6 +123,9 @@ export const authService = {
         ? role
         : 'staff';
 
+    // 이전 세션의 _pending_hospital_setup이 남아 있으면 SIGNED_IN 핸들러가 잘못 실행되므로 제거
+    localStorage.removeItem('_pending_hospital_setup');
+
     const userMetadata: Record<string, string> = {
       name,
       role: signupRole,
@@ -172,6 +175,20 @@ export const authService = {
 
     // 이메일 인증 대기 상태 (Supabase "Confirm email" ON)
     if (!authData.session) {
+      // 이메일 인증 완료 후 병원/워크스페이스 생성을 위한 정보 임시 저장
+      const pendingSetup: Record<string, string> = {
+        role: signupRole,
+        name,
+        phone: phone || '',
+      };
+      if (signupRole === 'master' && hospitalName) {
+        pendingSetup.hospitalName = hospitalName;
+      }
+      if (trialPlan && trialPlan !== 'free') {
+        pendingSetup.trialPlan = trialPlan;
+      }
+      localStorage.setItem('_pending_hospital_setup', JSON.stringify(pendingSetup));
+
       // 슬랙 가입 알림 (fire-and-forget) — H-7: PII 마스킹 후 전송
       (async () => {
         try {
@@ -230,14 +247,14 @@ export const authService = {
         return { success: false, error: '병원 등록에 실패했습니다.' };
       }
 
-      // 3. Profile에 hospital_id 연결
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ hospital_id: hospital.id })
-        .eq('id', userId);
-
+      // 3. Profile에 hospital_id 연결 (SECURITY DEFINER RPC로 RLS 우회)
+      const { data: linked, error: profileError } = await supabase.rpc('setup_profile_hospital', {
+        p_hospital_id: hospital.id,
+      });
       if (profileError) {
-        console.error('[authService] Profile update failed:', profileError);
+        console.error('[authService] Profile hospital link (RPC) failed:', profileError);
+      } else if (!linked) {
+        console.warn('[authService] setup_profile_hospital returned false (already linked or permission denied)');
       }
 
       // 3-1. 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 hospital.id 직접 사용)
@@ -284,13 +301,16 @@ export const authService = {
         return { success: false, error: '개인 워크스페이스 생성에 실패했습니다.' };
       }
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ hospital_id: workspace.id })
-        .eq('id', userId);
-
+      // 개인 워크스페이스 소유자는 master_admin_id이므로 role도 'master'로 업데이트
+      // SECURITY DEFINER RPC로 RLS 우회 (role 변경 포함)
+      const { data: linked, error: profileError } = await supabase.rpc('setup_profile_hospital', {
+        p_hospital_id: workspace.id,
+        p_new_role: 'master',
+      });
       if (profileError) {
-        console.error('[authService] Profile workspace link failed:', profileError);
+        console.error('[authService] Profile workspace link (RPC) failed:', profileError);
+      } else if (!linked) {
+        console.warn('[authService] setup_profile_hospital (staff) returned false');
       }
 
       // 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 workspace.id 직접 사용)
@@ -565,6 +585,97 @@ export const authService = {
     if (fbErr) console.error('[authService] Trial start fallback failed:', fbErr);
   },
 
+  /**
+   * 이메일 인증 완료 후 병원/워크스페이스 생성 (이메일 인증 ON 경로)
+   * SIGNED_IN 이벤트 핸들러에서 hospitalId가 없을 때 호출.
+   * @returns 생성된 hospitalId 또는 null
+   */
+  async createHospitalForEmailConfirmed(userId: string): Promise<string | null> {
+    const raw = localStorage.getItem('_pending_hospital_setup');
+    if (!raw) return null;
+
+    let pendingSetup: Record<string, string>;
+    try {
+      pendingSetup = JSON.parse(raw);
+    } catch {
+      localStorage.removeItem('_pending_hospital_setup');
+      return null;
+    }
+
+    // 사용 후 즉시 제거 (중복 실행 방지)
+    localStorage.removeItem('_pending_hospital_setup');
+    localStorage.removeItem('_pending_trial_plan'); // 이중 트라이얼 방지
+
+    const { role, hospitalName, name, phone, trialPlan } = pendingSetup;
+
+    // 전화번호 암호화 후 profile 업데이트
+    const profileUpdates: Record<string, string | null> = {};
+    if (phone) {
+      try {
+        const [encPhone, phoneHash] = await Promise.all([
+          encryptPatientInfo(phone),
+          hashPatientInfo(phone),
+        ]);
+        profileUpdates.phone = encPhone;
+        profileUpdates.phone_hash = phoneHash;
+      } catch (e) {
+        console.warn('[authService] createHospitalForEmailConfirmed: phone encryption failed:', e);
+      }
+    }
+    if (Object.keys(profileUpdates).length > 0) {
+      await supabase.from('profiles').update(profileUpdates).eq('id', userId);
+    }
+
+    try {
+      const encPhone = profileUpdates.phone ?? null;
+
+      if (role === 'master' && hospitalName) {
+        const { data: hospital, error } = await supabase
+          .from('hospitals')
+          .insert({ name: hospitalName, master_admin_id: userId, phone: encPhone })
+          .select()
+          .single();
+
+        if (error || !hospital) {
+          console.error('[authService] createHospitalForEmailConfirmed: hospital creation failed:', error);
+          return null;
+        }
+
+        await supabase.rpc('setup_profile_hospital', { p_hospital_id: hospital.id });
+
+        if (trialPlan && trialPlan !== 'free') {
+          await this._startTrialForHospital(hospital.id, trialPlan as PlanType);
+        }
+        return hospital.id;
+      }
+
+      if (role === 'staff') {
+        const { data: workspace, error } = await supabase
+          .from('hospitals')
+          .insert({ name: `${name}의 워크스페이스`, master_admin_id: userId, phone: encPhone })
+          .select()
+          .single();
+
+        if (error || !workspace) {
+          console.error('[authService] createHospitalForEmailConfirmed: workspace creation failed:', error);
+          return null;
+        }
+
+        await supabase.rpc('setup_profile_hospital', { p_hospital_id: workspace.id, p_new_role: 'master' });
+
+        if (trialPlan && trialPlan !== 'free') {
+          await this._startTrialForHospital(workspace.id, trialPlan as PlanType);
+        }
+        return workspace.id;
+      }
+
+      return null;
+    } catch (e) {
+      console.error('[authService] createHospitalForEmailConfirmed failed:', e);
+      return null;
+    }
+  },
+
   /** 회원 탈퇴 (DB 함수로 auth.users 완전 삭제) */
   async deleteAccount(): Promise<{ success: boolean; error?: string }> {
     try {
@@ -572,7 +683,7 @@ export const authService = {
       const { error } = await supabase.rpc('delete_my_account');
       if (error) {
         console.error('[authService] deleteAccount RPC failed:', error);
-        return { success: false, error: '회원 탈퇴에 실패했습니다.' };
+        return { success: false, error: error.message || '회원 탈퇴에 실패했습니다.' };
       }
 
       // dentweb_ 관련 localStorage 정리
@@ -581,11 +692,16 @@ export const authService = {
         .forEach(key => localStorage.removeItem(key));
 
       // 로컬 세션 정리
-      await supabase.auth.signOut();
+      // auth.users가 이미 삭제된 경우 signOut이 에러를 반환해도 UX는 성공으로 처리한다.
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        console.warn('[authService] deleteAccount signOut warning:', signOutError);
+      }
       return { success: true };
     } catch (error) {
       console.error('[authService] deleteAccount failed:', error);
-      return { success: false, error: '회원 탈퇴에 실패했습니다.' };
+      const message = error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.';
+      return { success: false, error: message };
     }
   },
 
