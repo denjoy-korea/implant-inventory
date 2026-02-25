@@ -6,6 +6,7 @@ const KEY_FIXTURE_DL = (id: string) => `denjoy_ob_v2_fixture_dl_${id}`;
 const KEY_SURGERY_DL = (id: string) => `denjoy_ob_v2_surgery_dl_${id}`;
 const KEY_INVENTORY_AUDIT = (id: string) => `denjoy_ob_v2_inventory_audit_${id}`;
 const KEY_DISMISSED = (id: string) => `denjoy_ob_v2_dismissed_${id}`;
+const KEY_SNOOZED   = (id: string) => `denjoy_ob_v2_snoozed_until_${id}`;
 
 /** 온보딩 비트마스크 플래그 */
 export const OB_FLAG = {
@@ -101,5 +102,18 @@ export const onboardingService = {
   },
   clearDismissed(hospitalId: string): void {
     localStorage.removeItem(KEY_DISMISSED(hospitalId));
+  },
+
+  /** 오늘 하루 자동 재개 억제 (24시간) */
+  isSnoozed(hospitalId: string): boolean {
+    const val = localStorage.getItem(KEY_SNOOZED(hospitalId));
+    if (!val) return false;
+    return Date.now() < parseInt(val, 10);
+  },
+  snoozeUntilTomorrow(hospitalId: string): void {
+    localStorage.setItem(KEY_SNOOZED(hospitalId), String(Date.now() + 24 * 60 * 60 * 1000));
+  },
+  clearSnooze(hospitalId: string): void {
+    localStorage.removeItem(KEY_SNOOZED(hospitalId));
   },
 };

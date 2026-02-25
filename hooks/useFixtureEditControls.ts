@@ -151,8 +151,8 @@ export function useFixtureEditControls({
     });
   }, [handleBulkToggle]);
 
-  const handleSaveSettings = useCallback(() => {
-    if (!fixtureData) return;
+  const handleSaveSettings = useCallback((): boolean => {
+    if (!fixtureData) return false;
     const activeSheet = fixtureData.sheets[fixtureData.activeSheetName];
     const unusedKeys = activeSheet.rows
       .filter(row => row['사용안함'] === true)
@@ -169,7 +169,7 @@ export function useFixtureEditControls({
       if (serialized.length > MAX_SETTINGS_PAYLOAD_SIZE) {
         console.warn('[App] 설정 데이터가 5MB를 초과합니다. 저장하지 않습니다.');
         showAlertToast('설정 데이터가 너무 큽니다. 저장에 실패했습니다.', 'error');
-        return;
+        return false;
       }
       localStorage.setItem(FIXTURE_SETTINGS_KEY, serialized);
       setHasSavedPoint(true);
@@ -177,6 +177,7 @@ export function useFixtureEditControls({
       setIsDirtyAfterSave(false);
     } catch {
       showAlertToast('설정 저장에 실패했습니다. 저장 공간이 부족할 수 있습니다.', 'error');
+      return false;
     }
 
     setSaveToast('saved');
@@ -186,6 +187,7 @@ export function useFixtureEditControls({
     requestAnimationFrame(() => {
       restorePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+    return true;
   }, [fixtureData, showAlertToast]);
 
   const handleRestoreToSavedPoint = useCallback(() => {

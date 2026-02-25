@@ -14,6 +14,8 @@ import { auditService, AuditHistoryItem } from '../services/auditService';
 import { manufacturerAliasKey } from '../services/appUtils';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
 import { holidayService } from '../services/holidayService';
+import { failThresholdService, getFailSeverity, FailThresholds } from '../services/failThresholdService';
+import FailThresholdModal from './dashboard/FailThresholdModal';
 
 interface DashboardOverviewProps {
   inventory: InventoryItem[];
@@ -83,6 +85,7 @@ type ActionItem = {
   score: number;
   meta?: string;
   metaItems?: Array<{ label: string; count: number }>;
+  alertNote?: string;
 };
 
 type ManufacturerUsageRow = {
@@ -208,6 +211,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [failThresholds, setFailThresholds] = useState<FailThresholds>({});
+  const [showFailThresholdModal, setShowFailThresholdModal] = useState(false);
   const [progressDelta, setProgressDelta] = useState<{
     placementDelta: number;
     failDelta: number;
@@ -240,6 +245,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return () => {
       cancelled = true;
     };
+  }, [hospitalId]);
+
+  useEffect(() => {
+    if (!hospitalId) return;
+    failThresholdService.get(hospitalId).then(setFailThresholds).catch(() => {});
   }, [hospitalId]);
 
   const visibleInventory = useMemo(
@@ -737,6 +747,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const surgeryStaleDays = daysSince(latestSurgeryDate);
   const auditStaleDays = daysSince(latestAuditSummary.date);
 
+  const hasBaseStockSet = useMemo(
+    () => visibleInventory.some((item) => item.initialStock > 0),
+    [visibleInventory]
+  );
+
   const thisMonthFailRate = useMemo(() => {
     const total = thisMonthSurgery.placementQty + thisMonthSurgery.failQty;
     if (total === 0) return null;
@@ -916,12 +931,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const failMetaItems = Object.entries(failByManufacturer)
         .sort(([, a], [, b]) => b - a)
         .map(([label, count]) => ({ label, count }));
+      const computedSeverity = getFailSeverity(failByManufacturer, failThresholds) ?? 'warning';
       items.push({
         key: 'action-fail',
         title: 'FAIL 교환 발주',
         description: `미교환 ${failSummary.pendingRows}건 / ${failSummary.remainingExchangeQty}개`,
         tab: 'fail_management',
-        severity: failSummary.remainingExchangeQty >= 15 ? 'critical' : 'warning',
+        severity: computedSeverity,
         score: (failSummary.remainingExchangeQty * 3) + (failSummary.pendingRows * 4),
         metaItems: failMetaItems.length > 0 ? failMetaItems : undefined,
       });
@@ -966,18 +982,19 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         title: '첫 재고 실사 실행',
         description: '실사 이력이 아직 없어 기준값 검증이 필요합니다.',
         tab: 'inventory_audit',
-        severity: 'warning',
-        score: 35,
+        severity: hasBaseStockSet ? 'warning' : 'critical',
+        score: hasBaseStockSet ? 35 : 60,
+        alertNote: hasBaseStockSet ? undefined : '기초재고 설정이 되지 않았습니다.',
       });
     }
 
-    if (auditStaleDays !== null && auditStaleDays >= 30) {
+    if (auditStaleDays !== null && auditStaleDays >= 15) {
       items.push({
         key: 'action-audit-freshness',
         title: '정기 실사 일정 경과',
         description: `최근 실사 후 ${auditStaleDays}일 경과`,
         tab: 'inventory_audit',
-        severity: auditStaleDays >= 45 ? 'critical' : 'warning',
+        severity: auditStaleDays >= 45 ? 'critical' : auditStaleDays >= 30 ? 'warning' : 'ok',
         score: auditStaleDays,
       });
     }
@@ -992,6 +1009,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     failExchangeEntries,
     failSummary.pendingRows,
     failSummary.remainingExchangeQty,
+    failThresholds,
+    hasBaseStockSet,
     latestAuditSummary.date,
     latestAuditSummary.mismatchCount,
     latestAuditSummary.mismatchQty,
@@ -1004,7 +1023,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     surgeryStaleDays,
     unregisteredSummary.count,
     unregisteredSummary.usageQty,
-    visibleInventory.length,
+    visibleInventory,
   ]);
 
   const maxManufacturerRecentQty = useMemo(
@@ -1013,6 +1032,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   );
 
   return (
+    <>
     <div className="space-y-5 [&_button]:cursor-pointer">
       <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -1068,10 +1088,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
           {todayActionItems.map((item, index) => (
-            <button
+            <div
               key={item.key}
+              role="button"
+              tabIndex={0}
               onClick={() => onNavigate(item.tab)}
-              className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5"
+              onKeyDown={(e) => e.key === 'Enter' && onNavigate(item.tab)}
+              className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5 cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <span className="mt-0.5 w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
@@ -1080,11 +1103,30 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-black text-slate-800 truncate">{item.title}</p>
-                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${PRIORITY_BADGE[item.severity].className}`}>
-                      {PRIORITY_BADGE[item.severity].label}
-                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {item.key === 'action-fail' && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowFailThresholdModal(true); }}
+                          className="w-5 h-5 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                          title="기준량 설정"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        </button>
+                      )}
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${PRIORITY_BADGE[item.severity].className}`}>
+                        {PRIORITY_BADGE[item.severity].label}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-600 mt-0.5">{item.description}</p>
+                  {item.alertNote && (
+                    <p className="text-[10px] font-bold text-rose-600 mt-0.5">⚠ {item.alertNote}</p>
+                  )}
                   {item.meta && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.meta}</p>}
                   {item.metaItems && (
                     <div className="flex items-center gap-1 mt-1 flex-wrap">
@@ -1100,7 +1142,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-            </button>
+            </div>
           ))}
 
           {todayActionItems.length === 0 && (
@@ -1516,6 +1558,19 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         )}
       </section>
     </div>
+
+    {showFailThresholdModal && (
+      <FailThresholdModal
+        manufacturers={failExchangeEntries.map((e) => e.manufacturer).filter((m, i, arr) => arr.indexOf(m) === i)}
+        currentThresholds={failThresholds}
+        onSave={async (updated) => {
+          if (hospitalId) await failThresholdService.save(hospitalId, updated);
+          setFailThresholds(updated);
+        }}
+        onClose={() => setShowFailThresholdModal(false)}
+      />
+    )}
+    </>
   );
 };
 

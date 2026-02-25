@@ -17,11 +17,15 @@ const ALLOWED_ORIGINS = new Set([
 /** Vercel 프리뷰 URL 패턴 (implant-stock-pro 프로젝트만 허용) */
 const VERCEL_PREVIEW_RE = /^https:\/\/implant-stock-[\w]+-headals-projects-042f32e0\.vercel\.app$/;
 
+/** 로컬 네트워크 IP 패턴 (개발 환경: 192.168.x.x, 10.x.x.x, 172.16-31.x.x) */
+const LOCAL_NETWORK_RE = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("Origin") ?? "";
   const allowed =
     ALLOWED_ORIGINS.has(origin) ||
-    VERCEL_PREVIEW_RE.test(origin);
+    VERCEL_PREVIEW_RE.test(origin) ||
+    LOCAL_NETWORK_RE.test(origin);
 
   return {
     "Access-Control-Allow-Origin": allowed ? origin : "https://denjoy.info",

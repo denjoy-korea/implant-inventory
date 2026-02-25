@@ -4,12 +4,22 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => {
+  const buildId = (
+    process.env.VERCEL_GIT_COMMIT_SHA
+    || process.env.GITHUB_SHA
+    || process.env.BUILD_ID
+    || 'dev-local'
+  ).trim();
+
   return {
     server: {
       port: 3001,
       host: '0.0.0.0',
     },
     plugins: [tailwindcss(), react()],
+    define: {
+      __APP_BUILD_ID__: JSON.stringify(buildId),
+    },
     // AI API keys must NOT be injected into the client bundle via define.
     // Call external AI APIs through a server-side route (e.g. Supabase Edge Function).
     resolve: {

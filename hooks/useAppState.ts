@@ -214,25 +214,51 @@ export function useAppState(onNotify?: NotifyFn) {
 
   /** 계정 삭제 */
   const handleDeleteAccount = async () => {
+    const resetToLanding = () => {
+      stopSessionPolling();
+      setState(prev => ({
+        ...prev,
+        user: null,
+        currentView: 'landing',
+        inventory: [],
+        surgeryMaster: {},
+        orders: [],
+        fixtureData: null,
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
+        showProfile: false,
+        isLoading: false,
+      }));
+    };
+
     try {
       const result = await authService.deleteAccount();
       if (result.success) {
-        setState(prev => ({
-          ...prev,
-          user: null,
-          currentView: 'landing',
-          inventory: [],
-          surgeryMaster: {},
-          orders: [],
-          fixtureData: null,
-          showProfile: false,
-        }));
+        resetToLanding();
+        notify('회원 탈퇴가 완료되었습니다.', 'success');
+        return;
+      }
+
+      // RPC 응답은 실패여도, 이미 auth 세션이 제거된 상태라면
+      // 사용자 관점에서는 탈퇴 완료이므로 안전하게 landing으로 복귀시킨다.
+      const session = await authService.getSession().catch(() => null);
+      if (!session?.user) {
+        resetToLanding();
         notify('회원 탈퇴가 완료되었습니다.', 'success');
       } else {
         notify(result.error || '회원 탈퇴에 실패했습니다.', 'error');
       }
-    } catch {
-      notify('회원 탈퇴에 실패했습니다.', 'error');
+    } catch (error) {
+      const session = await authService.getSession().catch(() => null);
+      if (!session?.user) {
+        resetToLanding();
+        notify('회원 탈퇴가 완료되었습니다.', 'success');
+        return;
+      }
+      const message = error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.';
+      notify(message, 'error');
     }
   };
 
@@ -411,8 +437,22 @@ export function useAppState(onNotify?: NotifyFn) {
         void (async () => {
           const profile = await waitForSignedInProfile();
           if (profile) {
-            const user = dbToUser(profile);
-            // 이메일 인증 완료 후 트라이얼 플랜 적용 (이메일 인증 ON 경로)
+            let user = dbToUser(profile);
+
+            // 이메일 인증 완료 후 병원/워크스페이스 생성 (이메일 인증 ON 경로)
+            // signUp()에서 authData.session이 없어 병원 생성을 건너뛴 경우 여기서 처리
+            if (!user.hospitalId && localStorage.getItem('_pending_hospital_setup')) {
+              const hospitalId = await authService.createHospitalForEmailConfirmed(profile.id);
+              if (hospitalId) {
+                // hospital_id가 업데이트된 최신 프로필 로드
+                const updatedProfile = await authService.getProfileById();
+                if (updatedProfile) {
+                  user = dbToUser(updatedProfile);
+                }
+              }
+            }
+
+            // 이메일 인증 완료 후 트라이얼 플랜 적용 (fallback: createHospitalForEmailConfirmed가 처리하지 못한 경우)
             const pendingPlan = localStorage.getItem('_pending_trial_plan') as PlanType | null;
             if (pendingPlan && pendingPlan !== 'free' && user.hospitalId) {
               localStorage.removeItem('_pending_trial_plan');
@@ -422,7 +462,7 @@ export function useAppState(onNotify?: NotifyFn) {
             // 소셜 로그인 시 세션 토큰 발급 (이메일 로그인은 signIn()에서 발급)
             if (!localStorage.getItem(SESSION_TOKEN_KEY)) {
               try {
-                const token = crypto.randomUUID();
+                const token = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
                 await supabase.rpc('set_session_token', { p_token: token });
                 localStorage.setItem(SESSION_TOKEN_KEY, token);
               } catch (e) {

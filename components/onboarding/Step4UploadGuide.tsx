@@ -260,7 +260,6 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
 
-  const isBlocked = uploadState !== 'done' || isSubmitting;
 
   return (
     <div className="px-6 py-6 flex flex-col h-full">
@@ -382,9 +381,12 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
       {/* Bottom CTA */}
       {uploadState !== 'parsing' && (
         <button
-          disabled={isBlocked}
           onClick={async () => {
-            if (isBlocked) return;
+            if (uploadState === 'idle' || uploadState === 'error') {
+              fileInputRef.current?.click();
+              return;
+            }
+            if (isSubmitting) return;
             setIsSubmitting(true);
             try {
               const ok = await onGoToSurgeryUpload(uploadedFile ?? undefined);
@@ -393,16 +395,16 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
               setIsSubmitting(false);
             }
           }}
-          className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all mt-4 shrink-0 ${
-            isBlocked
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
+          className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${
+            uploadState === 'done'
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-[0.98]'
           }`}
         >
           {isSubmitting
             ? '업로드 중...'
             : uploadState === 'idle' || uploadState === 'error'
-            ? '파일을 먼저 업로드해 주세요'
+            ? '파일 선택하기'
             : '수술기록 업로드하기'}
         </button>
       )}

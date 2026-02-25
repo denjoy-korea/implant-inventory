@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { parseExcelFile } from '../../services/excelService';
 
 const PARSING_STEPS = [
@@ -227,6 +227,9 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   const [approvedItems, setApprovedItems] = useState<Set<string>>(new Set());
   const [conversionEdits, setConversionEdits] = useState<Map<string, ConversionEdit>>(new Map());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentBrandIdx, setCurrentBrandIdx] = useState(0);
+  const currentBrandIdxRef = useRef(currentBrandIdx);
+  currentBrandIdxRef.current = currentBrandIdx;
 
   const toggleApprove = (key: string) => {
     setApprovedItems(prev => {
@@ -280,6 +283,44 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     }
   }, []);
 
+  // 새 파일 업로드 시 브랜드 인덱스 초기화
+  useEffect(() => { setCurrentBrandIdx(0); }, [groups]);
+
+  // 이상 항목이 있는 브랜드 플랫 목록 (파일 업로드 시 고정, 내비게이션 안정성 보장)
+  const allAnomalousBrands = useMemo(() => {
+    const list: { manufacturer: string; brand: string; brandData: BrandGroup }[] = [];
+    for (const g of groups) {
+      for (const b of g.brands) {
+        if (b.anomalousSizes.size > 0) list.push({ manufacturer: g.manufacturer, brand: b.brand, brandData: b });
+      }
+    }
+    return list;
+  }, [groups]);
+
+  // 현재 브랜드 전체 승인 시 → 다음 미완료 브랜드로 자동 이동 (500ms 딜레이)
+  useEffect(() => {
+    if (allAnomalousBrands.length === 0) return;
+    const safeIdx = Math.min(currentBrandIdxRef.current, allAnomalousBrands.length - 1);
+    if (safeIdx < 0) return;
+    const { manufacturer, brand, brandData } = allAnomalousBrands[safeIdx];
+    const makeKey = (s: string) => `${manufacturer}:${brand}:${s}`;
+    const unapproved = Array.from(brandData.anomalousSizes).filter(s => !approvedItems.has(makeKey(s)));
+    if (unapproved.length > 0) return;
+    // 현재 브랜드 이후 미완료 브랜드 탐색
+    let nextIdx = -1;
+    for (let i = safeIdx + 1; i < allAnomalousBrands.length; i++) {
+      const entry = allAnomalousBrands[i];
+      const k = (s: string) => `${entry.manufacturer}:${entry.brand}:${s}`;
+      if (Array.from(entry.brandData.anomalousSizes).some(s => !approvedItems.has(k(s)))) {
+        nextIdx = i;
+        break;
+      }
+    }
+    if (nextIdx === -1) return;
+    const timer = setTimeout(() => setCurrentBrandIdx(nextIdx), 500);
+    return () => clearTimeout(timer);
+  }, [approvedItems, allAnomalousBrands]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) processFile(file);
@@ -300,9 +341,24 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
       bsum + Array.from(b.anomalousSizes).filter(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`)).length
     , 0)
   , 0);
+
+  // 특수 항목 존재 여부 (다음 단계에서 추가되는 항목 — 없으면 건강도 하락, 진행은 차단하지 않음)
+  // 제조사명 또는 브랜드명 어디서든 키워드가 하나라도 있으면 충족
+  const hasSurgeryFailItems = groups.some(g =>
+    g.manufacturer.includes('FAIL') || g.brands.some(b => b.brand.includes('FAIL'))
+  );
+  const hasInsuranceItems = groups.some(g =>
+    g.manufacturer.includes('보험') || g.brands.some(b => b.brand.includes('보험'))
+  );
+
   const healthScoreRaw = totalItems > 0 ? Math.round(((totalItems - totalAnomalous) / totalItems) * 100) : 100;
-  // 이상 항목이 남아 있으면 올림으로 100%가 되지 않도록 99 이하로 강제
-  const healthScore = totalAnomalous > 0 ? Math.min(99, healthScoreRaw) : healthScoreRaw;
+  // 이상 항목이 남아 있으면 100%가 되지 않도록 99 이하로 강제
+  // 수술중FAIL_ 또는 보험청구 항목 없으면 85% 이하로 제한 (다음 단계에서 추가 예정이므로 진행은 차단 안 함)
+  const healthScore = (() => {
+    let score = totalAnomalous > 0 ? Math.min(99, healthScoreRaw) : healthScoreRaw;
+    if (uploadState === 'done' && (!hasSurgeryFailItems || !hasInsuranceItems)) score = Math.min(score, 85);
+    return score;
+  })();
 
   const healthMeta = healthScore === 100
     ? { label: '완벽', barColor: 'bg-emerald-500', badgeClass: 'text-emerald-700 bg-emerald-100', scoreClass: 'text-emerald-600', borderClass: 'border-emerald-100 bg-emerald-50' }
@@ -312,12 +368,6 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     ? { label: '주의', barColor: 'bg-amber-400', badgeClass: 'text-amber-700 bg-amber-100', scoreClass: 'text-amber-600', borderClass: 'border-amber-100 bg-amber-50' }
     : { label: '점검 필요', barColor: 'bg-red-500', badgeClass: 'text-red-700 bg-red-100', scoreClass: 'text-red-600', borderClass: 'border-red-100 bg-red-50' };
 
-  // 승인되지 않은 이상 항목이 남은 제조사만 표시
-  const anomalousGroups = groups.filter(g =>
-    g.brands.some(b =>
-      Array.from(b.anomalousSizes).some(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`))
-    )
-  );
 
   return (
     <div className="px-6 py-6 flex flex-col h-full">
@@ -387,240 +437,269 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
             </button>
           </div>
 
-          {/* Health score */}
-          <div className={`flex items-center gap-2 rounded-xl px-3 py-2.5 mb-3 border ${healthMeta.borderClass}`}>
-            <span className="text-[11px] font-bold text-slate-600 shrink-0">데이터 건강도</span>
-            <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all duration-700 ${healthMeta.barColor}`} style={{ width: `${healthScore}%` }} />
+          {/* Health score + 특수 항목 인라인 */}
+          <div className={`rounded-xl px-3 py-2.5 mb-3 border ${healthMeta.borderClass}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-600 shrink-0">데이터 건강도</span>
+              <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-700 ${healthMeta.barColor}`} style={{ width: `${healthScore}%` }} />
+              </div>
+              <span className={`text-sm font-black tabular-nums shrink-0 ${healthMeta.scoreClass}`}>{healthScore}%</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${healthMeta.badgeClass}`}>{healthMeta.label}</span>
+              {totalAnomalous > 0 && (
+                <span className="text-[10px] text-amber-700 bg-amber-100 font-bold px-1.5 py-0.5 rounded-full shrink-0">이상 {totalAnomalous}개</span>
+              )}
             </div>
-            <span className={`text-sm font-black tabular-nums shrink-0 ${healthMeta.scoreClass}`}>{healthScore}%</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${healthMeta.badgeClass}`}>{healthMeta.label}</span>
-            {totalAnomalous > 0 && (
-              <span className="text-[10px] text-amber-700 bg-amber-100 font-bold px-1.5 py-0.5 rounded-full shrink-0">이상 {totalAnomalous}개</span>
+            {(!hasSurgeryFailItems || !hasInsuranceItems) && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 flex-wrap">
+                {!hasSurgeryFailItems && (
+                  <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">FAIL 항목 없음</span>
+                )}
+                {!hasInsuranceItems && (
+                  <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">보험 항목 없음</span>
+                )}
+                <span className="text-[10px] text-slate-400 ml-auto">다음 단계에서 자동 추가됩니다</span>
+              </div>
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto mb-3 pr-0.5">
-            {totalAnomalous === 0 && healthScore === 100 ? (
-              /* ── 완벽! 칭찬 뷰 ── */
-              <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <p className="text-base font-black text-slate-800 mb-1">픽스처 목록이 완벽해요!</p>
-                <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
-                  {groups.length}개 제조사, {totalItems}개 사이즈 모두<br />
-                  정상 패턴으로 관리되고 있습니다.
-                </p>
-                <p className="text-xs text-emerald-600 font-bold mt-3 bg-emerald-50 px-3 py-1.5 rounded-full">
-                  덴트웹 목록 관리 우수 👍
-                </p>
-              </div>
-            ) : totalAnomalous > 0 ? (
-              /* ── 이상 항목 진단 뷰 ── */
-              <div className="space-y-4">
-                {/* 안심 메시지 */}
-                <div className="flex gap-2.5 bg-indigo-50 border border-indigo-100 rounded-2xl px-3 py-2.5">
-                  <span className="text-base shrink-0 mt-0.5">💡</span>
-                  <p className="text-[11px] text-indigo-700 leading-relaxed">
-                    아래 규칙 위반 의심 항목을 확인하고, 필요하면 <span className="font-bold">내용을 수정한 후 승인</span>해 주세요.
-                    모든 항목을 승인해야 저장할 수 있습니다.
-                  </p>
-                </div>
-                {anomalousGroups.map((g) => (
-                  <div key={g.manufacturer}>
-                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-2">{g.manufacturer}</p>
-                    <div className="space-y-2">
-                      {g.brands.map((b) => {
-                        const unapproved = Array.from(b.anomalousSizes).filter(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`));
-                        if (unapproved.length === 0) return null;
-                        return (
-                        <div key={b.brand} className="bg-white border border-amber-200 rounded-2xl overflow-hidden">
-                          {/* Brand header */}
-                          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-amber-100 bg-amber-50/50">
-                            <span className="text-[11px] font-bold text-indigo-600">{b.brand}</span>
-                            <span className="text-[10px] text-amber-600 font-bold bg-amber-100 px-1.5 py-0.5 rounded-full ml-auto">
-                              의심 항목 {unapproved.length}개
-                            </span>
-                          </div>
-
-                          <div className="px-3 py-2.5 space-y-2.5">
-                            {/* Guideline */}
-                            <div>
-                              <p className="text-[10px] font-bold text-slate-400 mb-1.5">이 브랜드의 정상 형식</p>
-                              <div className="flex flex-wrap gap-1">
-                                {b.isNumericCode
-                                  ? <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-0.5">숫자코드 + 접미사(B, BS, S, W 선택)</span>
-                                  : null
-                                }
-                                {b.normalSamples.map(s => (
-                                  <span key={s} className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 font-mono">
-                                    {s}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Anomalous items */}
-                            <div>
-                              <p className="text-[10px] font-bold text-amber-600 mb-1.5">규칙 위반 의심 항목</p>
-                              <div className="space-y-2">
-                                {unapproved.map((s) => {
-                                  const approveKey = `${g.manufacturer}:${b.brand}:${s}`;
-                                  const approved = approvedItems.has(approveKey);
-                                  // 숫자코드 브랜드 이상 항목 OR Φ/Ø 형식 브랜드 숫자 포함 이상 항목 → 편집 폼
-                                  const isEditableAnomaly = b.isNumericCode || (!b.isNumericCode && /\d/.test(s) && b.normalSamples.length > 0);
-                                  return (
-                                    <div key={s} className="space-y-1">
-                                      {/* 원본 + 진단 */}
-                                      <div className="flex items-start gap-2">
-                                        <span className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 font-mono font-bold shrink-0">
-                                          {s}
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 leading-4 pt-0.5">
-                                          {diagnoseAnomaly(s, b.isNumericCode, b.dominantPattern)}
-                                        </span>
-                                      </div>
-                                      {/* 변환 행 */}
-                                      <div className="flex items-center gap-1.5 pl-1 flex-wrap">
-                                        <span className="text-[9px] text-slate-400">저장 시</span>
-                                        {isEditableAnomaly ? (() => {
-                                          if (b.isNumericCode) {
-                                            // 숫자코드 브랜드: 구분자 제거 후 단일 입력 (숫자 + 대문자만 허용)
-                                            const rawDefault = s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
-                                            const def: ConversionEdit = { d: rawDefault, l: '', c: '', componentCount: 1 };
-                                            const edit = conversionEdits.get(approveKey) ?? def;
-                                            const canApprove = edit.d.length >= 4 && /^[0-9A-Z]+$/.test(edit.d);
-                                            return (
-                                              <>
-                                                <span className="text-[9px] text-slate-300">→</span>
-                                                <input
-                                                  type="text"
-                                                  value={edit.d}
-                                                  onChange={e => {
-                                                    const v = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
-                                                    updateConversionEdit(approveKey, 'd', v, def);
-                                                  }}
-                                                  className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${edit.d ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
-                                                  style={{ width: `${Math.max(36, edit.d.length * 8 + 4)}px` }}
-                                                />
-                                                <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 수정</span>
-                                                <button
-                                                  onClick={() => { if (canApprove) toggleApprove(approveKey); }}
-                                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${
-                                                    approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
-                                                    : canApprove ? 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
-                                                    : 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
-                                                  }`}
-                                                >
-                                                  {approved ? '✓ 승인완료' : '승인'}
-                                                </button>
-                                              </>
-                                            );
-                                          }
-                                          // Φ/Ø 형식 브랜드: normalSamples[0] 템플릿으로 편집 폼
-                                          const def = computeDefaultEdit(s, b.dominantPattern);
-                                          const edit = conversionEdits.get(approveKey) ?? def;
-                                          const getVal = (f: 'd'|'l'|'c') => f === 'd' ? edit.d : f === 'l' ? edit.l : edit.c;
-                                          type TPart = { isInput: false; text: string } | { isInput: true; field: 'd'|'l'|'c' };
-                                          const tParts: TPart[] = [];
-                                          const flds: ('d'|'l'|'c')[] = ['d', 'l', 'c'];
-                                          let rem = b.normalSamples[0] ?? '';
-                                          let fi = 0;
-                                          while (rem.length > 0) {
-                                            const nm = rem.match(/^(\d+\.?\d*)/);
-                                            if (nm) {
-                                              tParts.push({ isInput: true, field: flds[Math.min(fi, 2)] });
-                                              fi++; rem = rem.slice(nm[0].length);
-                                            } else {
-                                              const ni = rem.search(/\d/);
-                                              if (ni < 0) { tParts.push({ isInput: false, text: rem }); break; }
-                                              tParts.push({ isInput: false, text: rem.slice(0, ni) });
-                                              rem = rem.slice(ni);
-                                            }
-                                          }
-                                          const canApprove = !!edit.d && (def.componentCount < 2 || !!edit.l) && (def.componentCount < 3 || !!edit.c);
-                                          return (
-                                            <>
-                                              <span className="text-[9px] text-slate-300">→</span>
-                                              {tParts.map((p, i) => p.isInput ? (
-                                                <input key={i} type="text" value={getVal(p.field)}
-                                                  onChange={e => updateConversionEdit(approveKey, p.field, e.target.value, def)}
-                                                  className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${getVal(p.field) ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
-                                                  style={{ width: `${Math.max(22, (getVal(p.field).length || 2) * 7 + 4)}px` }}
-                                                />
-                                              ) : (
-                                                <span key={i} className="text-[10px] text-blue-600 font-mono">{p.text}</span>
-                                              ))}
-                                              <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 변환</span>
-                                              <button
-                                                onClick={() => { if (canApprove) toggleApprove(approveKey); }}
-                                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${
-                                                  approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
-                                                  : canApprove ? 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50'
-                                                  : 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
-                                                }`}
-                                              >
-                                                {approved ? '✓ 승인완료' : '승인'}
-                                              </button>
-                                            </>
-                                          );
-                                        })() : (
-                                          <span className="text-[9px] text-slate-400">자동 수정 불가 — 데이터 설정 페이지에서 직접 수정 필요</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
+          {totalAnomalous > 0 ? (
+            /* ── 이상 항목 진단 뷰 (브랜드별 페이지네이션) ── */
+            (() => {
+              const safeIdx = Math.min(currentBrandIdx, allAnomalousBrands.length - 1);
+              if (safeIdx < 0 || allAnomalousBrands.length === 0) return null;
+              const { manufacturer, brand, brandData: b } = allAnomalousBrands[safeIdx];
+              const makeKey = (s: string) => `${manufacturer}:${brand}:${s}`;
+              const unapproved = Array.from(b.anomalousSizes).filter(s => !approvedItems.has(makeKey(s)));
+              const allApproved = unapproved.length === 0;
+              return (
+                <div className="flex-1 flex flex-col mb-3 min-h-0">
+                  {/* 브랜드 카드 (nav + 내용 통합) */}
+                  {allApproved ? (
+                    <div className="flex-1 flex flex-col bg-emerald-50 border border-emerald-200 rounded-2xl min-h-0">
+                      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-emerald-200 bg-emerald-50/80 shrink-0">
+                        <button
+                          onClick={() => setCurrentBrandIdx(i => Math.max(0, i - 1))}
+                          disabled={safeIdx === 0}
+                          className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1.5 py-1 rounded-lg hover:bg-emerald-100"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                          </svg>
+                          이전
+                        </button>
+                        <div className="flex-1 text-center">
+                          <span className="text-[10px] text-slate-400">{manufacturer} · </span>
+                          <span className="text-xs font-bold text-slate-700">{brand}</span>
+                          <span className="text-[10px] text-slate-400 ml-1">({safeIdx + 1}/{allAnomalousBrands.length})</span>
                         </div>
-                        );
-                      })}
+                        <button
+                          onClick={() => setCurrentBrandIdx(i => Math.min(allAnomalousBrands.length - 1, i + 1))}
+                          disabled={safeIdx === allAnomalousBrands.length - 1}
+                          className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1.5 py-1 rounded-lg hover:bg-emerald-100"
+                        >
+                          다음
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6">
+                        <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-sm font-bold text-emerald-700">이 브랜드 모두 승인됨</p>
+                        {safeIdx < allAnomalousBrands.length - 1 && (
+                          <button
+                            onClick={() => setCurrentBrandIdx(i => i + 1)}
+                            className="mt-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors"
+                          >
+                            다음 브랜드 →
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              /* ── 정상: 전체 목록 뷰 ── */
-              <div className="space-y-2">
-                {groups.map((g) => (
-                  <div key={g.manufacturer} className="bg-slate-50 rounded-2xl p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black text-slate-800">{g.manufacturer}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{g.total}개</span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {g.brands.map((b) => (
-                        <div key={b.brand}>
-                          <span className="text-[10px] font-bold text-indigo-500 block mb-1">{b.brand}</span>
+                  ) : (
+                    <div className="flex-1 flex flex-col bg-white border border-amber-200 rounded-2xl min-h-0">
+                      <div className="px-3 py-2 border-b border-amber-100 bg-amber-50/30 shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setCurrentBrandIdx(i => Math.max(0, i - 1))}
+                            disabled={safeIdx === 0}
+                            className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1.5 py-1 rounded-lg hover:bg-amber-100"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            이전
+                          </button>
+                          <div className="flex-1 text-center">
+                            <span className="text-[10px] text-slate-400">{manufacturer} · </span>
+                            <span className="text-xs font-bold text-slate-700">{brand}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">({safeIdx + 1}/{allAnomalousBrands.length})</span>
+                          </div>
+                          <span className="text-[10px] text-amber-600 font-bold bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">의심 {unapproved.length}개</span>
+                          <button
+                            onClick={() => setCurrentBrandIdx(i => Math.min(allAnomalousBrands.length - 1, i + 1))}
+                            disabled={safeIdx === allAnomalousBrands.length - 1}
+                            className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1.5 py-1 rounded-lg hover:bg-amber-100"
+                          >
+                            다음
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 text-center mt-1">의심 항목을 확인 후 수정하고 승인해 주세요</p>
+                      </div>
+                      <div className="flex-1 overflow-y-auto px-3 py-2.5 space-y-2.5">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 mb-1.5">이 브랜드의 정상 형식</p>
                           <div className="flex flex-wrap gap-1">
-                            {b.sizes.map((s) => (
-                              <span key={s} className="text-[10px] text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-0.5">{s}</span>
+                            {b.isNumericCode
+                              ? <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-0.5">숫자코드 + 접미사(B, BS, S, W 선택)</span>
+                              : null
+                            }
+                            {b.normalSamples.map(s => (
+                              <span key={s} className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 font-mono">{s}</span>
                             ))}
                           </div>
                         </div>
-                      ))}
+                        <div>
+                          <p className="text-[10px] font-bold text-amber-600 mb-1.5">규칙 위반 의심 항목</p>
+                          <div className="space-y-2">
+                            {unapproved.map((s) => {
+                              const approveKey = makeKey(s);
+                              const approved = approvedItems.has(approveKey);
+                              const isEditableAnomaly = b.isNumericCode || (!b.isNumericCode && /\d/.test(s) && b.normalSamples.length > 0);
+                              return (
+                                <div key={s} className="space-y-1">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 font-mono font-bold shrink-0">{s}</span>
+                                    <span className="text-[10px] text-slate-500 leading-4 pt-0.5">{diagnoseAnomaly(s, b.isNumericCode, b.dominantPattern)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pl-1 flex-wrap">
+                                    <span className="text-[9px] text-slate-400">저장 시</span>
+                                    {isEditableAnomaly ? (() => {
+                                      if (b.isNumericCode) {
+                                        const rawDefault = s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
+                                        const def: ConversionEdit = { d: rawDefault, l: '', c: '', componentCount: 1 };
+                                        const edit = conversionEdits.get(approveKey) ?? def;
+                                        const canApprove = edit.d.length >= 4 && /^[0-9A-Z]+$/.test(edit.d);
+                                        return (
+                                          <>
+                                            <span className="text-[9px] text-slate-300">→</span>
+                                            <input
+                                              type="text"
+                                              value={edit.d}
+                                              onChange={e => {
+                                                const v = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+                                                updateConversionEdit(approveKey, 'd', v, def);
+                                              }}
+                                              className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${edit.d ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
+                                              style={{ width: `${Math.max(36, edit.d.length * 8 + 4)}px` }}
+                                            />
+                                            <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 수정</span>
+                                            <button
+                                              onClick={() => { if (canApprove) toggleApprove(approveKey); }}
+                                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : canApprove ? 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50' : 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'}`}
+                                            >
+                                              {approved ? '✓ 승인완료' : '승인'}
+                                            </button>
+                                          </>
+                                        );
+                                      }
+                                      const def = computeDefaultEdit(s, b.dominantPattern);
+                                      const edit = conversionEdits.get(approveKey) ?? def;
+                                      const getVal = (f: 'd'|'l'|'c') => f === 'd' ? edit.d : f === 'l' ? edit.l : edit.c;
+                                      type TPart = { isInput: false; text: string } | { isInput: true; field: 'd'|'l'|'c' };
+                                      const tParts: TPart[] = [];
+                                      const flds: ('d'|'l'|'c')[] = ['d', 'l', 'c'];
+                                      let rem = b.normalSamples[0] ?? '';
+                                      let fi = 0;
+                                      while (rem.length > 0) {
+                                        const nm = rem.match(/^(\d+\.?\d*)/);
+                                        if (nm) { tParts.push({ isInput: true, field: flds[Math.min(fi, 2)] }); fi++; rem = rem.slice(nm[0].length); }
+                                        else {
+                                          const ni = rem.search(/\d/);
+                                          if (ni < 0) { tParts.push({ isInput: false, text: rem }); break; }
+                                          tParts.push({ isInput: false, text: rem.slice(0, ni) });
+                                          rem = rem.slice(ni);
+                                        }
+                                      }
+                                      const canApprove = !!edit.d && (def.componentCount < 2 || !!edit.l) && (def.componentCount < 3 || !!edit.c);
+                                      return (
+                                        <>
+                                          <span className="text-[9px] text-slate-300">→</span>
+                                          {tParts.map((p, i) => p.isInput ? (
+                                            <input key={i} type="text" value={getVal(p.field)}
+                                              onChange={e => updateConversionEdit(approveKey, p.field, e.target.value, def)}
+                                              className={`text-[10px] text-center font-mono border-b outline-none py-0.5 bg-transparent transition-colors ${getVal(p.field) ? 'border-blue-300 text-blue-700' : 'border-slate-200 text-slate-300'}`}
+                                              style={{ width: `${Math.max(22, (getVal(p.field).length || 2) * 7 + 4)}px` }}
+                                            />
+                                          ) : (
+                                            <span key={i} className="text-[10px] text-blue-600 font-mono">{p.text}</span>
+                                          ))}
+                                          <span className={`text-[9px] transition-colors ${canApprove ? 'text-blue-500' : 'text-slate-300'}`}>로 변환</span>
+                                          <button
+                                            onClick={() => { if (canApprove) toggleApprove(approveKey); }}
+                                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all active:scale-95 ${approved ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : canApprove ? 'text-slate-500 bg-white border-slate-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50' : 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'}`}
+                                          >
+                                            {approved ? '✓ 승인완료' : '승인'}
+                                          </button>
+                                        </>
+                                      );
+                                    })() : (
+                                      <span className="text-[9px] text-slate-400">자동 수정 불가 — 데이터 설정 페이지에서 직접 수정 필요</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center mb-3 text-center">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-            )}
-          </div>
+              <p className="text-base font-black text-slate-800 mb-1">사이즈 패턴 이상 없음</p>
+              <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
+                {groups.length}개 제조사, {totalItems}개 사이즈 모두<br />
+                정상 패턴으로 확인됐습니다.
+              </p>
+              {healthScore === 100 && (
+                <p className="text-xs text-emerald-600 font-bold mt-3 bg-emerald-50 px-3 py-1.5 rounded-full">
+                  덴트웹 목록 관리 우수 👍
+                </p>
+              )}
+            </div>
+          )}
         </>
       )}
 
       {/* Bottom CTA */}
-      {uploadState !== 'parsing' && (() => {
-        const isBlocked = uploadState === 'idle' || (uploadState === 'done' && healthScore < 100);
+      {uploadState === 'done' && (() => {
+        const isBlocked = totalAnomalous > 0;
+        const firstIncompleteIdx = allAnomalousBrands.findIndex((entry) => {
+          const k = (s: string) => `${entry.manufacturer}:${entry.brand}:${s}`;
+          return Array.from(entry.brandData.anomalousSizes).some(s => !approvedItems.has(k(s)));
+        });
         return (
           <button
-            disabled={isBlocked}
             onClick={() => {
-              if (isBlocked) return;
+              if (isBlocked) {
+                if (firstIncompleteIdx !== -1) setCurrentBrandIdx(firstIncompleteIdx);
+                return;
+              }
               const corrections = new Map<string, string>();
               for (const g of groups) {
                 for (const b of g.brands) {
@@ -642,15 +721,13 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
             }}
             className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${
               isBlocked
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                ? 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 active:scale-[0.98]'
                 : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
             }`}
           >
-            {uploadState === 'idle'
-              ? '파일을 먼저 업로드해 주세요'
-              : uploadState === 'done' && healthScore < 100
-                ? `의심 항목 ${totalAnomalous}개를 모두 승인해야 저장할 수 있습니다`
-                : '데이터 설정 페이지에서 저장하기'
+            {isBlocked
+              ? `사이즈 오류 ${totalAnomalous}개 승인 필요`
+              : '데이터 설정 페이지에서 저장하기'
             }
           </button>
         );

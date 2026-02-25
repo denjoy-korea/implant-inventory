@@ -154,7 +154,8 @@ test('mobile bottom nav offset is applied to public toasts', () => {
 
   assert.match(overlays, /showMobilePublicNav: boolean/);
   assert.match(overlays, /const shouldLiftToastForBottomNav = showMobileDashboardNav \|\| showMobilePublicNav;/);
-  assert.match(overlays, /style=\{shouldLiftToastForBottomNav \? \{ bottom: 'calc\(5\.5rem \+ env\(safe-area-inset-bottom\)\)' \} : undefined\}/);
+  assert.match(overlays, /'calc\(5\.5rem \+ env\(safe-area-inset-bottom\)\)'/);
+  assert.match(overlays, /style=\{toastBottomOffset \? \{ bottom: toastBottomOffset \} : undefined\}/);
 
   assert.match(app, /const showMobilePublicNav = isPublicBottomNavView && isNarrowViewport;/);
   assert.match(app, /showMobilePublicNav=\{showMobilePublicNav\}/);

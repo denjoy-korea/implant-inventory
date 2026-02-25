@@ -300,6 +300,9 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                         <span className="text-slate-300">·</span>
                         <button type="button" onClick={() => setShowTerms(true)} className="text-indigo-600 hover:underline">이용약관</button>
                       </div>
+                      <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                        서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
+                      </p>
                     </div>
                   </div>
                   <button type="submit" disabled={submitting} className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10 mt-2 disabled:opacity-60">

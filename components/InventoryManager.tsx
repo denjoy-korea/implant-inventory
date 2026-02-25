@@ -108,7 +108,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (initialShowBaseStockEdit && !isEditExhausted) {
-      setShowEditNotice(true);
+      // 온보딩에서 진입 시 EditNoticeModal 건너뛰고 바로 편집 화면으로
+      setShowBaseStockModal(true);
       autoOpenedRef.current = true;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

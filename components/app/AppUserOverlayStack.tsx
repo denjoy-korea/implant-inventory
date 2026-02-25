@@ -27,7 +27,7 @@ interface AppUserOverlayStackProps {
   onReviewSubmitted: () => void;
   onDismissReview: () => void;
   onOnboardingComplete: () => Promise<void> | void;
-  onOnboardingSkip: () => void;
+  onOnboardingSkip: (snooze: boolean) => void;
   onReopenOnboarding: () => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
   onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;

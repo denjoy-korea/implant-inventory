@@ -442,7 +442,7 @@ export const authService = {
     // RPC 실패/지연 시 stale 토큰으로 인한 false 로그아웃 방지 — 먼저 기존 토큰 제거
     localStorage.removeItem('dentweb_session_token');
     try {
-      const token = crypto.randomUUID();
+      const token = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
       await Promise.race([
         supabase.rpc('set_session_token', { p_token: token }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
@@ -725,7 +725,7 @@ export const authService = {
     if (error) return { success: false, error: error.message };
     // verifyOtp이 Supabase 세션을 교체하므로 중복 로그인 차단 토큰도 재발급
     try {
-      const newToken = crypto.randomUUID();
+      const newToken = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
       await supabase.rpc('set_session_token', { p_token: newToken });
       localStorage.setItem('dentweb_session_token', newToken);
     } catch (e) {
@@ -752,7 +752,7 @@ export const authService = {
 
   /** 현재 기기를 신뢰 기기로 등록 (30일) */
   async registerTrustedDevice(deviceName?: string): Promise<void> {
-    const token = crypto.randomUUID();
+    const token = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
     const name = deviceName
       || `${navigator.platform} · ${new Date().toLocaleDateString('ko-KR')}`;
     try {

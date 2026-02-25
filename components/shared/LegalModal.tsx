@@ -14,7 +14,7 @@ interface LegalModalProps {
 // 강조 단락: 사용자가 반드시 인지해야 할 의무·권리 항목에만 사용
 type ParagraphEntry = string | { text: string; highlight: true } | { type: 'table'; headers: string[]; rows: string[][] };
 
-const EFFECTIVE_DATE = '2026년 2월 24일';
+const EFFECTIVE_DATE = '2026년 2월 25일';
 
 const TERMS_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
   {
@@ -94,6 +94,11 @@ const TERMS_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
     title: '제8조 (서비스 변경, 중단, 종료)',
     paragraphs: [
       '회사는 점검, 장애 복구, 보안 대응, 외부 인프라 이슈, 불가항력 사유로 서비스 일부 또는 전부를 일시 중단할 수 있습니다. 정기 점검 등 예정된 중단의 경우 최소 3일 전에 공지합니다.',
+      {
+        text: '회사는 보안 취약점 대응, 장애 복구, 기능 개선을 위해 웹 애플리케이션 및 PWA 업데이트를 배포할 수 있으며, 중대한 보안 위험이 확인된 경우 이용자 보호를 위해 업데이트 적용이 즉시 진행될 수 있습니다.',
+        highlight: true,
+      },
+      '서비스는 업데이트 감지 시 적용 안내를 제공하며, 회원은 안정적인 서비스 이용을 위해 최신 버전 사용을 유지해야 합니다.',
       '중대한 운영 변경 또는 서비스 종료가 필요한 경우 회사는 사전에 공지하고 이용자 보호 조치를 안내합니다.',
     ],
   },
@@ -160,6 +165,7 @@ const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> =
       },
       '전자상거래법에 따른 계약·청약철회, 대금결제, 재화 등의 공급 기록: 5년.',
       '전자금융거래법에 따른 전자금융 거래 기록: 5년.',
+      '서비스 운영 로그(접속 로그, 업데이트 감지/적용 기록, 오류 대응 기록): 생성일로부터 최대 1년 보관 후 파기 또는 비식별 처리.',
       {
         text: '무료 체험 데이터: 체험 종료 후 15일 이내에 유료 구독으로 전환하지 않을 경우 자동 삭제.',
         highlight: true,
@@ -172,6 +178,7 @@ const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> =
       '필수항목: 이메일 주소, 비밀번호(암호화 보관), 이름(또는 병원명), 사업자 정보(사업자 번호 등), 결제 정보.',
       '선택항목: 전화번호, 직위, 문의 내역, 서비스 이용 과정에서 생성되는 데이터(재고 및 수술 기록 등).',
       '자동 수집항목: 서비스 이용 기록, 접속 로그, 쿠키, IP 주소, 브라우저 및 기기 정보.',
+      '업데이트 운영항목: 앱 빌드 식별자, 업데이트 알림 노출/적용/지연 이벤트, 탭 동기화 상태값(서비스 안정성 및 보안 패치 적용 목적).',
     ],
   },
   {
@@ -215,6 +222,18 @@ const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> =
       `성명: ${BUSINESS_INFO.representativeName}`,
       '직책: 대표',
       `연락처: ${BUSINESS_INFO.supportEmail}`,
+    ],
+  },
+  {
+    title: '8. 서비스 업데이트 고지 및 로컬 저장소 사용 안내',
+    paragraphs: [
+      '회사는 보안 패치 및 서비스 품질 유지를 위해 Service Worker, 브라우저 캐시, LocalStorage, SessionStorage 등 기술을 사용할 수 있습니다.',
+      '업데이트 지연 선택 시 지연 만료 시각 등의 최소 정보가 브라우저 LocalStorage에 저장되며, 강제 보안 업데이트 재적용 방지를 위한 식별값이 SessionStorage에 일시 저장될 수 있습니다.',
+      {
+        text: '강제 업데이트가 필요한 보안 패치의 경우, 회사는 서비스 안정성 확보를 위해 즉시 재로딩 또는 업데이트 적용을 진행할 수 있습니다.',
+        highlight: true,
+      },
+      '브라우저 저장 정보는 서비스 운영 목적 외로 사용하지 않으며, 이용자는 브라우저 설정에서 쿠키/저장소를 삭제할 수 있습니다.',
     ],
   },
 ];

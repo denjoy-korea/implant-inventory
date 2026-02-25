@@ -24,7 +24,7 @@ interface DashboardFixtureEditSectionProps {
   onBulkToggle: (filters: Record<string, string>, targetUnused: boolean) => void;
   onLengthToggle: (normalizedTarget: string, setUnused: boolean) => void;
   onRestoreToSavedPoint: () => void;
-  onSaveSettings: () => void;
+  onSaveSettings: () => boolean;
   onUpdateFixtureCell: (index: number, column: string, value: boolean | string | number) => void;
   onFixtureSheetChange: (sheetName: string) => void;
   onExpandFailClaim: () => void;

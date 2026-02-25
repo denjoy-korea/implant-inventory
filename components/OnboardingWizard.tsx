@@ -12,7 +12,7 @@ import Step3FailAudit from './onboarding/Step3FailAudit';
 // 각 단계 진입 시 표시할 진행률 (단계별 완료 후 사용자가 확정할 값)
 const STEP_PROGRESS: Record<number, number> = {
   1: 0,
-  2: 0,
+  2: 15,
   3: 15,
   4: 30,
   5: 50,
@@ -27,7 +27,7 @@ interface Props {
   initialStep: number;
   inventory: InventoryItem[];
   onComplete: () => void;
-  onSkip: () => void;
+  onSkip: (snooze: boolean) => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
   onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
   onGoToInventoryAudit: () => void;
@@ -132,7 +132,10 @@ export default function OnboardingWizard({
         >
           {step === 1 && <Step1Welcome hospitalName={hospitalName} onNext={handleNext} onSkip={onSkip} />}
           {step === 2 && <Step2DenwebFixtureDownload onNext={handleNext} />}
-          {step === 3 && <Step2FixtureUpload onGoToDataSetup={onGoToDataSetup} />}
+          {step === 3 && <Step2FixtureUpload onGoToDataSetup={(file, corrections) => {
+            onGoToDataSetup(file, corrections);
+            onSkip(false); // 데이터 편집 중 위저드 최소화 (토스트로 전환)
+          }} />}
           {step === 4 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
           {step === 5 && (
             <Step4UploadGuide
@@ -141,7 +144,10 @@ export default function OnboardingWizard({
               onUploaded={() => goToStep(6)}
             />
           )}
-          {step === 6 && <Step6InventoryAudit onGoToBaseStockEdit={onGoToInventoryAudit} />}
+          {step === 6 && <Step6InventoryAudit onGoToBaseStockEdit={() => {
+            onGoToInventoryAudit();
+            onSkip(false); // 재고 편집 중 위저드 최소화 (토스트로 전환)
+          }} />}
           {step === 7 && <Step3FailAudit onGoToFailManagement={handleFailAuditNext} />}
         </div>
       </div>

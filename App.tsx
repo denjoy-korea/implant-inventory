@@ -35,6 +35,7 @@ import { onboardingService } from './services/onboardingService';
 import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
 import { manufacturerAliasKey } from './services/appUtils';
 import { useToast } from './hooks/useToast';
+import { usePwaUpdate } from './hooks/usePwaUpdate';
 import { DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
 import { buildHash, parseHash, VIEW_HASH, TAB_HASH, HASH_TO_VIEW, HASH_TO_TAB } from './appRouting';
 import { reviewService, ReviewType } from './services/reviewService';
@@ -121,6 +122,7 @@ const App: React.FC = () => {
     handleLeaveHospital: _handleLeaveHospital,
     handleDeleteAccount,
   } = useAppState(showAlertToast);
+  const pwaUpdate = usePwaUpdate(state.currentView);
 
   // 후기 팝업 state
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
@@ -509,6 +511,8 @@ const App: React.FC = () => {
     if (requiresBillingProgramSetup) return;
     if (state.user.status !== 'active') return;
     if (onboardingAutoResumeRef.current === state.user.hospitalId) return;
+
+    if (onboardingService.isSnoozed(state.user.hospitalId)) return;
 
     onboardingAutoResumeRef.current = state.user.hospitalId;
     onboardingService.clearDismissed(state.user.hospitalId);
@@ -1553,6 +1557,30 @@ const App: React.FC = () => {
     showAlertToast,
   });
 
+  const handleSaveSettingsAndProceed = useCallback((): boolean => {
+    const saved = handleSaveSettings();
+    if (!saved) return false;
+    if (state.currentView !== 'dashboard') return true;
+    if (state.dashboardTab !== 'fixture_edit') return true;
+    if (!state.user?.hospitalId) return true;
+    if (!isHospitalAdmin) return true;
+    if (firstIncompleteStep !== 3 && firstIncompleteStep !== 4) return true;
+
+    onboardingService.clearDismissed(state.user.hospitalId);
+    setOnboardingDismissed(false);
+    setForcedOnboardingStep(4);
+    setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+    return true;
+  }, [
+    firstIncompleteStep,
+    handleSaveSettings,
+    isHospitalAdmin,
+    setState,
+    state.currentView,
+    state.dashboardTab,
+    state.user?.hospitalId,
+  ]);
+
   const handleUpdateCell = useCallback((index: number, column: string, value: boolean | string | number, type: 'fixture' | 'surgery', sheetName?: string) => {
     if (type === 'fixture' && column === '사용안함') {
       markDirtyAfterSave();
@@ -1604,11 +1632,10 @@ const App: React.FC = () => {
       if (hid) {
         onboardingService.markWelcomeSeen(hid);
         onboardingService.markFixtureDownloaded(hid);
-        onboardingService.markSurgeryDownloaded(hid);
         onboardingService.clearDismissed(hid);
       }
       setOnboardingDismissed(false);
-      setForcedOnboardingStep(5);
+      setForcedOnboardingStep(4);
       setState(prev => ({ ...prev, dashboardTab: 'overview' }));
     },
   });
@@ -1958,7 +1985,7 @@ const App: React.FC = () => {
                           onBulkToggle: handleBulkToggle,
                           onLengthToggle: handleLengthToggle,
                           onRestoreToSavedPoint: handleRestoreToSavedPoint,
-                          onSaveSettings: handleSaveSettings,
+                          onSaveSettings: handleSaveSettingsAndProceed,
                           onUpdateFixtureCell: (idx, col, val) => handleUpdateCell(idx, col, val, 'fixture'),
                           onFixtureSheetChange: (name) => setState(prev => ({ ...prev, fixtureData: { ...prev.fixtureData!, activeSheetName: name } })),
                           onExpandFailClaim: handleExpandFailClaim,
@@ -2077,13 +2104,19 @@ const App: React.FC = () => {
             setOnboardingDismissed(true);
             await loadHospitalData(state.user);
           }}
-          onOnboardingSkip={() => {
-            if (state.user?.hospitalId) onboardingService.markDismissed(state.user.hospitalId);
+          onOnboardingSkip={(snooze: boolean) => {
+            if (state.user?.hospitalId) {
+              onboardingService.markDismissed(state.user.hospitalId);
+              if (snooze) onboardingService.snoozeUntilTomorrow(state.user.hospitalId);
+            }
             setForcedOnboardingStep(null);
             setOnboardingDismissed(true);
           }}
           onReopenOnboarding={() => {
-            if (state.user?.hospitalId) onboardingService.clearDismissed(state.user.hospitalId);
+            if (state.user?.hospitalId) {
+              onboardingService.clearDismissed(state.user.hospitalId);
+              onboardingService.clearSnooze(state.user.hospitalId);
+            }
             setForcedOnboardingStep(null);
             setOnboardingDismissed(false);
             setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'overview' }));
@@ -2127,6 +2160,14 @@ const App: React.FC = () => {
         planLimitModal={planLimitModal}
         confirmModal={confirmModal}
         inventoryCompare={inventoryCompare}
+        pwaUpdateBar={{
+          isVisible: pwaUpdate.shouldShowPrompt,
+          isForceUpdate: pwaUpdate.forceUpdate,
+          message: pwaUpdate.message,
+          isApplying: pwaUpdate.isApplying,
+          onApply: pwaUpdate.applyUpdate,
+          onLater: pwaUpdate.deferUpdate,
+        }}
         alertToast={alertToast}
         showMobileDashboardNav={showMobileDashboardNav}
         showMobilePublicNav={showMobilePublicNav}

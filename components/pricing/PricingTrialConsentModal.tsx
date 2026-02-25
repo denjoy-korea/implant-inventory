@@ -163,6 +163,9 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
               <span className="text-slate-300">·</span>
               <button type="button" onClick={() => setShowPrivacy(true)} className="text-indigo-600 hover:underline">개인정보</button>
             </div>
+            <p className="mt-1 ml-7 text-[11px] text-slate-500 leading-relaxed">
+              서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
+            </p>
           </div>
 
           <div className="flex gap-3">
