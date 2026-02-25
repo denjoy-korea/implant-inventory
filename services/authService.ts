@@ -549,17 +549,21 @@ export const authService = {
   /** 탈퇴 사유 저장 + 슬랙 알림 (fire-and-forget, 계정 삭제 전 호출) */
   async saveWithdrawalReason(reason: string, reasonDetail?: string): Promise<void> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // getUser()는 네트워크 요청으로 토큰 검증 — 403/오류 시 세션에서 userId 추출로 폴백
+      const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = user?.id ?? session?.user?.id;
+      const userEmail = user?.email ?? session?.user?.email ?? '';
+      if (!userId) return;
       await supabase.from('withdrawal_reasons').insert({
-        user_id: user.id,
-        email: user.email || '',
+        user_id: userId,
+        email: userEmail,
         reason,
         reason_detail: reasonDetail || null,
       });
       // 슬랙 알림 (fire-and-forget)
       supabase.functions.invoke('notify-withdrawal', {
-        body: { email: user.email || '', reasons: reason, reasonDetail },
+        body: { email: userEmail, reasons: reason, reasonDetail },
       }).catch(() => {});
     } catch (err) {
       console.warn('[authService] saveWithdrawalReason failed:', err);
@@ -679,6 +683,12 @@ export const authService = {
   /** 회원 탈퇴 (DB 함수로 auth.users 완전 삭제) */
   async deleteAccount(): Promise<{ success: boolean; error?: string }> {
     try {
+      // 세션 갱신: 탈퇴 시 JWT가 만료된 경우 auth.uid() = NULL → P0001 방지
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        return { success: false, error: '세션이 만료되었습니다. 다시 로그인 후 탈퇴해 주세요.' };
+      }
+
       // RPC: 병원/워크스페이스 + 관련 데이터 + auth.users 삭제
       const { error } = await supabase.rpc('delete_my_account');
       if (error) {
