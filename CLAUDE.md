@@ -20,13 +20,16 @@
 
 ## Edge Function 배포 규칙
 
-### crypto-service 배포
-`crypto-service`는 반드시 `--no-verify-jwt` 플래그 포함:
+### `verify_jwt = false` 함수 배포 규칙
+`config.toml`에 `verify_jwt = false`가 있는 함수는 반드시 `--no-verify-jwt` 플래그로 배포:
 ```bash
 npx supabase functions deploy crypto-service --no-verify-jwt
+npx supabase functions deploy notify-signup --no-verify-jwt
+npx supabase functions deploy notify-withdrawal --no-verify-jwt
 ```
 - 이유: `verify_jwt = false`가 config.toml에 있어도 클라우드 배포 시 CLI 플래그로 명시해야 반영됨
 - 플래그 누락 시 Supabase 게이트웨이가 모든 요청을 401 차단 (함수 코드가 실행되지 않음)
+- 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`
 
 ## 도메인 맥락
 - 치과 임플란트 재고 관리 SaaS (DenJOY / DentWeb)

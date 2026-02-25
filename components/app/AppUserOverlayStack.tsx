@@ -132,7 +132,11 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
       )}
 
       {showOnboardingComplete && (
-        <OnboardingCompleteModal onClose={onOnboardingCompleteClose} />
+        <OnboardingCompleteModal
+          onClose={onOnboardingCompleteClose}
+          hospitalName={hospitalName || undefined}
+          userName={user?.name || undefined}
+        />
       )}
     </>
   );

@@ -702,11 +702,9 @@ export const authService = {
         .forEach(key => localStorage.removeItem(key));
 
       // 로컬 세션 정리
-      // auth.users가 이미 삭제된 경우 signOut이 에러를 반환해도 UX는 성공으로 처리한다.
-      const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) {
-        console.warn('[authService] deleteAccount signOut warning:', signOutError);
-      }
+      // auth.users가 이미 삭제된 후 scope=global signOut은 user_not_found(403) 발생.
+      // scope=local: HTTP 요청 없이 로컬 세션만 삭제하므로 에러 없음.
+      await supabase.auth.signOut({ scope: 'local' });
       return { success: true };
     } catch (error) {
       console.error('[authService] deleteAccount failed:', error);

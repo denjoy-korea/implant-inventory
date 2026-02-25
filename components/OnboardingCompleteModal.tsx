@@ -21,12 +21,53 @@ const COLORS = [
   '#ef4444', '#f97316',
 ];
 
+const NEXT_ACTIONS = [
+  {
+    label: '수술기록 등록',
+    desc: '첫 수술기록을 입력해보세요',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+    ),
+  },
+  {
+    label: '재고 현황 확인',
+    desc: '품목별 수량을 한눈에',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+  },
+  {
+    label: '대시보드 둘러보기',
+    desc: '발주 권장량 · FAIL 통계',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+  },
+];
+
 interface Props {
   onClose: () => void;
+  hospitalName?: string;
+  userName?: string;
 }
 
-export default function OnboardingCompleteModal({ onClose }: Props) {
+export default function OnboardingCompleteModal({ onClose, hospitalName, userName }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const headline = hospitalName
+    ? `${hospitalName} 설정이 완료되었습니다`
+    : userName
+      ? `${userName}님 설정이 완료되었습니다`
+      : '초기 설정이 완료되었습니다';
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -41,7 +82,7 @@ export default function OnboardingCompleteModal({ onClose }: Props) {
     resize();
     window.addEventListener('resize', resize);
 
-    const pieces: ConfettiPiece[] = Array.from({ length: 160 }, (_, i) => ({
+    const makeRainPiece = (i: number): ConfettiPiece => ({
       x: Math.random() * window.innerWidth,
       y: -Math.random() * window.innerHeight * 0.6 - i * 8,
       vx: (Math.random() - 0.5) * 4,
@@ -51,7 +92,29 @@ export default function OnboardingCompleteModal({ onClose }: Props) {
       rotation: Math.random() * Math.PI * 2,
       vr: (Math.random() - 0.5) * 0.15,
       shape: (['rect', 'circle', 'triangle'] as const)[Math.floor(Math.random() * 3)],
-    }));
+    });
+
+    // Center burst: explodes outward from screen center
+    const makeBurstPiece = (): ConfettiPiece => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 14 + 5;
+      return {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 8,
+        size: Math.random() * 13 + 6,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        rotation: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.22,
+        shape: (['rect', 'circle', 'triangle'] as const)[Math.floor(Math.random() * 3)],
+      };
+    };
+
+    const pieces: ConfettiPiece[] = [
+      ...Array.from({ length: 180 }, (_, i) => makeRainPiece(i)),
+      ...Array.from({ length: 60 }, () => makeBurstPiece()),
+    ];
 
     let animId: number;
 
@@ -119,14 +182,25 @@ export default function OnboardingCompleteModal({ onClose }: Props) {
           </svg>
         </div>
 
-        <h2 className="text-2xl font-black text-slate-900 mb-2">튜토리얼 완성!</h2>
-        <p className="text-sm font-semibold text-indigo-600 mb-3">
-          초기 설정이 모두 완료되었습니다
+        <h2 className="text-2xl font-black text-slate-900 mb-1">준비 완료!</h2>
+        <p className="text-sm font-semibold text-indigo-600 mb-5 leading-snug px-2">
+          {headline}
         </p>
-        <p className="text-sm text-slate-500 leading-relaxed mb-8">
-          이제 수술기록 기반의 재고관리 및 주문 시스템을 이용해보세요.
-          대시보드에서 재고 현황, 발주 권장량, FAIL 통계를 한눈에 확인할 수 있습니다.
-        </p>
+
+        {/* 다음 행동 힌트 */}
+        <div className="space-y-2 mb-6 text-left">
+          {NEXT_ACTIONS.map((action) => (
+            <div key={action.label} className="flex items-center gap-3 bg-slate-50 rounded-xl px-3.5 py-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 text-indigo-600">
+                {action.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-800">{action.label}</p>
+                <p className="text-[11px] text-slate-400">{action.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
         <button
           onClick={onClose}

@@ -15,45 +15,21 @@ const SparkIcon = ({ className }: { className: string }) => (
 export default function OnboardingToast({ progress, onClick }: Props) {
   return (
     <div
-      className="fixed bottom-20 right-3 md:bottom-32 md:right-8 z-[200] cursor-pointer group"
+      className="fixed bottom-20 right-3 md:bottom-8 md:right-6 z-[200] cursor-pointer group"
       onClick={onClick}
     >
-      {/* 모바일: 컴팩트 필 (진행률 바 + %) */}
-      <div className="md:hidden bg-white rounded-full shadow-md shadow-slate-200/80 border border-slate-100 pl-2.5 pr-3 py-1.5 flex items-center gap-2 hover:border-indigo-100 transition-all duration-200">
+      {/* 모바일 + 데스크톱 공통: 컴팩트 필 */}
+      <div className="bg-white rounded-full shadow-md shadow-slate-200/80 border border-slate-100 pl-2.5 pr-3 py-1.5 flex items-center gap-2 hover:border-indigo-100 hover:shadow-lg transition-all duration-200">
         <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
           <SparkIcon className="w-3 h-3 text-indigo-600" />
         </div>
-        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="w-20 md:w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-indigo-500 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
         <span className="text-[10px] font-bold text-indigo-600 w-6 text-right shrink-0">{progress}%</span>
-      </div>
-
-      {/* 데스크톱: 풀 카드 */}
-      <div className="hidden md:flex bg-white rounded-2xl shadow-lg shadow-slate-200/80 border border-slate-100 px-4 py-3 items-center gap-3 w-[260px] hover:shadow-xl hover:border-indigo-100 transition-all duration-200">
-        <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-          <SparkIcon className="w-5 h-5 text-indigo-600" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-slate-800 mb-1.5">시작 가이드 설정 미완료</p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="text-[10px] font-bold text-indigo-600 shrink-0 w-7 text-right">{progress}%</span>
-          </div>
-        </div>
-
-        <svg className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-        </svg>
       </div>
     </div>
   );

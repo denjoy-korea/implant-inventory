@@ -48,6 +48,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   const [initRows, setInitRows] = useState<InitRow[]>([
     { id: Date.now().toString(), manufacturer: '', count: '' },
   ]);
+  const [noFailConfirmed, setNoFailConfirmed] = useState(false);
 
   // ── Tab 2: 정리 상태
   const [reconcileDate, setReconcileDate] = useState(today);
@@ -90,6 +91,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
     setInitRows([{ id: Date.now().toString(), manufacturer: '', count: '' }]);
     setReconcileInputs({});
     setResultMessage('');
+    setNoFailConfirmed(false);
     onClose();
   };
 
@@ -130,7 +132,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   // Submit handlers
   // ============================================================
   const handlePreview = () => {
-    if (tab === 'initialize' && validInitItems.length === 0) return;
+    if (tab === 'initialize' && !noFailConfirmed && validInitItems.length === 0) return;
     if (tab === 'reconcile' && changedReconcileRows.length === 0) return;
     setStep('preview');
   };
@@ -139,9 +141,12 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
     setStep('applying');
     try {
       if (tab === 'initialize') {
-        await onInitialize(validInitItems);
-        const total = validInitItems.reduce((s, i) => s + i.count, 0);
-        setResultMessage(`${total}건의 FAIL 재고가 등록되었습니다.`);
+        await onInitialize(noFailConfirmed ? [] : validInitItems);
+        setResultMessage(
+          noFailConfirmed
+            ? 'FAIL 픽스처 없음으로 처리 완료됩니다.'
+            : `${validInitItems.reduce((s, i) => s + i.count, 0)}건의 FAIL 재고가 등록되었습니다.`
+        );
       } else {
         await onReconcile(validReconcileItems, reconcileDate);
         const updated = changedReconcileRows.filter(r => r.diff > 0).reduce((s, r) => s + r.diff, 0);
@@ -249,7 +254,14 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 <p className="text-xs text-amber-700">아래 내용으로 처리됩니다. 확인 후 적용하세요.</p>
               </div>
 
-              {tab === 'initialize' && (
+              {tab === 'initialize' && noFailConfirmed && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-4 text-center">
+                  <p className="text-sm font-bold text-emerald-700">보유 FAIL 픽스처 없음</p>
+                  <p className="text-xs text-emerald-600 mt-1">등록 없이 초기 설정을 완료합니다.</p>
+                </div>
+              )}
+
+              {tab === 'initialize' && !noFailConfirmed && (
                 <div className="space-y-2">
                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">등록 예정</p>
                   {validInitItems.map((item, i) => (
@@ -312,85 +324,112 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 브랜드별 현재 보유 수량을 입력하면 미처리 FAIL 재고로 등록됩니다.
               </div>
 
-              {/* 기준일 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  기준일
-                </label>
-                <input
-                  type="date"
-                  value={initDate}
-                  onChange={e => setInitDate(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
-              </div>
+              {/* 보유 없음 선택 */}
+              <button
+                type="button"
+                onClick={() => setNoFailConfirmed(v => !v)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${
+                  noFailConfirmed
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  noFailConfirmed ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'
+                }`}>
+                  {noFailConfirmed && (
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <p className={`text-xs font-bold ${noFailConfirmed ? 'text-emerald-700' : 'text-slate-600'}`}>
+                    보유 중인 FAIL 픽스처 없음
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    현재 교환 대기 중인 FAIL 픽스처가 없는 경우 선택하세요
+                  </p>
+                </div>
+              </button>
 
-              {/* 브랜드 행 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  브랜드별 수량
-                </label>
-                <div className="space-y-2">
-                  {initRows.map(row => (
-                    <div key={row.id} className="flex items-center gap-2">
-                      {/* 제조사 */}
-                      <div className="flex-1">
-                        <select
-                          value={row.manufacturer}
-                          onChange={e => updateInitRow(row.id, 'manufacturer', e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-                        >
-                          <option value="">제조사 선택...</option>
-                          {availableManufacturers.map(m => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
+              {/* 수량 입력 섹션 (보유 없음 선택 시 숨김) */}
+              {!noFailConfirmed && (
+                <>
+                  {/* 기준일 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      기준일
+                    </label>
+                    <input
+                      type="date"
+                      value={initDate}
+                      onChange={e => setInitDate(e.target.value)}
+                      className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
 
-                      {/* 수량 */}
-                      <input
-                        type="number"
-                        min={1}
-                        max={999}
-                        placeholder="수량"
-                        value={row.count}
-                        onChange={e => updateInitRow(row.id, 'count', e.target.value)}
-                        className="w-20 text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-center"
-                      />
-
-                      {/* 삭제 */}
-                      <button
-                        onClick={() => removeInitRow(row.id)}
-                        disabled={initRows.length === 1}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors disabled:opacity-30"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                  {/* 브랜드 행 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      브랜드별 수량
+                    </label>
+                    <div className="space-y-2">
+                      {initRows.map(row => (
+                        <div key={row.id} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <select
+                              value={row.manufacturer}
+                              onChange={e => updateInitRow(row.id, 'manufacturer', e.target.value)}
+                              className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                            >
+                              <option value="">제조사 선택...</option>
+                              {availableManufacturers.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <input
+                            type="number"
+                            min={1}
+                            max={999}
+                            placeholder="수량"
+                            value={row.count}
+                            onChange={e => updateInitRow(row.id, 'count', e.target.value)}
+                            className="w-20 text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-center"
+                          />
+                          <button
+                            onClick={() => removeInitRow(row.id)}
+                            disabled={initRows.length === 1}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors disabled:opacity-30"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    <button
+                      onClick={addInitRow}
+                      className="mt-2 flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                      </svg>
+                      브랜드 추가
+                    </button>
+                  </div>
 
-                <button
-                  onClick={addInitRow}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                  </svg>
-                  브랜드 추가
-                </button>
-              </div>
-
-              {/* 미리보기 요약 */}
-              {validInitItems.length > 0 && (
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 flex items-center justify-between">
-                  <span className="text-xs text-indigo-700 font-medium">총 등록 예정</span>
-                  <span className="text-sm font-bold text-indigo-700">
-                    {validInitItems.reduce((s, i) => s + i.count, 0)}건
-                  </span>
-                </div>
+                  {validInitItems.length > 0 && (
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 flex items-center justify-between">
+                      <span className="text-xs text-indigo-700 font-medium">총 등록 예정</span>
+                      <span className="text-sm font-bold text-indigo-700">
+                        {validInitItems.reduce((s, i) => s + i.count, 0)}건
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -487,12 +526,12 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
               <button
                 onClick={handlePreview}
                 disabled={
-                  (tab === 'initialize' && validInitItems.length === 0) ||
+                  (tab === 'initialize' && !noFailConfirmed && validInitItems.length === 0) ||
                   (tab === 'reconcile' && (!hasSystemFailRecords || changedReconcileRows.length === 0))
                 }
                 className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                미리보기 →
+                {tab === 'initialize' && noFailConfirmed ? '없음으로 확인 →' : '미리보기 →'}
               </button>
             </>
           )}

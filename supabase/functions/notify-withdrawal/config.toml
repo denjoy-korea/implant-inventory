@@ -1,0 +1,2 @@
+[functions.notify-withdrawal]
+verify_jwt = false
