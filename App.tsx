@@ -569,7 +569,11 @@ const App: React.FC = () => {
     const hash = window.location.hash;
     if (hash && hash !== '#/' && hash !== '#' && hash !== '') {
       const { view, tab } = parseHash(hash);
-      if (view === 'dashboard' && !state.user) return;
+      if (view === 'dashboard' && !state.user) {
+        // 비로그인 상태에서 대시보드 딥링크 접근 → 로그인 후 복원하기 위해 저장
+        sessionStorage.setItem('_pending_redirect_hash', hash);
+        return;
+      }
       if (view === 'admin_panel' && state.user?.role !== 'admin') return;
       // 권한 없는 탭으로 URL 직접 접근 시 overview로 fallback
       const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
@@ -583,6 +587,21 @@ const App: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveAccessRole, state.isLoading]);
+
+  /* ── Hash Routing: 로그인 후 딥링크 복원 ── */
+  useEffect(() => {
+    if (!state.user || state.isLoading) return;
+    const pendingHash = sessionStorage.getItem('_pending_redirect_hash');
+    if (!pendingHash) return;
+    sessionStorage.removeItem('_pending_redirect_hash');
+    const { view, tab } = parseHash(pendingHash);
+    if (view !== 'dashboard') return;
+    const resolvedTab = (tab && !canAccessTab(tab, state.user.permissions, effectiveAccessRole))
+      ? 'overview' : tab;
+    skipHashSync.current = true;
+    setState(prev => ({ ...prev, currentView: view, ...(resolvedTab ? { dashboardTab: resolvedTab } : {}) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.user?.id, state.isLoading]);
 
   // 문자열 정규화: 수술기록 매칭용 (normalizeSurgery), 재고 비교용 (normalizeInventory)
   // → services/normalizationService.ts 에서 import
