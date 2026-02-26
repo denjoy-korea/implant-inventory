@@ -486,7 +486,8 @@ const App: React.FC = () => {
     // 이후 단계는 DB 데이터 필요 → 로딩 완료 후 체크
     if (state.isLoading) return null;
     if (!onboardingService.isFixtureDownloaded(hid)) return 2;
-    if (state.inventory.length === 0 && !onboardingService.isFixtureSaved(hid)) return 3;
+    // Step 3: 로딩 완료 후 재고가 비어있으면 데이터 초기화된 것 → 항상 step 3
+    if (state.inventory.length === 0) return 3;
     if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
     const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
     if (!hasSurgery) return 5;
