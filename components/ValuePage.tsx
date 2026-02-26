@@ -1,46 +1,17 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   DEFAULT_TRIAL_HIGHLIGHT_TEXT,
   getTrialCopy,
 } from '../utils/trialPolicy';
 import SectionNavigator from './SectionNavigator';
 import PublicInfoFooter from './shared/PublicInfoFooter';
+import useCountUp from '../hooks/useCountUp';
 
 interface ValuePageProps {
   onGetStarted: () => void;
   onContact: () => void;
 }
-
-/* ───── Counter Animation Hook ───── */
-const useCountUp = (end: number, duration = 2000, suffix = '') => {
-  const [count, setCount] = useState(0);
-  const [started, setStarted] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setStarted(true); },
-      { threshold: 0.3 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!started) return;
-    let start = 0;
-    const step = end / (duration / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= end) { setCount(end); clearInterval(timer); }
-      else setCount(Math.floor(start));
-    }, 16);
-    return () => clearInterval(timer);
-  }, [started, end, duration]);
-
-  return { count, ref, suffix };
-};
 
 const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -68,7 +39,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       {/* ─── Hero: Loss Aversion + Framing ─── */}
       <section id="vp-hero" className="relative pt-24 pb-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900"></div>
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 mb-8">
             <span className="w-2 h-2 bg-rose-400 rounded-full animate-pulse"></span>
@@ -245,7 +216,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
 
           {/* Aha! Moment - Key Transformation */}
           <div className="mt-12 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 md:p-12 text-center text-white relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+            <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10"></div>
             <div className="relative z-10">
               <p className="text-indigo-200 font-bold text-sm mb-4">핵심 변화</p>
               <div className="flex items-center justify-center gap-4 md:gap-8 mb-4">
@@ -271,7 +242,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
 
       {/* ─── Key Metrics: Framing + Social Proof ─── */}
       <section id="vp-stats" className="py-20 bg-slate-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
         <div className="relative z-10 max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-indigo-400 uppercase tracking-widest mb-3">Impact</p>
@@ -458,7 +429,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
       {/* ─── CTA: Scarcity + Peak-End Rule ─── */}
       <section className="py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800"></div>
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-15"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-15"></div>
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center text-white">
           <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 mb-8 shadow-[0_0_15px_rgba(245,158,11,0.2)] justify-center">
             <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>

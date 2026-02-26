@@ -9,7 +9,7 @@ const KakaoChannelButton: React.FC = () => {
 
                 {/* Main button */}
                 <a
-                    href="http://pf.kakao.com/_TxbxgDn/chat"
+                    href="https://pf.kakao.com/_TxbxgDn/chat"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 bg-[#FEE500] hover:bg-[#FADA0A] text-slate-900 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgba(254,229,0,0.4)] transition-all duration-300 transform hover:-translate-y-1 overflow-hidden ring-1 ring-[#FEE500]/50"

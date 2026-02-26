@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-26T06:08:22.488Z",
+  "lastUpdated": "2026-02-26T09:40:10.421Z",
   "activeFeatures": [
     "implant-inventory",
     "surgery-dashboard",
@@ -53,7 +53,9 @@
     "public",
     "holidayService.ts",
     "failThresholdService.ts",
-    "onboarding-improvements"
+    "onboarding-improvements",
+    "auth",
+    "verify-invite"
   ],
   "primaryFeature": "implant-inventory",
   "features": {
@@ -68,9 +70,9 @@
       },
       "timestamps": {
         "started": "2026-02-16T07:42:26.745Z",
-        "lastUpdated": "2026-02-26T06:07:57.718Z"
+        "lastUpdated": "2026-02-26T09:40:10.421Z"
       },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/UserProfile.tsx"
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/App.tsx"
     },
     "surgery-dashboard": {
       "phase": "do",
@@ -263,7 +265,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-21T16:39:12.041Z",
-        "lastUpdated": "2026-02-22T10:14:29.292Z"
+        "lastUpdated": "2026-02-26T09:22:10.315Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/invite-member/index.ts"
     },
@@ -739,18 +741,38 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/services/failThresholdService.ts"
     },
     "onboarding-improvements": {
-      "phase": "act",
-      "phaseNumber": 5,
+      "phase": "archived",
+      "matchRate": 100,
+      "iterationCount": 0,
+      "startedAt": "2026-02-26T04:44:56.600Z",
+      "archivedAt": "2026-02-26T06:00:00.000Z",
+      "archivedTo": "docs/archive/2026-02/onboarding-improvements/"
+    },
+    "auth": {
+      "phase": "do",
+      "phaseNumber": 3,
       "matchRate": null,
       "iterationCount": 0,
       "requirements": [],
       "documents": {},
       "timestamps": {
-        "started": "2026-02-26T04:44:56.600Z",
-        "lastUpdated": "2026-02-26T04:44:56.601Z"
+        "started": "2026-02-26T08:40:31.909Z",
+        "lastUpdated": "2026-02-26T08:40:34.632Z"
       },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/auth/AuthSignupRoleSelect.tsx"
+    },
+    "verify-invite": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-26T09:39:19.836Z",
+        "lastUpdated": "2026-02-26T09:39:19.836Z"
+      },
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/verify-invite/index.ts"
     }
   },
   "pipeline": {
@@ -768,7 +790,7 @@
   "session": {
     "startedAt": "2026-02-15T02:05:59.134Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-02-26T06:08:22.488Z"
+    "lastActivity": "2026-02-26T09:40:10.421Z"
   },
   "history": [
     {
@@ -10541,6 +10563,126 @@
     {
       "timestamp": "2026-02-26T06:08:22.488Z",
       "feature": "onboarding",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:37:42.918Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:37:44.835Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:37:54.501Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:37:58.665Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:39:01.023Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T07:39:03.693Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:39:52.410Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:39:56.079Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:39:59.669Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:14.546Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:31.909Z",
+      "feature": "auth",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:34.632Z",
+      "feature": "auth",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:40.691Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:47.016Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:40:59.819Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T08:41:22.290Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T09:22:10.315Z",
+      "feature": "invite-member",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T09:23:15.712Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T09:39:19.836Z",
+      "feature": "verify-invite",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T09:40:10.421Z",
+      "feature": "implant-inventory",
       "phase": "do",
       "action": "updated"
     }

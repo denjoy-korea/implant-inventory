@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { reviewService, UserReview, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
 import {
   DEFAULT_TRIAL_HIGHLIGHT_TEXT,
@@ -9,6 +9,7 @@ import { DashboardPromoMockup } from './DashboardPromoMockup';
 import { supabase } from '../services/supabaseClient';
 import SectionNavigator from './SectionNavigator';
 import PublicInfoFooter from './shared/PublicInfoFooter';
+import useCountUp from '../hooks/useCountUp';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -18,36 +19,6 @@ interface LandingPageProps {
   onGoToNotices?: () => void;
   onGoToContact?: () => void;
 }
-
-/* ───── Counter Animation Hook (목표 그라데이션: 숫자가 차오르는 모습) ───── */
-const useCountUp = (end: number, duration = 2000) => {
-  const [count, setCount] = useState(0);
-  const [started, setStarted] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setStarted(true); },
-      { threshold: 0.3 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!started) return;
-    let start = 0;
-    const step = end / (duration / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= end) { setCount(end); clearInterval(timer); }
-      else setCount(Math.floor(start));
-    }, 16);
-    return () => clearInterval(timer);
-  }, [started, end, duration]);
-
-  return { count, ref };
-};
 
 const LandingPage: React.FC<LandingPageProps> = ({
   onGetStarted,
@@ -384,7 +355,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
             {/* Card 1 — 실시간 재고 & 자동 차감 (Hero, row-span-2) */}
             <div className="group relative p-5 sm:p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden md:row-span-2 flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[2rem] -mr-8 -mt-8"></div>
-              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+              <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10"></div>
               <div className="relative z-10 flex flex-col flex-1">
                 <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
                   <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -522,7 +493,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
          ═══════════════════════════════════════════ */}
       {onAnalyze && (
         <section className="py-12 sm:py-16 bg-gradient-to-r from-emerald-600 to-teal-600 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+          <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10"></div>
           <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10">
             <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -561,7 +532,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           - 카운트업 애니메이션으로 목표 그라데이션 효과
          ═══════════════════════════════════════════ */}
       <section className="py-14 sm:py-20 bg-slate-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8 text-center">
@@ -773,7 +744,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           - 앵커링: "0원"을 먼저 보여주고 가치를 인식
          ═══════════════════════════════════════════ */}
       <section className="py-14 sm:py-20 bg-slate-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center relative z-10">
           <div className="inline-flex max-w-[min(92vw,640px)] flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 mb-5 sm:mb-8 shadow-[0_0_15px_rgba(245,158,11,0.2)]">

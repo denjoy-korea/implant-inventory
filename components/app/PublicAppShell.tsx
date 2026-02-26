@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from 'react';
+import { Helmet } from 'react-helmet-async';
 import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
 import ErrorBoundary from '../ErrorBoundary';
@@ -165,8 +166,55 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     onNavigate('analyze');
   };
 
+  const PAGE_META: Record<string, { title: string; description: string }> = {
+    landing: {
+      title: 'DenJOY - 치과 임플란트 재고관리 SaaS',
+      description: '매주 2시간 엑셀 정리를 5분으로. 덴트웹 데이터 업로드만으로 실시간 재고 추적, 스마트 발주, 수술기록 자동 연동.',
+    },
+    value: {
+      title: '도입효과 | DenJOY',
+      description: '연 104시간 절약, 발주 실수 감소, 비용 누수 방지. DenJOY 도입 전후 변화를 확인하세요.',
+    },
+    pricing: {
+      title: '요금제 | DenJOY',
+      description: 'Free부터 Enterprise까지, 병원 규모에 맞는 요금제. 무료 플랜으로 바로 시작하세요.',
+    },
+    reviews: {
+      title: '고객후기 | DenJOY',
+      description: '치과 원장, 실장, 스탭이 직접 남긴 DenJOY 사용 후기를 확인하세요.',
+    },
+    notices: {
+      title: '업데이트 소식 | DenJOY',
+      description: 'DenJOY 서비스의 새로운 기능과 개선 사항을 확인하세요.',
+    },
+    contact: {
+      title: '문의하기 | DenJOY',
+      description: '도입 상담, 요금제 안내, 맞춤 기능 문의. DenJOY 팀에 편하게 연락하세요.',
+    },
+    analyze: {
+      title: '무료 분석 | DenJOY',
+      description: '덴트웹 수술기록을 업로드하면 재고 건강도를 무료로 분석해 드립니다.',
+    },
+    login: {
+      title: '로그인 | DenJOY',
+      description: 'DenJOY 계정에 로그인하세요.',
+    },
+    signup: {
+      title: '회원가입 | DenJOY',
+      description: '1분이면 끝나는 간단한 가입. 지금 무료로 시작하세요.',
+    },
+  };
+
+  const meta = PAGE_META[currentView] || PAGE_META.landing;
+
   return (
     <div className="h-full flex flex-col">
+      <Helmet>
+        <title>{meta.title}</title>
+        <meta name="description" content={meta.description} />
+        <meta property="og:title" content={meta.title} />
+        <meta property="og:description" content={meta.description} />
+      </Helmet>
       <KakaoChannelButton />
       <Header
         onHomeClick={() => (user ? handleNavigate('dashboard') : handleNavigate('landing'))}

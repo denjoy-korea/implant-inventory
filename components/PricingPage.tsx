@@ -1173,7 +1173,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
 
       {/* CTA */}
       <section id="pp-cta" className="py-20 bg-slate-900 text-white text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-3xl mx-auto px-6 relative z-10">
           <h2 className="text-3xl md:text-4xl font-black mb-4">임플란트 재고 관리,<br />지금 바로 시작하세요</h2>
