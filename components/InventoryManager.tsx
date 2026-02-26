@@ -5,7 +5,7 @@ import { useInventoryManagerControls } from '../hooks/useInventoryManagerControl
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { normalizeSurgery } from '../services/normalizationService';
-import { isExchangePrefix } from '../services/appUtils';
+import { isExchangePrefix, stripExchangePrefix } from '../services/appUtils';
 import { smoothLine, smoothArea } from './surgery-dashboard/shared';
 import AddItemModal from './AddItemModal';
 import EditNoticeModal from './inventory/EditNoticeModal';
@@ -1197,7 +1197,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             if (added === false) return;
             // FAIL 연동 품목 자동 생성 (미존재 시에만)
             const failAlreadyExists = inventory.some(
-              i => i.manufacturer === `수술중교환_${newItem.manufacturer}` &&
+              i => isExchangePrefix(i.manufacturer) &&
+                stripExchangePrefix(i.manufacturer) === newItem.manufacturer &&
                 i.brand === newItem.brand &&
                 i.size === newItem.size
             );

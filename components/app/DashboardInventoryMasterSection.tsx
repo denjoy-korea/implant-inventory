@@ -16,7 +16,7 @@ import { planService } from '../../services/planService';
 import { fixIbsImplant } from '../../services/mappers';
 import { toCanonicalSize } from '../../services/sizeNormalizer';
 import { buildInventoryDuplicateKey } from '../../services/inventoryUtils';
-import { isExchangePrefix } from '../../services/appUtils';
+import { isExchangePrefix, stripExchangePrefix } from '../../services/appUtils';
 
 interface ResolveManualSurgeryInputParams {
   recordIds: string[];
@@ -112,7 +112,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
         if (delItem && !isExchangePrefix(delItem.manufacturer) && delItem.manufacturer !== '보험청구') {
           const failCounterpart = state.inventory.find(i => {
             if (!isExchangePrefix(i.manufacturer)) return false;
-            const rawBase = i.manufacturer.slice('수술중교환_'.length);
+            const rawBase = stripExchangePrefix(i.manufacturer);
             const sizeMatch = i.size === delItem.size;
             // 일반 케이스: FAIL 제조사 베이스 = 정품목 제조사
             if (rawBase === delItem.manufacturer && i.brand === delItem.brand && sizeMatch) return true;

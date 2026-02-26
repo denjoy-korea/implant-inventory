@@ -8,6 +8,15 @@ export function isExchangePrefix(manufacturer: string): boolean {
 }
 
 /**
+ * 교환 카테고리 prefix 제거 — '수술중교환_xxx' 또는 '수술중FAIL_xxx' → 'xxx'
+ */
+export function stripExchangePrefix(manufacturer: string): string {
+  if (manufacturer.startsWith('수술중교환_')) return manufacturer.slice('수술중교환_'.length);
+  if (manufacturer.startsWith('수술중FAIL_')) return manufacturer.slice('수술중FAIL_'.length);
+  return manufacturer;
+}
+
+/**
  * 제조사 별칭 키 생성 — 대소문자/공백 무시
  * 교환 카테고리는 일반 제조사와 중복키가 섞이지 않도록 별도 네임스페이스 유지
  */
