@@ -1162,18 +1162,14 @@ const App: React.FC = () => {
       // 실사 이력에 기초재고 편집 기록 추가 (stock_adjustment는 건드리지 않음)
       const hospitalId = state.user?.hospitalId;
       if (hospitalId) {
-        const auditRows = changes.map(change => {
-          const prevItem = prevInventory.find(item => item.id === change.id);
-          const prevStock = prevItem?.currentStock ?? 0;
-          return {
-            hospital_id: hospitalId,
-            inventory_id: change.id,
-            system_stock: prevStock,
-            actual_stock: change.nextCurrentStock,
-            difference: change.nextCurrentStock - prevStock,
-            reason: '기초재고 편집',
-          };
-        });
+        const auditRows = changes.map(change => ({
+          hospital_id: hospitalId,
+          inventory_id: change.id,
+          system_stock: change.nextCurrentStock,
+          actual_stock: change.nextCurrentStock,
+          difference: 0,
+          reason: '기초재고 편집',
+        }));
         const { error: auditError } = await supabase
           .from('inventory_audits')
           .insert(auditRows);
