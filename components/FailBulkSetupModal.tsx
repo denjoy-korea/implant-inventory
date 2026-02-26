@@ -131,9 +131,10 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   // ============================================================
   // Submit handlers
   // ============================================================
+  const allReconcileMatch = hasSystemFailRecords && changedReconcileRows.length === 0;
+
   const handlePreview = () => {
     if (tab === 'initialize' && !noFailConfirmed && validInitItems.length === 0) return;
-    if (tab === 'reconcile' && changedReconcileRows.length === 0) return;
     setStep('preview');
   };
 
@@ -149,12 +150,16 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
         );
       } else {
         await onReconcile(validReconcileItems, reconcileDate);
-        const updated = changedReconcileRows.filter(r => r.diff > 0).reduce((s, r) => s + r.diff, 0);
-        const inserted = changedReconcileRows.filter(r => r.diff < 0).reduce((s, r) => s + Math.abs(r.diff), 0);
-        const parts: string[] = [];
-        if (updated > 0) parts.push(`${updated}건 교환완료 처리`);
-        if (inserted > 0) parts.push(`${inserted}건 신규 등록`);
-        setResultMessage(parts.join(', ') + '되었습니다.');
+        if (allReconcileMatch) {
+          setResultMessage('시스템 기록과 실제 재고가 일치합니다. 확인 완료되었습니다.');
+        } else {
+          const updated = changedReconcileRows.filter(r => r.diff > 0).reduce((s, r) => s + r.diff, 0);
+          const inserted = changedReconcileRows.filter(r => r.diff < 0).reduce((s, r) => s + Math.abs(r.diff), 0);
+          const parts: string[] = [];
+          if (updated > 0) parts.push(`${updated}건 교환완료 처리`);
+          if (inserted > 0) parts.push(`${inserted}건 신규 등록`);
+          setResultMessage(parts.join(', ') + '되었습니다.');
+        }
       }
       setStep('done');
     } catch {
@@ -283,7 +288,10 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
               {tab === 'reconcile' && (
                 <div className="space-y-2">
                   {changedReconcileRows.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">변경 사항이 없습니다.</p>
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-4 text-center">
+                      <p className="text-sm font-bold text-emerald-700">시스템 기록과 실제 재고 일치</p>
+                      <p className="text-xs text-emerald-600 mt-1">변경 없이 확인 완료 처리됩니다.</p>
+                    </div>
                   ) : (
                     <>
                       <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">변경 예정</p>
@@ -527,11 +535,16 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 onClick={handlePreview}
                 disabled={
                   (tab === 'initialize' && !noFailConfirmed && validInitItems.length === 0) ||
-                  (tab === 'reconcile' && (!hasSystemFailRecords || changedReconcileRows.length === 0))
+                  (tab === 'reconcile' && !hasSystemFailRecords)
                 }
                 className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {tab === 'initialize' && noFailConfirmed ? '없음으로 확인 →' : '미리보기 →'}
+                {tab === 'initialize' && noFailConfirmed
+                  ? '없음으로 확인 →'
+                  : tab === 'reconcile' && allReconcileMatch
+                    ? '현재 재고 확인 →'
+                    : '미리보기 →'
+                }
               </button>
             </>
           )}
@@ -546,8 +559,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
               </button>
               <button
                 onClick={handleApply}
-                disabled={tab === 'reconcile' && changedReconcileRows.length === 0}
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors"
               >
                 확인 및 적용
               </button>

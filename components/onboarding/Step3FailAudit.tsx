@@ -42,9 +42,9 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
             ),
           },
         ].map(({ step, title, desc, icon }) => (
-          <div key={step} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+          <div key={step} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 group">
             <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-indigo-600 group-hover:animate-icon-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {icon}
               </svg>
             </div>
@@ -59,7 +59,7 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
 
       {/* 안내 박스 */}
       <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 mb-4">
-        <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0 animate-pulse-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <div>

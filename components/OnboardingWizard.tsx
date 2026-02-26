@@ -26,7 +26,6 @@ interface Props {
   hospitalName: string;
   initialStep: number;
   inventory: InventoryItem[];
-  onComplete: () => void;
   onSkip: (snooze: boolean) => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
   onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
@@ -40,7 +39,6 @@ export default function OnboardingWizard({
   hospitalName,
   initialStep,
   inventory,
-  onComplete,
   onSkip,
   onGoToDataSetup,
   onGoToSurgeryUpload,
@@ -140,7 +138,11 @@ export default function OnboardingWizard({
           {step === 5 && (
             <Step4UploadGuide
               inventory={inventory}
-              onGoToSurgeryUpload={onGoToSurgeryUpload}
+              onGoToSurgeryUpload={async (file?: File) => {
+                const ok = await onGoToSurgeryUpload(file);
+                if (!file) onSkip(false); // 탭 이동(파일 없음) 시에만 최소화 — 업로드 실패는 dismiss 안 함
+                return ok;
+              }}
               onUploaded={() => goToStep(6)}
             />
           )}

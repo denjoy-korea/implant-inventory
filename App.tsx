@@ -135,6 +135,9 @@ const App: React.FC = () => {
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
   const [billingProgramError, setBillingProgramError] = useState('');
   const [forcedOnboardingStep, setForcedOnboardingStep] = useState<number | null>(null);
+  const [toastCompletedLabel, setToastCompletedLabel] = useState<string | null>(null);
+  const prevFirstIncompleteStepRef = useRef<number | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 대시보드 진입 시 후기 팝업 여부 확인
   useEffect(() => {
@@ -447,6 +450,8 @@ const App: React.FC = () => {
   }, [state.planState, billableItemCount]);
 
   // 7단계 기준 첫 번째 미완료 단계 계산 (뷰/탭 조건 없이 순수 진행 상태만)
+  // ⚠️ IIFE 유지 필수: onboardingService.mark*() 는 localStorage 기록이라 React deps에 포함 불가.
+  //    useMemo로 바꾸면 mark* 호출 직후 재렌더 시 캐시된 이전 값을 반환해 wizard가 재등장함.
   const firstIncompleteStep = (() => {
     if (requiresBillingProgramSetup) return null;
     if (!isHospitalAdmin) return null;
@@ -482,13 +487,24 @@ const App: React.FC = () => {
   })();
   const shouldShowOnboarding = onboardingStep !== null;
 
-  const ONBOARDING_STEP_PROGRESS: Record<number, number> = { 1: 0, 2: 0, 3: 15, 4: 30, 5: 50, 6: 70, 7: 85 };
+  const ONBOARDING_STEP_PROGRESS: Record<number, number> = { 1: 0, 2: 15, 3: 15, 4: 30, 5: 50, 6: 70, 7: 85 };
   const showOnboardingToast = (
     state.currentView === 'dashboard' &&
     firstIncompleteStep !== null &&
     !shouldShowOnboarding
   );
   const onboardingProgress = firstIncompleteStep ? (ONBOARDING_STEP_PROGRESS[firstIncompleteStep] ?? 0) : 100;
+
+  // Step 5→6 전환 감지: surgery_database 탭에서 직접 업로드 완료 후 토스트에 피드백
+  useEffect(() => {
+    const prev = prevFirstIncompleteStepRef.current;
+    prevFirstIncompleteStepRef.current = firstIncompleteStep;
+    if (prev === 5 && firstIncompleteStep === 6 && showOnboardingToast) {
+      setToastCompletedLabel('수술기록 업로드 완료');
+      if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToastCompletedLabel(null), 2500);
+    }
+  }, [firstIncompleteStep, showOnboardingToast]);
 
   // 병원/사용자 컨텍스트가 바뀌면 세션 자동 재개 상태를 초기화
   useEffect(() => {
@@ -1585,6 +1601,7 @@ const App: React.FC = () => {
     if (!isHospitalAdmin) return true;
     if (firstIncompleteStep !== 3 && firstIncompleteStep !== 4) return true;
 
+    onboardingService.markFixtureSaved(state.user.hospitalId);
     onboardingService.clearDismissed(state.user.hospitalId);
     setOnboardingDismissed(false);
     setForcedOnboardingStep(4);
@@ -1651,6 +1668,7 @@ const App: React.FC = () => {
       if (hid) {
         onboardingService.markWelcomeSeen(hid);
         onboardingService.markFixtureDownloaded(hid);
+        onboardingService.markFixtureSaved(hid);
         onboardingService.clearDismissed(hid);
       }
       setOnboardingDismissed(false);
@@ -2059,8 +2077,10 @@ const App: React.FC = () => {
                         initialShowFailBulkModal: autoOpenFailBulkModal,
                         onFailBulkModalOpened: () => setAutoOpenFailBulkModal(false),
                         onFailAuditDone: () => {
-                          onboardingService.markFailAuditDone(state.user?.hospitalId ?? '');
+                          const user = state.user;
+                          onboardingService.markFailAuditDone(user?.hospitalId ?? '');
                           setShowOnboardingComplete(true);
+                          if (user) loadHospitalData(user); // 완료 후 대시보드 수치 갱신 (백그라운드)
                         },
                       }}
                     />
@@ -2108,6 +2128,7 @@ const App: React.FC = () => {
           onboardingStep={onboardingStep}
           showOnboardingToast={showOnboardingToast}
           onboardingProgress={onboardingProgress}
+          toastCompletedLabel={toastCompletedLabel}
           onCloseProfile={() => setState(prev => ({ ...prev, showProfile: false }))}
           onLeaveHospital={handleLeaveHospital}
           onDeleteAccount={handleDeleteAccount}
@@ -2117,12 +2138,6 @@ const App: React.FC = () => {
             showAlertToast('후기를 남겨주셔서 감사합니다!', 'success');
           }}
           onDismissReview={() => setReviewPopupType(null)}
-          onOnboardingComplete={async () => {
-            if (!state.user) return;
-            setForcedOnboardingStep(null);
-            setOnboardingDismissed(true);
-            await loadHospitalData(state.user);
-          }}
           onOnboardingSkip={(snooze: boolean) => {
             if (state.user?.hospitalId) {
               onboardingService.markDismissed(state.user.hospitalId);
@@ -2142,9 +2157,12 @@ const App: React.FC = () => {
           }}
           onGoToDataSetup={(file?: File, sizeCorrections?: Map<string, string>) => {
             if (file) {
-              if (state.user?.hospitalId) onboardingService.markFixtureSaved(state.user.hospitalId);
+              const hid = state.user?.hospitalId;
               setState(prev => ({ ...prev, currentView: 'dashboard' }));
-              handleFileUpload(file, 'fixture', sizeCorrections);
+              // markFixtureSaved는 업로드 성공 후에만 기록 (실패 시 Step 3 재진입 가능하도록)
+              handleFileUpload(file, 'fixture', sizeCorrections).then(ok => {
+                if (ok && hid) onboardingService.markFixtureSaved(hid);
+              });
             } else {
               setState(prev => ({ ...prev, currentView: 'dashboard', dashboardTab: 'fixture_upload' }));
             }

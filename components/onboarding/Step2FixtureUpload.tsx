@@ -60,6 +60,22 @@ type UploadState = 'idle' | 'parsing' | 'done' | 'error';
 
 const NUMERIC_CODE_RE = /^\d+[A-Za-z]*$/;
 
+const SESSION_KEY = 'ob_v2_step2_state';
+
+// Set<string>을 포함한 ManufacturerGroup 직렬화/역직렬화
+function serializeGroups(groups: ManufacturerGroup[]) {
+  return groups.map(g => ({
+    ...g,
+    brands: g.brands.map(b => ({ ...b, anomalousSizes: Array.from(b.anomalousSizes) })),
+  }));
+}
+function deserializeGroups(data: ReturnType<typeof serializeGroups>): ManufacturerGroup[] {
+  return data.map(g => ({
+    ...g,
+    brands: g.brands.map(b => ({ ...b, anomalousSizes: new Set<string>(b.anomalousSizes) })),
+  }));
+}
+
 function extractSizePattern(size: string): string {
   const trimmed = size.trim();
   const numericMatch = trimmed.match(/^(\d+)([A-Za-z]*)$/);
@@ -171,8 +187,8 @@ function diagnoseAnomaly(size: string, isNumericCode: boolean, dominantPattern?:
     const formatDesc = componentCount === 3
       ? 'Φ직경 × 길이 × 커프 3요소 형식'
       : componentCount === 2
-      ? 'Φ직경 × 길이 2요소 형식'
-      : 'Φ 형식';
+        ? 'Φ직경 × 길이 2요소 형식'
+        : 'Φ 형식';
     return `숫자코드 형식 혼용 (${decoded}로 추정) — 이 브랜드는 ${formatDesc} 사용`;
   }
   const bad = [...new Set((size.match(/[*!@#$%^&\\|`~]/g) || []))];
@@ -230,6 +246,46 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   const [currentBrandIdx, setCurrentBrandIdx] = useState(0);
   const currentBrandIdxRef = useRef(currentBrandIdx);
   currentBrandIdxRef.current = currentBrandIdx;
+  // 파일 동일성 비교용 (File 객체는 sessionStorage 직렬화 불가 → ref로 추적)
+  const uploadedFileMetaRef = useRef<{ name: string; size: number } | null>(null);
+
+  // 마운트 시 sessionStorage에서 분석 결과 복원 (탭 이동 후 마법사 재마운트 대비)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (!saved) return;
+      const { groups: g, approvedItems: ai, conversionEdits: ce, fileName: fn, fileSize: fs, currentBrandIdx: cbi } = JSON.parse(saved);
+      if (!g || !fn) return;
+      setGroups(deserializeGroups(g));
+      setApprovedItems(new Set<string>(ai));
+      setConversionEdits(new Map<string, ConversionEdit>(ce));
+      setFileName(fn);
+      setCurrentBrandIdx(cbi ?? 0);
+      // ref 복원: 같은 파일 재업로드 시 processFile의 name+size 비교로 corrections 보존 가능
+      if (fs != null) uploadedFileMetaRef.current = { name: fn, size: fs };
+      setUploadState('done');
+    } catch {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 분석 결과가 바뀔 때마다 sessionStorage에 저장
+  useEffect(() => {
+    if (uploadState !== 'done') return;
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        groups: serializeGroups(groups),
+        approvedItems: Array.from(approvedItems),
+        conversionEdits: Array.from(conversionEdits.entries()),
+        fileName,
+        fileSize: uploadedFileMetaRef.current?.size ?? null,
+        currentBrandIdx,
+      }));
+    } catch {
+      // sessionStorage 용량 초과 시 무시
+    }
+  }, [uploadState, groups, approvedItems, conversionEdits, fileName, currentBrandIdx]);
 
   const toggleApprove = (key: string) => {
     setApprovedItems(prev => {
@@ -251,8 +307,13 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
 
   const processFile = useCallback(async (file: File) => {
     setErrorMsg('');
-    setApprovedItems(new Set());
-    setConversionEdits(new Map());
+    setCurrentBrandIdx(0); // 새 업로드 시 인덱스 초기화 (sessionStorage 복원 시엔 실행 안 됨)
+    // 다른 파일이 선택된 경우에만 수정 내역 초기화 (같은 파일 재업로드 시 보존)
+    const meta = uploadedFileMetaRef.current;
+    if (!meta || meta.name !== file.name || meta.size !== file.size) {
+      setApprovedItems(new Set());
+      setConversionEdits(new Map());
+    }
     setGroups([]);
 
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
@@ -263,6 +324,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     setUploadState('parsing');
     setFileName(file.name);
     setUploadedFile(file);
+    uploadedFileMetaRef.current = { name: file.name, size: file.size };
     try {
       const [data] = await Promise.all([
         parseExcelFile(file),
@@ -283,8 +345,6 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     }
   }, []);
 
-  // 새 파일 업로드 시 브랜드 인덱스 초기화
-  useEffect(() => { setCurrentBrandIdx(0); }, [groups]);
 
   // 이상 항목이 있는 브랜드 플랫 목록 (파일 업로드 시 고정, 내비게이션 안정성 보장)
   const allAnomalousBrands = useMemo(() => {
@@ -339,8 +399,8 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   const totalAnomalous = groups.reduce((sum, g) =>
     sum + g.brands.reduce((bsum, b) =>
       bsum + Array.from(b.anomalousSizes).filter(s => !approvedItems.has(`${g.manufacturer}:${b.brand}:${s}`)).length
-    , 0)
-  , 0);
+      , 0)
+    , 0);
 
   // 특수 항목 존재 여부 (다음 단계에서 추가되는 항목 — 없으면 건강도 하락, 진행은 차단하지 않음)
   // 제조사명 또는 브랜드명 어디서든 키워드가 하나라도 있으면 충족
@@ -363,10 +423,10 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   const healthMeta = healthScore === 100
     ? { label: '완벽', barColor: 'bg-emerald-500', badgeClass: 'text-emerald-700 bg-emerald-100', scoreClass: 'text-emerald-600', borderClass: 'border-emerald-100 bg-emerald-50' }
     : healthScore >= 95
-    ? { label: '양호', barColor: 'bg-green-500', badgeClass: 'text-green-700 bg-green-100', scoreClass: 'text-green-600', borderClass: 'border-green-100 bg-green-50' }
-    : healthScore >= 85
-    ? { label: '주의', barColor: 'bg-amber-400', badgeClass: 'text-amber-700 bg-amber-100', scoreClass: 'text-amber-600', borderClass: 'border-amber-100 bg-amber-50' }
-    : { label: '점검 필요', barColor: 'bg-red-500', badgeClass: 'text-red-700 bg-red-100', scoreClass: 'text-red-600', borderClass: 'border-red-100 bg-red-50' };
+      ? { label: '양호', barColor: 'bg-green-500', badgeClass: 'text-green-700 bg-green-100', scoreClass: 'text-green-600', borderClass: 'border-green-100 bg-green-50' }
+      : healthScore >= 85
+        ? { label: '주의', barColor: 'bg-amber-400', badgeClass: 'text-amber-700 bg-amber-100', scoreClass: 'text-amber-600', borderClass: 'border-amber-100 bg-amber-50' }
+        : { label: '점검 필요', barColor: 'bg-red-500', badgeClass: 'text-red-700 bg-red-100', scoreClass: 'text-red-600', borderClass: 'border-red-100 bg-red-50' };
 
 
   return (
@@ -389,7 +449,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
             ${isDragging ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/50'}`}
         >
           <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center mb-3">
-            <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-indigo-600 animate-icon-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
@@ -423,7 +483,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
         <>
           {/* File info */}
           <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-3 py-2 mb-2">
-            <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-green-500 shrink-0 animate-pulse-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-xs text-green-700 font-medium flex-1 truncate">{fileName}</p>
@@ -611,10 +671,10 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                                       }
                                       const def = computeDefaultEdit(s, b.dominantPattern);
                                       const edit = conversionEdits.get(approveKey) ?? def;
-                                      const getVal = (f: 'd'|'l'|'c') => f === 'd' ? edit.d : f === 'l' ? edit.l : edit.c;
-                                      type TPart = { isInput: false; text: string } | { isInput: true; field: 'd'|'l'|'c' };
+                                      const getVal = (f: 'd' | 'l' | 'c') => f === 'd' ? edit.d : f === 'l' ? edit.l : edit.c;
+                                      type TPart = { isInput: false; text: string } | { isInput: true; field: 'd' | 'l' | 'c' };
                                       const tParts: TPart[] = [];
-                                      const flds: ('d'|'l'|'c')[] = ['d', 'l', 'c'];
+                                      const flds: ('d' | 'l' | 'c')[] = ['d', 'l', 'c'];
                                       let rem = b.normalSamples[0] ?? '';
                                       let fi = 0;
                                       while (rem.length > 0) {
@@ -667,7 +727,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center mb-3 text-center">
               <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-emerald-500 animate-icon-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -700,6 +760,12 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                 if (firstIncompleteIdx !== -1) setCurrentBrandIdx(firstIncompleteIdx);
                 return;
               }
+              // 페이지 새로고침 시 File 객체는 직렬화 불가 → uploadedFile=null로 복원됨
+              // 같은 파일을 다시 선택하면 processFile의 name+size 비교로 corrections 보존
+              if (!uploadedFile) {
+                fileInputRef.current?.click();
+                return;
+              }
               const corrections = new Map<string, string>();
               for (const g of groups) {
                 for (const b of g.brands) {
@@ -717,16 +783,18 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                   }
                 }
               }
+              sessionStorage.removeItem(SESSION_KEY);
               onGoToDataSetup(uploadedFile ?? undefined, corrections.size > 0 ? corrections : undefined);
             }}
-            className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${
-              isBlocked
+            className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${(isBlocked || !uploadedFile)
                 ? 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 active:scale-[0.98]'
                 : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
-            }`}
+              }`}
           >
             {isBlocked
               ? `사이즈 오류 ${totalAnomalous}개 승인 필요`
+              : !uploadedFile
+              ? '파일을 다시 선택해주세요'
               : '데이터 설정 페이지에서 저장하기'
             }
           </button>

@@ -54,6 +54,38 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     [codes],
   );
 
+  const handleCopyCode = async (code: string) => {
+    // 1차: Clipboard API
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast(`코드 복사 완료: ${code}`, 'success');
+        return;
+      } catch {
+        // 포커스 없음 등으로 실패 시 execCommand 폴백
+      }
+    }
+    // 2차: execCommand 폴백 (구형 브라우저 / 포커스 없는 경우)
+    try {
+      const el = document.createElement('textarea');
+      el.value = code;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(el);
+      if (ok) {
+        showToast(`코드 복사 완료: ${code}`, 'success');
+      } else {
+        showToast('클립보드 복사에 실패했습니다.', 'error');
+      }
+    } catch {
+      showToast('클립보드 복사에 실패했습니다.', 'error');
+    }
+  };
+
   const handleCreateCode = async () => {
     setCreating(true);
     try {
@@ -68,25 +100,11 @@ const SystemAdminBetaCodesTab: React.FC = () => {
       setDistributedContact('');
       setNote('');
       setUsageMode('single');
-      try {
-        await navigator.clipboard.writeText(created.code);
-        showToast(`코드 생성 완료: ${created.code} (클립보드 복사됨)`, 'success');
-      } catch {
-        showToast(`코드 생성 완료: ${created.code}`, 'success');
-      }
+      await handleCopyCode(created.code);
     } catch (error) {
       showToast(error instanceof Error ? error.message : '코드 생성에 실패했습니다.', 'error');
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleCopyCode = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      showToast(`코드 복사 완료: ${code}`, 'success');
-    } catch {
-      showToast('클립보드 복사에 실패했습니다.', 'error');
     }
   };
 

@@ -20,13 +20,13 @@ interface AppUserOverlayStackProps {
   onboardingStep: number | null;
   showOnboardingToast: boolean;
   onboardingProgress: number;
+  toastCompletedLabel: string | null;
   onCloseProfile: () => void;
   onLeaveHospital: () => void;
   onDeleteAccount: () => void;
   onChangePlan: () => void;
   onReviewSubmitted: () => void;
   onDismissReview: () => void;
-  onOnboardingComplete: () => Promise<void> | void;
   onOnboardingSkip: (snooze: boolean) => void;
   onReopenOnboarding: () => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
@@ -48,13 +48,13 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   onboardingStep,
   showOnboardingToast,
   onboardingProgress,
+  toastCompletedLabel,
   onCloseProfile,
   onLeaveHospital,
   onDeleteAccount,
   onChangePlan,
   onReviewSubmitted,
   onDismissReview,
-  onOnboardingComplete,
   onOnboardingSkip,
   onReopenOnboarding,
   onGoToDataSetup,
@@ -114,7 +114,6 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
             hospitalName={hospitalName ?? user.name}
             initialStep={onboardingStep ?? 1}
             inventory={inventory}
-            onComplete={onOnboardingComplete}
             onSkip={onOnboardingSkip}
             onGoToDataSetup={onGoToDataSetup}
             onGoToSurgeryUpload={onGoToSurgeryUpload}
@@ -128,6 +127,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
         <OnboardingToast
           progress={onboardingProgress}
           onClick={onReopenOnboarding}
+          completedLabel={toastCompletedLabel}
         />
       )}
 

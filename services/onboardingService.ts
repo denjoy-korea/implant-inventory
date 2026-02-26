@@ -18,15 +18,6 @@ export const OB_FLAG = {
   FAIL_AUDIT: 16,      // bit 4
 } as const;
 
-// G2/D1: 현재 온보딩은 fixture-upload 방식으로 대체됨.
-// Step2BrandSelect / Step3StockInput / Step5Complete은 V2 브랜드선택 온보딩 전환 시 사용.
-export interface OnboardingStockItem {
-  manufacturer: string;
-  brand: string;
-  size: string;
-  quantity: number;
-}
-
 /** hospitals.onboarding_flags를 원자적 OR 비트 업데이트 (fire-and-forget)
  *  SEC-W3: SELECT→UPDATE 패턴 제거, DB 단일 UPDATE로 race condition 방지
  */

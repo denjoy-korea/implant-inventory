@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      aria-hidden={isCollapsed}
+      inert={isCollapsed || undefined}
       className={`bg-slate-900 flex flex-col overflow-hidden transition-all duration-300 shadow-xl ${isMobile
         ? (isCollapsed
           ? 'fixed inset-y-0 left-0 w-72 max-w-[86vw] -translate-x-full pointer-events-none z-[280]'
