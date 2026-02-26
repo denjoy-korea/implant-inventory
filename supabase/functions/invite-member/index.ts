@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // SEC-07: 서버 환경변수만 사용 (클라이언트 입력 불허 — 피싱 방지)
-    const baseUrl = Deno.env.get("SITE_URL") || "https://denjoy.info";
+    const baseUrl = Deno.env.get("SITE_URL") || "https://inventory.denjoy.info";
     const inviteUrl = `${baseUrl}?invite=${token}`;
 
     // Resend로 초대 이메일 발송

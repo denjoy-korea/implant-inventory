@@ -1,0 +1,2 @@
+[functions.verify-invite]
+verify_jwt = false

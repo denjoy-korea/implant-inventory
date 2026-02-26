@@ -205,26 +205,19 @@ const App: React.FC = () => {
     token: string; email: string; name: string; hospitalName: string;
   } | null>(null);
 
-  // URL ?invite=TOKEN 감지 → 초대 수락 뷰로 전환
+  // URL ?invite=TOKEN 감지 → verify-invite Edge Function으로 검증 후 초대 수락 뷰로 전환
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('invite');
     if (!token || state.user) return;
 
-    supabase
-      .from('member_invitations')
-      .select('email, name, hospitals(name)')
-      .eq('token', token)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) {
+    supabase.functions.invoke('verify-invite', { body: { token } })
+      .then(({ data, error }) => {
+        if (error || !data || data.error) {
           setState(prev => ({ ...prev, currentView: 'login' }));
           return;
         }
-        const hospitalName = (data.hospitals as { name: string }[] | null)?.[0]?.name ?? '치과';
-        setInviteInfo({ token, email: data.email, name: data.name, hospitalName });
+        setInviteInfo({ token, email: data.email, name: data.name, hospitalName: data.hospitalName });
         setState(prev => ({ ...prev, currentView: 'invite' }));
         // URL에서 토큰 파라미터 제거 (보안)
         const url = new URL(window.location.href);

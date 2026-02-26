@@ -1,0 +1,2 @@
+[functions.kick-member]
+verify_jwt = false
