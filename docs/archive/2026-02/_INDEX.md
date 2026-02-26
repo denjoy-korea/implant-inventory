@@ -13,6 +13,7 @@
 | crypto-phase2-authorization | 98% | 2026-02-23 | 4 |
 | profiles-pii-encryption | 97% | 2026-02-23 | 3 |
 | product-strategy-gaps | 100% | 2026-02-24 | 4 |
+| social-login | 97% | 2026-02-26 | 4 |
 | surgery-dashboard-upgrade | 97% | 2026-02-24 | 4 |
 
 ### 임플란트-재고관리
@@ -90,6 +91,19 @@
   - `surgery-dashboard-upgrade.design.md` - Design document
   - `surgery-dashboard-upgrade.analysis.md` - Gap Analysis (97%)
   - `surgery-dashboard-upgrade.report.md` - Completion Report
+
+### social-login
+
+- **Phase**: Completed
+- **Match Rate**: 97% (0 iterations)
+- **Iteration Count**: 0
+- **Period**: 2026-02-25 ~ 2026-02-26
+- **Scope**: Google / Kakao 소셜 로그인 연동 — 로그인 폼 소셜 버튼, 기존 계정 연동/해제 (UserProfile 보안 탭), OAuth 리다이렉트 후 성공 토스트 + 보안 탭 자동 선택
+- **Documents**:
+  - `social-login.plan.md` - Plan document
+  - `social-login.design.md` - Design document
+  - `social-login.analysis.md` - Gap Analysis (97%)
+  - `social-login.report.md` - Completion Report
 
 ### product-strategy-gaps
 
