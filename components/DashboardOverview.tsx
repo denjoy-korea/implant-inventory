@@ -1120,23 +1120,39 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
-          {todayActionItems.map((item, index) => (
+          {todayActionItems.map((item, index) => {
+            const isOnboarding = item.key === 'action-onboarding';
+            return (
             <div
               key={item.key}
               role="button"
               tabIndex={0}
               onClick={() => item.onClick ? item.onClick() : onNavigate(item.tab)}
               onKeyDown={(e) => e.key === 'Enter' && (item.onClick ? item.onClick() : onNavigate(item.tab))}
-              className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5 cursor-pointer"
+              className={isOnboarding
+                ? 'lg:col-span-2 w-full text-left rounded-xl border-2 border-indigo-400 bg-gradient-to-r from-indigo-50 via-white to-violet-50 hover:border-indigo-500 hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/15 active:translate-y-0 active:scale-[0.99] transition-all duration-200 px-4 py-3 cursor-pointer relative overflow-hidden group'
+                : 'w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5 cursor-pointer'
+              }
             >
-              <div className="flex items-center gap-3">
-                <span className="mt-0.5 w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
+              {isOnboarding && (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-transparent to-violet-500/5 group-hover:from-indigo-500/10 group-hover:to-violet-500/10 transition-colors" />
+                  <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-indigo-500 to-violet-500 rounded-l-xl" />
+                </>
+              )}
+              <div className={`flex items-center gap-3 ${isOnboarding ? 'relative z-10' : ''}`}>
+                <span className={`mt-0.5 w-6 h-6 rounded-lg text-white text-[11px] font-black inline-flex items-center justify-center shrink-0 ${isOnboarding ? 'bg-indigo-600 animate-pulse' : 'bg-slate-900'}`}>
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-black text-slate-800 truncate">{item.title}</p>
+                    <p className={`text-xs font-black truncate ${isOnboarding ? 'text-indigo-900' : 'text-slate-800'}`}>{item.title}</p>
                     <div className="flex items-center gap-1 shrink-0">
+                      {isOnboarding && (
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-black animate-pulse">
+                          시작하기
+                        </span>
+                      )}
                       {item.key === 'action-fail' && (
                         <button
                           type="button"
@@ -1151,14 +1167,28 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           </svg>
                         </button>
                       )}
+                      {!isOnboarding && (
                       <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${PRIORITY_BADGE[item.severity].className}`}>
                         {PRIORITY_BADGE[item.severity].label}
                       </span>
+                      )}
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-0.5">{item.description}</p>
+                  <p className={`text-[11px] mt-0.5 ${isOnboarding ? 'text-indigo-700' : 'text-slate-600'}`}>{item.description}</p>
                   {item.alertNote && (
-                    <p className="text-[10px] font-bold text-rose-600 mt-0.5">⚠ {item.alertNote}</p>
+                    <div className={`flex items-center gap-1.5 mt-1 ${isOnboarding ? '' : ''}`}>
+                      {isOnboarding && onboardingStep != null && (
+                        <div className="flex-1 max-w-[180px] h-1.5 bg-indigo-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.round(((onboardingStep - 1) / 7) * 100)}%` }}
+                          />
+                        </div>
+                      )}
+                      <p className={`text-[10px] font-bold ${isOnboarding ? 'text-indigo-600' : 'text-rose-600'}`}>
+                        {isOnboarding ? item.alertNote : `⚠ ${item.alertNote}`}
+                      </p>
+                    </div>
                   )}
                   {item.meta && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.meta}</p>}
                   {item.metaItems && (
@@ -1171,12 +1201,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </div>
                   )}
                 </div>
-                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <svg className={`w-3.5 h-3.5 shrink-0 ${isOnboarding ? 'text-indigo-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all' : 'text-slate-400'}`} viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {todayActionItems.length === 0 && (
             <div className="lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
