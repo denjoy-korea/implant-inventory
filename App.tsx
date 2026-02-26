@@ -1158,13 +1158,36 @@ const App: React.FC = () => {
         `기초재고 일괄 수정 (${changes.length}개)`,
         { count: changes.length }
       );
+
+      // 실사 이력에 기초재고 편집 기록 추가 (stock_adjustment는 건드리지 않음)
+      const hospitalId = state.user?.hospitalId;
+      if (hospitalId) {
+        const auditRows = changes.map(change => {
+          const prevItem = prevInventory.find(item => item.id === change.id);
+          const prevStock = prevItem?.currentStock ?? 0;
+          return {
+            hospital_id: hospitalId,
+            inventory_id: change.id,
+            system_stock: prevStock,
+            actual_stock: change.nextCurrentStock,
+            difference: change.nextCurrentStock - prevStock,
+            reason: '기초재고 편집',
+          };
+        });
+        const { error: auditError } = await supabase
+          .from('inventory_audits')
+          .insert(auditRows);
+        if (auditError) {
+          console.warn('[App] 기초재고 실사 이력 저장 실패 (무시):', auditError);
+        }
+      }
     } catch (error) {
       console.error('[App] 기초재고 일괄 저장 실패, 롤백:', error);
       setState(prev => ({ ...prev, inventory: prevInventory }));
       showAlertToast('기초재고 일괄 저장에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
       throw error;
     }
-  }, [setState, showAlertToast, state.inventory]);
+  }, [setState, showAlertToast, state.inventory, state.user?.hospitalId]);
 
   const handleFileUpload = async (file: File, type: UploadType, sizeCorrections?: Map<string, string>): Promise<boolean> => {
     uploadingTypeRef.current = type;
