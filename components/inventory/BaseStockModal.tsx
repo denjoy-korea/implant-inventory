@@ -399,13 +399,21 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
             <button
               onClick={handleApply}
               disabled={isSaving || visibleInventory.length === 0}
-              className={`w-full h-14 rounded-2xl text-base font-black transition-colors ${
+              className={`w-full h-14 rounded-2xl text-base font-black transition-colors flex items-center justify-center gap-2 ${
                 !isSaving && visibleInventory.length > 0
                   ? 'bg-indigo-600 text-white active:scale-[0.99]'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
-              {isSaving ? '저장 중...' : '기초재고 반영'}
+              {isSaving ? (
+                <>
+                  <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  저장 중...
+                </>
+              ) : '기초재고 반영'}
             </button>
             <button
               onClick={handleClose}
@@ -436,13 +444,21 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               <button
                 onClick={handleApply}
                 disabled={isSaving || visibleInventory.length === 0}
-                className={`px-5 py-2 text-sm font-black rounded-xl transition-colors ${
+                className={`px-5 py-2 text-sm font-black rounded-xl transition-colors flex items-center gap-2 ${
                   !isSaving && visibleInventory.length > 0
                     ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                {isSaving ? '저장 중...' : '기초재고 반영'}
+                {isSaving ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    저장 중...
+                  </>
+                ) : '기초재고 반영'}
               </button>
             </div>
           </div>

@@ -1,13 +1,11 @@
 {
-  "sessionCount": 133,
+  "sessionCount": 135,
   "lastSession": {
-    "startedAt": "2026-02-25T08:42:24.015Z",
+    "startedAt": "2026-02-26T04:03:45.029Z",
     "platform": "claude",
     "level": "Dynamic"
   },
-  "currentFeature": "notion-integration",
-  "currentPhase": "completed",
-  "matchRate": 95,
-  "reportPath": "docs/04-report/features/notion-integration.report.md",
-  "completionStatus": "PDCA_COMPLETE"
+  "currentFeature": "onboarding-improvements",
+  "currentPhase": "check",
+  "matchRate": 100
 }
