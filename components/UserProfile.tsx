@@ -1134,7 +1134,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                 message={confirmModal.message}
                 confirmColor={confirmModal.confirmColor ?? 'indigo'}
                 confirmLabel="확인"
-                onConfirm={confirmModal.onConfirm}
+                onConfirm={() => { setConfirmModal(null); confirmModal.onConfirm(); }}
                 onCancel={() => setConfirmModal(null)}
             />
         )}
