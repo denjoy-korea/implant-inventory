@@ -3,6 +3,7 @@ import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact, BillingProgram } from '../types';
 import { dbToHospital, decryptProfile } from './mappers';
 import { encryptPatientInfo } from './cryptoUtils';
+import { isExchangePrefix } from './appUtils';
 
 // C-4: hospitals.phone 평문 감지 헬퍼
 function isPlainHospitalPhone(v: string | null): v is string {
@@ -375,7 +376,7 @@ export const hospitalService = {
       .eq('hospital_id', hospitalId);
     const all = (data || []).map((d: Record<string, unknown>) => d.manufacturer as string);
     return [...new Set(all)]
-      .filter(m => m !== '보험임플란트' && !m.startsWith('수술중교환_'))
+      .filter(m => m !== '보험임플란트' && !isExchangePrefix(m))
       .sort();
   },
 

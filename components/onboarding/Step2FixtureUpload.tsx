@@ -405,7 +405,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
   // 특수 항목 존재 여부 (다음 단계에서 추가되는 항목 — 없으면 건강도 하락, 진행은 차단하지 않음)
   // 제조사명 또는 브랜드명 어디서든 키워드가 하나라도 있으면 충족
   const hasSurgeryFailItems = groups.some(g =>
-    g.manufacturer.includes('교환') || g.brands.some(b => b.brand.includes('교환'))
+    g.manufacturer.includes('교환') || g.manufacturer.includes('FAIL') || g.brands.some(b => b.brand.includes('교환') || b.brand.includes('FAIL'))
   );
   const hasInsuranceItems = groups.some(g =>
     g.manufacturer.includes('보험') || g.brands.some(b => b.brand.includes('보험'))

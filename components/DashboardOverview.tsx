@@ -11,7 +11,7 @@ import {
 } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { auditService, AuditHistoryItem } from '../services/auditService';
-import { manufacturerAliasKey } from '../services/appUtils';
+import { manufacturerAliasKey, isExchangePrefix } from '../services/appUtils';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
 import { holidayService } from '../services/holidayService';
 import { failThresholdService, getFailSeverity, FailThresholds } from '../services/failThresholdService';
@@ -271,7 +271,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     () =>
       inventory.filter(
         (item) =>
-          !item.manufacturer.startsWith('수술중교환_') &&
+          !isExchangePrefix(item.manufacturer) &&
           item.manufacturer !== '보험청구' &&
           item.brand !== '보험임플란트'
       ),
@@ -696,7 +696,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const manufacturer = String(row['제조사'] || '').trim();
       const brand = String(row['브랜드'] || '').trim() || '-';
       if (!manufacturer) return;
-      if (manufacturer.startsWith('수술중교환_') || manufacturer === '보험청구' || brand === '보험임플란트') return;
+      if (isExchangePrefix(manufacturer) || manufacturer === '보험청구' || brand === '보험임플란트') return;
       const manufacturerKey = manufacturerAliasKey(manufacturer);
       if (!manufacturerKey) return;
 

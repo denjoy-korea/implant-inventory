@@ -5,6 +5,7 @@ import { useInventoryManagerControls } from '../hooks/useInventoryManagerControl
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { normalizeSurgery } from '../services/normalizationService';
+import { isExchangePrefix } from '../services/appUtils';
 import { smoothLine, smoothArea } from './surgery-dashboard/shared';
 import AddItemModal from './AddItemModal';
 import EditNoticeModal from './inventory/EditNoticeModal';
@@ -118,7 +119,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   /** 수술중교환_ / 보험청구 항목 제외한 실제 표시 대상 */
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
-      !item.manufacturer.startsWith('수술중교환_') && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
+      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
     );
   }, [inventory]);
 
@@ -346,7 +347,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         const manufacturer = String(i.manufacturer || '');
         const brand = String(i.brand || '');
         const lowerManufacturer = manufacturer.toLowerCase();
-        const isFailCategory = manufacturer.startsWith('수술중교환_')
+        const isFailCategory = isExchangePrefix(manufacturer)
           || lowerManufacturer.includes('수술중fail')
           || lowerManufacturer.includes('fail_')
           || lowerManufacturer.includes('수술중 fail');

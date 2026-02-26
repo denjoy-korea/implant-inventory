@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { ExcelSheet } from '../types';
+import { isExchangePrefix } from '../services/appUtils';
 
 interface BrandChartProps {
   data: ExcelSheet;
@@ -34,7 +35,7 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
     // brandStats에 실제 데이터가 존재하는 제조사만 필터 (수술중교환_, 보험청구 제외)
     const dataManufacturers = new Set<string>();
     Object.values(brandStats).forEach(v => {
-      if (!v.manufacturer.startsWith('수술중교환_') && v.manufacturer !== '보험청구') {
+      if (!isExchangePrefix(v.manufacturer) && v.manufacturer !== '보험청구') {
         dataManufacturers.add(v.manufacturer);
       }
     });
@@ -57,7 +58,7 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
     return Object.values(brandStats)
       .filter(v =>
         v.manufacturer === selectedManufacturer &&
-        !v.manufacturer.startsWith('수술중교환_') &&
+        !isExchangePrefix(v.manufacturer) &&
         v.manufacturer !== '보험청구'
       )
       .sort((a, b) => a.brandName.localeCompare(b.brandName, 'ko'));
@@ -67,7 +68,7 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
   const billableActiveCount = useMemo(() => data.rows.filter(r => {
     if (r['사용안함'] === true) return false;
     const m = String(r['제조사'] || '');
-    return !m.startsWith('수술중교환_') && m !== '보험청구';
+    return !isExchangePrefix(m) && m !== '보험청구';
   }).length, [data.rows]);
 
   // 선택된 제조사 브랜드들의 전체/일부 활성 상태 — IIFE 제거, useMemo로 추출

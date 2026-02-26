@@ -6,6 +6,7 @@ import { toCanonicalSize, isIbsImplantManufacturer } from '../services/sizeNorma
 import { inventoryService } from '../services/inventoryService';
 import { operationLogService } from '../services/operationLogService';
 import { buildInventoryDuplicateKey } from '../services/inventoryUtils';
+import { isExchangePrefix } from '../services/appUtils';
 import { ToastType } from './useToast';
 
 interface UseInventoryCompareParams {
@@ -93,7 +94,7 @@ export function useInventoryCompare({
 
     // 플랜 품목 수 제한 체크 (수술중교환_ / 보험청구 제외)
     const planMaxItems = PLAN_LIMITS[effectivePlan].maxItems;
-    const billableNew = newItems.filter(i => !i.manufacturer.startsWith('수술중교환_') && i.manufacturer !== '보험청구').length;
+    const billableNew = newItems.filter(i => !isExchangePrefix(i.manufacturer) && i.manufacturer !== '보험청구').length;
     const totalAfterAdd = billableItemCount + billableNew;
     if (planMaxItems !== Infinity && totalAfterAdd > planMaxItems) {
       setPlanLimitModal({ currentCount: billableItemCount, newCount: billableNew, maxItems: planMaxItems });

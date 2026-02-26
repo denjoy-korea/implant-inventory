@@ -4,6 +4,7 @@ import { ExcelData, ExcelRow, ExcelSheet } from '../types';
 import { extractLengthFromSize } from '../services/sizeUtils';
 import { normalizeLength } from './LengthFilter';
 import { MIN_FIXTURE_LENGTH } from '../constants';
+import { isExchangePrefix } from '../services/appUtils';
 
 interface ExcelTableProps {
   data: ExcelData;
@@ -65,7 +66,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
 
   const isFailExpanded = useMemo(() => {
     if (!activeSheet) return false;
-    return activeSheet.rows.some(r => String(r['제조사'] || '').startsWith('수술중교환_'));
+    return activeSheet.rows.some(r => isExchangePrefix(String(r['제조사'] || '')));
   }, [activeSheet]);
 
   const visibleRows = useMemo(() => {

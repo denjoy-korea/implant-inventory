@@ -77,7 +77,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     const set = new Set<string>();
     inventory.forEach(item => {
       const m = item.manufacturer;
-      if (m && !m.startsWith('수술중교환_') && !m.startsWith('FAIL_') && m !== '보험임플란트') {
+      if (m && !m.startsWith('수술중교환_') && !m.startsWith('수술중FAIL_') && !m.startsWith('FAIL_') && m !== '보험임플란트') {
         set.add(m);
       }
     });

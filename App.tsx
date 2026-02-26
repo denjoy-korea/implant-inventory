@@ -33,7 +33,7 @@ import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { onboardingService } from './services/onboardingService';
 import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
-import { manufacturerAliasKey } from './services/appUtils';
+import { isExchangePrefix } from './services/appUtils';
 import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import { DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
@@ -451,7 +451,7 @@ const App: React.FC = () => {
   /** 플랜 품목 수 계산 시 수술중교환_ / 보험청구 제외 */
   const countBillableItems = useCallback((items: InventoryItem[]) => {
     return items.filter(i =>
-      !i.manufacturer.startsWith('수술중교환_') && i.manufacturer !== '보험청구'
+      !isExchangePrefix(i.manufacturer) && i.manufacturer !== '보험청구'
     ).length;
   }, []);
 
@@ -687,7 +687,7 @@ const App: React.FC = () => {
 
     const usageByInventoryId: Record<string, number> = {};
     inventoryItems.forEach(item => {
-      const isCategory = item.manufacturer.startsWith('수술중교환_') || item.manufacturer === '보험청구';
+      const isCategory = isExchangePrefix(item.manufacturer) || item.manufacturer === '보험청구';
       if (isCategory) return;
 
       const targetM = normalize(item.manufacturer);
@@ -793,7 +793,7 @@ const App: React.FC = () => {
 
       // ── inventory 매핑: lookup O(inventory × surgeryMap keys) → 실질 O(n) ──
       const updatedInventory = prev.inventory.map(item => {
-        const isCategory = item.manufacturer.startsWith('수술중교환_') || item.manufacturer === '보험청구';
+        const isCategory = isExchangePrefix(item.manufacturer) || item.manufacturer === '보험청구';
         if (isCategory) {
           return {
             ...item,
@@ -989,7 +989,7 @@ const App: React.FC = () => {
 
     // 동일 제조사-브랜드-규격 키를 가진 기존 재고 규격 표기를 우선 사용 (목록 기반 표기 통일)
     const preferredInventoryItem = state.inventory.find(item => {
-      if (item.manufacturer.startsWith('수술중교환_')) return false;
+      if (isExchangePrefix(item.manufacturer)) return false;
       if (item.manufacturer === '보험청구' || item.brand === '보험임플란트') return false;
       const itemFixed = fixIbsImplant(item.manufacturer, item.brand);
       return (
@@ -1795,7 +1795,7 @@ const App: React.FC = () => {
       const size = String(row['규격(SIZE)'] || '').trim();
 
       if (!manufacturer && !brand && !size) return;
-      if (manufacturer.startsWith('수술중교환_')) return;
+      if (isExchangePrefix(manufacturer)) return;
       if (manufacturer === '보험청구' || brand === '보험임플란트') return;
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;

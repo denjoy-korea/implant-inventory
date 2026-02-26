@@ -2,6 +2,7 @@ import { ExcelRow, InventoryItem, SurgeryUnregisteredItem, SurgeryUnregisteredSa
 import { fixIbsImplant } from './mappers';
 import { normalizeSurgery } from './normalizationService';
 import { getSizeMatchKey } from './sizeNormalizer';
+import { isExchangePrefix } from './appUtils';
 
 export type BrandSizeFormatEntry = {
   manufacturerKey: string;
@@ -24,7 +25,7 @@ export function buildBrandSizeFormatIndex(inventoryItems: InventoryItem[]): Bran
 
   inventoryItems
     .filter(item =>
-      !item.manufacturer.startsWith('수술중교환_') &&
+      !isExchangePrefix(item.manufacturer) &&
       item.manufacturer !== '보험청구' &&
       item.brand !== '보험임플란트'
     )

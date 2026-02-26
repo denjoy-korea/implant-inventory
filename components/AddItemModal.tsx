@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { InventoryItem } from '../types';
 import { toCanonicalSize } from '../services/sizeNormalizer';
 import { fixIbsImplant } from '../services/mappers';
+import { isExchangePrefix } from '../services/appUtils';
 import {
   DENTWEB_DEFAULTS,
   getDentwWebManufacturers,
@@ -17,7 +18,7 @@ interface AddItemModalProps {
 }
 
 function isSystemItem(item: InventoryItem): boolean {
-  return item.manufacturer.startsWith('수술중교환_') ||
+  return isExchangePrefix(item.manufacturer) ||
     item.manufacturer === '보험청구' ||
     item.brand === '보험임플란트';
 }

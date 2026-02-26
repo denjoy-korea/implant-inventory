@@ -3,6 +3,7 @@ import { parseExcelFile } from '../../services/excelService';
 import { buildBrandSizeFormatIndex, hasRegisteredBrandSize, isListBasedSurgeryInput, buildUnregisteredSample, appendUnregisteredSample } from '../../services/surgeryUnregisteredUtils';
 import { normalizeSurgery } from '../../services/normalizationService';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../../services/sizeNormalizer';
+import { isExchangePrefix } from '../../services/appUtils';
 import type { ExcelRow } from '../../types';
 import { InventoryItem, SurgeryUnregisteredItem } from '../../types';
 
@@ -65,7 +66,7 @@ function parseFixtureFromRecord(surgeryRecord: string): { manufacturer: string; 
 
   if (fixturePart.includes('보험임플란트') || fixturePart.includes('보험청구')) return null;
   // FAIL 기록 제외 (수술중 실패한 픽스처)
-  if (fixturePart.startsWith('수술중교환_')) return null;
+  if (isExchangePrefix(fixturePart)) return null;
 
   // "제조사 - 브랜드 규격" 분리
   const dashIdx = fixturePart.indexOf(' - ');
@@ -139,7 +140,7 @@ function analyzeSurgeryRows(
       size = String(row['규격(SIZE)'] || '').trim();
 
       if (!manufacturer && !brand && !size) continue;
-      if (manufacturer.startsWith('수술중교환_')) continue;
+      if (isExchangePrefix(manufacturer)) continue;
       if (manufacturer === '보험청구' || brand === '보험임플란트') continue;
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;

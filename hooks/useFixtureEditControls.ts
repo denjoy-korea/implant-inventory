@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, ExcelData, ExcelRow } from '../types';
 import { extractLengthFromSize } from '../services/sizeUtils';
 import { normalizeLength } from '../components/LengthFilter';
+import { isExchangePrefix } from '../services/appUtils';
 
 const FIXTURE_SETTINGS_KEY = 'fixture_settings_v1';
 const MAX_SETTINGS_PAYLOAD_SIZE = 5 * 1024 * 1024;
@@ -21,7 +22,7 @@ const buildFixtureRowKey = (row: ExcelRow): string => [
 ].join('\x00');
 
 const isSkippableManufacturer = (manufacturer: string): boolean =>
-  manufacturer.startsWith('수술중교환_') || manufacturer === '보험청구';
+  isExchangePrefix(manufacturer) || manufacturer === '보험청구';
 
 export function useFixtureEditControls({
   fixtureData,
@@ -246,7 +247,7 @@ export function useFixtureEditControls({
       const activeSheet = currentData.sheets[currentData.activeSheetName];
 
       const alreadyExpanded = activeSheet.rows.some(row =>
-        String(row['제조사'] || '').startsWith('수술중교환_')
+        isExchangePrefix(String(row['제조사'] || ''))
       );
       if (alreadyExpanded) return prev;
 

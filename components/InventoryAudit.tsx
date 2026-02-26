@@ -4,6 +4,7 @@ import { InventoryItem } from '../types';
 import { auditService, AuditEntry, AuditHistoryItem } from '../services/auditService';
 import { operationLogService } from '../services/operationLogService';
 import { useToast } from '../hooks/useToast';
+import { isExchangePrefix } from '../services/appUtils';
 
 interface InventoryAuditProps {
   inventory: InventoryItem[];
@@ -82,7 +83,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
-      !item.manufacturer.startsWith('수술중교환_') && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
+      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
     );
   }, [inventory]);
 
