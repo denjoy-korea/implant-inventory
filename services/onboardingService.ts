@@ -5,6 +5,7 @@ const KEY_FAIL_AUDIT = (id: string) => `denjoy_ob_v2_failaudit_${id}`;
 const KEY_FIXTURE_DL = (id: string) => `denjoy_ob_v2_fixture_dl_${id}`;
 const KEY_SURGERY_DL = (id: string) => `denjoy_ob_v2_surgery_dl_${id}`;
 const KEY_INVENTORY_AUDIT = (id: string) => `denjoy_ob_v2_inventory_audit_${id}`;
+const KEY_FIXTURE_SAVED = (id: string) => `denjoy_ob_v2_fixture_saved_${id}`;
 const KEY_DISMISSED = (id: string) => `denjoy_ob_v2_dismissed_${id}`;
 const KEY_SNOOZED   = (id: string) => `denjoy_ob_v2_snoozed_until_${id}`;
 
@@ -92,6 +93,14 @@ export const onboardingService = {
   markInventoryAuditSeen(hospitalId: string): void {
     localStorage.setItem(KEY_INVENTORY_AUDIT(hospitalId), '1');
     void persistFlag(hospitalId, OB_FLAG.INVENTORY_AUDIT);
+  },
+
+  /** 픽스처 파일을 업로드 후 DB 저장 완료 여부 (Step 3 새로고침 안정성) */
+  isFixtureSaved(hospitalId: string): boolean {
+    return !!localStorage.getItem(KEY_FIXTURE_SAVED(hospitalId));
+  },
+  markFixtureSaved(hospitalId: string): void {
+    localStorage.setItem(KEY_FIXTURE_SAVED(hospitalId), '1');
   },
 
   isDismissed(hospitalId: string): boolean {

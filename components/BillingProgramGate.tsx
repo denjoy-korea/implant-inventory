@@ -65,7 +65,7 @@ const BillingProgramGate: React.FC<BillingProgramGateProps> = ({
           <p className="text-sm font-black text-indigo-900">초기 셋팅 안내</p>
           <p className="mt-1 text-xs text-indigo-800 leading-relaxed">
             프로그램 선택 후 시작 가이드를 따라 재고조사까지 진행해야 하며,
-            초기 셋팅은 보통 30~40분이 소요됩니다.
+            초기 셋팅은 보통 20~30분이 소요됩니다.
           </p>
           <p className="mt-2 text-xs text-indigo-800 leading-relaxed">
             원활한 진행을 위해 사전 재고조사를 준비하거나,

@@ -171,9 +171,9 @@ export default function OnboardingCompleteModal({ onClose, hospitalName, userNam
 
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center">
-      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-3xl shadow-2xl px-8 py-10 max-w-sm w-full mx-4 text-center">
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-10" />
+      <div className="relative z-20 bg-white rounded-3xl shadow-2xl px-8 py-10 max-w-sm w-full mx-4 text-center">
         {/* 아이콘 */}
         <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
           <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

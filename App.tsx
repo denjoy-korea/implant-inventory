@@ -457,7 +457,7 @@ const App: React.FC = () => {
     // 이후 단계는 DB 데이터 필요 → 로딩 완료 후 체크
     if (state.isLoading) return null;
     if (!onboardingService.isFixtureDownloaded(hid)) return 2;
-    if (state.inventory.length === 0 && !state.fixtureData) return 3;
+    if (state.inventory.length === 0 && !onboardingService.isFixtureSaved(hid)) return 3;
     if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
     const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
     if (!hasSurgery) return 5;
@@ -2142,6 +2142,7 @@ const App: React.FC = () => {
           }}
           onGoToDataSetup={(file?: File, sizeCorrections?: Map<string, string>) => {
             if (file) {
+              if (state.user?.hospitalId) onboardingService.markFixtureSaved(state.user.hospitalId);
               setState(prev => ({ ...prev, currentView: 'dashboard' }));
               handleFileUpload(file, 'fixture', sizeCorrections);
             } else {
