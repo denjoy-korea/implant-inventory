@@ -154,6 +154,20 @@ export const resetService = {
     return true;
   },
 
+  /** 요청 레코드 삭제 (admin — 테스트 데이터 정리용) */
+  async deleteRequest(requestId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('data_reset_requests')
+      .delete()
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('[resetService] deleteRequest failed:', error);
+      return false;
+    }
+    return true;
+  },
+
   /** 예약된 초기화 체크 및 실행 (로그인 시 호출) */
   async checkScheduledReset(hospitalId: string): Promise<boolean> {
     const req = await this.getActiveRequest(hospitalId);

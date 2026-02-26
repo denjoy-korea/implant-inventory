@@ -1040,6 +1040,23 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         });
     };
 
+    const handleDeleteResetRequest = (request: DbResetRequest, hospitalName: string) => {
+        setConfirmModal({
+            title: '요청 삭제',
+            message: `${hospitalName}의 초기화 요청 레코드를 삭제하시겠습니까?`,
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setConfirmModal(null);
+                setResetActionLoading(request.id);
+                const ok = await resetService.deleteRequest(request.id);
+                if (ok) await loadData();
+                else showToast('삭제에 실패했습니다.', 'error');
+                setResetActionLoading(null);
+            },
+        });
+    };
+
     return (
         <>
             <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
@@ -1172,6 +1189,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         onApproveImmediate={handleApproveImmediateResetRequest}
                                         onApproveScheduled={handleApproveScheduledResetRequest}
                                         onReject={handleRejectResetRequest}
+                                        onDelete={handleDeleteResetRequest}
                                     />
                                 )}
 
