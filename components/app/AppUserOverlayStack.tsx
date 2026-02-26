@@ -22,7 +22,6 @@ interface AppUserOverlayStackProps {
   onboardingProgress: number;
   toastCompletedLabel: string | null;
   onCloseProfile: () => void;
-  onLeaveHospital: () => void;
   onDeleteAccount: () => void;
   onChangePlan: () => void;
   onReviewSubmitted: () => void;
@@ -50,7 +49,6 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   onboardingProgress,
   toastCompletedLabel,
   onCloseProfile,
-  onLeaveHospital,
   onDeleteAccount,
   onChangePlan,
   onReviewSubmitted,
@@ -74,7 +72,6 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
               planState={planState}
               hospitalName={hospitalName}
               onClose={onCloseProfile}
-              onLeaveHospital={onLeaveHospital}
               onDeleteAccount={onDeleteAccount}
               onChangePlan={onChangePlan}
             />
