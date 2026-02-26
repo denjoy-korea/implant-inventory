@@ -9,6 +9,7 @@ import { UNLIMITED_DAYS } from '../constants';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 import { reviewService, UserReview, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
+import { resetService } from '../services/resetService';
 
 const REVIEW_ROLES_LIST: ReviewRole[] = ['원장', '실장', '팀장', '스탭'];
 const REVIEW_TYPE_META: Record<string, { label: string; color: string }> = {
@@ -256,6 +257,48 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [wouldStayForFeature, setWouldStayForFeature] = useState<boolean | null>(null);
     const [isPausing, setIsPausing] = useState(false);
     const [pauseSuccess, setPauseSuccess] = useState(false);
+    // 이직 데이터 초기화
+    const [resetReason, setResetReason] = useState('');
+    const [isRequestingReset, setIsRequestingReset] = useState(false);
+    const [activeResetRequest, setActiveResetRequest] = useState<{ id: string; status: string; created_at: string } | null>(null);
+    const [showResetSection, setShowResetSection] = useState(false);
+    const isMaster = user.role === 'master';
+
+    // 활성 초기화 요청 조회
+    useEffect(() => {
+        if (isMaster && user.hospitalId) {
+            resetService.getActiveRequest(user.hospitalId).then(req => {
+                if (req) setActiveResetRequest({ id: req.id, status: req.status, created_at: req.created_at });
+            });
+        }
+    }, [isMaster, user.hospitalId]);
+
+    const handleRequestReset = async () => {
+        if (!user.hospitalId || !resetReason.trim()) return;
+        setIsRequestingReset(true);
+        const req = await resetService.requestReset(user.hospitalId, resetReason.trim());
+        setIsRequestingReset(false);
+        if (req) {
+            setActiveResetRequest({ id: req.id, status: req.status, created_at: req.created_at });
+            setShowResetSection(false);
+            setResetReason('');
+            showToast('데이터 초기화 요청이 접수되었습니다. 운영팀 검토 후 처리됩니다.', 'success');
+        } else {
+            showToast('요청에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+        }
+    };
+
+    const handleCancelReset = async () => {
+        if (!activeResetRequest) return;
+        const ok = await resetService.cancelRequest(activeResetRequest.id);
+        if (ok) {
+            setActiveResetRequest(null);
+            showToast('초기화 요청이 취소되었습니다.', 'success');
+        } else {
+            showToast('취소에 실패했습니다.', 'error');
+        }
+    };
+
     // 인라인 플랜 변경
     const [showPlanPicker, setShowPlanPicker] = useState(false);
     const [pickerCycle, setPickerCycle] = useState<'monthly' | 'yearly'>(planState?.billingCycle ?? 'monthly');
@@ -551,6 +594,99 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                     )}
                                 </div>
                             </div>
+
+                            {/* 이직 데이터 초기화 — master(개인 워크스페이스 소유자)만 */}
+                            {isMaster && user.hospitalId && (
+                                <div className="mt-6">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">이직 시 데이터 초기화</h4>
+
+                                    {activeResetRequest ? (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-amber-800">
+                                                        초기화 요청 {activeResetRequest.status === 'pending' ? '검토 대기 중' : '처리 예정'}
+                                                    </p>
+                                                    <p className="text-[11px] text-amber-600 mt-0.5">
+                                                        {new Date(activeResetRequest.created_at).toLocaleDateString('ko-KR')}에 요청됨 · 운영팀에서 검토 후 처리합니다
+                                                    </p>
+                                                    {activeResetRequest.status === 'scheduled' && (
+                                                        <button
+                                                            onClick={() => setConfirmModal({
+                                                                title: '초기화 요청 취소',
+                                                                message: '데이터 초기화 요청을 취소하시겠습니까?',
+                                                                onConfirm: handleCancelReset,
+                                                            })}
+                                                            className="mt-2 text-xs font-bold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+                                                        >
+                                                            요청 취소
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : showResetSection ? (
+                                        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
+                                            <div className="flex items-start gap-2">
+                                                <svg className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                <div>
+                                                    <p className="text-xs font-bold text-rose-700">다음 데이터가 모두 삭제됩니다</p>
+                                                    <p className="text-[11px] text-rose-600 mt-1 leading-relaxed">
+                                                        수술기록 · 재고 마스터 · 주문/발주 · 교환 내역 · 재고실사 · 활동로그
+                                                    </p>
+                                                    <p className="text-[11px] text-slate-500 mt-1">계정 정보와 구독 플랜은 유지됩니다.</p>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-slate-500 block mb-1">초기화 사유</label>
+                                                <input
+                                                    type="text"
+                                                    value={resetReason}
+                                                    onChange={e => setResetReason(e.target.value)}
+                                                    placeholder="예: 이직으로 인한 데이터 초기화"
+                                                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => { setShowResetSection(false); setResetReason(''); }}
+                                                    className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+                                                >
+                                                    취소
+                                                </button>
+                                                <button
+                                                    onClick={() => setConfirmModal({
+                                                        title: '데이터 초기화 요청',
+                                                        message: '운영팀에 데이터 초기화를 요청합니다.\n승인되면 모든 병원 데이터가 삭제되며 복구할 수 없습니다.\n\n정말 요청하시겠습니까?',
+                                                        confirmColor: 'rose',
+                                                        onConfirm: handleRequestReset,
+                                                    })}
+                                                    disabled={!resetReason.trim() || isRequestingReset}
+                                                    className="flex-1 py-2 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {isRequestingReset ? '요청 중...' : '초기화 요청'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => setShowResetSection(true)}
+                                            className="w-full flex items-center gap-3 rounded-xl border border-slate-200 p-4 bg-white hover:border-rose-200 hover:bg-rose-50/30 transition-all group"
+                                        >
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-100 text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-500 transition-colors">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-sm font-bold text-slate-700 group-hover:text-rose-700 transition-colors">이직으로 인한 데이터 초기화</p>
+                                                <p className="text-[11px] text-slate-400">수술기록, 재고, 주문, 교환, 재고실사 정보를 초기화합니다</p>
+                                            </div>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                         </div>
                     )}
