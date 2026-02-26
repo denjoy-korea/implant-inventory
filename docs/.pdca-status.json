@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-26T09:40:10.421Z",
+  "lastUpdated": "2026-02-26T15:39:01.035Z",
   "activeFeatures": [
     "implant-inventory",
     "surgery-dashboard",
@@ -55,7 +55,8 @@
     "failThresholdService.ts",
     "onboarding-improvements",
     "auth",
-    "verify-invite"
+    "verify-invite",
+    "holiday-proxy"
   ],
   "primaryFeature": "implant-inventory",
   "features": {
@@ -70,9 +71,9 @@
       },
       "timestamps": {
         "started": "2026-02-16T07:42:26.745Z",
-        "lastUpdated": "2026-02-26T09:40:10.421Z"
+        "lastUpdated": "2026-02-26T15:39:01.035Z"
       },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/App.tsx"
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/DashboardOverview.tsx"
     },
     "surgery-dashboard": {
       "phase": "do",
@@ -83,9 +84,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-16T17:36:28.807Z",
-        "lastUpdated": "2026-02-23T17:34:11.501Z"
+        "lastUpdated": "2026-02-26T15:22:37.205Z"
       },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/surgery-dashboard/KPIStrip.tsx"
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/surgery-dashboard/PlacementTrendChart.tsx"
     },
     "sizeNormalizer.ts": {
       "phase": "do",
@@ -773,6 +774,19 @@
         "lastUpdated": "2026-02-26T09:39:19.836Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/verify-invite/index.ts"
+    },
+    "holiday-proxy": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-26T14:52:40.471Z",
+        "lastUpdated": "2026-02-26T14:52:40.471Z"
+      },
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/holiday-proxy/index.ts"
     }
   },
   "pipeline": {
@@ -790,7 +804,7 @@
   "session": {
     "startedAt": "2026-02-15T02:05:59.134Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-02-26T09:40:10.421Z"
+    "lastActivity": "2026-02-26T15:39:01.035Z"
   },
   "history": [
     {
@@ -10682,6 +10696,234 @@
     },
     {
       "timestamp": "2026-02-26T09:40:10.421Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:50:23.425Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:52:40.471Z",
+      "feature": "holiday-proxy",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:54:22.778Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:54:38.566Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:54:52.031Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:55:09.685Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T14:57:40.673Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:07:13.739Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:07:54.916Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:08:13.488Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:08:22.665Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:08:44.907Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:08:46.828Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:08:47.858Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:09:10.624Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:09:34.821Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:09:36.604Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:13:35.991Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:15:19.395Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:19:33.572Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:19:48.061Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:20:05.370Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:20:19.336Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:20:34.097Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:14.172Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:25.367Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:37.205Z",
+      "feature": "surgery-dashboard",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:39.929Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:44.845Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:53.130Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:55.527Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:22:56.060Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:23:05.190Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:23:18.608Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:23:45.044Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:32:39.526Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:38:26.229Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T15:39:01.035Z",
       "feature": "implant-inventory",
       "phase": "do",
       "action": "updated"
