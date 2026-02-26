@@ -19,6 +19,14 @@ import { encryptPatientInfo, decryptPatientInfo, decryptPatientInfoBatch, hashPa
 const isEncryptedPII = (value: string | null | undefined): value is string =>
   !!value && (value.startsWith('ENCv2:') || value.startsWith('ENC:'));
 
+/** 구 classification 값을 신규 값으로 정규화 (수술중 FAIL → 수술중교환, FAIL 교환완료 → 교환완료) */
+function normalizeClassification(cls: string | null | undefined): string {
+  const v = String(cls ?? '').trim();
+  if (v === '수술중 FAIL') return '수술중교환';
+  if (v === 'FAIL 교환완료') return '교환완료';
+  return v;
+}
+
 function sanitizeEncryptedProfileField(
   field: 'email' | 'name' | 'phone',
   value: string | null,
@@ -115,7 +123,7 @@ export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
     '치아번호': db.tooth_number || '',
     '갯수': db.quantity,
     '수술기록': db.surgery_record || '',
-    '구분': db.classification,
+    '구분': normalizeClassification(db.classification),
     '제조사': manufacturer,
     '브랜드': brand,
     '규격(SIZE)': isIbsImplantManufacturer(manufacturer) ? dbSize : toCanonicalSize(dbSize, manufacturer),
@@ -142,7 +150,7 @@ export async function dbToExcelRowBatch(records: DbSurgeryRecord[]): Promise<Exc
       '치아번호': db.tooth_number || '',
       '갯수': db.quantity,
       '수술기록': db.surgery_record || '',
-      '구분': db.classification,
+      '구분': normalizeClassification(db.classification),
       '제조사': manufacturer,
       '브랜드': brand,
       '규격(SIZE)': isIbsImplantManufacturer(manufacturer) ? dbSize : toCanonicalSize(dbSize, manufacturer),
@@ -237,7 +245,7 @@ export async function excelRowToDbSurgery(
     tooth_number: row['치아번호'] ? String(row['치아번호']) : null,
     quantity: Number(row['갯수']) || 1,
     surgery_record: row['수술기록'] ? String(row['수술기록']) : null,
-    classification: String(row['구분'] ?? '') || '식립',
+    classification: normalizeClassification(String(row['구분'] ?? '')) || '식립',
     manufacturer: manufacturer || null,
     brand: brand || null,
     size: size || null,

@@ -5,7 +5,7 @@
 
 /**
  * 수술기록 매칭용 정규화 (Surgery matching normalization)
- * - 접두어 제거: 수술중교환_, 보험임플란트
+ * - 접두어 제거: 수술중교환_, 수술중FAIL_, 보험임플란트
  * - 특수문자 제거: 공백, -, _, ., (, )
  * - Φ, φ → d 변환
  *
@@ -16,6 +16,7 @@ export const normalizeSurgery = (str: string): string => {
     .trim()
     .toLowerCase()
     .replace(/보험임플란트/g, '')
+    .replace(/수술중교환/g, '')
     .replace(/수술중fail/g, '')
     .replace(/[\s\-\_\.\(\)]/g, '')
     .replace(/[Φφ]/g, 'd');

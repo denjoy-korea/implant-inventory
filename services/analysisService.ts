@@ -81,7 +81,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
     let size = "";
 
     if (desc.includes('[GBR Only]')) classification = "골이식만";
-    else if (desc.includes('수술중교환_')) classification = "수술중교환";
+    else if (desc.includes('수술중교환_') || desc.includes('수술중FAIL_')) classification = "수술중교환";
     else if (desc.includes('보험임플란트')) classification = "청구";
 
     if (classification === "골이식만") {
@@ -92,7 +92,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
     } else if (desc.includes('-')) {
       const mainParts = desc.split('-').map(p => p.trim());
       let rawM = mainParts[0];
-      manufacturer = rawM.replace('수술중교환_', '').replace('보험임플란트', '').trim();
+      manufacturer = rawM.replace('수술중교환_', '').replace('수술중FAIL_', '').replace('보험임플란트', '').trim();
       if (manufacturer === "" && mainParts.length > 1) {
         manufacturer = mainParts[1];
       }
@@ -115,7 +115,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
         manufacturer = brand;
       }
     } else {
-      manufacturer = desc.replace('보험임플란트', '').replace('수술중교환_', '').trim();
+      manufacturer = desc.replace('보험임플란트', '').replace('수술중교환_', '').replace('수술중FAIL_', '').trim();
     }
 
     const fixed = fixIbsImplant(manufacturer, brand);
