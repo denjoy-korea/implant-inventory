@@ -27,6 +27,12 @@ function normalizeClassification(cls: string | null | undefined): string {
   return v;
 }
 
+/** 구 제조사 prefix 정규화 (수술중FAIL_xxx → 수술중교환_xxx) */
+function normalizeManufacturer(m: string): string {
+  if (m.startsWith('수술중FAIL_')) return '수술중교환_' + m.slice('수술중FAIL_'.length);
+  return m;
+}
+
 function sanitizeEncryptedProfileField(
   field: 'email' | 'name' | 'phone',
   value: string | null,
@@ -99,7 +105,8 @@ export function fixIbsImplant(
 /** DbInventoryItem → InventoryItem (계산 필드 초기값 포함) */
 export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
   const adj = db.stock_adjustment ?? 0;
-  const { manufacturer, brand } = fixIbsImplant(db.manufacturer, db.brand);
+  const { manufacturer: rawM, brand } = fixIbsImplant(db.manufacturer, db.brand);
+  const manufacturer = normalizeManufacturer(rawM);
   return {
     id: db.id,
     manufacturer,
@@ -115,7 +122,8 @@ export function dbToInventoryItem(db: DbInventoryItem): InventoryItem {
 
 /** DbSurgeryRecord → ExcelRow (기존 수술기록지 포맷 호환) */
 export async function dbToExcelRow(db: DbSurgeryRecord): Promise<ExcelRow> {
-  const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+  const { manufacturer: rawM, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+  const manufacturer = normalizeManufacturer(rawM);
   const dbSize = db.size || '';
   return {
     '날짜': db.date || '',
@@ -142,7 +150,8 @@ export async function dbToExcelRowBatch(records: DbSurgeryRecord[]): Promise<Exc
   const patientInfos = records.map(r => r.patient_info || '');
   const decrypted = await decryptPatientInfoBatch(patientInfos);
   return records.map((db, i) => {
-    const { manufacturer, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+    const { manufacturer: rawM, brand } = fixIbsImplant(db.manufacturer || '', db.brand || '');
+    const manufacturer = normalizeManufacturer(rawM);
     const dbSize = db.size || '';
     return {
       '날짜': db.date || '',
