@@ -570,6 +570,34 @@ export const authService = {
     }
   },
 
+  /** 2개월 일시 중지 요청 저장 (피드백 수집, fire-and-forget) */
+  async pauseAccount(featureRequest: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = user?.id ?? session?.user?.id;
+      const userEmail = user?.email ?? session?.user?.email ?? '';
+      if (!userId) return { success: false, error: '세션이 만료되었습니다.' };
+
+      await supabase.from('withdrawal_reasons').insert({
+        user_id: userId,
+        email: userEmail,
+        reason: '필요한 기능이 없어서 (2개월 일시 중지 요청)',
+        reason_detail: featureRequest.trim() || null,
+      });
+
+      // 슬랙 알림 (fire-and-forget)
+      supabase.functions.invoke('notify-withdrawal', {
+        body: { email: userEmail, reasons: '일시 중지 요청', reasonDetail: featureRequest.trim() },
+      }).catch(() => {});
+
+      return { success: true };
+    } catch (err) {
+      console.warn('[authService] pauseAccount failed:', err);
+      return { success: false, error: '요청 처리에 실패했습니다.' };
+    }
+  },
+
   /** 가입 시 트라이얼 시작 (hospital.id를 직접 받아 profile 의존 없이 실행) */
   async _startTrialForHospital(hospitalId: string, plan: PlanType): Promise<void> {
     // RPC 시도 (p_plan 파라미터 지원)
