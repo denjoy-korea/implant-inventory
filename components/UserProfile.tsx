@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, TrustedDevice } from '../types';
 import { contactService } from '../services/contactService';
 import { authService } from '../services/authService';
+import { planService } from '../services/planService';
 import PlanBadge from './PlanBadge';
 import { UNLIMITED_DAYS } from '../constants';
 import { useToast } from '../hooks/useToast';
@@ -304,7 +305,10 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
 
     const handlePause = async () => {
         setIsPausing(true);
-        await authService.pauseAccount(featureRequest);
+        await Promise.all([
+            authService.pauseAccount(featureRequest),
+            planService.cancelSubscription(user.hospitalId),
+        ]);
         setIsPausing(false);
         setPauseSuccess(true);
     };
