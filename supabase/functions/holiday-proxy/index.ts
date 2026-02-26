@@ -49,13 +49,14 @@ async function fetchMonth(apiKey: string, year: number, month: number): Promise<
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const corsHeaders = getCorsHeaders(req);
     const apiKey = Deno.env.get("HOLIDAY_API_KEY");
     if (!apiKey) {
       return new Response(

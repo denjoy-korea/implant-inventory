@@ -277,10 +277,30 @@ export function useAppState(onNotify?: NotifyFn) {
     }
   };
 
+  /** 프로필 존재 확인 — 방출(kick)으로 계정 삭제된 경우 감지 */
+  const checkProfileExists = async (): Promise<boolean> => {
+    try {
+      const profile = await authService.getProfileById();
+      return profile !== null;
+    } catch {
+      return true; // 네트워크 오류 시 로그아웃하지 않음
+    }
+  };
+
   /** 세션 토큰 폴링 시작 */
   const startSessionPolling = () => {
     if (sessionPollRef.current) return; // 이미 실행 중
     sessionPollRef.current = setInterval(async () => {
+      // 프로필 존재 확인 (방출 감지)
+      const profileExists = await checkProfileExists();
+      if (!profileExists) {
+        clearInterval(sessionPollRef.current!);
+        sessionPollRef.current = null;
+        notify('계정이 삭제되었거나 병원에서 방출되었습니다.', 'error');
+        setTimeout(() => authService.signOut(), 2000);
+        return;
+      }
+      // 중복 로그인 검증
       const valid = await validateSessionToken();
       if (!valid) {
         clearInterval(sessionPollRef.current!);
@@ -360,6 +380,21 @@ export function useAppState(onNotify?: NotifyFn) {
 
         const session = await authService.getSession();
         if (session?.user) {
+          // JWT가 만료되었거나 곧 만료될 경우 선제적으로 갱신
+          // getSession()은 localStorage만 읽어 만료된 토큰도 반환하므로,
+          // RPC 호출 전에 반드시 refreshSession()으로 유효한 토큰 확보
+          const expiresAt = session.expires_at; // unix seconds
+          const now = Math.floor(Date.now() / 1000);
+          if (!expiresAt || expiresAt < now + 60) {
+            const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError || !refreshed.session) {
+              console.warn('[useAppState] Session refresh failed, signing out:', refreshError?.message);
+              await authService.signOut();
+              setState(prev => ({ ...prev, isLoading: false }));
+              return;
+            }
+          }
+
           let profile = await authService.getProfileById();
           // 프로필 조회 실패 시 500ms 후 1회 재시도 (RPC 일시 오류 대응)
           if (!profile) {

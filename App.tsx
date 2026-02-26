@@ -204,13 +204,54 @@ const App: React.FC = () => {
   const [inviteInfo, setInviteInfo] = React.useState<{
     token: string; email: string; name: string; hospitalName: string;
   } | null>(null);
+  const [processingInvite, setProcessingInvite] = useState(false);
 
   // URL ?invite=TOKEN 감지 → verify-invite Edge Function으로 검증 후 초대 수락 뷰로 전환
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('invite');
-    if (!token || state.user) return;
+    if (!token) return;
 
+    // URL에서 토큰 파라미터 즉시 제거 (보안 + 중복 실행 방지)
+    const url = new URL(window.location.href);
+    url.searchParams.delete('invite');
+    window.history.replaceState(null, '', url.toString());
+
+    // 이미 로그인된 사용자: 토큰 검증 후 accept-invite 자동 호출
+    if (state.user) {
+      setProcessingInvite(true);
+      supabase.functions.invoke('verify-invite', { body: { token } })
+        .then(async ({ data, error }) => {
+          if (error || !data || data.error) {
+            showAlertToast('유효하지 않거나 만료된 초대입니다.', 'error');
+            setProcessingInvite(false);
+            return;
+          }
+          // 이미 해당 병원에 소속된 경우 스킵
+          if (state.user!.hospitalId) {
+            showAlertToast('이미 병원에 소속되어 있습니다.', 'info');
+            setProcessingInvite(false);
+            return;
+          }
+          const { data: { session } } = await supabase.auth.getSession();
+          const { data: acceptData, error: acceptError } = await supabase.functions.invoke('accept-invite', {
+            body: { token, userId: state.user!.id },
+            headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+          });
+          if (acceptError || acceptData?.error) {
+            showAlertToast(acceptData?.error || '초대 수락에 실패했습니다.', 'error');
+            setProcessingInvite(false);
+            return;
+          }
+          showAlertToast(`${data.hospitalName}에 합류되었습니다!`, 'success');
+          // 세션 새로고침하여 병원 데이터 로드
+          window.location.reload();
+        })
+        .catch(() => setProcessingInvite(false));
+      return;
+    }
+
+    // 비로그인 사용자: 초대 수락 폼으로 전환
     supabase.functions.invoke('verify-invite', { body: { token } })
       .then(({ data, error }) => {
         if (error || !data || data.error) {
@@ -219,10 +260,6 @@ const App: React.FC = () => {
         }
         setInviteInfo({ token, email: data.email, name: data.name, hospitalName: data.hospitalName });
         setState(prev => ({ ...prev, currentView: 'invite' }));
-        // URL에서 토큰 파라미터 제거 (보안)
-        const url = new URL(window.location.href);
-        url.searchParams.delete('invite');
-        window.history.replaceState(null, '', url.toString());
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1981,7 +2018,13 @@ const App: React.FC = () => {
               <main className="flex-1" style={{ overflowX: 'clip' }}>
                 <ErrorBoundary>
                   <Suspense fallback={suspenseFallback}>
-                    {/* Dashboard routing based on Approval Status */}
+                    {/* 초대 처리 중에는 병원 찾기 대신 로딩 표시 */}
+                    {processingInvite ? (
+                      <div className="flex flex-col items-center justify-center py-32 gap-4">
+                        <div className="w-10 h-10 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                        <p className="text-sm text-slate-500 font-medium">초대를 처리하고 있습니다...</p>
+                      </div>
+                    ) : (
                     <DashboardGuardedContent
                       state={state}
                       setState={setState}
@@ -2077,6 +2120,7 @@ const App: React.FC = () => {
                         },
                       }}
                     />
+                    )}
                   </Suspense>
                 </ErrorBoundary>
               </main>
