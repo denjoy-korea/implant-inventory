@@ -119,7 +119,6 @@ const App: React.FC = () => {
     setState,
     loadHospitalData,
     handleLoginSuccess,
-    handleLeaveHospital: _handleLeaveHospital,
     handleDeleteAccount,
   } = useAppState(showAlertToast);
   const pwaUpdate = usePwaUpdate(state.currentView);
@@ -158,10 +157,6 @@ const App: React.FC = () => {
     }).catch(() => { });
   }, [state.user, state.currentView, reviewPopupType]);
 
-  // UserProfile expects () => void; hook expects (user: User) so wrap with current user
-  const handleLeaveHospital = useCallback(() => {
-    if (state.user) _handleLeaveHospital(state.user);
-  }, [_handleLeaveHospital, state.user]);
 
   const handleSelectBillingProgram = useCallback(async (program: BillingProgram) => {
     if (!state.user?.hospitalId) return;
@@ -484,7 +479,6 @@ const App: React.FC = () => {
   //    useMemo로 바꾸면 mark* 호출 직후 재렌더 시 캐시된 이전 값을 반환해 wizard가 재등장함.
   const firstIncompleteStep = (() => {
     if (requiresBillingProgramSetup) return null;
-    if (!isHospitalAdmin) return null;
     if (state.user?.status !== 'active') return null;
     const hid = state.user?.hospitalId ?? '';
     // Step 1은 localStorage만 체크 — DB 로딩 완료 전에도 즉시 표시 가능
@@ -2167,7 +2161,6 @@ const App: React.FC = () => {
           onboardingProgress={onboardingProgress}
           toastCompletedLabel={toastCompletedLabel}
           onCloseProfile={() => setState(prev => ({ ...prev, showProfile: false }))}
-          onLeaveHospital={handleLeaveHospital}
           onDeleteAccount={handleDeleteAccount}
           onChangePlan={() => setState(prev => ({ ...prev, showProfile: false, currentView: 'pricing' }))}
           onReviewSubmitted={() => {
