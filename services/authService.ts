@@ -702,9 +702,12 @@ export const authService = {
         .forEach(key => localStorage.removeItem(key));
 
       // 로컬 세션 정리
-      // auth.users가 이미 삭제된 후 scope=global signOut은 user_not_found(403) 발생.
-      // scope=local: HTTP 요청 없이 로컬 세션만 삭제하므로 에러 없음.
-      await supabase.auth.signOut({ scope: 'local' });
+      // auth.users가 이미 삭제됐으므로 signOut HTTP 요청 시 403 user_not_found 발생.
+      // 403 반환 시 Supabase JS 클라이언트가 로컬 세션을 삭제하지 않아 스토리지 잔존.
+      // → signOut 호출 없이 sb-* 키를 직접 삭제해 세션 완전 정리.
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('sb-') && key.endsWith('-auth-token'))
+        .forEach(key => localStorage.removeItem(key));
       return { success: true };
     } catch (error) {
       console.error('[authService] deleteAccount failed:', error);
