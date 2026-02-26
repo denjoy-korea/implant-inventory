@@ -80,7 +80,8 @@ export function useAppState(onNotify?: NotifyFn) {
       return;
     }
 
-    if (!user.hospitalId || (user.status !== 'active' && user.status !== 'readonly')) {
+    const isAdminRole = user.role === 'admin';
+    if (!user.hospitalId || (!isAdminRole && user.status !== 'active' && user.status !== 'readonly')) {
       setState(prev => ({
         ...prev,
         user,

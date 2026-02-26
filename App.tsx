@@ -180,6 +180,45 @@ const App: React.FC = () => {
     await loadHospitalData(state.user);
   }, [loadHospitalData, state.user]);
 
+  // 관리자 원래 hospital_id 보존 (사용자 뷰 → 관리자 뷰 복귀 시 복원용)
+  const adminOriginalHospitalIdRef = useRef<string | null>(null);
+
+  /** 시스템 관리자: 사용자 뷰 진입 (hospital_id를 데이터 있는 병원으로 전환 → 데이터 로드) */
+  const handleEnterUserView = useCallback(async () => {
+    if (!state.user || state.user.role !== 'admin') return;
+
+    // 원래 hospital_id 보존
+    adminOriginalHospitalIdRef.current = state.user.hospitalId || null;
+
+    setState(prev => ({ ...prev, isLoading: true }));
+    try {
+      // RPC로 데이터가 있는 병원으로 전환 (자동 선택)
+      const { data, error } = await supabase.rpc('admin_enter_user_view');
+      if (error || !data) {
+        console.error('[App] admin_enter_user_view failed:', error?.message);
+        setState(prev => ({ ...prev, isLoading: false }));
+        return;
+      }
+      const updatedUser = { ...state.user, hospitalId: data as string };
+      setState(prev => ({ ...prev, user: updatedUser, adminViewMode: 'user' }));
+      await loadHospitalData(updatedUser);
+    } catch (err) {
+      console.error('[App] admin_enter_user_view error:', err);
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [state.user, loadHospitalData, setState]);
+
+  /** 시스템 관리자: 관리자 뷰 복귀 (원래 hospital_id 복원) */
+  const handleReturnToAdmin = useCallback(async () => {
+    setState(prev => ({ ...prev, adminViewMode: 'admin' }));
+    // 원래 hospital_id 복원 (백그라운드 - 실패해도 뷰 전환은 유지)
+    const originalId = adminOriginalHospitalIdRef.current;
+    const { error } = await supabase.rpc('admin_exit_user_view', {
+      p_original_hospital_id: originalId,
+    });
+    if (error) console.warn('[App] admin_exit_user_view failed:', error.message);
+  }, [setState]);
+
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
   const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
   const [autoOpenFailBulkModal, setAutoOpenFailBulkModal] = useState(false);
@@ -1936,7 +1975,7 @@ const App: React.FC = () => {
           hospitalName={state.hospitalName}
           userRole={state.user?.role}
           userPermissions={state.user?.permissions}
-          onReturnToAdmin={isSystemAdmin ? () => setState(prev => ({ ...prev, adminViewMode: 'admin' })) : undefined}
+          onReturnToAdmin={isSystemAdmin ? handleReturnToAdmin : undefined}
           userName={state.user?.name}
           onProfileClick={() => setState(prev => ({ ...prev, showProfile: true }))}
         />
@@ -1980,7 +2019,7 @@ const App: React.FC = () => {
               <Suspense fallback={suspenseFallback}>
                 <SystemAdminDashboard
                   onLogout={async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); }}
-                  onToggleView={() => setState(prev => ({ ...prev, adminViewMode: 'user' }))}
+                  onToggleView={handleEnterUserView}
                   onGoHome={() => setState(prev => ({ ...prev, currentView: 'landing' }))}
                 />
               </Suspense>
