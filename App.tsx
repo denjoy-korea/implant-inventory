@@ -448,10 +448,10 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleSidebarShortcut);
   }, [showDashboardSidebar]);
 
-  /** 플랜 품목 수 계산 시 수술중FAIL_ / 보험청구 제외 */
+  /** 플랜 품목 수 계산 시 수술중교환_ / 보험청구 제외 */
   const countBillableItems = useCallback((items: InventoryItem[]) => {
     return items.filter(i =>
-      !i.manufacturer.startsWith('수술중FAIL_') && i.manufacturer !== '보험청구'
+      !i.manufacturer.startsWith('수술중교환_') && i.manufacturer !== '보험청구'
     ).length;
   }, []);
 
@@ -662,7 +662,7 @@ const App: React.FC = () => {
 
     records.forEach(row => {
       const cls = String(row.classification || '');
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
       const record = String(row.surgery_record || '');
       if (record.includes('[GBR Only]')) return;
 
@@ -687,7 +687,7 @@ const App: React.FC = () => {
 
     const usageByInventoryId: Record<string, number> = {};
     inventoryItems.forEach(item => {
-      const isCategory = item.manufacturer.startsWith('수술중FAIL_') || item.manufacturer === '보험청구';
+      const isCategory = item.manufacturer.startsWith('수술중교환_') || item.manufacturer === '보험청구';
       if (isCategory) return;
 
       const targetM = normalize(item.manufacturer);
@@ -740,7 +740,7 @@ const App: React.FC = () => {
         if (isTotalRow) return;
 
         const cls = String(row['구분'] || '');
-        if (cls !== '식립' && cls !== '수술중 FAIL') return;
+        if (cls !== '식립' && cls !== '수술중교환') return;
         const record = String(row['수술기록'] || '');
         if (record.includes('[GBR Only]')) return;
 
@@ -793,7 +793,7 @@ const App: React.FC = () => {
 
       // ── inventory 매핑: lookup O(inventory × surgeryMap keys) → 실질 O(n) ──
       const updatedInventory = prev.inventory.map(item => {
-        const isCategory = item.manufacturer.startsWith('수술중FAIL_') || item.manufacturer === '보험청구';
+        const isCategory = item.manufacturer.startsWith('수술중교환_') || item.manufacturer === '보험청구';
         if (isCategory) {
           return {
             ...item,
@@ -989,7 +989,7 @@ const App: React.FC = () => {
 
     // 동일 제조사-브랜드-규격 키를 가진 기존 재고 규격 표기를 우선 사용 (목록 기반 표기 통일)
     const preferredInventoryItem = state.inventory.find(item => {
-      if (item.manufacturer.startsWith('수술중FAIL_')) return false;
+      if (item.manufacturer.startsWith('수술중교환_')) return false;
       if (item.manufacturer === '보험청구' || item.brand === '보험임플란트') return false;
       const itemFixed = fixIbsImplant(item.manufacturer, item.brand);
       return (
@@ -1222,7 +1222,7 @@ const App: React.FC = () => {
             let initialFixation = "";
 
             if (desc.includes('[GBR Only]')) classification = "골이식만";
-            else if (desc.includes('수술중FAIL_')) classification = "수술중 FAIL";
+            else if (desc.includes('수술중교환_')) classification = "수술중교환";
             else if (desc.includes('보험임플란트')) classification = "청구";
 
             if (classification === "골이식만") {
@@ -1234,7 +1234,7 @@ const App: React.FC = () => {
             else if (desc.includes('-')) {
               const mainParts = desc.split('-').map(p => p.trim());
               let rawM = mainParts[0];
-              manufacturer = rawM.replace('수술중FAIL_', '').replace('보험임플란트', '').trim();
+              manufacturer = rawM.replace('수술중교환_', '').replace('보험임플란트', '').trim();
               if (manufacturer === "" && mainParts.length > 1) {
                 manufacturer = mainParts[1];
               }
@@ -1264,7 +1264,7 @@ const App: React.FC = () => {
                 else if (seg.startsWith('초기고정')) initialFixation = seg.replace('초기고정', '').trim();
               }
             } else {
-              manufacturer = desc.replace('보험임플란트', '').replace('수술중FAIL_', '').trim();
+              manufacturer = desc.replace('보험임플란트', '').replace('수술중교환_', '').trim();
             }
 
             const fixedMfr = fixIbsImplant(manufacturer, brand);
@@ -1506,7 +1506,7 @@ const App: React.FC = () => {
       const totalToProcess = order.items.reduce((sum, item) => sum + item.quantity, 0);
       const targetM = normalize(order.manufacturer);
       failRecordIds = rows
-        .filter(row => row['구분'] === '수술중 FAIL' && normalize(String(row['제조사'] ?? '')) === targetM)
+        .filter(row => row['구분'] === '수술중교환' && normalize(String(row['제조사'] ?? '')) === targetM)
         .sort((a, b) => String(a['날짜'] ?? '').localeCompare(String(b['날짜'] ?? '')))
         .slice(0, totalToProcess)
         .filter(r => r._id)
@@ -1523,12 +1523,12 @@ const App: React.FC = () => {
           const targetM = normalize(nextOrder.manufacturer);
           const failIndices = rows
             .map((row, idx) => ({ row, idx }))
-            .filter(({ row }) => row['구분'] === '수술중 FAIL' && normalize(String(row['제조사'] ?? '')) === targetM)
+            .filter(({ row }) => row['구분'] === '수술중교환' && normalize(String(row['제조사'] ?? '')) === targetM)
             .sort((a, b) => String(a.row['날짜'] ?? '').localeCompare(String(b.row['날짜'] ?? '')))
             .map(item => item.idx);
           const indicesToUpdate = failIndices.slice(0, totalToProcess);
           indicesToUpdate.forEach(idx => {
-            rows[idx] = { ...rows[idx], '구분': 'FAIL 교환완료' };
+            rows[idx] = { ...rows[idx], '구분': '교환완료' };
           });
           nextSurgeryMaster[sheetName] = rows;
         }
@@ -1766,7 +1766,7 @@ const App: React.FC = () => {
       if (isTotalRow) return;
 
       const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
 
       const surgeryRecord = String(row['수술기록'] || '');
       if (surgeryRecord.includes('[GBR Only]')) return;
@@ -1776,7 +1776,7 @@ const App: React.FC = () => {
       const size = String(row['규격(SIZE)'] || '').trim();
 
       if (!manufacturer && !brand && !size) return;
-      if (manufacturer.startsWith('수술중FAIL_')) return;
+      if (manufacturer.startsWith('수술중교환_')) return;
       if (manufacturer === '보험청구' || brand === '보험임플란트') return;
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;
@@ -2112,6 +2112,13 @@ const App: React.FC = () => {
                           setShowOnboardingComplete(true);
                           if (user) loadHospitalData(user); // 완료 후 대시보드 수치 갱신 (백그라운드)
                         },
+                        onboardingStep: firstIncompleteStep,
+                        onResumeOnboarding: firstIncompleteStep != null ? () => {
+                          const hid = state.user?.hospitalId ?? '';
+                          onboardingService.clearDismissed(hid);
+                          setOnboardingDismissed(false);
+                          setForcedOnboardingStep(firstIncompleteStep);
+                        } : undefined,
                       }}
                     />
                     )}

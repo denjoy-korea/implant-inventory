@@ -90,6 +90,8 @@ export interface DashboardWorkspaceSectionProps {
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
   onFailAuditDone?: () => void;
+  onboardingStep?: number | null;
+  onResumeOnboarding?: () => void;
 }
 
 const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
@@ -122,6 +124,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   initialShowFailBulkModal,
   onFailBulkModalOpened,
   onFailAuditDone,
+  onboardingStep,
+  onResumeOnboarding,
 }) => {
   const buildQuickOrder = (item: InventoryItem): Order => ({
     id: `order_${Date.now()}`,
@@ -204,6 +208,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           isMaster={isHospitalMaster || isSystemAdmin}
           onStartTrial={onStartOverviewTrial}
           onGoToPricing={onGoToPricing}
+          onboardingStep={onboardingStep}
+          onResumeOnboarding={onResumeOnboarding}
         />
       )}
 

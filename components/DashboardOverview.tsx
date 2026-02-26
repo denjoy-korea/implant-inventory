@@ -31,6 +31,8 @@ interface DashboardOverviewProps {
   isMaster?: boolean;
   onStartTrial: () => void;
   onGoToPricing: () => void;
+  onboardingStep?: number | null;
+  onResumeOnboarding?: () => void;
 }
 
 type ShortageEntry = {
@@ -86,6 +88,7 @@ type ActionItem = {
   meta?: string;
   metaItems?: Array<{ label: string; count: number }>;
   alertNote?: string;
+  onClick?: () => void;
 };
 
 type ManufacturerUsageRow = {
@@ -199,6 +202,16 @@ function pickDisplayManufacturer(current: string, candidate: string): string {
   return b.length > a.length ? b : a;
 }
 
+const ONBOARDING_STEP_LABELS: Record<number, { title: string; desc: string }> = {
+  1: { title: '초기 설정을 시작하세요', desc: '웰컴 가이드를 확인하고 DenJOY 설정을 시작합니다.' },
+  2: { title: '덴트웹 픽스쳐 데이터 다운로드', desc: '덴트웹에서 픽스쳐(재고) 데이터를 내려받으세요.' },
+  3: { title: '픽스쳐 데이터 업로드', desc: '다운받은 픽스쳐 엑셀 파일을 업로드하세요.' },
+  4: { title: '덴트웹 수술기록 다운로드', desc: '덴트웹에서 수술기록 데이터를 내려받으세요.' },
+  5: { title: '수술기록 업로드', desc: '다운받은 수술기록 엑셀 파일을 업로드하세요.' },
+  6: { title: '기초재고 실사 실행', desc: '현재 실물 재고와 시스템 재고를 대조하세요.' },
+  7: { title: 'FAIL 재고 정리', desc: '미교환 FAIL 임플란트를 확인하고 정리하세요.' },
+};
+
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   inventory,
   orders,
@@ -208,6 +221,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   onNavigate,
   planState,
+  onboardingStep,
+  onResumeOnboarding,
 }) => {
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -256,7 +271,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     () =>
       inventory.filter(
         (item) =>
-          !item.manufacturer.startsWith('수술중FAIL_') &&
+          !item.manufacturer.startsWith('수술중교환_') &&
           item.manufacturer !== '보험청구' &&
           item.brand !== '보험임플란트'
       ),
@@ -353,7 +368,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   );
 
   const pendingFailRows = useMemo(
-    () => cleanSurgeryRows.filter((row) => String(row['구분'] || '').trim() === '수술중 FAIL'),
+    () => cleanSurgeryRows.filter((row) => String(row['구분'] || '').trim() === '수술중교환'),
     [cleanSurgeryRows]
   );
 
@@ -438,7 +453,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
     cleanSurgeryRows.forEach((row) => {
       const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
 
       const monthKey = monthKeyFromDate(row['날짜']);
       if (!monthKey) return;
@@ -447,7 +462,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const current = monthMap.get(monthKey) ?? { placement: 0, fail: 0 };
 
       if (cls === '식립') current.placement += qty;
-      if (cls === '수술중 FAIL') current.fail += qty;
+      if (cls === '수술중교환') current.fail += qty;
 
       monthMap.set(monthKey, current);
     });
@@ -532,7 +547,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const cls = String(row['구분'] || '').trim();
       const qty = parseQty(row['갯수']);
       if (cls === '식립') placementQty += qty;
-      if (cls === '수술중 FAIL') failQty += qty;
+      if (cls === '수술중교환') failQty += qty;
     });
 
     return { placementQty, failQty };
@@ -616,7 +631,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const cls = String(row['구분'] || '').trim();
         const qty = parseQty(row['갯수']);
         if (cls === '식립') prevPlacement += qty;
-        if (cls === '수술중 FAIL') prevFail += qty;
+        if (cls === '수술중교환') prevFail += qty;
       });
 
       setProgressDelta({
@@ -676,12 +691,12 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
     cleanSurgeryRows.forEach((row) => {
       const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
 
       const manufacturer = String(row['제조사'] || '').trim();
       const brand = String(row['브랜드'] || '').trim() || '-';
       if (!manufacturer) return;
-      if (manufacturer.startsWith('수술중FAIL_') || manufacturer === '보험청구' || brand === '보험임플란트') return;
+      if (manufacturer.startsWith('수술중교환_') || manufacturer === '보험청구' || brand === '보험임플란트') return;
       const manufacturerKey = manufacturerAliasKey(manufacturer);
       if (!manufacturerKey) return;
 
@@ -700,7 +715,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       current.manufacturer = pickDisplayManufacturer(current.manufacturer, manufacturer);
       current.totalQty += qty;
       if (cls === '식립') current.placementQty += qty;
-      if (cls === '수술중 FAIL') current.failQty += qty;
+      if (cls === '수술중교환') current.failQty += qty;
       if (monthKey && monthSet.has(monthKey)) current.recentQty += qty;
       current.brandMap.set(brand, (current.brandMap.get(brand) ?? 0) + qty);
       if (monthKey) current.monthMap.set(monthKey, (current.monthMap.get(monthKey) ?? 0) + qty);
@@ -819,7 +834,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               ? 'border-amber-200 bg-amber-50/70 text-amber-700'
               : 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
         tab: 'fail_management',
-        hint: '수술중 FAIL 기준',
+        hint: '수술중교환 기준',
         severity: failSeverity,
         score: (failSummary.remainingExchangeQty * 3) + (failSummary.pendingRows * 4),
       },
@@ -895,6 +910,22 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const todayActionItems = useMemo<ActionItem[]>(() => {
     const items: ActionItem[] = [];
+
+    // 온보딩 미완료 시 최우선 긴급 항목으로 추가
+    if (onboardingStep != null && onResumeOnboarding) {
+      const label = ONBOARDING_STEP_LABELS[onboardingStep];
+      items.push({
+        key: 'action-onboarding',
+        title: label?.title ?? '초기 설정 완료하기',
+        description: label?.desc ?? '초기 설정을 완료하세요.',
+        tab: 'overview',
+        severity: 'critical',
+        score: 9999, // 항상 1순위
+        alertNote: `초기 설정 ${onboardingStep}/7단계 진행 중`,
+        onClick: onResumeOnboarding,
+      });
+    }
+
     const topShortage = shortageEntries[0];
     const topMismatch = latestAuditSummary.topMismatches[0];
     const topFail = failExchangeEntries[0];
@@ -1024,6 +1055,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     unregisteredSummary.count,
     unregisteredSummary.usageQty,
     visibleInventory,
+    onboardingStep,
+    onResumeOnboarding,
   ]);
 
   const maxManufacturerRecentQty = useMemo(
@@ -1092,8 +1125,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               key={item.key}
               role="button"
               tabIndex={0}
-              onClick={() => onNavigate(item.tab)}
-              onKeyDown={(e) => e.key === 'Enter' && onNavigate(item.tab)}
+              onClick={() => item.onClick ? item.onClick() : onNavigate(item.tab)}
+              onKeyDown={(e) => e.key === 'Enter' && (item.onClick ? item.onClick() : onNavigate(item.tab))}
               className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5 cursor-pointer"
             >
               <div className="flex items-center gap-3">
@@ -1540,7 +1573,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     ))}
                   </div>
                 </div>
-                <p className="mt-2 text-[10px] text-slate-500">수술기록지의 식립/수술중 FAIL 수량 기준 집계</p>
+                <p className="mt-2 text-[10px] text-slate-500">수술기록지의 식립/수술중교환 수량 기준 집계</p>
               </div>
             </div>
           </div>
