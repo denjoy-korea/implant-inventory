@@ -1183,7 +1183,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
-                                                <p className="text-xs">2개월 일시 중지 후 자동 재개됩니다. 이용료는 중지 기간 동안 청구되지 않습니다.</p>
+                                                <p className="text-xs">중지 기간에는 서비스 이용과 이용료 청구가 함께 중단됩니다. 2개월 후 자동으로 재개됩니다.</p>
                                             </div>
                                         )}
                                     </div>
