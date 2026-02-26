@@ -7,17 +7,17 @@ interface Props {
 export default function Step3FailAudit({ onGoToFailManagement }: Props) {
   return (
     <div className="px-5 py-5 flex flex-col h-full">
-      <h2 className="text-lg font-black text-slate-900 mb-0.5">FAIL 재고 정합 처리</h2>
+      <h2 className="text-lg font-black text-slate-900 mb-0.5">교환 재고 정합 처리</h2>
       <p className="text-xs text-slate-500 mb-4">
-        수술기록의 FAIL 항목을 확인하고 실제 재고와 맞춰 데이터를 정확하게 만들어요.
+        수술기록의 교환 항목을 확인하고 실제 재고와 맞춰 데이터를 정확하게 만들어요.
       </p>
 
       <div className="space-y-2 mb-4">
         {[
           {
             step: '1',
-            title: 'FAIL 항목 확인',
-            desc: 'FAIL 관리 탭에서 수술 중 FAIL 목록 확인',
+            title: '교환 항목 확인',
+            desc: '교환 관리 탭에서 수술 중 교환 목록 확인',
             icon: (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -25,7 +25,7 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
           },
           {
             step: '2',
-            title: 'FAIL 교환 처리',
+            title: '교환 처리',
             desc: '교환 완료된 항목 처리 → 재고 자동 차감',
             icon: (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -63,9 +63,9 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <div>
-          <p className="text-xs font-bold text-amber-700 mb-0.5">FAIL 관리 탭에서 진행</p>
+          <p className="text-xs font-bold text-amber-700 mb-0.5">교환 관리 탭에서 진행</p>
           <p className="text-[11px] text-amber-600 leading-snug">
-            수술 중 발생한 FAIL 임플란트를 처리하여 재고를 정확하게 유지합니다.
+            수술 중 발생한 교환 임플란트를 처리하여 재고를 정확하게 유지합니다.
           </p>
         </div>
       </div>
@@ -74,7 +74,7 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
         onClick={onGoToFailManagement}
         className="w-full py-3.5 text-sm font-bold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all mt-auto"
       >
-        FAIL 관리 진행하기
+        교환 관리 진행하기
       </button>
     </div>
   );

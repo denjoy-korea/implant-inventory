@@ -228,7 +228,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange'; label: string }[] = [
     { key: 'all', label: '전체' },
     { key: 'replenishment', label: '재고 발주' },
-    { key: 'fail_exchange', label: 'FAIL 교환' },
+    { key: 'fail_exchange', label: '교환' },
   ];
   const STATUS_FILTERS: { key: 'all' | OrderStatus; label: string }[] = [
     { key: 'all', label: '모든 상태' },
@@ -538,7 +538,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-white/50 backdrop-blur-sm px-2.5 sm:px-3 py-1.5 rounded-xl border border-white shadow-sm">
                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">재고 발주</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">FAIL 교환</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">교환</span></div>
                 </div>
               </div>
               {monthlyOrderData.length > 0 ? (
@@ -586,7 +586,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           {hFail > 0 && <rect x={x} y={startY} width={barWidth} height={hFail} rx="4" fill="url(#barRoseGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
                           {hRep > 0 && <rect x={x} y={chartH - hRep} width={barWidth} height={hRep} rx="4" fill="url(#barIndigoGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
 
-                          {/* FAIL 교환 수량 (hFail >= 14 이면 바 내부 중앙, 작으면 바 위) */}
+                          {/* 교환 수량 (hFail >= 14 이면 바 내부 중앙, 작으면 바 위) */}
                           {hFail > 0 && hFail >= 14 ? (
                             <text x={x + barWidth / 2} y={startY + (hFail / 2) + 3} textAnchor="middle" fontSize="9" fill="#ffffff" fontWeight="800" className="pointer-events-none drop-shadow-sm">{d.fail_exchange}</text>
                           ) : hFail > 0 ? (
@@ -686,7 +686,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(order.manufacturer)}</p>
                   </div>
                   <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
-                    {order.type === 'replenishment' ? '재고 발주' : 'FAIL 교환'}
+                    {order.type === 'replenishment' ? '재고 발주' : '교환'}
                   </span>
                 </div>
 
@@ -759,7 +759,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{order.date}</span></td>
                     <td className="px-6 py-3">
                       <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
-                        {order.type === 'replenishment' ? '재고 발주' : 'FAIL 교환'}
+                        {order.type === 'replenishment' ? '재고 발주' : '교환'}
                       </span>
                     </td>
                     <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(order.manufacturer)}</span></td>

@@ -9,7 +9,7 @@
  * - 특수문자 제거: 공백, -, _, ., (, )
  * - Φ, φ → d 변환
  *
- * 용도: 수술기록지 ↔ 픽스쳐 매칭, FAIL 교환 매칭
+ * 용도: 수술기록지 ↔ 픽스쳐 매칭, 교환 매칭
  */
 export const normalizeSurgery = (str: string): string => {
   return String(str || '')

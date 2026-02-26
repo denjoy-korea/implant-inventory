@@ -118,7 +118,7 @@ function SemiGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, de
     <div className="flex items-center gap-5">
       <div className="relative w-24 h-16 flex-shrink-0">
         <svg viewBox="0 0 100 60" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 rounded-lg"
-          role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% FAIL 비율 반원 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
+          role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% 교환 비율 반원 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
           tabIndex={0} onKeyDown={handleKeyDown}
           onBlur={() => setHovered(null)}
           style={{ touchAction: 'manipulation', overflow: 'visible' }}>

@@ -507,7 +507,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
               <p className="text-base font-black text-slate-800 tabular-nums">{kpiStats.classificationStats['식립']}</p>
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-slate-400">FAIL율</p>
+              <p className="text-[10px] font-bold text-slate-400">교환율</p>
               <p className={`text-base font-black tabular-nums ${kpiStats.failRate > 15 ? 'text-rose-600' : 'text-slate-800'}`}>
                 {kpiStats.failRate.toFixed(1)}%
               </p>

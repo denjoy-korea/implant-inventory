@@ -127,12 +127,12 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
         <div className="min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-3 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-            FAIL률 / Failure Rate
+            교환율 / Exchange Rate
           </p>
           {manufacturerFailStats.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-8">FAIL 데이터 없음</p>
+            <p className="text-xs text-slate-400 text-center py-8">교환 데이터 없음</p>
           ) : (
-            <div className="space-y-3" role="list" aria-label="제조사별 FAIL률 순위">
+            <div className="space-y-3" role="list" aria-label="제조사별 교환율 순위">
               {(() => {
                 return manufacturerFailStats.map((f, i) => {
                   // Use absolute percentage (0-100%) instead of relative to max
@@ -161,7 +161,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
                 });
               })()}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total FAIL</span>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchange</span>
                 <span className="text-sm font-semibold text-slate-800 tabular-nums">{manufacturerFailStats.reduce((s, f) => s + f.failCount, 0)}건</span>
               </div>
             </div>

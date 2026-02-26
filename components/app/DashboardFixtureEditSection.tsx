@@ -106,7 +106,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
     // STEP 3: 길이 필터링
     if (unusedBrands) steps.push(3);
 
-    // STEP 5: FAIL/청구 확장
+    // STEP 5: 교환/청구 확장
     const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중교환_'));
     if (hasFailRows) steps.push(5);
 

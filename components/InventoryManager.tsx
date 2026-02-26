@@ -122,7 +122,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     );
   }, [inventory]);
 
-  /** 숨겨진 FAIL/청구 항목 수 */
+  /** 숨겨진 교환/청구 항목 수 */
   const hiddenCategoryCount = useMemo(() => {
     return inventory.length - visibleInventory.length;
   }, [inventory, visibleInventory]);
@@ -494,7 +494,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-white/60 backdrop-blur-md border border-slate-200/60 shadow-sm w-fit">
                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isNormal ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'}`} />
                       <p className={`text-[10px] font-bold tracking-tight ${isNormal ? 'text-slate-600' : 'text-rose-600'}`}>
-                        + FAIL/청구 {hiddenCategoryCount}개 별도{!isNormal && ' · 품목오류'}
+                        + 교환/청구 {hiddenCategoryCount}개 별도{!isNormal && ' · 품목오류'}
                       </p>
                     </div>
                   );

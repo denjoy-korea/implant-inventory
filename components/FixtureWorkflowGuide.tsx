@@ -156,7 +156,7 @@ const FixtureWorkflowGuide: React.FC<FixtureWorkflowGuideProps> = ({ completedSt
             <div className="space-y-1.5">
               <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
                 <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">교환</span>
-                수술 중 교환 발생 시 해당 제조사의 수술중교환 항목을 선택하여 기록합니다. FAIL 관리 메뉴에서 제조사별 교환 신청에 활용됩니다.
+                수술 중 교환 발생 시 해당 제조사의 수술중교환 항목을 선택하여 기록합니다. 교환 관리 메뉴에서 제조사별 교환 신청에 활용됩니다.
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
                 <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">청구</span>

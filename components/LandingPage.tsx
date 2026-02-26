@@ -400,7 +400,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Card 3 — FAIL 완전 추적 */}
+            {/* Card 3 — 교환 완전 추적 */}
             <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-rose-100/50 transition-all duration-500 border border-slate-200 hover:border-rose-200 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-rose-100/50 z-0"></div>
               <div className="relative z-10">
@@ -409,9 +409,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">FAIL 완전 추적</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">교환 완전 추적</h3>
                 <p className="text-slate-500 leading-relaxed text-balance">
-                  수술 중 FAIL → 교환 접수 → 입고 확인까지 단계별 추적. 브랜드별 FAIL률을 자동으로 계산합니다.
+                  수술 중 교환 → 교환 접수 → 입고 확인까지 단계별 추적. 브랜드별 교환율을 자동으로 계산합니다.
                 </p>
               </div>
             </div>
@@ -505,7 +505,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               먼저 우리 병원 데이터 품질을 확인해보세요
             </h2>
             <p className="text-emerald-100 text-base sm:text-lg mb-8 max-w-2xl mx-auto text-balance">
-              픽스쳐 재고 파일과 수술기록지를 업로드하면, FAIL 관리·보험청구 구분·매칭률 등 6가지 항목을 즉시 진단합니다.
+              픽스쳐 재고 파일과 수술기록지를 업로드하면, 교환 관리·보험청구 구분·매칭률 등 6가지 항목을 즉시 진단합니다.
             </p>
             <button
               onClick={isMobileViewport ? handleMobileAnalyzeFallback : handleAnalyzeClick}

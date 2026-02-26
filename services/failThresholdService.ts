@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 
-/** 제조사별 FAIL 교환 기준량. { "OSSTEM": 15, "IBS Implant": 10 } */
+/** 제조사별 교환 기준량. { "OSSTEM": 15, "IBS Implant": 10 } */
 export type FailThresholds = Record<string, number>;
 
 export const failThresholdService = {

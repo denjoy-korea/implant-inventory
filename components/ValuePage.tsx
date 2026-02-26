@@ -173,7 +173,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                   '발주 시점을 감으로 판단',
                   '사이즈별 소모량 분석 불가',
                   '직원마다 다른 엑셀 양식',
-                  'FAIL 교환 이력 추적 어려움',
+                  '교환 이력 추적 어려움',
                 ].map((text, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -201,7 +201,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                   '데이터 기반 적정 재고량 자동 계산',
                   '브랜드/사이즈별 소모 트렌드 분석',
                   '통합 대시보드로 일관된 관리',
-                  'FAIL 접수부터 교환까지 자동 추적',
+                  '교환 접수부터 입고까지 자동 추적',
                 ].map((text, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <svg className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -408,7 +408,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               { title: '수술 기록 자동 연동', desc: '덴트웹 수술기록 업로드 시 자동으로 재고 차감 및 소모 이력 기록', tag: '자동화' },
               { title: '브랜드별 소모 분석', desc: '어떤 브랜드의 어떤 사이즈가 많이 쓰이는지 데이터 기반 분석', tag: '분석' },
               { title: '스마트 발주 추천', desc: '소모 패턴 기반 적정 재고 자동 계산, 부족 시 즉시 발주 가능', tag: '발주' },
-              { title: 'FAIL 교환 관리', desc: '수술 중 FAIL 발생부터 교환 접수, 입고 확인까지 전 과정 추적', tag: 'FAIL' },
+              { title: '교환 관리', desc: '수술 중 교환 발생부터 교환 접수, 입고 확인까지 전 과정 추적', tag: '교환' },
               { title: '역할별 권한 관리', desc: '원장/매니저/스탭 역할에 따라 접근 가능한 메뉴와 기능을 구분', tag: '보안' },
             ].map((item, i) => (
               <div key={i} className="group p-7 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-2xl hover:shadow-indigo-100/50 hover:-translate-y-2 transition-all duration-500 relative overflow-hidden">

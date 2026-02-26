@@ -8,7 +8,7 @@ export interface FailBulkSetupModalProps {
   onClose: () => void;
   /** 인벤토리 기반 제조사 목록 (FAIL_ 미포함) */
   availableManufacturers: string[];
-  /** 현재 미처리 FAIL 제조사별 건수 */
+  /** 현재 미처리 교환 제조사별 건수 */
   pendingByManufacturer: { manufacturer: string; count: number }[];
   onInitialize: (items: { manufacturer: string; count: number; date: string }[]) => Promise<void>;
   onReconcile: (reconciles: { manufacturer: string; targetCount: number }[], date: string) => Promise<void>;
@@ -145,8 +145,8 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
         await onInitialize(noFailConfirmed ? [] : validInitItems);
         setResultMessage(
           noFailConfirmed
-            ? 'FAIL 픽스처 없음으로 처리 완료됩니다.'
-            : `${validInitItems.reduce((s, i) => s + i.count, 0)}건의 FAIL 재고가 등록되었습니다.`
+            ? '교환 픽스처 없음으로 처리 완료됩니다.'
+            : `${validInitItems.reduce((s, i) => s + i.count, 0)}건의 교환 재고가 등록되었습니다.`
         );
       } else {
         await onReconcile(validReconcileItems, reconcileDate);
@@ -186,8 +186,8 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
         {/* ── Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
           <div>
-            <h2 className="text-sm font-bold text-slate-800">FAIL 재고 일괄 관리</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">브랜드별 FAIL 픽스쳐 재고를 시스템에 반영합니다</p>
+            <h2 className="text-sm font-bold text-slate-800">교환 재고 일괄 관리</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">브랜드별 교환 픽스처 재고를 시스템에 반영합니다</p>
           </div>
           <button
             onClick={handleClose}
@@ -233,7 +233,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
               <div className="text-center">
                 <p className="text-sm font-bold text-slate-800">완료!</p>
                 <p className="text-xs text-slate-500 mt-1">{resultMessage}</p>
-                <p className="text-[11px] text-slate-400 mt-1">FAIL 관리 화면이 자동으로 업데이트됩니다.</p>
+                <p className="text-[11px] text-slate-400 mt-1">교환 관리 화면이 자동으로 업데이트됩니다.</p>
               </div>
             </div>
           )}
@@ -261,7 +261,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
 
               {tab === 'initialize' && noFailConfirmed && (
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-4 text-center">
-                  <p className="text-sm font-bold text-emerald-700">보유 FAIL 픽스처 없음</p>
+                  <p className="text-sm font-bold text-emerald-700">보유 교환 픽스처 없음</p>
                   <p className="text-xs text-emerald-600 mt-1">등록 없이 초기 설정을 완료합니다.</p>
                 </div>
               )}
@@ -328,8 +328,8 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
           {step === 'form' && tab === 'initialize' && (
             <div className="space-y-4">
               <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600 leading-relaxed">
-                수기 장부로 관리하던 FAIL 픽스쳐를 시스템에 등록합니다.<br />
-                브랜드별 현재 보유 수량을 입력하면 미처리 FAIL 재고로 등록됩니다.
+                수기 장부로 관리하던 교환 픽스처를 시스템에 등록합니다.<br />
+                브랜드별 현재 보유 수량을 입력하면 미처리 교환 재고로 등록됩니다.
               </div>
 
               {/* 보유 없음 선택 */}
@@ -353,10 +353,10 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
                 </div>
                 <div>
                   <p className={`text-xs font-bold ${noFailConfirmed ? 'text-emerald-700' : 'text-slate-600'}`}>
-                    보유 중인 FAIL 픽스처 없음
+                    보유 중인 교환 픽스처 없음
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    현재 교환 대기 중인 FAIL 픽스처가 없는 경우 선택하세요
+                    현재 교환 대기 중인 교환 픽스처가 없는 경우 선택하세요
                   </p>
                 </div>
               </button>
@@ -452,7 +452,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
 
               {!hasSystemFailRecords ? (
                 <div className="text-center py-8 text-sm text-slate-400">
-                  미처리 FAIL 데이터가 없습니다.<br />
+                  미처리 교환 데이터가 없습니다.<br />
                   <span className="text-xs mt-1 block">"초기화 등록" 탭을 사용하세요.</span>
                 </div>
               ) : (

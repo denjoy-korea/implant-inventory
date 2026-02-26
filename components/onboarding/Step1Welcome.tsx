@@ -30,7 +30,7 @@ export default function Step1Welcome({ hospitalName, onNext, onSkip }: Props) {
           { step: '01', label: '픽스처 품목 마스터 등록', desc: '사용 중인 임플란트 품목을 등록합니다', time: '5분' },
           { step: '02', label: '수술 기록 연동', desc: '과거 수술 기록을 불러옵니다', time: '2분' },
           { step: '03', label: '실재고 등록 및 동기화', desc: '실제 보유 수량을 확인하고 입력합니다', time: '10~20분' },
-          { step: '04', label: 'FAIL 재고 정합 처리', desc: '불량·분실 항목을 정리합니다', time: '3분' },
+          { step: '04', label: '교환 재고 정합 처리', desc: '불량·분실 항목을 정리합니다', time: '3분' },
         ].map(({ step, label, desc, time }) => (
           <div key={step} className="flex items-start gap-3 bg-slate-50 rounded-xl px-4 py-2 text-left">
             <span className="text-xs font-black text-indigo-500 w-6 shrink-0 pt-0.5">{step}</span>

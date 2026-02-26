@@ -44,7 +44,7 @@ const NEXT_ACTIONS = [
   },
   {
     label: '대시보드 둘러보기',
-    desc: '발주 권장량 · FAIL 통계',
+    desc: '발주 권장량 · 교환 통계',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

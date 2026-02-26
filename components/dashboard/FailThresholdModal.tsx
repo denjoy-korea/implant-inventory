@@ -49,7 +49,7 @@ export default function FailThresholdModal({ manufacturers, currentThresholds, o
               </svg>
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-900">FAIL 교환 기준량 설정</h3>
+              <h3 className="text-base font-black text-slate-900">교환 기준량 설정</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">제조사별 교환 발주 알림 기준을 설정합니다.</p>
             </div>
           </div>
@@ -66,7 +66,7 @@ export default function FailThresholdModal({ manufacturers, currentThresholds, o
         {/* 제조사별 입력 */}
         <div className="px-6 py-4 space-y-3 max-h-64 overflow-y-auto">
           {manufacturers.length === 0 && (
-            <p className="text-sm text-slate-500 text-center py-4">현재 FAIL 교환 대기 중인 제조사가 없습니다.</p>
+            <p className="text-sm text-slate-500 text-center py-4">현재 교환 대기 중인 제조사가 없습니다.</p>
           )}
           {manufacturers.map((m) => (
             <div key={m} className="flex items-center justify-between gap-3">

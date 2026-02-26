@@ -209,7 +209,7 @@ const ONBOARDING_STEP_LABELS: Record<number, { title: string; desc: string }> = 
   4: { title: '덴트웹 수술기록 다운로드', desc: '덴트웹에서 수술기록 데이터를 내려받으세요.' },
   5: { title: '수술기록 업로드', desc: '다운받은 수술기록 엑셀 파일을 업로드하세요.' },
   6: { title: '기초재고 실사 실행', desc: '현재 실물 재고와 시스템 재고를 대조하세요.' },
-  7: { title: 'FAIL 재고 정리', desc: '미교환 FAIL 임플란트를 확인하고 정리하세요.' },
+  7: { title: '교환 재고 정리', desc: '미교환 교환 임플란트를 확인하고 정리하세요.' },
 };
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -824,7 +824,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       },
       {
         key: 'pending-fails',
-        title: 'FAIL 미교환',
+        title: '미교환',
         value: `${failSummary.pendingRows}건`,
         sub: `${failSummary.remainingExchangeQty}개 교환 필요`,
         tone:
@@ -965,7 +965,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const computedSeverity = getFailSeverity(failByManufacturer, failThresholds) ?? 'warning';
       items.push({
         key: 'action-fail',
-        title: 'FAIL 교환 발주',
+        title: '교환 발주',
         description: `미교환 ${failSummary.pendingRows}건 / ${failSummary.remainingExchangeQty}개`,
         tab: 'fail_management',
         severity: computedSeverity,
@@ -1094,7 +1094,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
               <div className="w-px h-8 bg-slate-200" />
               <div className="text-right">
-                <p className="text-[10px] font-bold text-slate-400">이번달 FAIL</p>
+                <p className="text-[10px] font-bold text-slate-400">이번달 교환</p>
                 <p className={`text-sm font-black tabular-nums leading-tight ${thisMonthSurgery.failQty > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
                   {thisMonthSurgery.failQty}개{progressDelta.isReady && progressDelta.failDelta !== 0 && (
                     <span className={`ml-1 text-[10px] font-bold ${progressDelta.failDelta > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
@@ -1319,12 +1319,12 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-black text-slate-900">FAIL 교환 권장 TOP 5</h3>
+            <h3 className="text-sm font-black text-slate-900">교환 권장 TOP 5</h3>
             <button
               onClick={() => onNavigate('fail_management')}
               className="flex items-center gap-0.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-700"
             >
-              FAIL 관리 이동
+              교환 관리 이동
               <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -1364,11 +1364,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.12em]">식립 / FAIL 월평균 추이</p>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.12em]">식립 / 교환 월평균 추이</p>
               {isWorkDaysLoading ? (
                 <p className="text-xs text-slate-500 mt-5">진료요일/공휴일 기준 진료일수를 계산 중입니다...</p>
               ) : recentMonthlyTrend.length >= 2 ? (
-                <svg className="w-full h-20 mt-3" viewBox="0 0 240 80" role="img" aria-label="최근 월별 식립 및 FAIL 추이">
+                <svg className="w-full h-20 mt-3" viewBox="0 0 240 80" role="img" aria-label="최근 월별 식립 및 교환 추이">
                   <path d={buildSparklinePath(trendSeries.placement, 240, 80)} fill="none" stroke="#4f46e5" strokeWidth="2.4" strokeLinecap="round" />
                   <path d={buildSparklinePath(trendSeries.fail, 240, 80)} fill="none" stroke="#f43f5e" strokeWidth="2.1" strokeLinecap="round" />
                 </svg>
@@ -1388,7 +1388,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   실제 식립 {latestTrendMonth.placement}개 (Δ {trendDelta.placementDelta >= 0 ? '+' : ''}{trendDelta.placementDelta})
                 </span>
                 <span className="font-semibold text-rose-600">
-                  실제 FAIL {latestTrendMonth.fail}개 (Δ {trendDelta.failDelta >= 0 ? '+' : ''}{trendDelta.failDelta})
+                  실제 교환 {latestTrendMonth.fail}개 (Δ {trendDelta.failDelta >= 0 ? '+' : ''}{trendDelta.failDelta})
                 </span>
               </div>
             </div>
@@ -1455,7 +1455,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   hoverClass: 'hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_8px_18px_rgba(14,165,233,0.16)]',
                 },
                 {
-                  label: 'FAIL 관리',
+                  label: '교환 관리',
                   tab: 'fail_management' as DashboardTab,
                   hoverClass: 'hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 hover:shadow-[0_8px_18px_rgba(244,63,94,0.16)]',
                 },
@@ -1522,7 +1522,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <p className="mt-1 text-xl font-black text-indigo-700 tabular-nums">{manufacturerUsageSummary.placementQty}개</p>
               </div>
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5">
-                <p className="text-[10px] font-bold text-rose-500 uppercase tracking-[0.12em]">FAIL 합계</p>
+                <p className="text-[10px] font-bold text-rose-500 uppercase tracking-[0.12em]">교환 합계</p>
                 <p className="mt-1 text-xl font-black text-rose-700 tabular-nums">{manufacturerUsageSummary.failQty}개</p>
               </div>
             </div>
@@ -1544,8 +1544,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           <div className="h-full rounded-full bg-indigo-500" style={{ width: `${width}%` }} />
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>식립 {row.placementQty}개 / FAIL {row.failQty}개</span>
-                          <span>FAIL율 {row.failRate}%</span>
+                          <span>식립 {row.placementQty}개 / 교환 {row.failQty}개</span>
+                          <span>교환율 {row.failRate}%</span>
                         </div>
                         <p className="text-[10px] text-slate-500 truncate">
                           주요 브랜드: {row.topBrands.map((brand) => `${brand.brand}(${brand.qty})`).join(' · ') || '-'}

@@ -64,7 +64,7 @@ export default function OnboardingWizard({
     goToStep(2);
   };
 
-  // Step 7: FAIL 관리 화면으로 이동 (완료 기록은 실제 재고 정리 완료 후 App에서 처리)
+  // Step 7: 교환 관리 화면으로 이동 (완료 기록은 실제 재고 정리 완료 후 App에서 처리)
   const handleFailAuditNext = () => {
     onGoToFailManagement();
   };

@@ -201,7 +201,7 @@ export const surgeryService = {
     return data as DbSurgeryRecord;
   },
 
-  /** FAIL 교환 완료 처리 (classification 변경) */
+  /** 교환 완료 처리 (classification 변경) */
   async markFailExchanged(recordIds: string[]): Promise<boolean> {
     if (recordIds.length === 0) return true;
 
@@ -302,8 +302,8 @@ export const surgeryService = {
   },
 
   /**
-   * FAIL 재고 일괄 초기화
-   * 수기 장부로 관리하던 FAIL 픽스쳐를 디지털로 등록합니다.
+   * 교환 재고 일괄 초기화
+   * 수기 장부로 관리하던 교환 픽스처를 디지털로 등록합니다.
    * 제조사별 count개의 '수술중교환' 레코드를 생성합니다.
    */
   async bulkInsertFailRecords(
@@ -349,7 +349,7 @@ export const surgeryService = {
   },
 
   /**
-   * FAIL 재고 정리 (기존 데이터 → 실제 재고에 맞게 조정)
+   * 교환 재고 정리 (기존 데이터 → 실제 재고에 맞게 조정)
    * actual < system → 오래된 것부터 차이만큼 '교환완료' 처리
    * actual > system → 차이만큼 신규 '수술중교환' 레코드 생성
    */

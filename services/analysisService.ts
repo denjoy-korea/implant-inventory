@@ -305,14 +305,14 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   });
   const failScore = hasFailItems ? 15 : 0;
   diagnostics.push({
-    category: 'FAIL 항목 분리 관리',
+    category: '교환 항목 분리 관리',
     status: hasFailItems ? 'good' : 'critical',
     score: failScore,
     maxScore: 15,
-    title: hasFailItems ? 'FAIL 교환 근거자료 관리 가능' : 'FAIL 기록 미분리',
+    title: hasFailItems ? '교환 근거자료 관리 가능' : '교환 기록 미분리',
     detail: hasFailItems
-      ? '픽스쳐 목록에 FAIL 항목이 별도 분류되어 있어, 제조사 교환 요청 시 근거자료로 활용할 수 있습니다.'
-      : 'FAIL 픽스쳐가 일반 재고와 섞여 있어, 제조사 교환 관리가 누락될 위험이 있습니다. FAIL 항목을 별도로 분류하세요.',
+      ? '픽스쳐 목록에 교환 항목이 별도 분류되어 있어, 제조사 교환 요청 시 근거자료로 활용할 수 있습니다.'
+      : '교환 픽스처가 일반 재고와 섞여 있어, 제조사 교환 관리가 누락될 위험이 있습니다. 교환 항목을 별도로 분류하세요.',
   });
 
   // --- Diagnostic 2: Insurance Claim (보험청구) Classification (15 pts) ---
@@ -438,7 +438,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   });
 
   // --- Diagnostic 5: Name Consistency (15 pts) ---
-  // FAIL/보험임플란트 접두어 행 제외 (의도적 접두어를 표기 변형으로 오탐하지 않기 위해)
+  // 교환/보험임플란트 접두어 행 제외 (의도적 접두어를 표기 변형으로 오탐하지 않기 위해)
   const filteredFixtureRows = fixtureRows.filter(row => {
     const m = String(row['제조사'] || row['Manufacturer'] || '').toLowerCase();
     return !m.includes('수술중fail') && !m.includes('fail_') && !m.includes('보험임플란트');
@@ -565,7 +565,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     .filter(r => r['구분'] === '수술중교환')
     .reduce((sum, r) => sum + (Number(r['갯수']) || 0), 0);
 
-  // Manufacturer distribution (보험임플란트/FAIL 제외)
+  // Manufacturer distribution (보험임플란트/교환 제외)
   const mfgCounts = new Map<string, number>();
   allSurgeryRows.forEach(row => {
     if (row['구분'] === '골이식만') return;
@@ -596,7 +596,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   // ========== RECOMMENDATIONS ==========
   const recommendations: string[] = [];
   if (!hasFailItems) {
-    recommendations.push('FAIL 픽스쳐를 별도 항목으로 분류하여, 제조사 교환 요청 시 근거자료로 활용하세요. DenJOY는 FAIL 발생 시 자동 분류 및 교환 추적 기능을 제공합니다.');
+    recommendations.push('교환 픽스처를 별도 항목으로 분류하여, 제조사 교환 요청 시 근거자료로 활용하세요. DenJOY는 교환 발생 시 자동 분류 및 교환 추적 기능을 제공합니다.');
   }
   if (!bothHaveInsurance) {
     recommendations.push('보험 임플란트 수술(2단계)을 별도로 구분하여 픽스쳐 2중 카운팅을 방지하세요.');

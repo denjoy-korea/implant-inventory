@@ -298,11 +298,11 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 hover:border-rose-300 transition-all"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                FAIL/청구 확장
+                교환/청구 확장
               </button>
               <div className="absolute top-full right-0 mt-2 w-80 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/fail-claim-tip:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
-                <p className="font-bold text-rose-300 mb-1">📋 FAIL 항목 확장</p>
-                <p>수술기록지 작성 시 수술 중 FAIL되는 픽스쳐를 별도 추적·관리하기 위해 필요합니다.</p>
+                <p className="font-bold text-rose-300 mb-1">📋 교환 항목 확장</p>
+                <p>수술기록지 작성 시 수술 중 교환되는 픽스쳐를 별도 추적·관리하기 위해 필요합니다.</p>
                 <p className="mt-1 text-slate-400">별도로 관리하신다면 확장하지 않아도 됩니다.</p>
                 <p className="font-bold text-amber-300 mt-2.5 mb-1">🏥 보험청구 항목 추가</p>
                 <p>보험청구 2단계 진행 시, 수술기록지에 픽스쳐 정보를 실수로 중복 입력하는 것을 방지합니다.</p>
@@ -320,7 +320,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
               <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-5">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">FAIL/청구 항목 확장</h3>
+              <h3 className="text-xl font-black text-slate-900 mb-2">교환/청구 항목 확장</h3>
               <p className="text-sm text-slate-500 mb-5 leading-relaxed">
                 현재 <span className="font-bold text-indigo-600">사용 중인 항목({counts.active}개)</span>을 기반으로<br />
                 다음 항목이 자동 생성됩니다.
@@ -345,7 +345,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                   </div>
                 </div>
                 <div className="border-t border-slate-200 pt-3">
-                  <p className="text-xs font-bold text-slate-500">총 예상 결과: <span className="text-indigo-600">{counts.active * 2 + 1}개</span> (기존 {counts.active} + FAIL {counts.active} + 보험청구 1)</p>
+                  <p className="text-xs font-bold text-slate-500">총 예상 결과: <span className="text-indigo-600">{counts.active * 2 + 1}개</span> (기존 {counts.active} + 교환 {counts.active} + 보험청구 1)</p>
                 </div>
               </div>
             </div>

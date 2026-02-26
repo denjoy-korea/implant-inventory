@@ -175,7 +175,7 @@ const ContactPage: React.FC<ContactPageProps> = ({ onGetStarted, onAnalyze }) =>
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-4">
                       <p className="text-sm font-black text-slate-800 mb-1">다음 단계 1순위: 무료 회원가입</p>
                       <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                        재고/주문/식립 FAIL 관리를 지금 바로 시작할 수 있습니다.
+                        재고/주문/식립 교환 관리를 지금 바로 시작할 수 있습니다.
                       </p>
                       <button
                         onClick={onGetStarted}

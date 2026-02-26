@@ -659,7 +659,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">분석 기준</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
             {[
-              { name: 'FAIL 항목 분리 관리', pts: 15, desc: '재고 목록에 FAIL 픽스쳐 별도 분류 여부' },
+              { name: '교환 항목 분리 관리', pts: 15, desc: '재고 목록에 교환 픽스처 별도 분류 여부' },
               { name: '보험청구 2단계 구분', pts: 15, desc: '픽스쳐 목록 + 수술기록 양쪽 보험임플란트 구분' },
               { name: '수술기록→재고 매칭률', pts: 25, desc: '수술에 사용된 품목이 재고 목록에 등록되어 있는지' },
               { name: '재고→수술기록 활용률', pts: 20, desc: '등록된 재고가 실제 수술에 사용되고 있는지' },
