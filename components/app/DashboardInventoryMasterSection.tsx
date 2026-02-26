@@ -105,13 +105,13 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
       onDeleteInventoryItem={async (id) => {
         const delItem = state.inventory.find(i => i.id === id);
         const prevInventory = state.inventory;
-        // 정규 품목 삭제 시 수술중FAIL_ 연동 품목도 함께 찾기
+        // 정규 품목 삭제 시 수술중교환_ 연동 품목도 함께 찾기
         // IBS Implant 계열은 fixIbsImplant 때문에 manufacturer/brand가 뒤바뀌어 있을 수 있으므로 양방향 매칭
         let failCounterpartId: string | null = null;
-        if (delItem && !delItem.manufacturer.startsWith('수술중FAIL_') && delItem.manufacturer !== '보험청구') {
+        if (delItem && !delItem.manufacturer.startsWith('수술중교환_') && delItem.manufacturer !== '보험청구') {
           const failCounterpart = state.inventory.find(i => {
-            if (!i.manufacturer.startsWith('수술중FAIL_')) return false;
-            const rawBase = i.manufacturer.slice('수술중FAIL_'.length);
+            if (!i.manufacturer.startsWith('수술중교환_')) return false;
+            const rawBase = i.manufacturer.slice('수술중교환_'.length);
             const sizeMatch = i.size === delItem.size;
             // 일반 케이스: FAIL 제조사 베이스 = 정품목 제조사
             if (rawBase === delItem.manufacturer && i.brand === delItem.brand && sizeMatch) return true;
@@ -148,7 +148,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
           return false;
         }
 
-        const isBillable = !normalizedItem.manufacturer.startsWith('수술중FAIL_') && normalizedItem.manufacturer !== '보험청구';
+        const isBillable = !normalizedItem.manufacturer.startsWith('수술중교환_') && normalizedItem.manufacturer !== '보험청구';
         if (isBillable && !planService.canAddItem(effectivePlan, billableItemCount)) {
           const req = planService.getRequiredPlanForItems(billableItemCount + 1);
           showAlertToast(`품목 수 제한(${PLAN_LIMITS[effectivePlan].maxItems}개)에 도달했습니다. ${PLAN_NAMES[req]} 이상으로 업그레이드해 주세요.`, 'error');

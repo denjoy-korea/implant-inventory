@@ -57,12 +57,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // 1. FAIL 히스토리 전체 추출
   const historyFailList = useMemo(() => {
     const allRows = surgeryMaster['수술기록지'] || [];
-    return allRows.filter(row => row['구분'] === '수술중 FAIL' || row['구분'] === 'FAIL 교환완료');
+    return allRows.filter(row => row['구분'] === '수술중교환' || row['구분'] === '교환완료');
   }, [surgeryMaster]);
 
   // 2. 미처리 FAIL 리스트
   const pendingFailList = useMemo(() => {
-    return historyFailList.filter(row => row['구분'] === '수술중 FAIL');
+    return historyFailList.filter(row => row['구분'] === '수술중교환');
   }, [historyFailList]);
 
   // 3. 제조사 목록
@@ -77,7 +77,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     const set = new Set<string>();
     inventory.forEach(item => {
       const m = item.manufacturer;
-      if (m && !m.startsWith('수술중FAIL_') && !m.startsWith('FAIL_') && m !== '보험임플란트') {
+      if (m && !m.startsWith('수술중교환_') && !m.startsWith('FAIL_') && m !== '보험임플란트') {
         set.add(m);
       }
     });
@@ -118,14 +118,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       const m = String(f['제조사'] || '기타');
       if (!stats[m]) stats[m] = { total: 0, processed: 0, pending: 0 };
       stats[m].total++;
-      if (f['구분'] === 'FAIL 교환완료') stats[m].processed++;
+      if (f['구분'] === '교환완료') stats[m].processed++;
       else stats[m].pending++;
     });
     return stats;
   }, [historyFailList]);
 
   const currentStats = activeM === 'all'
-    ? { total: historyFailList.length, processed: historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length, pending: pendingFailList.length }
+    ? { total: historyFailList.length, processed: historyFailList.filter(f => f['구분'] === '교환완료').length, pending: pendingFailList.length }
     : (mStats[activeM] || { total: 0, processed: 0, pending: 0 });
   const currentRemainingFails = currentStats.pending;
 
@@ -159,7 +159,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const failSparkline = useMemo(() => monthlyFailData.map(d => d.total), [monthlyFailData]);
   const exchangeSparkline = useMemo(() => {
     const monthMap: Record<string, number> = {};
-    historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').forEach(f => {
+    historyFailList.filter(f => f['구분'] === '교환완료').forEach(f => {
       const d = String(f['날짜'] || '');
       if (!d || d.length < 7) return;
       const month = d.substring(0, 7);
@@ -174,7 +174,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return allRows.filter(row => row['구분'] === '식립').length;
   }, [surgeryMaster]);
 
-  const failRate = totalPlacements > 0 ? (historyFailList.filter(f => f['구분'] === '수술중 FAIL').length / totalPlacements * 100) : 0;
+  const failRate = totalPlacements > 0 ? (historyFailList.filter(f => f['구분'] === '수술중교환').length / totalPlacements * 100) : 0;
   const monthlyAvgFail = monthlyFailData.length > 0 ? (historyFailList.length / monthlyFailData.length) : 0;
 
   // ============================================================
@@ -209,7 +209,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // Animated KPI values
   // ============================================================
   const animTotal = useCountUp(historyFailList.length);
-  const animProcessed = useCountUp(historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length);
+  const animProcessed = useCountUp(historyFailList.filter(f => f['구분'] === '교환완료').length);
   const animPending = useCountUp(pendingFailList.length);
   const animFailRate = useCountUp(Math.round(failRate * 10));
   const animMonthlyAvg = useCountUp(Math.round(monthlyAvgFail * 10));
@@ -602,7 +602,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
               <p className="text-[10px] font-bold text-slate-400">교환완료</p>
-              <p className="text-base font-black text-emerald-600 tabular-nums">{historyFailList.filter(f => f['구분'] === 'FAIL 교환완료').length}</p>
+              <p className="text-base font-black text-emerald-600 tabular-nums">{historyFailList.filter(f => f['구분'] === '교환완료').length}</p>
             </div>
           </div>
 

@@ -65,7 +65,7 @@ function parseFixtureFromRecord(surgeryRecord: string): { manufacturer: string; 
 
   if (fixturePart.includes('보험임플란트') || fixturePart.includes('보험청구')) return null;
   // FAIL 기록 제외 (수술중 실패한 픽스처)
-  if (fixturePart.startsWith('수술중FAIL_')) return null;
+  if (fixturePart.startsWith('수술중교환_')) return null;
 
   // "제조사 - 브랜드 규격" 분리
   const dashIdx = fixturePart.indexOf(' - ');
@@ -129,7 +129,7 @@ function analyzeSurgeryRows(
       if (isTotalRow) continue;
 
       const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중 FAIL') continue;
+      if (cls !== '식립' && cls !== '수술중교환') continue;
 
       const surgeryRecord = String(row['수술기록'] || '');
       if (surgeryRecord.includes('[GBR Only]')) continue;
@@ -139,7 +139,7 @@ function analyzeSurgeryRows(
       size = String(row['규격(SIZE)'] || '').trim();
 
       if (!manufacturer && !brand && !size) continue;
-      if (manufacturer.startsWith('수술중FAIL_')) continue;
+      if (manufacturer.startsWith('수술중교환_')) continue;
       if (manufacturer === '보험청구' || brand === '보험임플란트') continue;
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;

@@ -367,7 +367,7 @@ export const hospitalService = {
   },
 
   /** 재고에 사용된 제조사 목록 (중복 제거, 정렬)
-   * 보험임플란트, 수술중FAIL_ 말머리 제조사는 제외 */
+   * 보험임플란트, 수술중교환_ 말머리 제조사는 제외 */
   async getDistinctManufacturers(hospitalId: string): Promise<string[]> {
     const { data } = await supabase
       .from('inventory')
@@ -375,7 +375,7 @@ export const hospitalService = {
       .eq('hospital_id', hospitalId);
     const all = (data || []).map((d: Record<string, unknown>) => d.manufacturer as string);
     return [...new Set(all)]
-      .filter(m => m !== '보험임플란트' && !m.startsWith('수술중FAIL_'))
+      .filter(m => m !== '보험임플란트' && !m.startsWith('수술중교환_'))
       .sort();
   },
 

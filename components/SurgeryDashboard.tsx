@@ -287,10 +287,10 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
     if (!isPartialMonth) {
       setProgressAwareDeltas({
         placementDelta: lastMonth['식립'] - prevMonth['식립'],
-        failDelta: lastMonth['수술중 FAIL'] - prevMonth['수술중 FAIL'],
+        failDelta: lastMonth['수술중교환'] - prevMonth['수술중교환'],
         claimDelta: lastMonth['청구'] - prevMonth['청구'],
         prevMonthPlacement: prevMonth['식립'],
-        prevMonthFail: prevMonth['수술중 FAIL'],
+        prevMonthFail: prevMonth['수술중교환'],
         prevMonthClaim: prevMonth['청구'],
         prevCutoffDay: daysInLastMonth,
         progressPct: 100,
@@ -347,13 +347,13 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         const cls = String(row['구분'] || '');
         const qty = Number(row['갯수']) || 1;
         if (cls === '식립') prevPlacement += qty;
-        else if (cls === '수술중 FAIL') prevFail += qty;
+        else if (cls === '수술중교환') prevFail += qty;
         else if (cls === '청구') prevClaim += qty;
       });
 
       setProgressAwareDeltas({
         placementDelta: lastMonth['식립'] - prevPlacement,
-        failDelta: lastMonth['수술중 FAIL'] - prevFail,
+        failDelta: lastMonth['수술중교환'] - prevFail,
         claimDelta: lastMonth['청구'] - prevClaim,
         prevMonthPlacement: prevPlacement,
         prevMonthFail: prevFail,
@@ -366,10 +366,10 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
     }).catch(() => {
       setProgressAwareDeltas({
         placementDelta: lastMonth['식립'] - prevMonth['식립'],
-        failDelta: lastMonth['수술중 FAIL'] - prevMonth['수술중 FAIL'],
+        failDelta: lastMonth['수술중교환'] - prevMonth['수술중교환'],
         claimDelta: lastMonth['청구'] - prevMonth['청구'],
         prevMonthPlacement: prevMonth['식립'],
-        prevMonthFail: prevMonth['수술중 FAIL'],
+        prevMonthFail: prevMonth['수술중교환'],
         prevMonthClaim: prevMonth['청구'],
         prevCutoffDay: daysInLastMonth,
         progressPct: 100,
@@ -898,10 +898,10 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
             })}
           </div>
           <div className="flex flex-nowrap shrink-0 overflow-x-auto gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
-            {([null, '식립', '수술중 FAIL', '청구', '골이식만'] as const).map(cls => {
+            {([null, '식립', '수술중교환', '청구', '골이식만'] as const).map(cls => {
               const active = filterCls === cls;
-              const colors: Record<string, string> = { '식립': 'bg-indigo-600 text-white', '수술중 FAIL': 'bg-rose-500 text-white', '청구': 'bg-teal-500 text-white', '골이식만': 'bg-amber-500 text-white' };
-              const label = cls === null ? '전체' : cls === '수술중 FAIL' ? 'FAIL' : cls;
+              const colors: Record<string, string> = { '식립': 'bg-indigo-600 text-white', '수술중교환': 'bg-rose-500 text-white', '청구': 'bg-teal-500 text-white', '골이식만': 'bg-amber-500 text-white' };
+              const label = cls === null ? '전체' : cls === '수술중교환' ? '교환' : cls;
               return (
                 <button key={label} onClick={() => setFilterCls(cls)} className={`whitespace-nowrap px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${active ? (cls === null ? 'bg-slate-800 text-white' : colors[cls]) : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
                   {label}
@@ -1036,7 +1036,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
                         .replace(/\((\d+)\)/, (_m, nums) => '(' + '*'.repeat(nums.length) + ')');
                     }
                     return (
-                      <td key={col} className={`px-3 py-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap ${isQty ? 'text-center font-black tabular-nums' : ''} ${isCls ? 'font-bold' : 'text-slate-600'} ${isCls && rowCls === '식립' ? 'text-indigo-600' : ''} ${isCls && rowCls === '수술중 FAIL' ? 'text-rose-500' : ''} ${isCls && rowCls === '청구' ? 'text-teal-600' : ''} ${isCls && rowCls === '골이식만' ? 'text-amber-600' : ''} ${isQty && !noUsage && Number(displayVal) > 1 ? 'text-rose-600 bg-rose-50/50' : ''}`} title={displayVal}>
+                      <td key={col} className={`px-3 py-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap ${isQty ? 'text-center font-black tabular-nums' : ''} ${isCls ? 'font-bold' : 'text-slate-600'} ${isCls && rowCls === '식립' ? 'text-indigo-600' : ''} ${isCls && rowCls === '수술중교환' ? 'text-rose-500' : ''} ${isCls && rowCls === '청구' ? 'text-teal-600' : ''} ${isCls && rowCls === '골이식만' ? 'text-amber-600' : ''} ${isQty && !noUsage && Number(displayVal) > 1 ? 'text-rose-600 bg-rose-50/50' : ''}`} title={displayVal}>
                         {displayVal}
                       </td>
                     );

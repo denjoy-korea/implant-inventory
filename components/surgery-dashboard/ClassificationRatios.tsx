@@ -196,8 +196,8 @@ export default function ClassificationRatios({ classificationStats, mounted }: P
           colorA="#4F46E5" colorB="#0EA5E9" mounted={mounted} delay={0} />
         <div className="h-px bg-slate-100" />
         <SemiGauge
-          labelA="식립" labelB="수술중 FAIL"
-          countA={classificationStats['식립']} countB={classificationStats['수술중 FAIL']}
+          labelA="식립" labelB="수술중교환"
+          countA={classificationStats['식립']} countB={classificationStats['수술중교환']}
           colorA="#4F46E5" colorB="#F43F5E" mounted={mounted} delay={0.3} />
       </div>
     </div>

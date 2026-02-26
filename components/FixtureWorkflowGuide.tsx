@@ -40,8 +40,8 @@ const STEPS = [
   },
   {
     num: 5,
-    title: 'FAIL/청구 확장',
-    desc: '수술중FAIL 항목 + 보험청구 항목 자동 생성',
+    title: '교환/청구 확장',
+    desc: '수술중교환 항목 + 보험청구 항목 자동 생성',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
     ),
@@ -155,8 +155,8 @@ const FixtureWorkflowGuide: React.FC<FixtureWorkflowGuideProps> = ({ completedSt
             </h4>
             <div className="space-y-1.5">
               <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
-                <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">FAIL</span>
-                수술 중 FAIL 발생 시 해당 제조사의 수술중FAIL 항목을 선택하여 기록합니다. FAIL 관리 메뉴에서 제조사별 교환 신청에 활용됩니다.
+                <span className="px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">교환</span>
+                수술 중 교환 발생 시 해당 제조사의 수술중교환 항목을 선택하여 기록합니다. FAIL 관리 메뉴에서 제조사별 교환 신청에 활용됩니다.
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-2">
                 <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[9px] font-bold rounded flex-shrink-0 mt-px">청구</span>

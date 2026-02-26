@@ -81,7 +81,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
     let size = "";
 
     if (desc.includes('[GBR Only]')) classification = "골이식만";
-    else if (desc.includes('수술중FAIL_')) classification = "수술중 FAIL";
+    else if (desc.includes('수술중교환_')) classification = "수술중교환";
     else if (desc.includes('보험임플란트')) classification = "청구";
 
     if (classification === "골이식만") {
@@ -92,7 +92,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
     } else if (desc.includes('-')) {
       const mainParts = desc.split('-').map(p => p.trim());
       let rawM = mainParts[0];
-      manufacturer = rawM.replace('수술중FAIL_', '').replace('보험임플란트', '').trim();
+      manufacturer = rawM.replace('수술중교환_', '').replace('보험임플란트', '').trim();
       if (manufacturer === "" && mainParts.length > 1) {
         manufacturer = mainParts[1];
       }
@@ -115,7 +115,7 @@ function parseSurgeryRows(rows: ExcelRow[]): SurgeryRow[] {
         manufacturer = brand;
       }
     } else {
-      manufacturer = desc.replace('보험임플란트', '').replace('수술중FAIL_', '').trim();
+      manufacturer = desc.replace('보험임플란트', '').replace('수술중교환_', '').trim();
     }
 
     const fixed = fixIbsImplant(manufacturer, brand);
@@ -445,7 +445,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   });
   const filteredSurgeryRows = allSurgeryRows.filter(row => {
     const cls = getSurgeryClassification(row);
-    if (cls === '골이식만' || cls === '청구' || cls === '수술중 FAIL') return false;
+    if (cls === '골이식만' || cls === '청구' || cls === '수술중교환') return false;
     const m = getSurgeryManufacturer(row).toLowerCase();
     return !m.includes('수술중fail') && !m.includes('fail_') && !m.includes('보험임플란트');
   });
@@ -551,7 +551,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
   const totalSurgeries = allSurgeryRows.filter(r => r['구분'] !== '골이식만').length;
   const primarySurgeries = allSurgeryRows.filter(r => r['구분'] === '식립').length;
   const secondarySurgeries = allSurgeryRows.filter(r => r['구분'] === '청구').length;
-  const failSurgeries = allSurgeryRows.filter(r => r['구분'] === '수술중 FAIL').length;
+  const failSurgeries = allSurgeryRows.filter(r => r['구분'] === '수술중교환').length;
   const monthlyAvgSurgeries = Number((totalSurgeries / periodMonths).toFixed(1));
 
   // Implant usage counts (개수 기준)
@@ -562,7 +562,7 @@ export async function runAnalysis(fixtureFile: File, surgeryFiles: File[]): Prom
     .filter(r => r['구분'] === '청구')
     .reduce((sum, r) => sum + (Number(r['갯수']) || 0), 0);
   const failUsageCount = allSurgeryRows
-    .filter(r => r['구분'] === '수술중 FAIL')
+    .filter(r => r['구분'] === '수술중교환')
     .reduce((sum, r) => sum + (Number(r['갯수']) || 0), 0);
 
   // Manufacturer distribution (보험임플란트/FAIL 제외)

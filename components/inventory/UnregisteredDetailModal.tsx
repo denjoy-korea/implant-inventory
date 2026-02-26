@@ -665,7 +665,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     const failItem: InventoryItem = {
       ...mainItem,
       id: `manual_unregistered_fail_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      manufacturer: `수술중FAIL_${item.canonicalManufacturer}`,
+      manufacturer: `수술중교환_${item.canonicalManufacturer}`,
     };
 
     try {

@@ -49,7 +49,7 @@ export function getSurgeryQuantity(row: SurgeryRow): number {
 }
 
 /**
- * 수술기록 행에서 구분(식립/청구/수술중 FAIL/골이식만) 추출
+ * 수술기록 행에서 구분(식립/청구/수술중교환/골이식만) 추출
  */
 export function getSurgeryClassification(row: SurgeryRow): string {
   return String(row['구분'] || '식립').trim();

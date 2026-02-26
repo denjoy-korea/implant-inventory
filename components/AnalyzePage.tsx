@@ -945,7 +945,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-sm bg-rose-500"></span>
-                    <span className="text-sm text-slate-600">수술중 FAIL</span>
+                    <span className="text-sm text-slate-600">수술중교환</span>
                   </div>
                   <span className="text-sm font-bold text-slate-800">{report.usagePatterns.failSurgeries}건</span>
                 </div>
@@ -981,7 +981,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-sm bg-rose-500"></span>
-                        <span className="text-sm text-slate-600">수술중 FAIL</span>
+                        <span className="text-sm text-slate-600">수술중교환</span>
                       </div>
                       <span className="text-sm font-bold text-slate-800">{report.usagePatterns.failUsageCount}개</span>
                     </div>

@@ -115,10 +115,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** 수술중FAIL_ / 보험청구 항목 제외한 실제 표시 대상 */
+  /** 수술중교환_ / 보험청구 항목 제외한 실제 표시 대상 */
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
-      !item.manufacturer.startsWith('수술중FAIL_') && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
+      !item.manufacturer.startsWith('수술중교환_') && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
     );
   }, [inventory]);
 
@@ -222,7 +222,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
       if (isTotalRow) return;
       const cls = String(row['구분'] || '');
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
       const record = String(row['수술기록'] || '');
       if (record.includes('[GBR Only]')) return;
 
@@ -346,7 +346,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         const manufacturer = String(i.manufacturer || '');
         const brand = String(i.brand || '');
         const lowerManufacturer = manufacturer.toLowerCase();
-        const isFailCategory = manufacturer.startsWith('수술중FAIL_')
+        const isFailCategory = manufacturer.startsWith('수술중교환_')
           || lowerManufacturer.includes('수술중fail')
           || lowerManufacturer.includes('fail_')
           || lowerManufacturer.includes('수술중 fail');
@@ -371,7 +371,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       });
   }, [inventory]);
 
-  // 식립 / 수술중 FAIL 건수 분리
+  // 식립 / 수술중교환 건수 분리
   const surgeryBreakdown = useMemo(() => {
     if (!surgeryData) return { placement: 0, fail: 0 };
     const sheet = surgeryData.sheets[surgeryData.activeSheetName];
@@ -386,7 +386,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       if (selectedManufacturer !== null && mfr !== selectedManufacturer) return;
       const qty = Number(row['갯수']) || 1;
       if (cls === '식립') placement += qty;
-      else if (cls === '수술중 FAIL') fail += qty;
+      else if (cls === '수술중교환') fail += qty;
     });
     return { placement, fail };
   }, [surgeryData, selectedManufacturer]);
@@ -512,7 +512,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 {(surgeryBreakdown.placement > 0 || surgeryBreakdown.fail > 0) ? (
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] font-bold text-indigo-600">식립 {surgeryBreakdown.placement}</span>
-                    {surgeryBreakdown.fail > 0 && <span className="text-[10px] font-bold text-rose-500">FAIL {surgeryBreakdown.fail}</span>}
+                    {surgeryBreakdown.fail > 0 && <span className="text-[10px] font-bold text-rose-500">교환 {surgeryBreakdown.fail}</span>}
                   </div>
                 ) : null}
               </div>
@@ -1196,7 +1196,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             if (added === false) return;
             // FAIL 연동 품목 자동 생성 (미존재 시에만)
             const failAlreadyExists = inventory.some(
-              i => i.manufacturer === `수술중FAIL_${newItem.manufacturer}` &&
+              i => i.manufacturer === `수술중교환_${newItem.manufacturer}` &&
                 i.brand === newItem.brand &&
                 i.size === newItem.size
             );
@@ -1204,7 +1204,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               const failItem: InventoryItem = {
                 ...newItem,
                 id: `manual_fail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                manufacturer: `수술중FAIL_${newItem.manufacturer}`,
+                manufacturer: `수술중교환_${newItem.manufacturer}`,
                 initialStock: 0,
                 stockAdjustment: 0,
                 currentStock: 0,

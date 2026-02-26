@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { MonthlyDatum, TrendlineData, smoothLine, smoothArea, CHART_FOCUS_CLASS } from './shared';
 
-type SeriesKey = '식립' | '청구' | '수술중 FAIL';
+type SeriesKey = '식립' | '청구' | '수술중교환';
 
 const SERIES_OPTIONS: { key: SeriesKey; label: string; color: string }[] = [
   { key: '식립', label: '식립', color: '#4F46E5' },
-  { key: '수술중 FAIL', label: '페일', color: '#F43F5E' },
+  { key: '수술중교환', label: '교환', color: '#F43F5E' },
   { key: '청구', label: '보험', color: '#0EA5E9' },
 ];
 

@@ -42,10 +42,10 @@ export default function ClinicalAnalysisSection({ rows, manufacturers, mounted }
             }
 
             // 3. Classification Filter (Targeting Clinical Analysis)
-            // Should match useClinicalStats logic: only '식립' or '수술중 FAIL'
+            // Should match useClinicalStats logic: only '식립' or '수술중교환'
             // Exclude '골이식만', '상악동거상', etc. as they don't have implant outcomes
             const cls = String(row['구분'] || '');
-            if (cls !== '식립' && cls !== '수술중 FAIL') return false;
+            if (cls !== '식립' && cls !== '수술중교환') return false;
 
             return true;
         });

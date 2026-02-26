@@ -19,7 +19,7 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
   const groupW = groupCount > 0 ? plotW / groupCount : 0;
   const barW = Math.min(22, groupW * 0.24);
   const barGap = 3;
-  const maxVal = Math.max(1, ...monthlyData.flatMap(d => [d['식립'], d['청구'], d['수술중 FAIL']]));
+  const maxVal = Math.max(1, ...monthlyData.flatMap(d => [d['식립'], d['청구'], d['수술중교환']]));
   const niceMax = Math.ceil(maxVal / 5) * 5;
   const yTicks = Array.from({ length: 6 }, (_, i) => Math.round((niceMax / 5) * i));
 
@@ -60,7 +60,7 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
       <div className="chart-dot-grid rounded-lg" style={{ overflowX: 'auto', overflowY: 'visible' }}>
         <svg viewBox={`0 0 ${W} ${H}`} className={CHART_FOCUS_CLASS}
           style={{ minWidth: Math.max(500, groupCount * 65), overflow: 'visible', touchAction: 'manipulation' }}
-          role="img" aria-label="월별 식립, 청구, 수술중 FAIL 건수 추이 바 차트"
+          role="img" aria-label="월별 식립, 청구, 수술중교환 건수 추이 바 차트"
           tabIndex={0} onKeyDown={handleKeyDown}
           onPointerLeave={() => setHoveredBarGroup(null)}
           onBlur={() => setHoveredBarGroup(null)}>

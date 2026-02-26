@@ -413,7 +413,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
 
   const healthScoreRaw = totalItems > 0 ? Math.round(((totalItems - totalAnomalous) / totalItems) * 100) : 100;
   // 이상 항목이 남아 있으면 100%가 되지 않도록 99 이하로 강제
-  // 수술중FAIL_ 또는 보험청구 항목 없으면 85% 이하로 제한 (다음 단계에서 추가 예정이므로 진행은 차단 안 함)
+  // 수술중교환_ 또는 보험청구 항목 없으면 85% 이하로 제한 (다음 단계에서 추가 예정이므로 진행은 차단 안 함)
   const healthScore = (() => {
     let score = totalAnomalous > 0 ? Math.min(99, healthScoreRaw) : healthScoreRaw;
     if (uploadState === 'done' && (!hasSurgeryFailItems || !hasInsuranceItems)) score = Math.min(score, 85);

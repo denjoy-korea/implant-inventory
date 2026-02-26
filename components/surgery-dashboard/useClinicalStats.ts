@@ -64,9 +64,9 @@ export function useClinicalStats(rows: ExcelRow[]): ClinicalStats {
 
     rows.forEach((row) => {
       const cls = String(row['구분'] || '');
-      if (cls !== '식립' && cls !== '수술중 FAIL') return;
+      if (cls !== '식립' && cls !== '수술중교환') return;
 
-      const isFail = cls === '수술중 FAIL';
+      const isFail = cls === '수술중교환';
       const qty = Number(row['갯수']) > 0 ? Number(row['갯수']) : 1;
 
       // Parse Bone Density

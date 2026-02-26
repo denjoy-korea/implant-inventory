@@ -5,7 +5,7 @@
 
 /**
  * 수술기록 매칭용 정규화 (Surgery matching normalization)
- * - 접두어 제거: 수술중FAIL_, 보험임플란트
+ * - 접두어 제거: 수술중교환_, 보험임플란트
  * - 특수문자 제거: 공백, -, _, ., (, )
  * - Φ, φ → d 변환
  *
@@ -23,7 +23,7 @@ export const normalizeSurgery = (str: string): string => {
 
 /**
  * 재고 비교용 정규화 (Inventory comparison normalization)
- * - 접두어 유지: 수술중FAIL_, 보험청구 등 그대로 보존
+ * - 접두어 유지: 수술중교환_, 보험청구 등 그대로 보존
  * - 공백, -, _ 만 제거
  *
  * 용도: 재고 마스터 중복 검사, 픽스쳐 → 재고 반영 시 비교

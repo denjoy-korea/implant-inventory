@@ -207,7 +207,7 @@ export const surgeryService = {
 
     const { error } = await supabase
       .from('surgery_records')
-      .update({ classification: 'FAIL 교환완료' })
+      .update({ classification: '교환완료' })
       .in('id', recordIds);
 
     if (error) {
@@ -235,7 +235,7 @@ export const surgeryService = {
    * Realtime 구독 — INSERT / UPDATE / DELETE 이벤트 모두 처리
    *
    * - INSERT: 새 수술기록 실시간 반영
-   * - UPDATE: classification 변경(FAIL 교환완료 처리 등) 실시간 반영
+   * - UPDATE: classification 변경(교환완료 처리 등) 실시간 반영
    * - DELETE: 삭제된 레코드 실시간 제거
    */
   subscribeToChanges(
@@ -304,7 +304,7 @@ export const surgeryService = {
   /**
    * FAIL 재고 일괄 초기화
    * 수기 장부로 관리하던 FAIL 픽스쳐를 디지털로 등록합니다.
-   * 제조사별 count개의 '수술중 FAIL' 레코드를 생성합니다.
+   * 제조사별 count개의 '수술중교환' 레코드를 생성합니다.
    */
   async bulkInsertFailRecords(
     items: { manufacturer: string; count: number; date: string }[],
@@ -321,7 +321,7 @@ export const surgeryService = {
           tooth_number: null,
           quantity: 1,
           surgery_record: '[일괄등록]',
-          classification: '수술중 FAIL',
+          classification: '수술중교환',
           manufacturer: item.manufacturer,
           brand: item.manufacturer,
           size: '기타',
@@ -350,8 +350,8 @@ export const surgeryService = {
 
   /**
    * FAIL 재고 정리 (기존 데이터 → 실제 재고에 맞게 조정)
-   * actual < system → 오래된 것부터 차이만큼 'FAIL 교환완료' 처리
-   * actual > system → 차이만큼 신규 '수술중 FAIL' 레코드 생성
+   * actual < system → 오래된 것부터 차이만큼 '교환완료' 처리
+   * actual > system → 차이만큼 신규 '수술중교환' 레코드 생성
    */
   async bulkReconcileFails(
     reconciles: { manufacturer: string; targetCount: number }[],
@@ -366,7 +366,7 @@ export const surgeryService = {
         .from('surgery_records')
         .select('id')
         .eq('hospital_id', hospitalId)
-        .eq('classification', '수술중 FAIL')
+        .eq('classification', '수술중교환')
         .eq('manufacturer', manufacturer)
         .order('date', { ascending: true });
 
@@ -383,7 +383,7 @@ export const surgeryService = {
         const ids = (pending || []).slice(0, gap).map(r => r.id);
         const { error } = await supabase
           .from('surgery_records')
-          .update({ classification: 'FAIL 교환완료' })
+          .update({ classification: '교환완료' })
           .in('id', ids);
         if (error) {
           console.error('[surgeryService] bulkReconcileFails update failed:', error);
@@ -401,7 +401,7 @@ export const surgeryService = {
           tooth_number: null,
           quantity: 1,
           surgery_record: '[일괄등록]',
-          classification: '수술중 FAIL',
+          classification: '수술중교환',
           manufacturer,
           brand: manufacturer,
           size: '기타',

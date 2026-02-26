@@ -52,7 +52,7 @@ CREATE TABLE surgery_records (
   quantity INTEGER DEFAULT 1,
   surgery_record TEXT,
   classification TEXT DEFAULT '식립' CHECK (
-    classification IN ('식립', '골이식만', '수술중 FAIL', '청구', 'FAIL 교환완료')
+    classification IN ('식립', '골이식만', '수술중교환', '청구', '교환완료')
   ),
   manufacturer TEXT,
   brand TEXT,

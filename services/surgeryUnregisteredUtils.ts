@@ -24,7 +24,7 @@ export function buildBrandSizeFormatIndex(inventoryItems: InventoryItem[]): Bran
 
   inventoryItems
     .filter(item =>
-      !item.manufacturer.startsWith('수술중FAIL_') &&
+      !item.manufacturer.startsWith('수술중교환_') &&
       item.manufacturer !== '보험청구' &&
       item.brand !== '보험임플란트'
     )

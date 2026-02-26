@@ -107,7 +107,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
     if (unusedBrands) steps.push(3);
 
     // STEP 5: FAIL/청구 확장
-    const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중FAIL_'));
+    const hasFailRows = rows.some(r => String(r['제조사'] || '').startsWith('수술중교환_'));
     if (hasFailRows) steps.push(5);
 
     // STEP 7: 재고 마스터 반영
@@ -120,7 +120,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
     activeSheet.rows
       .filter(r => r['사용안함'] !== true)
       .map(r => String(r['제조사'] || ''))
-      .filter(m => m && !m.startsWith('수술중FAIL_') && m !== '보험청구')
+      .filter(m => m && !m.startsWith('수술중교환_') && m !== '보험청구')
   )).sort();
 
   const selectedIndices = selectedFixtureIndices[fixtureData.activeSheetName] || new Set<number>();

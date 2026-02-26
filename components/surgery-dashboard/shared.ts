@@ -6,9 +6,9 @@ import { useState, useEffect } from 'react';
 export const CLASSIFICATION_COLORS: Record<string, string> = {
   '식립': '#4F46E5',
   '청구': '#0EA5E9',
-  '수술중 FAIL': '#F43F5E',
+  '수술중교환': '#F43F5E',
   '골이식만': '#F59E0B',
-  'FAIL 교환완료': '#10B981',
+  '교환완료': '#10B981',
 };
 
 export const DONUT_COLORS = ['#4F46E5', '#8B5CF6', '#0EA5E9', '#F59E0B', '#10B981', '#64748b'];
@@ -16,7 +16,7 @@ export const DONUT_COLORS = ['#4F46E5', '#8B5CF6', '#0EA5E9', '#F59E0B', '#10B98
 export const BAR_SERIES = [
   { key: '식립' as const, color: '#4F46E5' },
   { key: '청구' as const, color: '#0EA5E9' },
-  { key: '수술중 FAIL' as const, color: '#F43F5E' },
+  { key: '수술중교환' as const, color: '#F43F5E' },
 ];
 
 // ============================================================
@@ -26,7 +26,7 @@ export interface MonthlyDatum {
   month: string;
   '식립': number;
   '청구': number;
-  '수술중 FAIL': number;
+  '수술중교환': number;
 }
 
 export interface DonutSegment {

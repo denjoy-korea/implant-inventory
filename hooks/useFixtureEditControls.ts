@@ -21,7 +21,7 @@ const buildFixtureRowKey = (row: ExcelRow): string => [
 ].join('\x00');
 
 const isSkippableManufacturer = (manufacturer: string): boolean =>
-  manufacturer.startsWith('수술중FAIL_') || manufacturer === '보험청구';
+  manufacturer.startsWith('수술중교환_') || manufacturer === '보험청구';
 
 export function useFixtureEditControls({
   fixtureData,
@@ -246,7 +246,7 @@ export function useFixtureEditControls({
       const activeSheet = currentData.sheets[currentData.activeSheetName];
 
       const alreadyExpanded = activeSheet.rows.some(row =>
-        String(row['제조사'] || '').startsWith('수술중FAIL_')
+        String(row['제조사'] || '').startsWith('수술중교환_')
       );
       if (alreadyExpanded) return prev;
 
@@ -255,7 +255,7 @@ export function useFixtureEditControls({
 
       const failRows = activeRows.map(row => ({
         ...row,
-        '제조사': `수술중FAIL_${row['제조사'] || ''}`,
+        '제조사': `수술중교환_${row['제조사'] || ''}`,
       }));
 
       const hasInsurance = activeSheet.rows.some(row => String(row['제조사'] || '') === '보험청구');

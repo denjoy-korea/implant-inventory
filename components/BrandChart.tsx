@@ -31,10 +31,10 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
   // (ManufacturerToggle에서 해제한 것만 제거됨, BrandChart 전체해제로는 사라지지 않음)
   const tabManufacturers = useMemo(() => {
     const enabledSet = new Set(enabledManufacturers);
-    // brandStats에 실제 데이터가 존재하는 제조사만 필터 (수술중FAIL_, 보험청구 제외)
+    // brandStats에 실제 데이터가 존재하는 제조사만 필터 (수술중교환_, 보험청구 제외)
     const dataManufacturers = new Set<string>();
     Object.values(brandStats).forEach(v => {
-      if (!v.manufacturer.startsWith('수술중FAIL_') && v.manufacturer !== '보험청구') {
+      if (!v.manufacturer.startsWith('수술중교환_') && v.manufacturer !== '보험청구') {
         dataManufacturers.add(v.manufacturer);
       }
     });
@@ -52,12 +52,12 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
     );
   }, [tabManufacturers.join(',')]);
 
-  // 선택된 제조사의 브랜드 목록 (수술중FAIL_, 보험청구 제외)
+  // 선택된 제조사의 브랜드 목록 (수술중교환_, 보험청구 제외)
   const brands = useMemo(() => {
     return Object.values(brandStats)
       .filter(v =>
         v.manufacturer === selectedManufacturer &&
-        !v.manufacturer.startsWith('수술중FAIL_') &&
+        !v.manufacturer.startsWith('수술중교환_') &&
         v.manufacturer !== '보험청구'
       )
       .sort((a, b) => a.brandName.localeCompare(b.brandName, 'ko'));
@@ -67,7 +67,7 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
   const billableActiveCount = useMemo(() => data.rows.filter(r => {
     if (r['사용안함'] === true) return false;
     const m = String(r['제조사'] || '');
-    return !m.startsWith('수술중FAIL_') && m !== '보험청구';
+    return !m.startsWith('수술중교환_') && m !== '보험청구';
   }).length, [data.rows]);
 
   // 선택된 제조사 브랜드들의 전체/일부 활성 상태 — IIFE 제거, useMemo로 추출

@@ -100,7 +100,7 @@ export function useSurgeryStats(
 
   const classificationStats = useMemo(() => {
     const stats: Record<string, number> = {
-      '식립': 0, '청구': 0, '수술중 FAIL': 0, '골이식만': 0, 'FAIL 교환완료': 0,
+      '식립': 0, '청구': 0, '수술중교환': 0, '골이식만': 0, '교환완료': 0,
     };
     cleanRows.forEach(row => {
       const cls = String(row['구분'] || '');
@@ -118,12 +118,12 @@ export function useSurgeryStats(
       if (!parsedDate) return;
 
       const month = formatMonthKey(parsedDate);
-      if (!map[month]) map[month] = { month, '식립': 0, '청구': 0, '수술중 FAIL': 0 };
+      if (!map[month]) map[month] = { month, '식립': 0, '청구': 0, '수술중교환': 0 };
       const cls = String(row['구분'] || '');
       const qty = Number(row['갯수']) || 1;
       if (cls === '식립') map[month]['식립'] += qty;
       else if (cls === '청구') map[month]['청구'] += qty;
-      else if (cls === '수술중 FAIL') map[month]['수술중 FAIL'] += qty;
+      else if (cls === '수술중교환') map[month]['수술중교환'] += qty;
     });
     return Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
   }, [cleanRows]);
@@ -177,9 +177,9 @@ export function useSurgeryStats(
   }, [monthlyData]);
 
   const failRate = useMemo(() => {
-    const total = classificationStats['식립'] + classificationStats['수술중 FAIL'];
+    const total = classificationStats['식립'] + classificationStats['수술중교환'];
     if (total === 0) return 0;
-    return Number(((classificationStats['수술중 FAIL'] / total) * 100).toFixed(1));
+    return Number(((classificationStats['수술중교환'] / total) * 100).toFixed(1));
   }, [classificationStats]);
 
   const dailyAvgPlacement = useMemo(() => {
@@ -225,12 +225,12 @@ export function useSurgeryStats(
     const prev = months[months.length - 2];
     return {
       placement: months.map(m => m['식립']),
-      fail: months.map(m => m['수술중 FAIL']),
+      fail: months.map(m => m['수술중교환']),
       claim: months.map(m => m['청구']),
       placementDelta: last && prev ? last['식립'] - prev['식립'] : 0,
       placementPrev: prev ? prev['식립'] : 0,
-      failDelta: last && prev ? last['수술중 FAIL'] - prev['수술중 FAIL'] : 0,
-      failPrev: prev ? prev['수술중 FAIL'] : 0,
+      failDelta: last && prev ? last['수술중교환'] - prev['수술중교환'] : 0,
+      failPrev: prev ? prev['수술중교환'] : 0,
       claimDelta: last && prev ? last['청구'] - prev['청구'] : 0,
       claimPrev: prev ? prev['청구'] : 0,
     };
@@ -261,7 +261,7 @@ export function useSurgeryStats(
       const cls = String(row['구분'] || '');
       const qty = Number(row['갯수']) || 1;
 
-      if (cls === '수술중 FAIL') failMap[m] = (failMap[m] || 0) + qty;
+      if (cls === '수술중교환') failMap[m] = (failMap[m] || 0) + qty;
       else if (cls === '식립') placeMap[m] = (placeMap[m] || 0) + qty;
     });
 

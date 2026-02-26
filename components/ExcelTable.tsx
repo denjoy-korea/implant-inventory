@@ -65,7 +65,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
 
   const isFailExpanded = useMemo(() => {
     if (!activeSheet) return false;
-    return activeSheet.rows.some(r => String(r['제조사'] || '').startsWith('수술중FAIL_'));
+    return activeSheet.rows.some(r => String(r['제조사'] || '').startsWith('수술중교환_'));
   }, [activeSheet]);
 
   const visibleRows = useMemo(() => {
@@ -331,8 +331,8 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                     <span className="text-xs font-black">F</span>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-700">수술중FAIL 항목</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">각 항목의 제조사 앞에 "수술중FAIL_"을 붙인 복제본 <span className="font-bold text-slate-600">+{counts.active}개</span></p>
+                    <p className="text-xs font-bold text-slate-700">수술중교환 항목</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">각 항목의 제조사 앞에 "수술중교환_"을 붙인 복제본 <span className="font-bold text-slate-600">+{counts.active}개</span></p>
                   </div>
                 </div>
                 <div className="border-t border-slate-200 pt-3 flex items-start gap-3">
@@ -376,9 +376,9 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-black text-slate-900 mb-1.5">이미 FAIL/청구 확장 완료</h3>
+              <h3 className="text-lg font-black text-slate-900 mb-1.5">이미 교환/청구 확장 완료</h3>
               <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-                수술중FAIL 항목이 이미 추가되어 있습니다.<br />
+                수술중교환 항목이 이미 추가되어 있습니다.<br />
                 덴트웹에 반영하려면 아래 순서로 진행해 주세요.
               </p>
               <div className="w-full bg-slate-50 rounded-2xl p-4 space-y-2.5 text-left mb-2">

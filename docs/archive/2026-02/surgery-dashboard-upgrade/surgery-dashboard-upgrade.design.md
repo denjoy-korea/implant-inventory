@@ -66,10 +66,10 @@ KPI 배열에서 `id: 'placement'`, `id: 'monthly'`, `id: 'fail'`, `id: 'claim'`
 
 | 차트 | role | aria-label |
 |------|------|------------|
-| 월별 추세 Bar | `img` | `"월별 식립, 청구, 수술중 FAIL 건수 추이 바 차트"` |
+| 월별 추세 Bar | `img` | `"월별 식립, 청구, 수술중교환 건수 추이 바 차트"` |
 | 요일별 패턴 | `img` | `"요일별 식립 건수 컬럼 차트"` |
 | 식립 추세 Line | `img` | `"월별 식립 건수 추세 라인 차트"` |
-| 구분별 비율 Ring | `img` | `"식립 대비 청구 비율 링 게이지"` / `"식립 대비 수술중 FAIL 비율 링 게이지"` |
+| 구분별 비율 Ring | `img` | `"식립 대비 청구 비율 링 게이지"` / `"식립 대비 수술중교환 비율 링 게이지"` |
 | 제조사 Donut | `img` | `"제조사별 식립 분포 도넛 차트"` |
 | 식립부위 Ring | `img` | `"식립 부위별 분포 링 차트"` |
 
@@ -107,7 +107,7 @@ function TrendBadge({ value, prevValue, suffix = '건' }: {
 sparkline useMemo에서 `prevValue` 계산 추가:
 ```tsx
 placementPrev: prev ? prev['식립'] : 0,
-failPrev: prev ? prev['수술중 FAIL'] : 0,
+failPrev: prev ? prev['수술중교환'] : 0,
 claimPrev: prev ? prev['청구'] : 0,
 ```
 
@@ -125,7 +125,7 @@ const manufacturerFailStats = useMemo(() => {
   cleanRows.forEach(row => {
     const m = String(row['제조사'] || '기타').trim();
     const cls = String(row['구분'] || '');
-    if (cls === '수술중 FAIL') failMap[m] = (failMap[m] || 0) + 1;
+    if (cls === '수술중교환') failMap[m] = (failMap[m] || 0) + 1;
     if (cls === '식립') placeMap[m] = (placeMap[m] || 0) + 1;
   });
 
