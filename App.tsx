@@ -2088,6 +2088,7 @@ const App: React.FC = () => {
                             onboardingService.clearDismissed(hid);
                             setOnboardingDismissed(false);
                             setAutoOpenBaseStockEdit(false);
+                            setForcedOnboardingStep(7);
                             setState(prev => ({ ...prev, dashboardTab: 'overview' }));
                           },
                           applyBaseStockBatch,
@@ -2122,6 +2123,7 @@ const App: React.FC = () => {
                           onboardingService.markInventoryAuditSeen(hid);
                           onboardingService.clearDismissed(hid);
                           setOnboardingDismissed(false);
+                          setForcedOnboardingStep(7);
                           setState(prev => ({ ...prev, dashboardTab: 'overview' }));
                         },
                         initialShowFailBulkModal: autoOpenFailBulkModal,
