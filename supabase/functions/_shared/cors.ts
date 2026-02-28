@@ -12,6 +12,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:3001",
+  "http://localhost:3002",
 ]);
 
 /** Vercel 프리뷰 URL 패턴 (implant-stock-pro 프로젝트만 허용) */
