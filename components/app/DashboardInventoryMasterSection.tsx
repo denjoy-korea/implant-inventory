@@ -242,6 +242,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
         manager: state.user?.name || '관리자',
         status: 'ordered',
       })}
+      onAddOrder={onAddOrder}
     />
   );
 };

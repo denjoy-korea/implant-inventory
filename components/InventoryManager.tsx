@@ -1,6 +1,6 @@
 
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem } from '../types';
+import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, Order } from '../types';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
@@ -27,6 +27,7 @@ interface InventoryManagerProps {
   onUpdateInventoryItem: (updatedItem: InventoryItem) => void;
   surgeryData?: ExcelData | null;
   onQuickOrder?: (item: InventoryItem) => void;
+  onAddOrder?: (order: Order) => Promise<void>;
   isReadOnly?: boolean;
   userId?: string;
   hospitalId?: string;
@@ -64,6 +65,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   onUpdateInventoryItem,
   surgeryData,
   onQuickOrder,
+  onAddOrder,
   isReadOnly,
   userId,
   hospitalId,
@@ -1183,6 +1185,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           deadStockItems={deadStockItems}
           onDeleteInventoryItem={onDeleteInventoryItem}
           onUpdateInventoryItem={onUpdateInventoryItem}
+          onAddOrder={onAddOrder}
           onClose={() => setShowOptimizeModal(false)}
         />
       )}

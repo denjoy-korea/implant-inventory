@@ -114,10 +114,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     };
   }, [orders, lowStockItems, filterType]);
 
-  const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange', number> = useMemo(() => ({
+  const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange' | 'return', number> = useMemo(() => ({
     all: orders.length,
     replenishment: orders.filter(o => o.type === 'replenishment').length,
     fail_exchange: orders.filter(o => o.type === 'fail_exchange').length,
+    return: orders.filter(o => o.type === 'return').length,
   }), [orders]);
 
   // ── 월별 주문 추세 데이터 (건수 → 총 수량 합계) ──
@@ -225,10 +226,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const animReceived = useCountUp(stats.receivedCount);
   const animLowStock = useCountUp(stats.lowStockCount);
 
-  const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange'; label: string }[] = [
+  const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange' | 'return'; label: string }[] = [
     { key: 'all', label: '전체' },
     { key: 'replenishment', label: '재고 발주' },
     { key: 'fail_exchange', label: '교환' },
+    { key: 'return', label: '반품' },
   ];
   const STATUS_FILTERS: { key: 'all' | OrderStatus; label: string }[] = [
     { key: 'all', label: '모든 상태' },
@@ -674,6 +676,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
             const typeBadgeClass = order.type === 'replenishment'
               ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
+              : order.type === 'return'
+              ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700'
               : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
             return (
               <article
@@ -686,7 +690,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(order.manufacturer)}</p>
                   </div>
                   <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
-                    {order.type === 'replenishment' ? '재고 발주' : '교환'}
+                    {order.type === 'replenishment' ? '재고 발주' : order.type === 'return' ? '반품' : '교환'}
                   </span>
                 </div>
 
@@ -751,15 +755,15 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
-                const accentHoverClass = order.type === 'replenishment' ? 'hover:border-l-indigo-500' : 'hover:border-l-rose-500';
+                const accentHoverClass = order.type === 'replenishment' ? 'hover:border-l-indigo-500' : order.type === 'return' ? 'hover:border-l-amber-500' : 'hover:border-l-rose-500';
                 const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
                 const isEven = idx % 2 === 1;
                 return (
                   <tr key={order.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
                     <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{order.date}</span></td>
                     <td className="px-6 py-3">
-                      <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
-                        {order.type === 'replenishment' ? '재고 발주' : '교환'}
+                      <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : order.type === 'return' ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
+                        {order.type === 'replenishment' ? '재고 발주' : order.type === 'return' ? '반품' : '교환'}
                       </span>
                     </td>
                     <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(order.manufacturer)}</span></td>

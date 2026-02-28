@@ -63,7 +63,7 @@ export interface InventoryItem {
   lastUsedDate?: string | null;
 }
 
-export type OrderType = 'replenishment' | 'fail_exchange';
+export type OrderType = 'replenishment' | 'fail_exchange' | 'return';
 export type OrderStatus = 'ordered' | 'received';
 
 export interface OrderItem {

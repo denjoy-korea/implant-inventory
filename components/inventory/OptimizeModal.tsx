@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { InventoryItem } from '../../types';
+import { InventoryItem, Order } from '../../types';
 
 interface DeadStockItem extends InventoryItem {
   neverUsed: boolean;
@@ -11,10 +11,11 @@ interface OptimizeModalProps {
   deadStockItems: DeadStockItem[];
   onDeleteInventoryItem: (id: string) => void;
   onUpdateInventoryItem: (item: InventoryItem) => void;
+  onAddOrder?: (order: Order) => Promise<void>;
   onClose: () => void;
 }
 
-const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onClose }) => {
+const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
@@ -49,6 +50,17 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     const qty = parseInt(returnQtyStr, 10);
     if (!qty || qty < 1 || qty > item.currentStock) return;
     onUpdateInventoryItem({ ...item, currentStock: item.currentStock - qty });
+    if (onAddOrder) {
+      onAddOrder({
+        id: `order_${Date.now()}`,
+        type: 'return',
+        manufacturer: item.manufacturer,
+        date: new Date().toISOString().split('T')[0],
+        items: [{ brand: item.brand, size: item.size, quantity: qty }],
+        manager: '품목 최적화',
+        status: 'received',
+      });
+    }
     setReturningId(null);
     setReturnQtyStr('');
   };
