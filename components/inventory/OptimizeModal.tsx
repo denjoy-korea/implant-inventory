@@ -108,19 +108,29 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
             <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
               <svg className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
               <span className="text-[11px] text-slate-400 font-medium">필터</span>
-              <button
-                onClick={() => { setFilterZeroStock(v => !v); setSelectedOptimizeIds(new Set()); }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
-                  filterZeroStock
-                    ? 'bg-indigo-600 border-indigo-600 text-white'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
-                }`}
-              >
-                현재 재고 0개
-                <span className={`text-[10px] tabular-nums ${filterZeroStock ? 'text-indigo-200' : 'text-slate-400'}`}>
-                  {neverZeroItems.length}
-                </span>
-              </button>
+              <div className="group/zero-tip relative flex items-center gap-1">
+                <button
+                  onClick={() => { setFilterZeroStock(v => !v); setSelectedOptimizeIds(new Set()); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
+                    filterZeroStock
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                >
+                  현재 재고 0개
+                  <span className={`text-[10px] tabular-nums ${filterZeroStock ? 'text-indigo-200' : 'text-slate-400'}`}>
+                    {neverZeroItems.length}
+                  </span>
+                </button>
+                <svg className="w-3.5 h-3.5 text-slate-400 cursor-help flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {/* Tooltip */}
+                <div className="pointer-events-none absolute top-full left-0 mt-2 z-50 w-72 rounded-xl bg-slate-900 px-4 py-3 text-left shadow-xl opacity-0 group-hover/zero-tip:opacity-100 transition-opacity duration-75">
+                  <p className="text-[11px] font-bold text-white mb-1.5">재고 0개 미사용 품목 정리 권장</p>
+                  <p className="text-[11px] leading-relaxed text-slate-300">한 번도 사용하지 않았으면서 현재 재고가 <span className="text-white font-bold">0개인 품목</span>은 재고 목록에 있을 필요가 없습니다.</p>
+                  <p className="text-[11px] leading-relaxed text-slate-300 mt-2">덴트웹에서도 해당 품목을 <span className="text-indigo-300 font-bold">사용하지 않음</span>으로 설정하면 수술기록지 브랜드 선택 시 불필요한 항목이 줄어 피로도가 감소합니다.</p>
+                  <span className="absolute -top-1.5 left-6 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
+                </div>
+              </div>
             </div>
           )}
           {displayed.length === 0 ? (
