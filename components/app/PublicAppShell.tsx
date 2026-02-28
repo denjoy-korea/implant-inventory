@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
@@ -83,6 +83,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
 }) => {
   const isLoggedIn = !!user;
   const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
+  const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
   const hasPublicMobileNav = publicViews.includes(currentView);
 
   const handlePlanSelect = user?.hospitalId
@@ -316,7 +317,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
             {currentView === 'analyze' && (
               <AnalyzePage
                 onSignup={() => handleNavigate('signup')}
-                onContact={() => handleNavigate('consultation')}
+                onContact={(data) => { setConsultationPrefill(data); handleNavigate('consultation'); }}
               />
             )}
             {currentView === 'notices' && (
@@ -333,7 +334,13 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
               <ReviewsPage onBack={() => handleNavigate('landing')} />
             )}
             {currentView === 'consultation' && (
-              <ConsultationPage onBack={() => handleNavigate('analyze')} />
+              <ConsultationPage
+                onBack={() => handleNavigate('analyze')}
+                initialEmail={consultationPrefill.email}
+                initialHospitalName={consultationPrefill.hospitalName}
+                initialRegion={consultationPrefill.region}
+                initialContact={consultationPrefill.contact}
+              />
             )}
           </Suspense>
         </ErrorBoundary>

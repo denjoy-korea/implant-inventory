@@ -20,9 +20,16 @@ import PublicInfoFooter from './shared/PublicInfoFooter';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+interface ConsultationPrefill {
+  email: string;
+  hospitalName?: string;
+  region?: string;
+  contact?: string;
+}
+
 interface AnalyzePageProps {
   onSignup: () => void;
-  onContact: () => void;
+  onContact: (data: ConsultationPrefill) => void;
 }
 
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
@@ -215,11 +222,24 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     setIsSubmittingLead(true);
     setLeadSubmitError('');
     pageViewService.trackEvent('analyze_lead_submit_start', { detailed: wantDetailedAnalysis }, 'analyze');
-    const reportText = generateReportText(report);
+
+    let reportText: string;
+    try {
+      reportText = generateReportText(report);
+    } catch (err) {
+      console.error('[AnalyzePage] generateReportText failed:', err);
+      setLeadSubmitError('리포트 텍스트 생성 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      setIsSubmittingLead(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/send-analysis-report`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_ANON_KEY,
@@ -259,16 +279,25 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       pageViewService.trackEvent('analyze_lead_submit', { detailed: wantDetailedAnalysis }, 'analyze');
     } catch (err) {
       console.error('[AnalyzePage] send-analysis-report failed:', err);
-      setLeadSubmitError(classifyLeadSubmitError(err));
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      const errMsg = isTimeout
+        ? '요청 시간(30초)이 초과되었습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.'
+        : classifyLeadSubmitError(err);
+      setLeadSubmitError(errMsg);
       pageViewService.trackEvent(
         'analyze_lead_submit_error',
-        { detailed: wantDetailedAnalysis, message: classifyLeadSubmitError(err) },
+        { detailed: wantDetailedAnalysis, message: errMsg },
         'analyze',
       );
     } finally {
+      clearTimeout(timeoutId);
       setIsSubmittingLead(false);
     }
   }, [leadEmail, leadHospital, leadRegion, leadContact, wantDetailedAnalysis, report, isSubmittingLead]);
+
+  const handleGoToConsultation = useCallback(() => {
+    onContact({ email: leadEmail, hospitalName: leadHospital, region: leadRegion, contact: leadContact });
+  }, [onContact, leadEmail, leadHospital, leadRegion, leadContact]);
 
   const hasAnyUploadedFile = Boolean(fixtureFile) || surgeryFiles.length > 0;
   const uploadRequirements: { label: string; detail?: string; status: 'done' | 'pending' | 'warning' }[] = [
@@ -598,7 +627,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
       eta: '담당자가 영업일 기준 1일 이내에 연락드립니다.',
       detail: '요청 내역이 정상 접수되었고 분석 리포트 텍스트는 클립보드에 복사되었습니다.',
       ctaLabel: '상담 일정 잡기',
-      onClick: onContact,
+      onClick: handleGoToConsultation,
     }
     : {
       title: '리포트 저장 완료',
@@ -1247,7 +1276,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
           </div>
           <p className="text-xs text-indigo-300/70">{analyzeTrialFootnoteText}</p>
           <button
-            onClick={onContact}
+            onClick={handleGoToConsultation}
             className="mt-4 text-sm text-slate-400 hover:text-white underline underline-offset-2 transition-colors"
           >
             정밀 분석 문의하기

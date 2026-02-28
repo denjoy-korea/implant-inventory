@@ -22,6 +22,9 @@ const ConsultationPage: React.FC<ConsultationPageProps> = ({
   const [hospitalName, setHospitalName] = useState(initialHospitalName);
   const [region, setRegion] = useState(initialRegion);
   const [contact, setContact] = useState(initialContact);
+
+  const prefilled = { email: !!initialEmail, hospitalName: !!initialHospitalName, region: !!initialRegion, contact: !!initialContact };
+  const prefilledClass = 'bg-slate-50 text-slate-500 cursor-not-allowed select-none';
   const [preferredDate, setPreferredDate] = useState('');
   const [preferredTimeSlot, setPreferredTimeSlot] = useState<TimeSlot | ''>('');
   const [notes, setNotes] = useState('');
@@ -149,10 +152,11 @@ const ConsultationPage: React.FC<ConsultationPageProps> = ({
                 <input
                   type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { if (!prefilled.email) setEmail(e.target.value); }}
+                  readOnly={prefilled.email}
                   placeholder="example@hospital.com"
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+                  className={`w-full px-4 py-3 rounded-xl border border-slate-200 text-sm transition-all ${prefilled.email ? prefilledClass : 'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400'}`}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -163,10 +167,11 @@ const ConsultationPage: React.FC<ConsultationPageProps> = ({
                   <input
                     type="text"
                     value={hospitalName}
-                    onChange={e => setHospitalName(e.target.value)}
+                    onChange={e => { if (!prefilled.hospitalName) setHospitalName(e.target.value); }}
+                    readOnly={prefilled.hospitalName}
                     placeholder="치과 병원명"
                     required
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+                    className={`w-full px-4 py-3 rounded-xl border border-slate-200 text-sm transition-all ${prefilled.hospitalName ? prefilledClass : 'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400'}`}
                   />
                 </div>
                 <div>
@@ -174,9 +179,10 @@ const ConsultationPage: React.FC<ConsultationPageProps> = ({
                   <input
                     type="text"
                     value={region}
-                    onChange={e => setRegion(e.target.value)}
+                    onChange={e => { if (!prefilled.region) setRegion(e.target.value); }}
+                    readOnly={prefilled.region}
                     placeholder="서울 강남구"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+                    className={`w-full px-4 py-3 rounded-xl border border-slate-200 text-sm transition-all ${prefilled.region ? prefilledClass : 'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400'}`}
                   />
                 </div>
               </div>
@@ -185,9 +191,10 @@ const ConsultationPage: React.FC<ConsultationPageProps> = ({
                 <input
                   type="tel"
                   value={contact}
-                  onChange={e => setContact(e.target.value)}
+                  onChange={e => { if (!prefilled.contact) setContact(e.target.value); }}
+                  readOnly={prefilled.contact}
                   placeholder="010-0000-0000"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+                  className={`w-full px-4 py-3 rounded-xl border border-slate-200 text-sm transition-all ${prefilled.contact ? prefilledClass : 'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400'}`}
                 />
               </div>
             </div>

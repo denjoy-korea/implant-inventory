@@ -43,10 +43,13 @@ function hasAnyHeader(headers: Set<string>, candidates: string[]): boolean {
 
 function isLikelySurgerySheet(sheet: { columns?: string[]; rows?: ExcelRow[] } | undefined): boolean {
   const headers = collectSheetHeaders(sheet);
+  const hasSurgeryHint = hasAnyHeader(headers, ['수술기록', '수술내용', '구분', '치아번호', '환자정보', '날짜', '수술일']);
   const hasManufacturer = hasAnyHeader(headers, ['제조사', 'Manufacturer']);
   const hasBrand = hasAnyHeader(headers, ['브랜드', 'Brand']);
-  const hasSurgeryHint = hasAnyHeader(headers, ['수술기록', '구분', '치아번호', '환자정보', '날짜', '수술일']);
-  return hasManufacturer && hasBrand && hasSurgeryHint;
+  // 수술기록지는 두 가지 형태 지원:
+  // 1. 텍스트 묘사 형태: '수술기록' 컬럼에 "제조사-브랜드 규격" 통합 기재 (제조사/브랜드 별도 컬럼 없음)
+  // 2. 구조화 형태: 제조사/브랜드 컬럼 분리
+  return hasSurgeryHint || (hasManufacturer && hasBrand);
 }
 
 function isLikelyFixtureSheet(sheet: { columns?: string[]; rows?: ExcelRow[] } | undefined): boolean {
