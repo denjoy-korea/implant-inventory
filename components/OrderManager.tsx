@@ -102,6 +102,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     const receivedOrders = totalOrders.filter(o => o.status === 'received');
     const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + (o.items[0]?.quantity || 0), 0);
     const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
+    // 반품 통계 (전체 orders 기준, 필터 무관)
+    const returnOrders = orders.filter(o => o.type === 'return');
+    const returnPending = returnOrders.filter(o => o.status === 'ordered');
+    const returnReceived = returnOrders.filter(o => o.status === 'received');
     return {
       totalCount: totalOrders.length,
       totalQty: sumQty(totalOrders),
@@ -111,6 +115,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       receivedQty: sumQty(receivedOrders),
       lowStockCount: lowStockItems.length,
       lowStockQty: lowStockDeficit,
+      returnCount: returnOrders.length,
+      returnQty: sumQty(returnOrders),
+      returnPendingCount: returnPending.length,
+      returnReceivedCount: returnReceived.length,
     };
   }, [orders, lowStockItems, filterType]);
 
@@ -225,6 +233,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const animPending = useCountUp(stats.pendingCount);
   const animReceived = useCountUp(stats.receivedCount);
   const animLowStock = useCountUp(stats.lowStockCount);
+  const animReturn = useCountUp(stats.returnCount);
 
   const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange' | 'return'; label: string }[] = [
     { key: 'all', label: '전체' },
@@ -250,104 +259,202 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* STICKY HEADER + KPI + FILTERS           */}
       {/* ═══════════════════════════════════════ */}
       <div
-        className="md:sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md"
-        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
+        className="md:sticky z-20 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200"
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
       >
+        <div className="hidden md:block bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
+          <div className="flex flex-wrap items-center justify-between gap-4">
 
-        {/* A. KPI Strip */}
-        <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100/50 divide-y lg:divide-y-0">
-            {/* 전체 주문 */}
-            <div className="p-4 sm:p-6 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <h4 className="text-sm font-black text-slate-800 relative z-10">전체 주문</h4>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Total Orders</p>
-              <p className="text-[32px] font-black text-slate-800 tabular-nums leading-none tracking-tight mt-3 relative z-10">{animTotal}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
-              <p className="text-[11px] font-bold text-slate-400 mt-1.5 relative z-10">{stats.totalQty}개</p>
-              {orderSparkline.length > 1 && (
-                <svg className="absolute bottom-0 right-2 opacity-50 drop-shadow-sm transition-all group-hover:opacity-80" width="80" height="28">
-                  <defs>
-                    <linearGradient id="totalSparkGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#818cf8" />
-                      <stop offset="100%" stopColor="#4f46e5" />
-                    </linearGradient>
-                  </defs>
-                  <path d={buildSparklinePath(orderSparkline, 76, 24)} fill="none" stroke="url(#totalSparkGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
+            {/* Left: summary metrics (Metric Strip style) */}
+            <div className="flex items-start gap-6 flex-wrap">
+
+              {/* 총 주문 건수 */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">총 주문</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Orders</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <p className="text-base font-bold text-slate-800 tabular-nums tracking-tight">{animTotal}</p>
+                  <span className="text-xs font-semibold text-slate-400">건</span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 mt-0.5">합계 {stats.totalQty}개</p>
+              </div>
+
+              <div className="h-14 w-px bg-slate-100 mt-0.5" />
+
+              {/* 입고 대기 */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">입고 대기</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Pending</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <p className={`text-base font-bold tabular-nums tracking-tight ${animPending > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                    {animPending}
+                  </p>
+                  <span className="text-xs font-semibold text-slate-400">건</span>
+                </div>
+                {animPending > 0 && <p className="text-[10px] font-bold text-rose-500 mt-0.5">미입고 {stats.pendingQty}개</p>}
+              </div>
+
+              <div className="h-14 w-px bg-slate-100 mt-0.5" />
+
+              {/* 처리 완료 (입고 완료) */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">완료</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Received</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <p className="text-base font-bold text-emerald-600 tabular-nums tracking-tight">
+                    {animReceived}
+                  </p>
+                  <span className="text-xs font-semibold text-slate-400">건</span>
+                </div>
+                <p className="text-[10px] font-bold text-emerald-500 mt-0.5">누적 {stats.receivedQty}개</p>
+              </div>
+
+              <div className="h-14 w-px bg-slate-100 mt-0.5" />
+
+              {/* 반품 */}
+              <div
+                className="cursor-pointer"
+                onClick={() => { setFilterType('return'); setFilterStatus('all'); }}
+              >
+                <h4 className="text-sm font-semibold text-slate-800">반품</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Return</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <p className={`text-base font-bold tabular-nums tracking-tight ${animReturn > 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+                    {animReturn}
+                  </p>
+                  <span className="text-xs font-semibold text-slate-400">건</span>
+                </div>
+                {stats.returnPendingCount > 0 && (
+                  <p className="text-[10px] font-bold text-amber-500 mt-0.5">대기 {stats.returnPendingCount}건</p>
+                )}
+                {stats.returnPendingCount === 0 && stats.returnCount > 0 && (
+                  <p className="text-[10px] font-bold text-emerald-500 mt-0.5">모두 완료</p>
+                )}
+              </div>
+
+              <div className="h-14 w-px bg-slate-100 mt-0.5" />
+
+              {/* 발주 권장 (Low Stock) */}
+              <div className="relative">
+                <h4 className="text-sm font-semibold text-slate-800">발주 권장</h4>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Low Stock</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <p className={`text-base font-bold tabular-nums tracking-tight ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                    {animLowStock}
+                  </p>
+                  <span className="text-xs font-semibold text-slate-400">품목</span>
+                </div>
+                {animLowStock > 0 && (
+                  <p className="text-[10px] font-bold text-rose-500 mt-0.5">총 {stats.lowStockQty}개 부족</p>
+                )}
+                {animLowStock > 0 && <span className="absolute top-0 -right-2 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" /></span>}
+              </div>
+
             </div>
-            {/* 입고 대기 */}
-            <div className="p-4 sm:p-6 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-rose-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <h4 className="text-sm font-black text-slate-800 relative z-10">입고 대기</h4>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Pending</p>
-              <p className={`text-[32px] font-black tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm ${animPending > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animPending}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
-              <p className={`text-[11px] font-bold mt-1.5 relative z-10 ${animPending > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{stats.pendingQty}개</p>
+
+            {/* Right: Filter Buttons */}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
+                {TYPE_TABS.map(({ key, label }) => {
+                  const isActive = filterType === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setFilterType(key)}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${isActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {label}
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{typeCounts[key]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                {STATUS_FILTERS.map(({ key, label }) => {
+                  const isActive = filterStatus === key;
+                  const activeColor = key === 'ordered' ? 'border-rose-300 bg-rose-50 text-rose-600' : key === 'received' ? 'border-emerald-300 bg-emerald-50 text-emerald-600' : 'border-indigo-300 bg-indigo-50 text-indigo-600';
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setFilterStatus(key)}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-all ${isActive ? activeColor : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {/* 처리 완료 */}
-            <div className="p-4 sm:p-6 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <h4 className="text-sm font-black text-slate-800 relative z-10">처리 완료</h4>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Received</p>
-              <p className="text-[32px] font-black text-emerald-600 tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm">{animReceived}<span className="text-sm font-bold text-slate-400 ml-1">건</span></p>
-              <p className="text-[11px] font-bold text-emerald-400 mt-1.5 relative z-10">{stats.receivedQty}개</p>
-            </div>
-            {/* 발주 권장 */}
-            <div className="p-4 sm:p-6 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <h4 className="text-sm font-black text-rose-600 relative z-10">발주 권장</h4>
-              <p className="text-[10px] text-rose-400 uppercase tracking-widest font-bold mt-0.5 relative z-10">Low Stock</p>
-              <p className={`text-[32px] font-black tabular-nums leading-none tracking-tight mt-3 relative z-10 drop-shadow-sm ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animLowStock}<span className="text-sm font-bold text-slate-400 ml-1">품목</span></p>
-              <p className="text-[11px] font-bold text-rose-400 mt-1.5 relative z-10">{stats.lowStockQty}개 부족</p>
-              {animLowStock > 0 && <span className="absolute top-6 right-6 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" /></span>}
-            </div>
+
           </div>
         </div>
 
-        {/* B. Type Tabs + Status Filter */}
-        <div className="flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-between bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 px-3 sm:px-5 py-3 shadow-sm relative z-10">
-          <div className="flex flex-wrap gap-1.5 bg-indigo-50/40 p-1.5 rounded-xl border border-indigo-100/50 shadow-inner w-full lg:w-auto">
-            {TYPE_TABS.map(({ key, label }) => {
-              const isActive = filterType === key;
-              return (
+        {/* Mobile View Strategy */}
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-800">모바일 주문 요약</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">총 주문</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">{animTotal}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">입고 대기</p>
+              <p className={`text-base font-black tabular-nums ${animPending > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animPending}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">발주 권장</p>
+              <p className={`text-base font-black tabular-nums ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animLowStock}</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-amber-500">반품</p>
+              <p className={`text-base font-black tabular-nums ${animReturn > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{animReturn}</p>
+              {stats.returnPendingCount > 0 && <p className="text-[9px] font-bold text-amber-400">대기 {stats.returnPendingCount}건</p>}
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">완료 내역</p>
+              <p className="text-base font-black text-emerald-600 tabular-nums">{animReceived}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <div className="flex gap-1">
+              {TYPE_TABS.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setFilterType(key)}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${isActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {label}
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>{typeCounts[key]}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="hidden sm:flex flex-wrap items-center gap-0.5 p-1 bg-slate-100 rounded-xl w-full lg:w-auto">
-            {STATUS_FILTERS.map(({ key, label }) => {
-              const isActive = filterStatus === key;
-              const activeColor = key === 'ordered' ? 'text-rose-600' : key === 'received' ? 'text-emerald-600' : 'text-indigo-600';
-              return (
-                <button
-                  key={key}
-                  onClick={() => setFilterStatus(key)}
-                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${isActive ? `bg-white shadow-sm ${activeColor}` : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${filterType === key ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
                 >
                   {label}
                 </button>
-              );
-            })}
-          </div>
-          <div className="sm:hidden px-1 text-[11px] font-semibold text-slate-500">
-            상태 필터는 기본값(전체)로 적용됩니다.
+              ))}
+            </div>
+            <div className="flex gap-1">
+              {STATUS_FILTERS.map(({ key, label }) => {
+                const isActive = filterStatus === key;
+                const activeColor = key === 'ordered' ? 'border-rose-300 bg-rose-50 text-rose-600' : key === 'received' ? 'border-emerald-300 bg-emerald-50 text-emerald-600' : 'border-indigo-300 bg-indigo-50 text-indigo-600';
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilterStatus(key)}
+                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${isActive ? activeColor : 'border-slate-200 bg-slate-50 text-slate-500'}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>{/* end sticky */}
+      </div>
 
       {/* ═══════════════════════════════════════ */}
       {/* 발주 권장 품목 (제조사별 그룹핑)          */}
       {/* ═══════════════════════════════════════ */}
       {groupedLowStock.length > 0 && (
-        <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
           {/* ── Header ── */}
           <div className="px-4 sm:px-7 pt-5 sm:pt-7 pb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -421,7 +528,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
 
               return (
-                <div key={mfr} className={`rounded-2xl border transition-all duration-300 ${isExpanded ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50/80 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                <div key={mfr} className={`rounded-2xl border transition-all duration-300 ${isExpanded ? 'bg-white border-slate-200 shadow-[0_4px_12px_rgba(15,23,42,0.04)] ring-1 ring-slate-100/50' : 'bg-slate-50/80 border-slate-100 hover:border-slate-200 hover:bg-slate-50 hover:shadow-sm'
                   }`}>
                   {/* Manufacturer Header — clickable */}
                   <button
@@ -531,7 +638,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
           <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-4 sm:gap-6">
             {/* LEFT: 월별 추세 */}
-            <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-4 sm:p-7 relative overflow-hidden" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
                 <div>
@@ -615,7 +722,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               )}
             </div>
             {/* RIGHT: 제조사 도넛 */}
-            <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 p-4 sm:p-7 relative overflow-hidden flex flex-col" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+            <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 relative overflow-hidden flex flex-col">
               <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
               <div>
                 <h3 className="text-base font-black text-slate-800 tracking-tight">제조사별 주문 비율</h3>
@@ -659,7 +766,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       {/* ═══════════════════════════════════════ */}
       {/* 주문 내역 테이블                          */}
       {/* ═══════════════════════════════════════ */}
-      <div className="bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative">
         <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
         <div className="px-4 sm:px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
           <div>
@@ -677,8 +784,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             const typeBadgeClass = order.type === 'replenishment'
               ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
               : order.type === 'return'
-              ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700'
-              : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
+                ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700'
+                : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
             return (
               <article
                 key={`mobile-order-${order.id}`}
