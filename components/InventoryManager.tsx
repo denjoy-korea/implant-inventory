@@ -1182,6 +1182,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         <OptimizeModal
           deadStockItems={deadStockItems}
           onDeleteInventoryItem={onDeleteInventoryItem}
+          onUpdateInventoryItem={onUpdateInventoryItem}
           onClose={() => setShowOptimizeModal(false)}
         />
       )}
