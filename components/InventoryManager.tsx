@@ -1,4 +1,3 @@
-
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, Order } from '../types';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
@@ -117,7 +116,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       setShowBaseStockModal(true);
       autoOpenedRef.current = true;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** 수술중교환_ / 보험청구 항목 제외한 실제 표시 대상 */
@@ -479,175 +478,202 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       {/* ================================================= */}
       <div
         ref={stickyRef}
-        className={`sticky z-20 pt-px -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 ${
-          isMobileViewport && isMobileStickyCollapsed ? 'space-y-2 pb-2' : 'space-y-4 pb-3'
-        }`}
+        className={`sticky z-20 pt-px -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 ${isMobileViewport && isMobileStickyCollapsed ? 'space-y-2 pb-2' : 'space-y-4 pb-3'
+          }`}
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
       >
         {/* A. Header Strip */}
-        <div className="hidden md:block bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* Left: summary metrics */}
-            <div className="flex items-start gap-6 flex-wrap">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">총 품목</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Items</p>
-                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredInventory.length}<span className="text-xs font-semibold text-slate-400 ml-1">items</span></p>
-                {hiddenCategoryCount > 0 && (() => {
-                  const isNormal = hiddenCategoryCount === visibleInventory.length + 1;
-                  return (
-                    <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-md bg-white/60 backdrop-blur-md border border-slate-200/60 shadow-sm w-fit">
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isNormal ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'}`} />
-                      <p className={`text-[10px] font-bold tracking-tight ${isNormal ? 'text-slate-600' : 'text-rose-600'}`}>
-                        + 교환/청구 {hiddenCategoryCount}개 별도{!isNormal && ' · 품목오류'}
-                      </p>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div className="h-16 w-px bg-slate-100 mt-0.5" />
-              {/* 총 사용량 */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">총 사용량</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Usage</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <p className="text-base font-bold text-slate-800 tabular-nums tracking-tight">{kpiData.totalUsage.toLocaleString()}</p>
-                  <span className="text-xs font-semibold text-slate-400">개</span>
-                </div>
-                {(surgeryBreakdown.placement > 0 || surgeryBreakdown.fail > 0) ? (
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-bold text-indigo-600">식립 {surgeryBreakdown.placement}</span>
-                    {surgeryBreakdown.fail > 0 && <span className="text-[10px] font-bold text-rose-500">교환 {surgeryBreakdown.fail}</span>}
-                  </div>
-                ) : null}
-              </div>
-              <div className="h-16 w-px bg-slate-100 mt-0.5" />
-              {/* 현재 재고 */}
-              <div className="relative">
-                <h4 className="text-sm font-semibold text-slate-800">현재 재고</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Current Stock</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <p className={`text-base font-bold tabular-nums tracking-tight ${kpiData.totalStock < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                    {kpiData.totalStock.toLocaleString()}
-                  </p>
-                  <span className="text-xs font-semibold text-slate-400">개</span>
-                </div>
-                {kpiData.totalStock < 0 ? (
-                  <p className="text-[10px] font-bold text-rose-500 mt-0.5">⚠ 입력 필요</p>
-                ) : (() => {
-                  // 권장량 기준 건강 분류 (예측 소진일 제거)
-                  const itemsWithDemand = visibleInventory.filter(i => (i.usageCount ?? 0) > 0 || (i.monthlyAvgUsage ?? 0) > 0 || (i.dailyMaxUsage ?? 0) > 0);
-                  const healthy = itemsWithDemand.filter(i => i.currentStock >= Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor))).length;
-                  const normal = itemsWithDemand.filter(i => {
-                    const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
-                    const threshold = Math.ceil(recommended * 0.7);
-                    return i.currentStock < recommended && i.currentStock >= threshold;
-                  }).length;
-                  const caution = itemsWithDemand.filter(i => {
-                    const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
-                    const threshold = Math.ceil(recommended * 0.7);
-                    return i.currentStock < threshold;
-                  }).length;
-                  if (itemsWithDemand.length === 0) return null;
-                  return (
-                    <div className="mt-0.5 space-y-0.5">
-                      <p className="text-[9px] text-slate-400 font-medium">권장량 기준</p>
-                      <div className="flex items-center gap-1.5">
-                        {healthy > 0 && <span className="text-[9px] font-bold text-emerald-600">건강 {healthy}</span>}
-                        {normal > 0 && <span className="text-[9px] font-bold text-amber-500">보통 {normal}</span>}
-                        {caution > 0 && <span className="text-[9px] font-bold text-rose-500">주의 {caution}</span>}
+        {/* A. Header Strip (Tier 1 & Tier 2) */}
+        <div className="hidden md:flex flex-col gap-4">
+          {/* Tier 1: Action and Context Header */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-wrap items-stretch gap-2 flex-1 min-w-0">
+                <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 flex flex-col justify-center">
+                  <h4 className="text-sm font-semibold text-slate-800">총 품목</h4>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Items</p>
+                  <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredInventory.length}<span className="text-xs font-semibold text-slate-400 ml-1">items</span></p>
+                  {hiddenCategoryCount > 0 && (() => {
+                    const isNormal = hiddenCategoryCount === visibleInventory.length + 1;
+                    return (
+                      <div className="flex items-center gap-1 mt-1.5 w-fit">
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isNormal ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'}`} />
+                        <p className={`text-[10px] font-bold tracking-tight ${isNormal ? 'text-slate-500' : 'text-rose-500'}`}>
+                          교환/청구 {hiddenCategoryCount}개 별도{!isNormal && ' · 품목오류'}
+                        </p>
                       </div>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div className="h-16 w-px bg-slate-100 mt-0.5" />
-              {/* 부족 품목 */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">부족 품목</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">{monthFactor}개월 기준</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <p className={`text-base font-bold tabular-nums tracking-tight ${kpiData.shortageCount > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{kpiData.shortageCount}</p>
-                  <span className="text-xs font-semibold text-slate-400">items</span>
+                    );
+                  })()}
                 </div>
-                {kpiData.shortageCount > 0 && (
-                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                    총 <span className="text-rose-500">{kpiData.shortageDeficit}개</span> 부족
-                  </p>
-                )}
-              </div>
-              <div className="h-16 w-px bg-slate-100 mt-0.5" />
-              {/* 재고 건강도 */}
-              {(() => {
-                const totalItems = Math.max(kpiData.totalItems, 1);
-                const healthyCount = kpiData.totalItems - kpiData.shortageCount;
-                const rate = Math.round(Math.max(0, healthyCount) / totalItems * 100);
-                const isHealthy = rate >= 90;
-                const isMid = rate >= 75;
-                const color = isHealthy ? 'text-emerald-600' : isMid ? 'text-amber-500' : 'text-rose-500';
-                const label = isHealthy ? '건강' : isMid ? '보통' : '주의';
-                const bgColor = isHealthy ? 'bg-emerald-50 text-emerald-600' : isMid ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-500';
-                return (
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-800">재고 건강도</h4>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Stock Health</p>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <p className={`text-base font-bold tabular-nums tracking-tight ${color}`}>{rate}</p>
-                      <span className={`text-xs font-semibold ${color}`}>%</span>
-                      <span className={`ml-1 text-[9px] font-black px-1 py-0.5 rounded ${bgColor}`}>{label}</span>
+                <div className="min-w-[190px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 flex flex-col justify-center">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-800">권장 기간</h4>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Recommendation</p>
                     </div>
-                    <p className="text-[9px] text-slate-400 mt-0.5">부족 {kpiData.shortageCount}개 제외</p>
+                  </div>
+                  <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mt-2 w-fit">
+                    <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월</button>
+                    <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: action buttons */}
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                {!isReadOnly && deadStockItems.length > 0 && (
+                  <button
+                    onClick={() => setShowOptimizeModal(true)}
+                    className="relative px-3.5 py-2 text-xs font-bold rounded-xl border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12l-3-3m0 0l-3 3m3-3v6" /></svg>
+                    품목 최적화
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center">
+                      {deadStockItems.length}
+                    </span>
+                  </button>
+                )}
+                {!isReadOnly && (
+                  <button
+                    onClick={() => !isEditExhausted && setShowEditNotice(true)}
+                    disabled={isEditExhausted}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${isEditExhausted ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-700 bg-white border-slate-200 hover:bg-slate-50 active:scale-[0.98] shadow-sm'}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    기초재고 편집{isUnlimited ? '' : isEditExhausted ? '' : ` (${maxEdits - editCount}회)`}
+                  </button>
+                )}
+                <button
+                  onClick={() => { if (!isReadOnly) openAddItemModal(); }}
+                  disabled={isReadOnly}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+                  품목 추가
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tier 2: 메인 KPI 스트립 */}
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm flex overflow-hidden">
+            {/* 총 사용량 */}
+            <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
+              <h4 className="text-sm font-semibold text-slate-800">총 사용량</h4>
+              <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Total Usage</p>
+              <div className="flex items-baseline gap-1 mt-3">
+                <p className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter leading-none">{kpiData.totalUsage.toLocaleString()}</p>
+                <span className="text-sm font-bold text-slate-400">개</span>
+              </div>
+              {(surgeryBreakdown.placement > 0 || surgeryBreakdown.fail > 0) ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-bold text-indigo-600">식립 {surgeryBreakdown.placement}</span>
+                  {surgeryBreakdown.fail > 0 && <span className="text-xs font-bold text-rose-500">교환 {surgeryBreakdown.fail}</span>}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="w-px bg-slate-100 shrink-0" />
+
+            {/* 현재 재고 */}
+            <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
+              <h4 className="text-sm font-semibold text-slate-800">현재 재고</h4>
+              <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Current Stock</p>
+              <div className="flex items-baseline gap-1 mt-3">
+                <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none ${kpiData.totalStock < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                  {kpiData.totalStock.toLocaleString()}
+                </p>
+                <span className="text-sm font-bold text-slate-400">개</span>
+              </div>
+              {kpiData.totalStock < 0 ? (
+                <p className="text-xs font-bold text-rose-500 mt-2">⚠ 입력 필요</p>
+              ) : (() => {
+                const itemsWithDemand = visibleInventory.filter(i => (i.usageCount ?? 0) > 0 || (i.monthlyAvgUsage ?? 0) > 0 || (i.dailyMaxUsage ?? 0) > 0);
+                const healthy = itemsWithDemand.filter(i => i.currentStock >= Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor))).length;
+                const normal = itemsWithDemand.filter(i => {
+                  const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
+                  const threshold = Math.ceil(recommended * 0.7);
+                  return i.currentStock < recommended && i.currentStock >= threshold;
+                }).length;
+                const caution = itemsWithDemand.filter(i => {
+                  const recommended = Math.max(1, Math.ceil((i.recommendedStock ?? 0) * monthFactor));
+                  const threshold = Math.ceil(recommended * 0.7);
+                  return i.currentStock < threshold;
+                }).length;
+                if (itemsWithDemand.length === 0) return null;
+                return (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-[10px] text-slate-400 font-bold shrink-0">권장량 기준</p>
+                    {healthy > 0 && <span className="text-[11px] font-black text-emerald-600">건강 {healthy}</span>}
+                    {normal > 0 && <span className="text-[11px] font-black text-amber-500">보통 {normal}</span>}
+                    {caution > 0 && <span className="text-[11px] font-black text-rose-500">주의 {caution}</span>}
                   </div>
                 );
               })()}
-              <div className="h-16 w-px bg-slate-100 mt-0.5" />
-              {/* 권장 기간 */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">권장 기간</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">부족 품목 기준</p>
-                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mt-1">
-                  <button onClick={() => setMonthFactor(1)} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>1개월</button>
-                  <button onClick={() => setMonthFactor(2)} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>2개월</button>
+            </div>
+
+            <div className="w-px bg-slate-100 shrink-0" />
+
+            {/* 부족 품목 */}
+            <div
+              onClick={() => { window.location.hash = '#/dashboard/orders'; }}
+              role="button"
+              tabIndex={0}
+              className="flex-1 p-5 lg:p-6 transition-all duration-300 hover:bg-indigo-50/40 cursor-pointer active:bg-indigo-100/50 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 group/shortage relative overflow-hidden"
+            >
+              <div className="absolute top-5 right-5 opacity-0 translate-x-2 group-hover/shortage:opacity-100 group-hover/shortage:translate-x-0 transition-all duration-300 pointer-events-none">
+                <div className="flex items-center gap-1 text-indigo-600 bg-white shadow-sm border border-indigo-100 px-2.5 py-1 rounded-full">
+                  <span className="text-[10px] font-black tracking-tight">주문 관리</span>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </div>
               </div>
-            </div>
-            {/* Right: action buttons */}
-            <div className="flex items-center gap-2">
-              {/* 품목 최적화 버튼 — dead stock 존재 시 뱃지 표시 */}
-              {!isReadOnly && deadStockItems.length > 0 && (
-                <button
-                  onClick={() => setShowOptimizeModal(true)}
-                  className="relative px-4 py-2 text-xs font-bold rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-all flex items-center gap-1.5 shadow-sm"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12l-3-3m0 0l-3 3m3-3v6" /></svg>
-                  품목 최적화
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center">
-                    {deadStockItems.length}
-                  </span>
-                </button>
+
+              <h4 className="text-sm font-semibold text-slate-800 group-hover/shortage:text-indigo-700 transition-colors">부족 품목</h4>
+              <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5 group-hover/shortage:text-indigo-400/80 transition-colors">{monthFactor}개월 기준</p>
+              <div className="flex items-baseline gap-1 mt-3">
+                <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none transition-colors duration-300 ${kpiData.shortageCount > 0 ? 'text-rose-600 group-hover/shortage:text-indigo-600' : 'text-slate-800 group-hover/shortage:text-indigo-600'}`}>{kpiData.shortageCount}</p>
+                <span className="text-sm font-bold text-slate-400 group-hover/shortage:text-indigo-400 transition-colors">items</span>
+              </div>
+              {kpiData.shortageCount > 0 ? (
+                <p className="text-xs font-bold text-slate-500 mt-2 transition-colors group-hover/shortage:text-indigo-500/80">
+                  총 <span className="text-rose-600 group-hover/shortage:text-indigo-600 transition-colors">-{kpiData.shortageDeficit}개</span> 부족
+                </p>
+              ) : (
+                <p className="text-xs font-bold text-slate-400 mt-2 transition-colors group-hover/shortage:text-indigo-400/80">부족 품목 없음</p>
               )}
-              {!isReadOnly && (
-                <button
-                  onClick={() => !isEditExhausted && setShowEditNotice(true)}
-                  disabled={isEditExhausted}
-                  className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${isEditExhausted ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-600 bg-white border-slate-200 hover:bg-slate-50 shadow-sm'}`}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  기초재고 편집{isUnlimited ? '' : isEditExhausted ? '' : ` (${maxEdits - editCount}회)`}
-                </button>
-              )}
-              <button onClick={() => { if (!isReadOnly) openAddItemModal(); }} disabled={isReadOnly} className={`px-4 py-2 text-xs font-black rounded-lg shadow-md transition-all flex items-center gap-1.5 ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95'}`}>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                품목 추가
-              </button>
             </div>
+
+            <div className="w-px bg-slate-100 shrink-0" />
+
+            {/* 재고 건강도 */}
+            {(() => {
+              const totalItems = Math.max(kpiData.totalItems, 1);
+              const healthyCount = kpiData.totalItems - kpiData.shortageCount;
+              const rate = Math.round(Math.max(0, healthyCount) / totalItems * 100);
+              const isHealthy = rate >= 90;
+              const isMid = rate >= 75;
+              const color = isHealthy ? 'text-emerald-600' : isMid ? 'text-amber-500' : 'text-rose-600';
+              const label = isHealthy ? '건강' : isMid ? '보통' : '주의';
+              const bgColor = isHealthy ? 'bg-emerald-50' : isMid ? 'bg-amber-50' : 'bg-rose-50';
+              return (
+                <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
+                  <h4 className="text-sm font-semibold text-slate-800">재고 건강도</h4>
+                  <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Stock Health</p>
+                  <div className="flex flex-wrap items-baseline gap-1 mt-3">
+                    <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none ${color}`}>{rate}</p>
+                    <span className={`text-sm font-bold ${color}`}>%</span>
+                    <span className={`ml-2 text-[10px] font-black px-2 py-0.5 rounded-md border border-current ${color} ${bgColor}`}>{label}</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-2">부족 {kpiData.shortageCount}개 제외</p>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
         <div
-          className={`md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all duration-200 ${
-            isMobileStickyCollapsed ? 'p-2.5' : 'p-4 space-y-3'
-          }`}
+          className={`md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all duration-200 ${isMobileStickyCollapsed ? 'p-2.5' : 'p-4 space-y-3'
+            }`}
         >
           {isMobileStickyCollapsed ? (
             <button
@@ -727,11 +753,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     type="button"
                     onClick={() => !isEditExhausted && setShowEditNotice(true)}
                     disabled={isEditExhausted}
-                    className={`h-10 px-3 rounded-xl text-[11px] font-black border transition-all ${
-                      isEditExhausted
-                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                        : 'bg-white text-slate-700 border-slate-200 active:scale-[0.99]'
-                    }`}
+                    className={`h-10 px-3 rounded-xl text-[11px] font-black border transition-all ${isEditExhausted
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : 'bg-white text-slate-700 border-slate-200 active:scale-[0.99]'
+                      }`}
                   >
                     기초재고관리{isUnlimited ? '' : isEditExhausted ? ' (한도)' : ` (${maxEdits - editCount}회)`}
                   </button>
@@ -749,33 +774,37 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
 
         {/* C. Manufacturer Filter Strip */}
-        <div className="hidden md:block bg-white/90 backdrop-blur-xl rounded-2xl px-5 py-3 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-slate-100/50">
+        <div className="hidden md:block bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setSelectedManufacturer(null)}
-              className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${selectedManufacturer === null ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${selectedManufacturer === null ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 hover:bg-white active:scale-95'}`}
             >
               전체
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${selectedManufacturer === null ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${selectedManufacturer === null ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
                 {visibleInventory.length}
               </span>
             </button>
-            {manufacturersList.map(m => {
-              const count = visibleInventory.filter(i => i.manufacturer === m).length;
-              const hasShortage = visibleInventory.some(i => i.manufacturer === m && i.currentStock < Math.ceil(i.recommendedStock * monthFactor));
-              return (
-                <button
-                  key={m}
-                  onClick={() => setSelectedManufacturer(m)}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${selectedManufacturer === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                >
-                  {m}
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${selectedManufacturer === m ? 'bg-white/20 text-white' : hasShortage ? 'bg-rose-100 text-rose-500' : 'bg-slate-100 text-slate-500'}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            <div className="w-px bg-slate-200 my-1 mx-0.5" />
+            <div className="flex-1 overflow-x-auto hide-scrollbar flex gap-1.5">
+              {manufacturersList.map(m => {
+                const count = visibleInventory.filter(i => i.manufacturer === m).length;
+                const hasShortage = visibleInventory.some(i => i.manufacturer === m && i.currentStock < Math.ceil(i.recommendedStock * monthFactor));
+                const isSelected = selectedManufacturer === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setSelectedManufacturer(m)}
+                    className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all flex-shrink-0 ${isSelected ? 'bg-white text-indigo-700 shadow-sm border border-indigo-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white border border-transparent active:scale-95'}`}
+                  >
+                    {m}
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-indigo-50 text-indigo-600' : hasShortage ? 'bg-rose-50 text-rose-500' : 'bg-slate-100 text-slate-400'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>{/* end sticky wrapper */}
@@ -944,120 +973,120 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             )}
             <div className="overflow-x-auto pb-1">
               <div className="space-y-2 min-w-0">
-              {chartData.length > 0 ? chartData.map((item, idx) => {
-                const pct = Math.round((item.usageCount / maxUsage) * 100);
-                const isTop = idx === 0;
-                const isLow = item.currentStock < Math.ceil((item.recommendedStock ?? 0) * monthFactor);
-                const avg = item.monthlyAvgUsage ?? 0;
-                const last = item.lastMonthUsage ?? 0;
-                const isSurge = avg > 0 && last > avg * 1.5 && last - avg >= 2;
-                const isDrop = avg >= 2 && last < avg * 0.5 && avg - last >= 2;
-                return (
-                  <div key={item.id} className="group flex items-center gap-3">
-                    {/* 순위 */}
-                    <span className={`w-5 text-right text-[10px] font-black shrink-0 ${isTop ? 'text-indigo-500' : 'text-slate-300'}`}>
-                      {idx + 1}
-                    </span>
-                    {/* 라벨 */}
-                    <div className="w-[100px] shrink-0">
-                      <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter leading-none">{item.brand}</p>
-                      <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
-                    </div>
-                    {/* 바 (최대 너비 제한) */}
-                    <div className="flex-1 max-w-[160px] sm:max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    {/* 수치 그리드 */}
-                    <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
-                      {/* 월평균 */}
-                      <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
-                        {avg.toFixed(1)}
-                      </p>
-                      {/* 지난달 */}
-                      <div className="flex items-center justify-center gap-0.5">
-                        <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-                          {last}
-                        </p>
-                        {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
-                        {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
+                {chartData.length > 0 ? chartData.map((item, idx) => {
+                  const pct = Math.round((item.usageCount / maxUsage) * 100);
+                  const isTop = idx === 0;
+                  const isLow = item.currentStock < Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+                  const avg = item.monthlyAvgUsage ?? 0;
+                  const last = item.lastMonthUsage ?? 0;
+                  const isSurge = avg > 0 && last > avg * 1.5 && last - avg >= 2;
+                  const isDrop = avg >= 2 && last < avg * 0.5 && avg - last >= 2;
+                  return (
+                    <div key={item.id} className="group flex items-center gap-3">
+                      {/* 순위 */}
+                      <span className={`w-5 text-right text-[10px] font-black shrink-0 ${isTop ? 'text-indigo-500' : 'text-slate-300'}`}>
+                        {idx + 1}
+                      </span>
+                      {/* 라벨 */}
+                      <div className="w-[100px] shrink-0">
+                        <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter leading-none">{item.brand}</p>
+                        <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
                       </div>
-                      {/* 현재재고 */}
-                      <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
-                        {item.currentStock}
-                      </p>
-                      {/* 부족분 */}
-                      {(() => {
-                        const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);
-                        const shortage = recommended - item.currentStock;
-                        return shortage > 0
-                          ? <p className="text-xs font-black tabular-nums text-center text-rose-500">-{shortage}</p>
-                          : <p className="text-xs font-bold tabular-nums text-center text-emerald-500">충분</p>;
-                      })()}
-                    </div>
-                    {/* 스파크라인 */}
-                    <div className="w-[120px] sm:w-[176px] shrink-0 px-2">
-                      {(() => {
-                        const series = sparklineSeriesByItemId.get(item.id) ?? [];
-                        if (!series.some(v => v > 0)) {
+                      {/* 바 (최대 너비 제한) */}
+                      <div className="flex-1 max-w-[160px] sm:max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      {/* 수치 그리드 */}
+                      <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
+                        {/* 월평균 */}
+                        <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
+                          {avg.toFixed(1)}
+                        </p>
+                        {/* 지난달 */}
+                        <div className="flex items-center justify-center gap-0.5">
+                          <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {last}
+                          </p>
+                          {isSurge && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-0.5 rounded leading-none">↑</span>}
+                          {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
+                        </div>
+                        {/* 현재재고 */}
+                        <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+                          {item.currentStock}
+                        </p>
+                        {/* 부족분 */}
+                        {(() => {
+                          const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);
+                          const shortage = recommended - item.currentStock;
+                          return shortage > 0
+                            ? <p className="text-xs font-black tabular-nums text-center text-rose-500">-{shortage}</p>
+                            : <p className="text-xs font-bold tabular-nums text-center text-emerald-500">충분</p>;
+                        })()}
+                      </div>
+                      {/* 스파크라인 */}
+                      <div className="w-[120px] sm:w-[176px] shrink-0 px-2">
+                        {(() => {
+                          const series = sparklineSeriesByItemId.get(item.id) ?? [];
+                          if (!series.some(v => v > 0)) {
+                            return (
+                              <div className="h-8 rounded-lg border border-slate-100 bg-slate-50/60 flex items-center justify-center">
+                                <span className="text-[9px] font-semibold text-slate-300">데이터 없음</span>
+                              </div>
+                            );
+                          }
+
+                          const width = 152;
+                          const height = 28;
+                          const minVal = Math.min(...series);
+                          const maxVal = Math.max(...series, 0);
+                          const range = Math.max(1, maxVal - minVal);
+                          const stepX = series.length > 1 ? width / (series.length - 1) : 0;
+
+                          const points = series.map((val, idx) => ({
+                            x: idx * stepX,
+                            y: height - ((val - minVal) / range) * height
+                          }));
+                          const pathLine = smoothLine(points);
+                          const pathArea = smoothArea(points, height);
+
+                          const lastPoint = points[points.length - 1] || { x: 0, y: height };
+                          const strokeColor = isTop ? '#4f46e5' : '#818cf8';
+                          const gradId = `sparkg-${item.id}`;
+
                           return (
-                            <div className="h-8 rounded-lg border border-slate-100 bg-slate-50/60 flex items-center justify-center">
-                              <span className="text-[9px] font-semibold text-slate-300">데이터 없음</span>
+                            <div className="relative h-8 rounded-lg border border-indigo-50 bg-indigo-50/20 px-2 py-1 group-hover:border-indigo-100 transition-colors">
+                              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none" aria-label="품목 사용 추이">
+                                <defs>
+                                  <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={strokeColor} stopOpacity={0.25} />
+                                    <stop offset="100%" stopColor={strokeColor} stopOpacity={0.0} />
+                                  </linearGradient>
+                                </defs>
+                                <path d={pathArea} fill={`url(#${gradId})`} />
+                                <path d={pathLine} fill="none" stroke={strokeColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
+                                <circle cx={lastPoint.x} cy={lastPoint.y} r="2.5" fill="white" stroke={strokeColor} strokeWidth={1.5} className="shadow-sm" />
+                              </svg>
                             </div>
                           );
-                        }
-
-                        const width = 152;
-                        const height = 28;
-                        const minVal = Math.min(...series);
-                        const maxVal = Math.max(...series, 0);
-                        const range = Math.max(1, maxVal - minVal);
-                        const stepX = series.length > 1 ? width / (series.length - 1) : 0;
-
-                        const points = series.map((val, idx) => ({
-                          x: idx * stepX,
-                          y: height - ((val - minVal) / range) * height
-                        }));
-                        const pathLine = smoothLine(points);
-                        const pathArea = smoothArea(points, height);
-
-                        const lastPoint = points[points.length - 1] || { x: 0, y: height };
-                        const strokeColor = isTop ? '#4f46e5' : '#818cf8';
-                        const gradId = `sparkg-${item.id}`;
-
-                        return (
-                          <div className="relative h-8 rounded-lg border border-indigo-50 bg-indigo-50/20 px-2 py-1 group-hover:border-indigo-100 transition-colors">
-                            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none" aria-label="품목 사용 추이">
-                              <defs>
-                                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={strokeColor} stopOpacity={0.25} />
-                                  <stop offset="100%" stopColor={strokeColor} stopOpacity={0.0} />
-                                </linearGradient>
-                              </defs>
-                              <path d={pathArea} fill={`url(#${gradId})`} />
-                              <path d={pathLine} fill="none" stroke={strokeColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
-                              <circle cx={lastPoint.x} cy={lastPoint.y} r="2.5" fill="white" stroke={strokeColor} strokeWidth={1.5} className="shadow-sm" />
-                            </svg>
-                          </div>
-                        );
-                      })()}
+                        })()}
+                      </div>
+                      {/* 재고 부족 닷 */}
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
                     </div>
-                    {/* 재고 부족 닷 */}
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${isLow ? 'bg-rose-400' : 'bg-transparent'}`} title={isLow ? '재고 부족' : ''} />
+                  );
+                }) : (
+                  <div className="py-10 text-center flex flex-col items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold italic">사용 데이터가 없습니다.</p>
                   </div>
-                );
-              }) : (
-                <div className="py-10 text-center flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <p className="text-xs text-slate-400 font-bold italic">사용 데이터가 없습니다.</p>
-                </div>
-              )}
+                )}
               </div>
             </div>
           </div>

@@ -64,7 +64,7 @@ export interface InventoryItem {
 }
 
 export type OrderType = 'replenishment' | 'fail_exchange' | 'return';
-export type OrderStatus = 'ordered' | 'received';
+export type OrderStatus = 'ordered' | 'received' | 'cancelled';
 
 export interface OrderItem {
   brand: string;
@@ -81,6 +81,8 @@ export interface Order {
   manager: string;
   status: OrderStatus;
   receivedDate?: string;
+  memo?: string;
+  cancelledReason?: string;
 }
 
 // Deprecated in favor of Order, but kept for compatibility if needed
@@ -601,6 +603,8 @@ export interface DbOrder {
   manager: string;
   status: OrderStatus;
   received_date: string | null;
+  memo: string | null;
+  cancelled_reason: string | null;
   created_at: string;
 }
 
@@ -612,6 +616,77 @@ export interface DbOrderItem {
   size: string;
   quantity: number;
 }
+
+// ============================================
+// Return Request Types
+// ============================================
+
+export type ReturnReason = 'excess_stock' | 'defective' | 'exchange';
+export type ReturnStatus = 'requested' | 'picked_up' | 'completed' | 'rejected';
+
+export const RETURN_REASON_LABELS: Record<ReturnReason, string> = {
+  excess_stock: '초과재고',
+  defective:    '제품하자',
+  exchange:     '수술중교환',
+};
+
+export const RETURN_STATUS_LABELS: Record<ReturnStatus, string> = {
+  requested: '반품 요청',
+  picked_up: '수거 완료',
+  completed: '반품 완료',
+  rejected:  '반품 거절',
+};
+
+export interface ReturnRequestItem {
+  id: string;
+  returnRequestId: string;
+  brand: string;
+  size: string;
+  quantity: number;
+}
+
+export interface ReturnRequest {
+  id: string;
+  hospitalId: string;
+  manufacturer: string;
+  reason: ReturnReason;
+  status: ReturnStatus;
+  requestedDate: string;
+  completedDate?: string | null;
+  manager: string;
+  memo?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: ReturnRequestItem[];
+}
+
+/** Supabase return_requests 테이블 Row */
+export interface DbReturnRequest {
+  id: string;
+  hospital_id: string;
+  manufacturer: string;
+  reason: ReturnReason;
+  status: ReturnStatus;
+  requested_date: string;
+  completed_date: string | null;
+  manager: string;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Supabase return_request_items 테이블 Row */
+export interface DbReturnRequestItem {
+  id: string;
+  return_request_id: string;
+  brand: string;
+  size: string;
+  quantity: number;
+}
+
+export type ReturnMutationResult =
+  | { ok: true }
+  | { ok: false; reason: 'conflict' | 'not_found' | 'error'; currentStatus?: ReturnStatus };
 
 /** Supabase billing_history 테이블 Row */
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';

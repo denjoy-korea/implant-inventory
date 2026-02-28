@@ -174,6 +174,36 @@ export const orderService = {
     return { ok: false, reason: 'conflict', currentStatus };
   },
 
+  /** 주문 취소 (ordered → cancelled) */
+  async cancelOrder(orderId: string, reason?: string): Promise<OrderMutationResult> {
+    const updates: Record<string, string | null> = {
+      status: 'cancelled',
+      cancelled_reason: reason || null,
+    };
+
+    const { data, error } = await supabase
+      .from('orders')
+      .update(updates)
+      .eq('id', orderId)
+      .eq('status', 'ordered')  // 낙관적 잠금: ordered 상태만 취소 가능
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[orderService] Cancel failed:', error);
+      return { ok: false, reason: 'error' };
+    }
+
+    if (data) {
+      return { ok: true };
+    }
+
+    const { status: currentStatus, errored } = await getOrderStatusById(orderId);
+    if (errored) return { ok: false, reason: 'error' };
+    if (!currentStatus) return { ok: false, reason: 'not_found' };
+    return { ok: false, reason: 'conflict', currentStatus };
+  },
+
   /** 주문 삭제 (CASCADE로 items도 삭제) */
   async deleteOrder(orderId: string, options?: DeleteOrderOptions): Promise<OrderMutationResult> {
     const expectedCurrentStatus = options?.expectedCurrentStatus;

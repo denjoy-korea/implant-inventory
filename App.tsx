@@ -18,17 +18,18 @@ const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRoute
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab } from './types';
+import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
 import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
 import { authService } from './services/authService';
 import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
 import { orderService } from './services/orderService';
+import { returnService } from './services/returnService';
 import { hospitalService } from './services/hospitalService';
 import { planService } from './services/planService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
-import { dbToExcelRowBatch, dbToOrder, fixIbsImplant } from './services/mappers';
+import { dbToExcelRowBatch, dbToOrder, dbToReturnRequest, fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
 import { onboardingService } from './services/onboardingService';
@@ -1518,6 +1519,172 @@ const App: React.FC = () => {
     showAlertToast('주문 삭제에 실패했습니다.', 'error');
   }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
 
+  const handleCancelOrder = useCallback(async (orderId: string, reason: string) => {
+    const currentOrder = state.orders.find(o => o.id === orderId);
+    if (!currentOrder) {
+      showAlertToast('주문을 찾을 수 없습니다.', 'info');
+      return;
+    }
+
+    // 낙관적 업데이트
+    setState(prev => ({
+      ...prev,
+      orders: prev.orders.map(o =>
+        o.id === orderId ? { ...o, status: 'cancelled', cancelledReason: reason || undefined } : o
+      ),
+    }));
+
+    const result = await orderService.cancelOrder(orderId, reason);
+
+    if (result.ok) {
+      showAlertToast('발주가 취소되었습니다.', 'success');
+      return;
+    }
+
+    // 롤백
+    setState(prev => ({
+      ...prev,
+      orders: prev.orders.map(o =>
+        o.id === orderId ? { ...o, status: currentOrder.status, cancelledReason: currentOrder.cancelledReason } : o
+      ),
+    }));
+
+    if (result.reason === 'conflict') {
+      showAlertToast('이미 상태가 변경된 발주입니다. 최신 목록을 다시 불러옵니다.', 'info');
+      await refreshOrdersFromServer();
+      return;
+    }
+    showAlertToast('발주 취소에 실패했습니다.', 'error');
+  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
+
+  // ═══════════════════════════════════════════════════════════════
+  // 반품 관리 (Return Requests)
+  // ═══════════════════════════════════════════════════════════════
+
+  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
+
+  const loadReturnRequests = useCallback(async () => {
+    const raw = await returnService.getReturnRequests();
+    const mapped = raw.map(r => dbToReturnRequest(r));
+    setReturnRequests(mapped);
+  }, []);
+
+  // 초기 로드 및 병원 변경 시 재로드
+  useEffect(() => {
+    if (state.user?.hospitalId) {
+      void loadReturnRequests();
+    }
+  }, [state.user?.hospitalId, loadReturnRequests]);
+
+  // Realtime 구독
+  useEffect(() => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return;
+
+    const channel = returnService.subscribeToChanges(hospitalId, () => {
+      void loadReturnRequests();
+    });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [state.user?.hospitalId, loadReturnRequests]);
+
+  const handleCreateReturn = useCallback(async (params: {
+    manufacturer: string;
+    reason: ReturnReason;
+    manager: string;
+    memo: string;
+    items: { brand: string; size: string; quantity: number }[];
+  }) => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return;
+
+    const result = await returnService.createReturnRequest(
+      {
+        hospital_id: hospitalId,
+        manufacturer: params.manufacturer,
+        reason: params.reason,
+        status: 'requested',
+        requested_date: new Date().toISOString().split('T')[0],
+        completed_date: null,
+        manager: params.manager,
+        memo: params.memo || null,
+      },
+      params.items
+    );
+
+    if (result.ok) {
+      await loadReturnRequests();
+    } else {
+      throw new Error('반품 신청 실패');
+    }
+  }, [state.user?.hospitalId, loadReturnRequests]);
+
+  const handleUpdateReturnStatus = useCallback(async (
+    returnId: string,
+    status: ReturnStatus,
+    currentStatus: ReturnStatus
+  ): Promise<ReturnMutationResult> => {
+    // 낙관적 업데이트
+    setReturnRequests(prev =>
+      prev.map(r => r.id === returnId ? { ...r, status } : r)
+    );
+
+    const result = await returnService.updateStatus(returnId, status, currentStatus);
+
+    if (!result.ok) {
+      // 롤백
+      setReturnRequests(prev =>
+        prev.map(r => r.id === returnId ? { ...r, status: currentStatus } : r)
+      );
+      if (result.reason === 'conflict') {
+        await loadReturnRequests();
+      }
+    }
+
+    return result;
+  }, [loadReturnRequests]);
+
+  const handleCompleteReturn = useCallback(async (returnId: string): Promise<ReturnMutationResult> => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return { ok: false, reason: 'error' };
+
+    // 낙관적 업데이트
+    setReturnRequests(prev =>
+      prev.map(r => r.id === returnId ? {
+        ...r,
+        status: 'completed' as ReturnStatus,
+        completedDate: new Date().toISOString().split('T')[0],
+      } : r)
+    );
+
+    const result = await returnService.completeReturn(returnId, hospitalId);
+
+    if (result.ok) {
+      // 재고 차감됐으므로 inventory 갱신
+      if (state.user) {
+        void loadHospitalData(state.user);
+      }
+    } else {
+      // 롤백
+      await loadReturnRequests();
+    }
+
+    return result;
+  }, [state.user, loadHospitalData, loadReturnRequests]);
+
+  const handleDeleteReturn = useCallback(async (returnId: string) => {
+    setReturnRequests(prev => prev.filter(r => r.id !== returnId));
+
+    const result = await returnService.deleteReturnRequest(returnId, 'requested');
+
+    if (!result.ok) {
+      await loadReturnRequests();
+      throw new Error('반품 삭제 실패');
+    }
+  }, [loadReturnRequests]);
+
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update
     let failRecordIds: string[] = [];
@@ -1581,7 +1748,9 @@ const App: React.FC = () => {
           date: order.date,
           manager: order.manager,
           status: order.status,
-          received_date: order.receivedDate || null
+          received_date: order.receivedDate || null,
+          memo: order.memo || null,
+          cancelled_reason: order.cancelledReason || null,
         },
         order.items.map(i => ({ brand: i.brand, size: i.size, quantity: i.quantity }))
       );
@@ -2115,9 +2284,16 @@ const App: React.FC = () => {
                         onFixtureUploadClick: () => fixtureFileRef.current?.click(),
                         onSurgeryUploadClick: () => surgeryFileRef.current?.click(),
                         onCloseAuditHistory: () => setShowAuditHistory(false),
+                        returnRequests,
+                        showAlertToast,
                         onAddOrder: handleAddOrder,
                         onUpdateOrderStatus: handleUpdateOrderStatus,
+                        onCancelOrder: handleCancelOrder,
                         onDeleteOrder: handleDeleteOrder,
+                        onCreateReturn: handleCreateReturn,
+                        onUpdateReturnStatus: handleUpdateReturnStatus,
+                        onCompleteReturn: handleCompleteReturn,
+                        onDeleteReturn: handleDeleteReturn,
                         onAuditSessionComplete: () => {
                           const hid = state.user?.hospitalId ?? '';
                           onboardingService.markInventoryAuditSeen(hid);

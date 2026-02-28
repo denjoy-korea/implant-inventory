@@ -8,6 +8,10 @@ import {
   Order,
   OrderStatus,
   PlanType,
+  ReturnMutationResult,
+  ReturnRequest,
+  ReturnReason,
+  ReturnStatus,
   SurgeryUnregisteredItem,
   User,
 } from '../../types';
@@ -25,6 +29,7 @@ interface DashboardOperationalTabsProps {
   inventory: InventoryItem[];
   surgeryMaster: Record<string, ExcelRow[]>;
   orders: Order[];
+  returnRequests: ReturnRequest[];
   isReadOnly: boolean;
   effectivePlan: PlanType;
   isHospitalMaster: boolean;
@@ -40,8 +45,20 @@ interface DashboardOperationalTabsProps {
   onWorkDaysChange: (workDays: number[]) => void;
   onAddFailOrder: (order: Order) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => Promise<void>;
+  onCreateReturn: (params: {
+    manufacturer: string;
+    reason: ReturnReason;
+    manager: string;
+    memo: string;
+    items: { brand: string; size: string; quantity: number }[];
+  }) => Promise<void>;
+  onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
+  onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
+  onDeleteReturn: (returnId: string) => Promise<void>;
+  showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onAuditSessionComplete?: () => void;
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
@@ -54,6 +71,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   inventory,
   surgeryMaster,
   orders,
+  returnRequests,
   isReadOnly,
   effectivePlan,
   isHospitalMaster,
@@ -69,8 +87,14 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onWorkDaysChange,
   onAddFailOrder,
   onUpdateOrderStatus,
+  onCancelOrder,
   onDeleteOrder,
   onQuickOrder,
+  onCreateReturn,
+  onUpdateReturnStatus,
+  onCompleteReturn,
+  onDeleteReturn,
+  showAlertToast,
   onAuditSessionComplete,
   initialShowFailBulkModal,
   onFailBulkModalOpened,
@@ -125,9 +149,18 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           <OrderManager
             orders={orders}
             inventory={inventory}
+            returnRequests={returnRequests}
+            hospitalId={user?.hospitalId}
+            currentUserName={user?.name}
             onUpdateOrderStatus={onUpdateOrderStatus}
+            onCancelOrder={onCancelOrder}
             onDeleteOrder={onDeleteOrder}
             onQuickOrder={onQuickOrder}
+            onCreateReturn={onCreateReturn}
+            onUpdateReturnStatus={onUpdateReturnStatus}
+            onCompleteReturn={onCompleteReturn}
+            onDeleteReturn={onDeleteReturn}
+            showAlertToast={showAlertToast}
             isReadOnly={isReadOnly}
           />
         </FeatureGate>

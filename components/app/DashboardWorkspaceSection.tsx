@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, User } from '../../types';
+import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnMutationResult, ReturnReason, ReturnRequest, ReturnStatus, SurgeryUnregisteredItem, User } from '../../types';
 import MigrationBanner from '../MigrationBanner';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
 import PlanLimitToast, { LimitType } from '../PlanLimitToast';
@@ -75,6 +75,7 @@ export interface DashboardWorkspaceSectionProps {
   showAuditHistory: boolean;
   fixtureEdit: FixtureEditBindings;
   inventoryMaster: InventoryMasterBindings;
+  returnRequests: ReturnRequest[];
   onLoadHospitalData: (user: User) => Promise<void>;
   onGoToPricing: () => void;
   onDismissPlanLimitToast: () => void;
@@ -85,7 +86,19 @@ export interface DashboardWorkspaceSectionProps {
   onCloseAuditHistory: () => void;
   onAddOrder: (order: Order) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
+  onCreateReturn: (params: {
+    manufacturer: string;
+    reason: ReturnReason;
+    manager: string;
+    memo: string;
+    items: { brand: string; size: string; quantity: number }[];
+  }) => Promise<void>;
+  onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
+  onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
+  onDeleteReturn: (returnId: string) => Promise<void>;
+  showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onAuditSessionComplete?: () => void;
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
@@ -109,6 +122,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   showAuditHistory,
   fixtureEdit,
   inventoryMaster,
+  returnRequests,
   onLoadHospitalData,
   onGoToPricing,
   onDismissPlanLimitToast,
@@ -119,7 +133,13 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onCloseAuditHistory,
   onAddOrder,
   onUpdateOrderStatus,
+  onCancelOrder,
   onDeleteOrder,
+  onCreateReturn,
+  onUpdateReturnStatus,
+  onCompleteReturn,
+  onDeleteReturn,
+  showAlertToast,
   onAuditSessionComplete,
   initialShowFailBulkModal,
   onFailBulkModalOpened,
@@ -285,6 +305,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         inventory={state.inventory}
         surgeryMaster={state.surgeryMaster}
         orders={state.orders}
+        returnRequests={returnRequests}
         isReadOnly={isReadOnly}
         effectivePlan={effectivePlan}
         isHospitalMaster={isHospitalMaster}
@@ -306,8 +327,14 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
         onAddFailOrder={onAddOrder}
         onUpdateOrderStatus={onUpdateOrderStatus}
+        onCancelOrder={onCancelOrder}
         onDeleteOrder={onDeleteOrder}
         onQuickOrder={(item) => onAddOrder(buildQuickOrder(item))}
+        onCreateReturn={onCreateReturn}
+        onUpdateReturnStatus={onUpdateReturnStatus}
+        onCompleteReturn={onCompleteReturn}
+        onDeleteReturn={onDeleteReturn}
+        showAlertToast={showAlertToast}
         onAuditSessionComplete={onAuditSessionComplete}
         initialShowFailBulkModal={initialShowFailBulkModal}
         onFailBulkModalOpened={onFailBulkModalOpened}
