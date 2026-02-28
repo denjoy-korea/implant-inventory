@@ -86,6 +86,32 @@ export const inventoryService = {
     return data as DbInventoryItem;
   },
 
+  /** stock_adjustment 증감 (반품/조정 등 delta 방식) */
+  async adjustStock(id: string, delta: number): Promise<boolean> {
+    const { error } = await supabase.rpc('adjust_inventory_stock', {
+      p_inventory_id: id,
+      p_adjustment: delta,
+    });
+    if (error) {
+      console.warn('[inventoryService] adjustStock RPC failed, using fallback:', error.message);
+      const { data: current } = await supabase
+        .from('inventory')
+        .select('stock_adjustment')
+        .eq('id', id)
+        .single();
+      const currentAdj = (current as { stock_adjustment?: number } | null)?.stock_adjustment ?? 0;
+      const { error: fallbackError } = await supabase
+        .from('inventory')
+        .update({ stock_adjustment: currentAdj + delta })
+        .eq('id', id);
+      if (fallbackError) {
+        console.error('[inventoryService] adjustStock fallback failed:', fallbackError);
+        return false;
+      }
+    }
+    return true;
+  },
+
   /** 재고 항목 삭제 */
   async deleteItem(id: string): Promise<boolean> {
     const { error } = await supabase

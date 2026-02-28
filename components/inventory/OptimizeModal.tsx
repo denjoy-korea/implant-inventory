@@ -50,7 +50,11 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const handleReturnConfirm = (item: DeadStockItem) => {
     const qty = parseInt(returnQtyStr, 10);
     if (!qty || qty < 1 || qty > item.currentStock) return;
-    onUpdateInventoryItem({ ...item, currentStock: item.currentStock - qty });
+    onUpdateInventoryItem({
+      ...item,
+      currentStock: item.currentStock - qty,
+      stockAdjustment: item.stockAdjustment - qty,
+    });
     if (onAddOrder) {
       onAddOrder({
         id: `order_${Date.now()}`,

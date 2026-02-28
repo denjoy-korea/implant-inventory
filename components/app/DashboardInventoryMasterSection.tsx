@@ -219,6 +219,9 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
           brand: fixed.brand,
           size: toCanonicalSize(ui.size, fixed.manufacturer),
         };
+        // stockAdjustment 변화량 계산 (반품 등으로 감소할 때 RPC로 반영)
+        const currentItem = state.inventory.find(i => i.id === ui.id);
+        const adjDelta = normalizedItem.stockAdjustment - (currentItem?.stockAdjustment ?? 0);
         setState(prev => ({ ...prev, inventory: prev.inventory.map(i => i.id === normalizedItem.id ? normalizedItem : i) }));
         await inventoryService.updateItem(normalizedItem.id, {
           manufacturer: normalizedItem.manufacturer,
@@ -226,6 +229,9 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
           size: normalizedItem.size,
           initial_stock: normalizedItem.initialStock,
         });
+        if (adjDelta !== 0) {
+          await inventoryService.adjustStock(normalizedItem.id, adjDelta);
+        }
       }}
       surgeryData={virtualSurgeryData}
       unregisteredFromSurgery={surgeryUnregisteredItems}
