@@ -243,6 +243,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
         status: 'ordered',
       })}
       onAddOrder={onAddOrder}
+      managerName={state.user?.name}
     />
   );
 };

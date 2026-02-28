@@ -12,10 +12,11 @@ interface OptimizeModalProps {
   onDeleteInventoryItem: (id: string) => void;
   onUpdateInventoryItem: (item: InventoryItem) => void;
   onAddOrder?: (order: Order) => Promise<void>;
+  managerName?: string;
   onClose: () => void;
 }
 
-const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, onClose }) => {
+const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, managerName, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
@@ -57,7 +58,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
         manufacturer: item.manufacturer,
         date: new Date().toISOString().split('T')[0],
         items: [{ brand: item.brand, size: item.size, quantity: qty }],
-        manager: '품목 최적화',
+        manager: managerName || '품목 최적화',
         status: 'received',
       });
     }

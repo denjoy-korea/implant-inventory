@@ -28,6 +28,7 @@ interface InventoryManagerProps {
   surgeryData?: ExcelData | null;
   onQuickOrder?: (item: InventoryItem) => void;
   onAddOrder?: (order: Order) => Promise<void>;
+  managerName?: string;
   isReadOnly?: boolean;
   userId?: string;
   hospitalId?: string;
@@ -66,6 +67,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   surgeryData,
   onQuickOrder,
   onAddOrder,
+  managerName,
   isReadOnly,
   userId,
   hospitalId,
@@ -1186,6 +1188,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           onDeleteInventoryItem={onDeleteInventoryItem}
           onUpdateInventoryItem={onUpdateInventoryItem}
           onAddOrder={onAddOrder}
+          managerName={managerName}
           onClose={() => setShowOptimizeModal(false)}
         />
       )}
