@@ -11,6 +11,7 @@ import RawDataUploadGuide from '../RawDataUploadGuide';
 import DashboardFixtureEditSection from './DashboardFixtureEditSection';
 import DashboardInventoryMasterSection from './DashboardInventoryMasterSection';
 import DashboardOperationalTabs from '../dashboard/DashboardOperationalTabs';
+import { ReceiptUpdate } from '../ReceiptConfirmationModal';
 
 interface FixtureEditBindings {
   enabledManufacturers: string[];
@@ -105,6 +106,7 @@ export interface DashboardWorkspaceSectionProps {
   onFailAuditDone?: () => void;
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
 }
 
 const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
@@ -139,6 +141,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onUpdateReturnStatus,
   onCompleteReturn,
   onDeleteReturn,
+  onConfirmReceipt,
   showAlertToast,
   onAuditSessionComplete,
   initialShowFailBulkModal,
@@ -315,6 +318,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         isLoading={state.isLoading}
         surgeryUnregisteredItems={surgeryUnregisteredItems}
         showAuditHistory={showAuditHistory}
+        onConfirmReceipt={onConfirmReceipt}
         onCloseAuditHistory={onCloseAuditHistory}
         onLoadHospitalData={onLoadHospitalData}
         onTabChange={(tab) => {

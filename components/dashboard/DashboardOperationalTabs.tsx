@@ -1,4 +1,4 @@
-import React, { lazy } from 'react';
+import React, { lazy, useEffect, useRef } from 'react';
 import FeatureGate from '../FeatureGate';
 import {
   DashboardTab,
@@ -15,6 +15,7 @@ import {
   SurgeryUnregisteredItem,
   User,
 } from '../../types';
+import { ReceiptUpdate } from '../ReceiptConfirmationModal';
 
 const InventoryAudit = lazy(() => import('../InventoryAudit'));
 const SurgeryDashboard = lazy(() => import('../SurgeryDashboard'));
@@ -45,6 +46,7 @@ interface DashboardOperationalTabsProps {
   onWorkDaysChange: (workDays: number[]) => void;
   onAddFailOrder: (order: Order) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => Promise<void>;
@@ -87,6 +89,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onWorkDaysChange,
   onAddFailOrder,
   onUpdateOrderStatus,
+  onConfirmReceipt,
   onCancelOrder,
   onDeleteOrder,
   onQuickOrder,
@@ -100,6 +103,24 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onFailBulkModalOpened,
   onFailAuditDone,
 }) => {
+  const prevTabRef = useRef<DashboardTab>(dashboardTab);
+
+  useEffect(() => {
+    const prevTab = prevTabRef.current;
+    if (prevTab !== dashboardTab) {
+      // Save scroll position of the tab we are leaving
+      sessionStorage.setItem(`tab-scroll-${prevTab}`, window.scrollY.toString());
+      prevTabRef.current = dashboardTab;
+    }
+    // Restore scroll position for the newly active tab
+    const savedY = sessionStorage.getItem(`tab-scroll-${dashboardTab}`);
+    if (savedY) {
+      window.scrollTo(0, parseInt(savedY, 10));
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [dashboardTab]);
+
   return (
     <>
       {dashboardTab === 'inventory_audit' && (
@@ -153,6 +174,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             hospitalId={user?.hospitalId}
             currentUserName={user?.name}
             onUpdateOrderStatus={onUpdateOrderStatus}
+            onConfirmReceipt={onConfirmReceipt}
             onCancelOrder={onCancelOrder}
             onDeleteOrder={onDeleteOrder}
             onQuickOrder={onQuickOrder}

@@ -245,6 +245,27 @@ export const orderService = {
     return { ok: false, reason: 'conflict', currentStatus };
   },
 
+  /** 주문 아이템 수량 변경 (부분 입고 / 초과 입고 처리) */
+  async updateOrderItemQuantity(
+    orderId: string,
+    brand: string,
+    size: string,
+    newQuantity: number
+  ): Promise<boolean> {
+    const { error } = await supabase
+      .from('order_items')
+      .update({ quantity: newQuantity })
+      .eq('order_id', orderId)
+      .eq('brand', brand)
+      .eq('size', size);
+
+    if (error) {
+      console.error('[orderService] Update order item quantity failed:', error);
+      return false;
+    }
+    return true;
+  },
+
   /** Realtime 구독 */
   subscribeToChanges(
     hospitalId: string,

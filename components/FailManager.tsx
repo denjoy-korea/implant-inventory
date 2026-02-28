@@ -32,7 +32,7 @@ interface FailManagerProps {
   surgeryMaster: Record<string, ExcelRow[]>;
   inventory: InventoryItem[];
   failOrders: FailOrder[];
-  onAddFailOrder: (order: FailOrder) => void;
+  onAddFailOrder: (order: FailOrder) => void | Promise<void>;
   currentUserName: string;
   isReadOnly?: boolean;
   hospitalId?: string;
@@ -96,6 +96,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
   const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOrderSubmitting, setIsOrderSubmitting] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
   useEffect(() => {
@@ -108,6 +109,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [chartMonthOffset, setChartMonthOffset] = useState(0);
+  const chartTouchStartX = useRef<number>(0);
+  const chartTouchStartY = useRef<number>(0);
   const orderModalRef = useRef<HTMLDivElement>(null);
   const orderModalCloseButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -258,6 +262,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   }, [inventory, activeM]);
 
   const handleOpenOrderModal = () => {
+    if (activeM === 'all') {
+      showToast('제조사를 먼저 선택해주세요.', 'error');
+      return;
+    }
     if (currentRemainingFails <= 0) {
       showToast('현재 제조사에 반품 가능한 교환 잔여 건수가 없습니다.', 'error');
       return;
@@ -384,19 +392,27 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       showToast(`주문 수량(${totalOrderQty})이 잔여 교환 건수(${currentRemainingFails})를 초과할 수 없습니다.`, 'error');
       return;
     }
-    validItems.forEach((item, index) => {
-      const newOrder: FailOrder = {
-        id: `order_${Date.now()}_${index}`,
-        type: 'fail_exchange',
-        manufacturer: activeM,
-        date: new Date().toISOString().split('T')[0],
-        items: [item],
-        manager: currentUserName,
-        status: 'ordered'
-      };
-      onAddFailOrder(newOrder);
+    setIsOrderSubmitting(true);
+    void Promise.all(
+      validItems.map((item, index) => {
+        const newOrder: FailOrder = {
+          id: `order_${Date.now()}_${index}`,
+          type: 'fail_exchange',
+          manufacturer: activeM,
+          date: new Date().toISOString().split('T')[0],
+          items: [item],
+          manager: currentUserName,
+          status: 'ordered'
+        };
+        return onAddFailOrder(newOrder);
+      })
+    ).then(() => {
+      setIsModalOpen(false);
+    }).catch(() => {
+      showToast('일부 주문 생성에 실패했습니다.', 'error');
+    }).finally(() => {
+      setIsOrderSubmitting(false);
     });
-    setIsModalOpen(false);
   };
 
   // ============================================================
@@ -429,12 +445,21 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   // RENDER
   // ============================================================
+  // 월별 차트: 스와이프 오프셋으로 보이는 월 범위 슬라이스
+  const CHART_MAX_VISIBLE = 12;
+  const chartDataLength = monthlyFailData.length;
+  const maxOffset = Math.max(0, chartDataLength - CHART_MAX_VISIBLE);
+  const clampedOffset = Math.min(Math.max(chartMonthOffset, 0), maxOffset);
+  const visibleMonthlyData = chartDataLength > CHART_MAX_VISIBLE
+    ? monthlyFailData.slice(clampedOffset, clampedOffset + CHART_MAX_VISIBLE)
+    : monthlyFailData;
+
   // 월별 차트 상수 (grouped bar용)
   const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
   const CHART_AREA_H = 280;
   const getMonthlyFailValue = (datum: MonthlyFailDatum, manufacturer: string): number => datum.byManufacturer[manufacturer] ?? 0;
   const maxBarVal = Math.max(
-    ...monthlyFailData.flatMap(d => manufacturers.map(m => getMonthlyFailValue(d, m))),
+    ...visibleMonthlyData.flatMap(d => manufacturers.map(m => getMonthlyFailValue(d, m))),
     1
   );
   const chartTickStep = Math.ceil(maxBarVal / 4) || 1;
@@ -494,8 +519,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               )}
               <button
                 onClick={handleOpenOrderModal}
-                disabled={isReadOnly}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+                disabled={isReadOnly || activeM === 'all'}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly || activeM === 'all' ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                 반품 및 교환 주문
@@ -761,11 +786,11 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               </div>
               {monthlyFailData.length > 0 ? (() => {
                 const nMfr = manufacturers.length || 1;
-                const MONTH_W = Math.max(48, Math.min(68, Math.floor(680 / monthlyFailData.length)));
+                const MONTH_W = Math.max(48, Math.min(68, Math.floor(680 / visibleMonthlyData.length)));
                 const GROUP_W = MONTH_W - 10;
                 const BAR_GAP = 2;
                 const BAR_W = Math.max(6, Math.floor((GROUP_W - BAR_GAP * (nMfr - 1)) / nMfr));
-                const SVG_W = CHART_PAD.l + monthlyFailData.length * MONTH_W + CHART_PAD.r;
+                const SVG_W = CHART_PAD.l + visibleMonthlyData.length * MONTH_W + CHART_PAD.r;
                 const SVG_H = CHART_PAD.t + CHART_AREA_H + CHART_PAD.b;
                 // 툴팁 크기
                 const TW = 148;
@@ -774,14 +799,40 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 const TH = T_PAD + 14 + nMfr * T_ROW_H + T_PAD;
 
                 return (
-                  <div className="overflow-x-auto -mx-1 px-1">
+                  <div
+                    className="overflow-x-auto -mx-1 px-1"
+                    onTouchStart={(e) => {
+                      chartTouchStartX.current = e.touches[0].clientX;
+                      chartTouchStartY.current = e.touches[0].clientY;
+                    }}
+                    onTouchMove={(e) => {
+                      const deltaX = chartTouchStartX.current - e.touches[0].clientX;
+                      const deltaY = chartTouchStartY.current - e.touches[0].clientY;
+                      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onTouchEnd={(e) => {
+                      const deltaX = chartTouchStartX.current - e.changedTouches[0].clientX;
+                      const deltaY = chartTouchStartY.current - e.changedTouches[0].clientY;
+                      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 40) {
+                        if (deltaX > 0) {
+                          // swipe left: shift forward (show later months)
+                          setChartMonthOffset(prev => Math.min(prev + 1, maxOffset));
+                        } else {
+                          // swipe right: shift backward (show earlier months)
+                          setChartMonthOffset(prev => Math.max(prev - 1, 0));
+                        }
+                      }
+                      setHoveredChartIdx(null);
+                    }}
+                  >
                     <svg
                       viewBox={`0 0 ${SVG_W} ${SVG_H}`}
                       className="w-full"
                       style={{ minWidth: Math.max(320, SVG_W) }}
                       preserveAspectRatio="xMinYMid meet"
                       onMouseLeave={() => setHoveredChartIdx(null)}
-                      onTouchEnd={() => setHoveredChartIdx(null)}
                     >
                       {/* Horizontal grid lines + Y labels */}
                       {chartTicks.map(tick => {
@@ -797,7 +848,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       <line x1={CHART_PAD.l} y1={CHART_PAD.t + CHART_AREA_H} x2={SVG_W - CHART_PAD.r} y2={CHART_PAD.t + CHART_AREA_H} stroke="#e2e8f0" strokeWidth="1.5" />
 
                       {/* Grouped bars per month */}
-                      {monthlyFailData.map((d, i) => {
+                      {visibleMonthlyData.map((d, i) => {
                         const barGroupW = BAR_W * nMfr + BAR_GAP * (nMfr - 1);
                         const groupX = CHART_PAD.l + i * MONTH_W + (MONTH_W - barGroupW) / 2;
                         const groupCenterX = CHART_PAD.l + i * MONTH_W + MONTH_W / 2;
@@ -860,7 +911,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
                       {/* Tooltip overlay */}
                       {hoveredChartIdx !== null && (() => {
-                        const d = monthlyFailData[hoveredChartIdx];
+                        const d = visibleMonthlyData[hoveredChartIdx];
                         const groupCenterX = CHART_PAD.l + hoveredChartIdx * MONTH_W + MONTH_W / 2;
                         let TX = groupCenterX - TW / 2;
                         TX = Math.max(CHART_PAD.l, Math.min(SVG_W - CHART_PAD.r - TW, TX));
@@ -1163,9 +1214,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 <button onClick={() => setIsModalOpen(false)} className="flex-1 sm:flex-none min-h-11 px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">취소</button>
                 <button
                   onClick={handleOrderSubmit}
-                  className="flex-1 sm:flex-none min-h-11 px-10 py-3 bg-slate-900 text-white font-black rounded-2xl shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all"
+                  disabled={isOrderSubmitting}
+                  className={`flex-1 sm:flex-none min-h-11 px-10 py-3 bg-slate-900 text-white font-black rounded-2xl shadow-xl shadow-slate-200 active:scale-95 transition-all ${isOrderSubmitting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-800'}`}
                 >
-                  주문 확인 및 완료
+                  {isOrderSubmitting ? '처리 중...' : '주문 확인 및 완료'}
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { ExcelData, DashboardTab, PlanType, PlanFeature, UserRole, MemberPermissions, canAccessTab } from '../types';
 import { planService } from '../services/planService';
 
@@ -88,9 +88,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     onToggleCollapse?.();
   };
 
+  const touchStartX = useRef<number>(0);
+
   return (
     <aside
       inert={isCollapsed || undefined}
+      onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+      onTouchEnd={(e) => {
+        const delta = touchStartX.current - e.changedTouches[0].clientX;
+        if (isMobile && delta > 50) onRequestClose?.();
+      }}
       className={`bg-slate-900 flex flex-col overflow-hidden transition-all duration-300 shadow-xl ${isMobile
         ? (isCollapsed
           ? 'fixed inset-y-0 left-0 w-72 max-w-[86vw] -translate-x-full pointer-events-none z-[280]'

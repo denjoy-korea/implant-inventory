@@ -916,7 +916,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
           <select
             value={filterCol}
             onChange={e => setFilterCol(e.target.value)}
-            className="px-3 py-2 text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-indigo-400"
+            className="px-3 py-2 text-base sm:text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-indigo-400"
           >
             <option value="전체">전체 컬럼</option>
             {COLUMNS.map(col => <option key={col} value={col}>{col}</option>)}

@@ -728,7 +728,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   id="mobile-manufacturer-filter"
                   value={selectedManufacturer ?? '__all__'}
                   onChange={(event) => setSelectedManufacturer(event.target.value === '__all__' ? null : event.target.value)}
-                  className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 >
                   <option value="__all__">전체 ({visibleInventory.length})</option>
                   {manufacturersList.map((manufacturer) => {

@@ -194,7 +194,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
           <select
             value={filterManufacturer}
             onChange={e => setFilterManufacturer(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-base sm:text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">전체 제조사</option>
             {manufacturers.map(m => (
@@ -317,21 +317,21 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
                             <button
                               onClick={() => handleUpdateStatus(r.id, 'picked_up', 'requested')}
                               disabled={isActing}
-                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                              className="min-h-11 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
                             >
                               수거 완료 처리
                             </button>
                             <button
                               onClick={() => handleUpdateStatus(r.id, 'rejected', 'requested')}
                               disabled={isActing}
-                              className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100 disabled:opacity-50"
+                              className="min-h-11 px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-100 disabled:opacity-50"
                             >
                               반품 거절
                             </button>
                             <button
                               onClick={() => handleDelete(r.id)}
                               disabled={isActing}
-                              className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-lg hover:bg-gray-200 disabled:opacity-50 ml-auto"
+                              className="min-h-11 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-lg hover:bg-gray-200 disabled:opacity-50 ml-auto"
                             >
                               삭제
                             </button>
@@ -342,7 +342,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
                           <button
                             onClick={() => handleUpdateStatus(r.id, 'completed', 'picked_up')}
                             disabled={isActing}
-                            className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                            className="min-h-11 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
                           >
                             반품 완료 처리 (재고 차감)
                           </button>
@@ -352,7 +352,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
                           <button
                             onClick={() => handleUpdateStatus(r.id, 'requested', 'rejected')}
                             disabled={isActing}
-                            className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                            className="min-h-11 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-200 disabled:opacity-50"
                           >
                             반품 요청으로 되돌리기
                           </button>

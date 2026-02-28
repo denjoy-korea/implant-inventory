@@ -6,6 +6,7 @@ import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
 import ReturnManager from './ReturnManager';
 import ConfirmModal from './ConfirmModal';
+import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
 
 function buildSparklinePath(values: number[], width: number, height: number): string {
   if (values.length === 0) return '';
@@ -29,6 +30,7 @@ interface OrderManagerProps {
   hospitalId?: string;
   currentUserName?: string;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onDeleteOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => void;
@@ -53,6 +55,19 @@ type LowStockEntry = {
   remainingDeficit: number;
 };
 
+export interface GroupedOrder {
+  id: string; // "YYYY-MM-DD|Manufacturer|OrderType"
+  date: string;
+  manufacturer: string;
+  type: Order['type'];
+  orders: Order[];
+  totalItems: number; // Distinct item count
+  totalQuantity: number; // Sum of all item quantities
+  managers: string[];
+  statuses: OrderStatus[];
+  overallStatus: OrderStatus | 'mixed';
+}
+
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
   inventory,
@@ -60,6 +75,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   hospitalId,
   currentUserName = '관리자',
   onUpdateOrderStatus,
+  onConfirmReceipt,
   onDeleteOrder,
   onCancelOrder,
   onQuickOrder,
@@ -71,7 +87,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   isReadOnly,
 }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'returns'>('orders');
-  const [filterType, setFilterType] = useState<OrderType | 'all'>('all');
+  const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -83,6 +99,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   // ── 일괄 주문 모달 state ──
   const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
+
+  // ── 상세 입고 확인 모달 state ──
+  const [selectedGroupModal, setSelectedGroupModal] = useState<GroupedOrder | null>(null);
+  const [isReceiptConfirming, setIsReceiptConfirming] = useState(false);
 
   // ── 발주 권장 품목 UI state ──
   const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
@@ -96,7 +116,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      const typeMatch = filterType === 'all' || order.type === filterType;
+      const typeMatch = filterType === 'all'
+        || (filterType === 'fail_and_return' ? (order.type === 'fail_exchange' || order.type === 'return') : order.type === filterType);
       const statusMatch = filterStatus === 'all' || order.status === filterStatus;
       const dateFromMatch = !filterDateFrom || order.date >= filterDateFrom;
       const dateToMatch = !filterDateTo || order.date <= filterDateTo;
@@ -104,6 +125,49 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       return typeMatch && statusMatch && dateFromMatch && dateToMatch && mfrMatch;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [orders, filterType, filterStatus, filterDateFrom, filterDateTo, filterManufacturer]);
+
+  const groupedOrders = useMemo(() => {
+    const groups: Record<string, GroupedOrder> = {};
+    filteredOrders.forEach(order => {
+      const key = `${order.date}|${simpleNormalize(order.manufacturer)}|${order.type}`;
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          date: order.date,
+          manufacturer: order.manufacturer,
+          type: order.type,
+          orders: [],
+          totalItems: 0,
+          totalQuantity: 0,
+          managers: [],
+          statuses: [],
+          overallStatus: 'ordered' as OrderStatus | 'mixed'
+        };
+      }
+      const group = groups[key];
+      group.orders.push(order);
+      group.totalItems += order.items.length;
+      group.totalQuantity += order.items.reduce((sum, i) => sum + i.quantity, 0);
+      if (!group.managers.includes(order.manager)) group.managers.push(order.manager);
+      if (!group.statuses.includes(order.status)) group.statuses.push(order.status);
+    });
+
+    return Object.values(groups).map(g => {
+      let overallStatus: GroupedOrder['overallStatus'] = 'mixed';
+      if (g.statuses.length === 1) {
+        overallStatus = g.statuses[0];
+      } else if (!g.statuses.includes('ordered') && !g.statuses.includes('received')) {
+        overallStatus = 'cancelled';
+      } else if (!g.statuses.includes('ordered')) {
+        overallStatus = 'received';
+      } else if (g.statuses.includes('ordered') && g.statuses.includes('received')) {
+        overallStatus = 'mixed';
+      } else {
+        overallStatus = 'ordered';
+      }
+      return { ...g, overallStatus };
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [filteredOrders]);
 
   const pendingQtyByItemKey = useMemo(() => {
     const qtyMap = new Map<string, number>();
@@ -138,10 +202,13 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   }, [inventory, pendingQtyByItemKey]);
 
   const stats = useMemo(() => {
-    const totalOrders = orders.filter(o => filterType === 'all' || o.type === filterType);
+    const totalOrders = orders.filter(o =>
+      filterType === 'all'
+      || (filterType === 'fail_and_return' ? (o.type === 'fail_exchange' || o.type === 'return') : o.type === filterType)
+    );
     const pendingOrders = totalOrders.filter(o => o.status === 'ordered');
     const receivedOrders = totalOrders.filter(o => o.status === 'received');
-    const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + (o.items[0]?.quantity || 0), 0);
+    const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
     const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
     // 반품 통계 (전체 orders 기준, 필터 무관)
     const returnOrders = orders.filter(o => o.type === 'return');
@@ -272,9 +339,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   // ── Animated KPI & Specific Metrics ──
   const kpiData = useMemo(() => {
     const pendingReplenishments = orders.filter(o => o.type === 'replenishment' && o.status === 'ordered');
-    const pendingReplenishmentQty = pendingReplenishments.reduce((acc, o) => acc + (o.items[0]?.quantity || 0), 0);
+    const pendingReplenishmentQty = pendingReplenishments.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
     const receivedOrders = orders.filter(o => o.status === 'received');
-    const receivedQty = receivedOrders.reduce((acc, o) => acc + (o.items[0]?.quantity || 0), 0);
+    const receivedQty = receivedOrders.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
     const pendingExcRet = orders.filter(o => (o.type === 'fail_exchange' || o.type === 'return') && o.status === 'ordered');
     const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
 
@@ -457,7 +524,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <select
                       value={filterManufacturer}
                       onChange={e => setFilterManufacturer(e.target.value)}
-                      className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-slate-200 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                      className="px-3 py-1.5 text-base sm:text-[11px] font-bold rounded-xl border border-slate-200 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
                     >
                       <option value="all">전체 제조사</option>
                       {manufacturerOptions.map(m => (
@@ -545,7 +612,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
               {/* 3. 교환/반품 대기 */}
               <div
-                onClick={() => { setFilterType('fail_exchange'); setFilterStatus('ordered'); }}
+                onClick={() => { setFilterType('fail_and_return'); setFilterStatus('ordered'); }}
                 role="button"
                 tabIndex={0}
                 className="flex-1 p-5 lg:p-6 transition-all duration-300 hover:bg-amber-50/40 cursor-pointer active:bg-amber-100/50 outline-none group/excret relative overflow-hidden"
@@ -1011,81 +1078,77 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </h3>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 ml-4">Order History</p>
             </div>
-            <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{filteredOrders.length}건</span>
+            <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length}건</span>
           </div>
           <div className="md:hidden px-3 pb-3 space-y-2.5 relative z-10">
-            {filteredOrders.length > 0 ? filteredOrders.map((order) => {
-              const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
-              const typeBadgeClass = order.type === 'replenishment'
+            {groupedOrders.length > 0 ? groupedOrders.map((group) => {
+              const typeBadgeClass = group.type === 'replenishment'
                 ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
-                : order.type === 'return'
+                : group.type === 'return'
                   ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700'
                   : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
               return (
                 <article
-                  key={`mobile-order-${order.id}`}
+                  key={`mobile-group-${group.id}`}
                   className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-500">{order.date}</p>
-                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(order.manufacturer)}</p>
+                      <p className="text-xs font-semibold text-slate-500">{group.date}</p>
+                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(group.manufacturer)}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
-                      {order.type === 'replenishment' ? '발주' : order.type === 'return' ? '반품' : '교환'}
+                      {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '교환'}
                     </span>
                   </div>
 
                   <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
-                    <p className="text-xs font-black text-slate-700">{item.brand}</p>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500">{item.size}</span>
-                      <span className="text-sm font-black text-slate-900 tabular-nums">{item.quantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500">{group.totalItems}개 품목</span>
+                      <span className="text-sm font-black text-slate-900 tabular-nums">총 {group.totalQuantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                     </div>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {order.manager}</span>
+                    <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {group.managers.join(', ')}</span>
                     <div className="flex items-center gap-1.5">
-                      {order.status === 'cancelled' ? (
-                        <span className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">취소됨</span>
+                      {group.overallStatus === 'cancelled' ? (
+                        <>
+                          <span className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">취소됨</span>
+                          {!isReadOnly && (
+                            <button
+                              title="주문 삭제"
+                              aria-label="주문 삭제"
+                              onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
+                              className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all active:scale-95"
+                            >
+                              삭제
+                            </button>
+                          )}
+                        </>
                       ) : (
-                        <button
-                          onClick={() => !isReadOnly && onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
-                          disabled={isReadOnly}
-                          className={`px-3 py-2 rounded-xl text-[11px] font-black transition-all active:scale-95 ${isReadOnly
-                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                            : order.status === 'received'
-                              ? 'bg-emerald-500 text-white'
-                              : 'bg-white border border-slate-200 text-rose-600'
-                            }`}
-                        >
-                          {order.type === 'return'
-                            ? order.status === 'received' ? '반품완료' : '반품확인'
-                            : order.status === 'received' ? '입고완료' : '입고확인'}
-                        </button>
-                      )}
-                      {!isReadOnly && order.status === 'ordered' && (
-                        <button
-                          onClick={() => setCancelModalOrder(order)}
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-500"
-                          title="발주 취소"
-                          aria-label="발주 취소"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                        </button>
-                      )}
-                      {!isReadOnly && (
-                        <button
-                          onClick={() => onDeleteOrder(order.id)}
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-500"
-                          title="주문 삭제"
-                          aria-label="주문 삭제"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        <>
+                          {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
+                            <button
+                              onClick={() => {
+                                const firstOrdered = group.orders.find(o => o.status === 'ordered');
+                                if (firstOrdered) setCancelModalOrder(firstOrdered);
+                              }}
+                              className="px-3 py-2 rounded-xl text-[11px] font-black bg-rose-50 text-rose-600 border border-rose-200 transition-all active:scale-95"
+                            >
+                              취소
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedGroupModal(group)}
+                            className={`px-3 py-2 rounded-xl text-[11px] font-black transition-all active:scale-95 ${group.overallStatus === 'received'
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                              : 'bg-indigo-50 border border-indigo-200 text-indigo-600'
+                              }`}
+                          >
+                            {group.overallStatus === 'received' ? '상세 확인' : '입고 확인'}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1112,65 +1175,69 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
-                  const accentHoverClass = order.type === 'replenishment' ? 'hover:border-l-indigo-500' : order.type === 'return' ? 'hover:border-l-amber-500' : 'hover:border-l-rose-500';
-                  const item = order.items[0] || { brand: 'N/A', size: 'N/A', quantity: 0 };
+                {groupedOrders.length > 0 ? groupedOrders.map((group, idx) => {
+                  const accentHoverClass = group.type === 'replenishment' ? 'hover:border-l-indigo-500' : group.type === 'return' ? 'hover:border-l-amber-500' : 'hover:border-l-rose-500';
                   const isEven = idx % 2 === 1;
                   return (
-                    <tr key={order.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
-                      <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{order.date}</span></td>
+                    <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
+                      <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{group.date}</span></td>
                       <td className="px-6 py-3">
-                        <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${order.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : order.type === 'return' ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
-                          {order.type === 'replenishment' ? '발주' : order.type === 'return' ? '반품' : '교환'}
+                        <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${group.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
+                          {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '교환'}
                         </span>
                       </td>
-                      <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(order.manufacturer)}</span></td>
+                      <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
                       <td className="px-6 py-3">
-                        <div className="flex bg-white/60 border border-slate-100 items-center justify-between px-3 py-1.5 rounded-xl shadow-sm w-fit group-hover:border-indigo-100 group-hover:bg-white transition-colors">
-                          <span className="text-xs font-black text-slate-800 mr-4">{item.brand}</span>
-                          <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{item.size}</span>
-                        </div>
+                        <span className="text-xs font-black text-slate-700">{group.totalItems} 품목</span>
                       </td>
-                      <td className="px-6 py-3 text-center font-black text-slate-800 text-lg tabular-nums">{item.quantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
-                      <td className="px-6 py-3"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1.5 rounded-lg">{order.manager}</span></td>
+                      <td className="px-6 py-3 text-center font-black text-slate-800 text-lg tabular-nums">{group.totalQuantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
+                      <td className="px-6 py-3"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1.5 rounded-lg">{group.managers.join(', ')}</span></td>
                       <td className="px-6 py-3 text-center">
-                        {order.status === 'cancelled' ? (
+                        {group.overallStatus === 'cancelled' ? (
                           <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">
                             취소됨
-                            {order.cancelledReason && (
-                              <span className="block text-[9px] text-slate-400 font-medium truncate max-w-[100px] mt-0.5">{order.cancelledReason}</span>
-                            )}
                           </span>
+                        ) : group.overallStatus === 'received' ? (
+                          <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-emerald-50 text-emerald-600 border border-emerald-100 inline-block">전체 완료</span>
+                        ) : group.overallStatus === 'ordered' ? (
+                          <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-rose-50 border border-rose-100 text-rose-600 inline-block">대기중</span>
                         ) : (
-                          <button
-                            onClick={() => !isReadOnly && onUpdateOrderStatus(order.id, order.status === 'ordered' ? 'received' : 'ordered')}
-                            disabled={isReadOnly}
-                            className={`px-4 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-sm active:scale-95 ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : order.status === 'received' ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white hover:shadow-md hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/20' : 'bg-white border border-slate-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50'}`}
-                          >
-                            {order.type === 'return'
-                              ? order.status === 'received' ? '반품 완료' : '반품 확인'
-                              : order.status === 'received' ? '입고 완료' : '입고 확인'}
-                          </button>
+                          <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-50 border border-indigo-100 text-indigo-600 inline-block">부분 완료</span>
                         )}
                       </td>
                       <td className="px-6 py-3 text-right">
-                        {!isReadOnly && (
-                          <div className="flex items-center justify-end gap-1">
-                            {order.status === 'ordered' && (
-                              <button
-                                onClick={() => setCancelModalOrder(order)}
-                                className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 hover:shadow-sm rounded-xl transition-all"
-                                title="발주 취소"
-                                aria-label="발주 취소"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                              </button>
-                            )}
-                            <button onClick={() => onDeleteOrder(order.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-xl transition-all" title="주문 삭제" aria-label="주문 삭제">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <div className="flex items-center justify-end gap-1">
+                          {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
+                            <button
+                              onClick={() => {
+                                const firstOrdered = group.orders.find(o => o.status === 'ordered');
+                                if (firstOrdered) setCancelModalOrder(firstOrdered);
+                              }}
+                              className="px-3 py-1.5 rounded-xl text-[11px] font-black text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-all shadow-sm active:scale-95"
+                            >
+                              취소
                             </button>
-                          </div>
-                        )}
+                          )}
+                          {group.overallStatus === 'cancelled' && !isReadOnly && (
+                            <button
+                              title="주문 삭제"
+                              aria-label="주문 삭제"
+                              onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
+                              className="px-3 py-1.5 rounded-xl text-[11px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all shadow-sm active:scale-95"
+                            >
+                              삭제
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedGroupModal(group)}
+                            className={`px-4 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-sm active:scale-95 border ${group.overallStatus === 'ordered' || group.overallStatus === 'mixed'
+                              ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                          >
+                            상세 보기
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1207,6 +1274,36 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
+        {(() => {
+          const activeModalGroup = selectedGroupModal ? (
+            groupedOrders.find(g =>
+              g.date === selectedGroupModal.date &&
+              g.manufacturer === selectedGroupModal.manufacturer &&
+              g.type === selectedGroupModal.type
+            ) || selectedGroupModal
+          ) : null;
+
+          return activeModalGroup && (
+            <ReceiptConfirmationModal
+              groupedOrder={activeModalGroup}
+              inventory={inventory}
+              onClose={() => setSelectedGroupModal(null)}
+              onConfirmReceipt={async (updates, orderIds) => {
+                setIsReceiptConfirming(true);
+                try {
+                  await onConfirmReceipt(updates, orderIds);
+                  setSelectedGroupModal(null);
+                } finally {
+                  setIsReceiptConfirming(false);
+                }
+              }}
+              onUpdateOrderStatus={onUpdateOrderStatus}
+              onDeleteOrder={onDeleteOrder}
+              isLoading={isReceiptConfirming}
+            />
+          );
+        })()}
+
         {showBulkOrderModal && (
           <ConfirmModal
             title="긴급 부족 품목 일괄 주문"
@@ -1221,11 +1318,16 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </svg>
             }
             onConfirm={() => {
-              lowStockItems.forEach(entry => {
-                onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit });
-              });
               setShowBulkOrderModal(false);
-              showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
+              void Promise.all(
+                lowStockItems.map(entry =>
+                  onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit })
+                )
+              ).then(() => {
+                showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
+              }).catch(() => {
+                showAlertToast('일부 발주 처리에 실패했습니다. 다시 시도해주세요.', 'error');
+              });
             }}
             onCancel={() => setShowBulkOrderModal(false)}
           />

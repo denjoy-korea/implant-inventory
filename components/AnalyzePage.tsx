@@ -280,13 +280,14 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ onSignup, onContact }) => {
     } catch (err) {
       console.error('[AnalyzePage] send-analysis-report failed:', err);
       const isTimeout = err instanceof Error && err.name === 'AbortError';
-      const errMsg = isTimeout
-        ? '요청 시간(30초)이 초과되었습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.'
-        : classifyLeadSubmitError(err);
-      setLeadSubmitError(errMsg);
+      if (isTimeout) {
+        setLeadSubmitError('요청 시간(30초)이 초과되었습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.');
+      } else {
+        setLeadSubmitError(classifyLeadSubmitError(err));
+      }
       pageViewService.trackEvent(
         'analyze_lead_submit_error',
-        { detailed: wantDetailedAnalysis, message: errMsg },
+        { detailed: wantDetailedAnalysis, message: isTimeout ? '요청 시간(30초)이 초과되었습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.' : classifyLeadSubmitError(err) },
         'analyze',
       );
     } finally {

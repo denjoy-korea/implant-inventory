@@ -86,8 +86,12 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center sm:justify-center">
+      <div className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto">
+        {/* Drag handle (mobile only) */}
+        <div className="sm:hidden flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-slate-300" />
+        </div>
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900">반품 신청</h2>
@@ -114,7 +118,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
                 setManufacturer(e.target.value);
                 setItems([{ brand: '', size: '', quantity: 1 }]);
               }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">제조사 선택</option>
               {manufacturers.map(m => (
@@ -181,7 +185,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
                     value={item.brand}
                     onChange={e => updateItem(idx, 'brand', e.target.value)}
                     disabled={!manufacturer}
-                    className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                    className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
                   >
                     <option value="">브랜드</option>
                     {brandsForMfr.map(b => (
@@ -192,7 +196,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
                     value={item.size}
                     onChange={e => updateItem(idx, 'size', e.target.value)}
                     disabled={!item.brand}
-                    className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                    className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
                   >
                     <option value="">사이즈</option>
                     {sizesForBrand(item.brand).map(s => (
