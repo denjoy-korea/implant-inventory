@@ -715,7 +715,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           : 'bg-white border border-slate-200 text-rose-600'
                         }`}
                     >
-                      {order.status === 'received' ? '입고완료' : '입고확인'}
+                      {order.type === 'return'
+                        ? order.status === 'received' ? '반품완료' : '반품확인'
+                        : order.status === 'received' ? '입고완료' : '입고확인'}
                     </button>
                     {!isReadOnly && (
                       <button
@@ -781,7 +783,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                         disabled={isReadOnly}
                         className={`px-4 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-sm active:scale-95 ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : order.status === 'received' ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white hover:shadow-md hover:from-emerald-500 hover:to-emerald-600 border border-emerald-500/20' : 'bg-white border border-slate-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50'}`}
                       >
-                        {order.status === 'received' ? '입고 완료' : '입고 확인'}
+                        {order.type === 'return'
+                          ? order.status === 'received' ? '반품 완료' : '반품 확인'
+                          : order.status === 'received' ? '입고 완료' : '입고 확인'}
                       </button>
                     </td>
                     <td className="px-6 py-3 text-right">

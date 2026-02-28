@@ -59,7 +59,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
         date: new Date().toISOString().split('T')[0],
         items: [{ brand: item.brand, size: item.size, quantity: qty }],
         manager: managerName || '품목 최적화',
-        status: 'received',
+        status: 'ordered',
       });
     }
     setReturningId(null);
