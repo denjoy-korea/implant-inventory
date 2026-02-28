@@ -52,6 +52,10 @@ const PERM_GROUPS: { label: string; keys: (keyof MemberPermissions)[] }[] = [
         label: '분석 · 보고서',
         keys: ['canViewAnalytics'],
     },
+    {
+        label: '설정 권한',
+        keys: ['canManageVendors', 'canManageWorkDays'],
+    },
 ];
 
 interface PermissionModalProps {
@@ -61,7 +65,12 @@ interface PermissionModalProps {
 }
 
 const PermissionModal: React.FC<PermissionModalProps> = ({ member, onClose, onSave }) => {
-    const initialPerms = member.permissions ?? DEFAULT_STAFF_PERMISSIONS;
+    // DB에 저장된 기존 permissions 객체에 새 필드(canManageVendors 등)가 없을 수 있으므로
+    // 새 필드에 대해 ?? false 폴백을 적용해 항상 완전한 MemberPermissions를 보장
+    const storedPerms = member.permissions as (MemberPermissions & { canManageVendors?: boolean; canManageWorkDays?: boolean }) | null;
+    const initialPerms: MemberPermissions = storedPerms
+        ? { ...storedPerms, canManageVendors: storedPerms.canManageVendors ?? false, canManageWorkDays: storedPerms.canManageWorkDays ?? false }
+        : DEFAULT_STAFF_PERMISSIONS;
     const [level, setLevel] = useState<PermissionLevel>(detectLevel(initialPerms));
     const [custom, setCustom] = useState<MemberPermissions>({ ...initialPerms });
     const [isSaving, setIsSaving] = useState(false);

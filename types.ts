@@ -461,6 +461,8 @@ export interface MemberPermissions {
   canManageOrders: boolean;    // 발주 관리
   canViewAnalytics: boolean;   // 분석/보고서 열람
   canManageFails: boolean;     // 실패 관리
+  canManageVendors: boolean;   // 거래처 관리
+  canManageWorkDays: boolean;  // 진료 요일 설정
 }
 
 /** 거래처 영업사원 연락처 */
@@ -485,6 +487,8 @@ export const DEFAULT_STAFF_PERMISSIONS: MemberPermissions = {
   canManageOrders: true,
   canViewAnalytics: true,
   canManageFails: true,
+  canManageVendors: true,
+  canManageWorkDays: true,
 };
 
 export const READONLY_PERMISSIONS: MemberPermissions = {
@@ -495,6 +499,8 @@ export const READONLY_PERMISSIONS: MemberPermissions = {
   canManageOrders: false,
   canViewAnalytics: true,
   canManageFails: false,
+  canManageVendors: false,
+  canManageWorkDays: false,
 };
 
 export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
@@ -505,6 +511,8 @@ export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
   canManageOrders: '발주 관리',
   canViewAnalytics: '분석/보고서 열람',
   canManageFails: '실패 관리',
+  canManageVendors: '거래처 관리',
+  canManageWorkDays: '진료 요일 설정',
 };
 
 /** 신뢰 기기 (프론트엔드) */

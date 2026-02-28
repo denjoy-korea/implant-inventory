@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact } from '../types';
+import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact, MemberPermissions } from '../types';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
@@ -29,6 +29,8 @@ interface SettingsHubProps {
   hospitalWorkDays?: number[];
   /** 진료 요일 변경 후 상태 업데이트 콜백 */
   onWorkDaysChange?: (workDays: number[]) => void;
+  /** staff 세부 권한 (master는 무시) */
+  permissions?: MemberPermissions | null;
 }
 
 interface SettingsCard {
@@ -49,7 +51,7 @@ function getMinPlanForFeature(feature: PlanFeature): PlanType {
   return 'business';
 }
 
-const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId, hospitalWorkDays, onWorkDaysChange }) => {
+const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId, hospitalWorkDays, onWorkDaysChange, permissions }) => {
   const [resetRequest, setResetRequest] = useState<DbResetRequest | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetReason, setResetReason] = useState('');
@@ -79,9 +81,12 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     if (hospitalWorkDays) setLocalWorkDays(hospitalWorkDays);
   }, [hospitalWorkDays]);
 
-  // 거래처 데이터 로딩
+  // 거래처 데이터 로딩 (master 또는 canManageVendors 권한 보유 staff)
+  const canAccessVendors = (isMaster && !isStaff) || (isStaff && !!permissions?.canManageVendors);
+  const canAccessWorkDays = isMaster || (isStaff && !!permissions?.canManageWorkDays);
+
   useEffect(() => {
-    if (!hospitalId || !isMaster) return;
+    if (!hospitalId || !canAccessVendors) return;
     setVendorsLoading(true);
     Promise.all([
       hospitalService.getDistinctManufacturers(hospitalId),
@@ -90,7 +95,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       setVendorManufacturers(mfrs);
       setVendors(contacts);
     }).finally(() => setVendorsLoading(false));
-  }, [hospitalId, isMaster]);
+  }, [hospitalId, canAccessVendors]);
 
   const startEditVendor = (manufacturer: string) => {
     const existing = vendors.find(v => v.manufacturer === manufacturer);
@@ -313,8 +318,8 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
           );
         })}
 
-        {/* 거래처 관리 카드 (Master 전용) */}
-        {isMaster && !isStaff && hospitalId && (
+        {/* 거래처 관리 카드 */}
+        {canAccessVendors && hospitalId && (
           <button
             onClick={() => setShowVendorModal(true)}
             className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
@@ -339,8 +344,8 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         )}
       </div>
 
-      {/* 진료 요일 설정 섹션 (Master 전용) */}
-      {isMaster && hospitalId && (
+      {/* 진료 요일 설정 섹션 */}
+      {canAccessWorkDays && hospitalId && (
         <>
           <div className="flex items-center gap-4 pt-2">
             <div className="h-px flex-1 bg-slate-200" />

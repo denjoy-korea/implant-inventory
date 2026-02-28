@@ -141,6 +141,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           hospitalId={user?.hospitalId}
           hospitalWorkDays={hospitalWorkDays}
           onWorkDaysChange={onWorkDaysChange}
+          permissions={user?.permissions}
         />
       )}
       {dashboardTab === 'audit_log' && user?.hospitalId && (
