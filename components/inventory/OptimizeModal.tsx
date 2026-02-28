@@ -124,7 +124,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               <svg className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
               <span className="text-[11px] text-slate-400 font-medium">필터</span>
               {/* 재고 0개 필터 */}
-              <div className="group/zero-tip relative flex items-center gap-1">
+              {neverZeroItems.length > 0 && <div className="group/zero-tip relative flex items-center gap-1">
                 <button
                   onClick={() => { setNeverStockFilter(v => v === 'zero' ? 'all' : 'zero'); setSelectedOptimizeIds(new Set()); setReturningId(null); }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
@@ -145,7 +145,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                   <p className="text-[11px] leading-relaxed text-slate-300 mt-2">덴트웹에서도 해당 품목을 <span className="text-indigo-300 font-bold">사용하지 않음</span>으로 설정하면 수술기록지 브랜드 선택 시 불필요한 항목이 줄어 피로도가 감소합니다.</p>
                   <span className="absolute -top-1.5 left-6 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
                 </div>
-              </div>
+              </div>}
               {/* 재고 3개 이상 필터 */}
               <div className="group/three-tip relative flex items-center gap-1">
                 <button
