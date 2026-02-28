@@ -775,7 +775,7 @@ const App: React.FC = () => {
       // ── 1회 순회: 입고완료 주문 집계 (O(orders × items)) ──────────────────
       // key: `${normM}|${normB}|${normS}` → totalReceived
       const receivedMap = new Map<string, number>();
-      prev.orders.filter(o => o.status === 'received').forEach(order => {
+      prev.orders.filter(o => o.status === 'received' && o.type !== 'return').forEach(order => {
         const normOM = normalize(order.manufacturer);
         order.items.forEach(orderItem => {
           const normOB = normalize(orderItem.brand);
