@@ -1288,18 +1288,17 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     {/* 품목 미리보기 */}
                     {(() => {
                       const allItems = group.orders.flatMap(o => o.items);
-                      const preview = allItems.slice(0, 2);
+                      const first = allItems[0];
+                      if (!first) return null;
                       return (
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
-                          {preview.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                              <span className="text-[11px] text-slate-600 font-medium">{item.brand} {item.size}</span>
-                              <span className="text-[11px] text-slate-400">×{item.quantity}</span>
-                            </div>
-                          ))}
-                          {allItems.length > 2 && (
-                            <p className="text-[10px] text-slate-400 font-medium">+ {allItems.length - 2}종 더</p>
-                          )}
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size}</span>
+                            <span className="text-[11px] text-slate-400">×{first.quantity}</span>
+                            {allItems.length > 1 && (
+                              <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
@@ -1360,14 +1359,14 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50/50 border-b border-slate-100/50 backdrop-blur-sm">
                 <tr>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">주문일자<br /><span className="text-[8px] tracking-widest">DATE</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">유형<br /><span className="text-[8px] tracking-widest">TYPE</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">제조사<br /><span className="text-[8px] tracking-widest">MFR</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">품목 내역<br /><span className="text-[8px] tracking-widest">ITEM</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">수량<br /><span className="text-[8px] tracking-widest">QTY</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">담당자<br /><span className="text-[8px] tracking-widest">MANAGER</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">상태<br /><span className="text-[8px] tracking-widest">STATUS</span></th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">관리<br /><span className="text-[8px] tracking-widest">ACTION</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">주문일자 <span className="text-[8px] tracking-widest text-slate-400">DATE</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">유형 <span className="text-[8px] tracking-widest text-slate-400">TYPE</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">제조사 <span className="text-[8px] tracking-widest text-slate-400">MFR</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">품목 내역 <span className="text-[8px] tracking-widest text-slate-400">ITEM</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center whitespace-nowrap">수량 <span className="text-[8px] tracking-widest text-slate-400">QTY</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">담당자 <span className="text-[8px] tracking-widest text-slate-400">MANAGER</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center whitespace-nowrap">상태 <span className="text-[8px] tracking-widest text-slate-400">STATUS</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right whitespace-nowrap">관리 <span className="text-[8px] tracking-widest text-slate-400">ACTION</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -1376,36 +1375,33 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   const isEven = idx % 2 === 1;
                   return (
                     <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
-                      <td className="px-6 py-3"><span className="text-[13px] font-bold text-slate-800">{group.date}</span></td>
-                      <td className="px-6 py-3">
-                        <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex inline-flex items-center justify-center w-[65px] ${group.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
+                      <td className="px-3 lg:px-5 py-2.5 whitespace-nowrap"><span className="text-xs font-bold text-slate-800">{group.date}</span></td>
+                      <td className="px-3 lg:px-5 py-2.5 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black shadow-sm inline-flex items-center justify-center w-[52px] ${group.type === 'replenishment' ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700' : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700'}`}>
                           {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '교환'}
                         </span>
                       </td>
-                      <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
-                      <td className="px-6 py-3">
+                      <td className="px-3 lg:px-5 py-2.5 whitespace-nowrap"><span className="text-sm font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
+                      <td className="px-3 lg:px-5 py-2.5">
                         {(() => {
                           const allItems = group.orders.flatMap(o => o.items);
-                          const preview = allItems.slice(0, 2);
+                          const first = allItems[0];
+                          if (!first) return null;
                           return (
-                            <div className="space-y-0.5">
-                              {preview.map((item, i) => (
-                                <div key={i} className="flex items-center gap-1 text-[12px]">
-                                  <span className="font-bold text-slate-700">{item.brand}</span>
-                                  <span className="text-slate-500">{item.size}</span>
-                                  <span className="text-slate-400 font-normal">×{item.quantity}</span>
-                                </div>
-                              ))}
-                              {allItems.length > 2 && (
-                                <div className="text-[11px] text-slate-400 font-medium">+ {allItems.length - 2}종 더</div>
+                            <div className="flex items-center gap-1 text-[12px] whitespace-nowrap">
+                              <span className="font-bold text-slate-700">{first.brand}</span>
+                              <span className="text-slate-500">{first.size}</span>
+                              <span className="text-slate-400">×{first.quantity}</span>
+                              {allItems.length > 1 && (
+                                <span className="text-[11px] text-slate-400 font-medium ml-0.5">외 {allItems.length - 1}종</span>
                               )}
                             </div>
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-3 text-center font-black text-slate-800 text-lg tabular-nums">{group.totalQuantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
-                      <td className="px-6 py-3"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1.5 rounded-lg">{group.managers.join(', ')}</span></td>
-                      <td className="px-6 py-3 text-center">
+                      <td className="px-3 lg:px-5 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-base tabular-nums">{group.totalQuantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
+                      <td className="px-3 lg:px-5 py-2.5 whitespace-nowrap"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1 rounded-lg">{group.managers.join(', ')}</span></td>
+                      <td className="px-3 lg:px-5 py-2.5 text-center whitespace-nowrap">
                         {group.overallStatus === 'cancelled' ? (
                           <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">
                             취소됨
@@ -1418,7 +1414,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           <span className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-50 border border-indigo-100 text-indigo-600 inline-block">부분 완료</span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right">
+                      <td className="px-3 lg:px-5 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
                             <button
