@@ -577,7 +577,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* STICKY HEADER + KPI + FILTERS           */}
         {/* ═══════════════════════════════════════ */}
         <div
-          className="md:sticky z-20 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 lg:space-y-4"
+          className="md:hidden z-20 pt-px pb-3 -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 lg:space-y-4"
           style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
         >
           <div className="hidden md:flex flex-col gap-4">

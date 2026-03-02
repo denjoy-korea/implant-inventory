@@ -174,7 +174,7 @@ export function ReceiptConfirmationModal({
     useEffect(() => { const t = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(t); }, []);
 
     return (
-        <div className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`} onClick={() => !isLoading && onClose()}>
+        <div className={`fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`} onClick={() => !isLoading && onClose()}>
             <div className={`bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-8 sm:scale-95 sm:translate-y-0'}`} onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
