@@ -174,7 +174,7 @@ export function ReceiptConfirmationModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                     <div>
                         <h3 className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
                         <p className="text-sm font-semibold text-slate-500 mt-1">
@@ -505,7 +505,7 @@ export function ReceiptConfirmationModal({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+                <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
                     <button
                         onClick={onClose}
                         disabled={isLoading}
