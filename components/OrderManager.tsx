@@ -7,6 +7,8 @@ import OrderCancelModal from './order/OrderCancelModal';
 import ReturnManager from './ReturnManager';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
+import OptimizeModal from './inventory/OptimizeModal';
+import { isExchangePrefix } from '../services/appUtils';
 import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
 
 function buildSparklinePath(values: number[], width: number, height: number): string {
@@ -115,29 +117,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [lowStockMfrFilter, setLowStockMfrFilter] = useState<string | 'all'>('all');
 
   // ── 반품 권장 모달 state ──
+  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [returnModalCategory, setReturnModalCategory] = useState<ReturnCategory | null>(null);
-  const [snoozedIds, setSnoozedIds] = useState<Record<string, number>>(() => {
-    try {
-      const stored = localStorage.getItem('return_snooze');
-      if (!stored) return {};
-      const parsed = JSON.parse(stored) as Record<string, number>;
-      // 1개월 지난 항목 정리
-      const now = Date.now();
-      const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
-      const cleaned: Record<string, number> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (now - v < ONE_MONTH) cleaned[k] = v;
-      }
-      return cleaned;
-    } catch { return {}; }
-  });
+  const [snoozedIds, setSnoozedIds] = useState<Record<string, number>>({});
 
   const handleSnooze = (itemId: string) => {
-    setSnoozedIds(prev => {
-      const next = { ...prev, [itemId]: Date.now() };
-      localStorage.setItem('return_snooze', JSON.stringify(next));
-      return next;
-    });
+    setSnoozedIds(prev => ({ ...prev, [itemId]: Date.now() }));
   };
 
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
@@ -245,14 +230,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         || mfr.includes('보험임플란트') || brand.includes('보험임플란트');
     };
 
-    const now = Date.now();
-    const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
-    const isSnoozed = (id: string) => {
-      const ts = snoozedIds[id];
-      return ts ? (now - ts) < ONE_MONTH : false;
-    };
-
-    const eligible = inventory.filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id));
+    const eligible = inventory.filter(i => !isExcluded(i) && i.currentStock > 0);
 
     const olderThanYear = eligible.filter(i => {
       if (i.usageCount === 0) return false;
@@ -273,7 +251,41 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       overstockExcess: overstock.reduce((s, i) => s + (i.currentStock - i.recommendedStock), 0),
       total: olderThanYear.length + neverUsed.length + overstock.length,
     };
-  }, [inventory, snoozedIds]);
+  }, [inventory]);
+
+  // ── 품목최적화 modal용 dead-stock 목록 ──
+  const deadStockItems = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+    return inventory
+      .filter(i => {
+        const mfr = String(i.manufacturer || '');
+        const brand = String(i.brand || '');
+        const lowerMfr = mfr.toLowerCase();
+        return !isExchangePrefix(mfr)
+          && !lowerMfr.includes('수술중fail')
+          && !lowerMfr.includes('fail_')
+          && !lowerMfr.includes('수술중 fail')
+          && mfr !== '보험청구'
+          && brand !== '보험청구'
+          && !mfr.includes('보험임플란트')
+          && !brand.includes('보험임플란트');
+      })
+      .map(i => {
+        const neverUsed = i.usageCount === 0;
+        const lastDate = i.lastUsedDate ?? null;
+        const olderThanYear = !neverUsed && lastDate !== null && lastDate < oneYearAgoStr;
+        return { ...i, neverUsed, olderThanYear, lastUsedDate: lastDate };
+      })
+      .filter(i => i.neverUsed || i.olderThanYear)
+      .sort((a, b) => {
+        if (a.neverUsed && !b.neverUsed) return 1;
+        if (!a.neverUsed && b.neverUsed) return -1;
+        return (a.lastUsedDate ?? '') < (b.lastUsedDate ?? '') ? -1 : 1;
+      });
+  }, [inventory]);
 
   // ── 교환 권장 품목 (미처리 수술중교환 제조사별) ──
   const exchangeCandidates = useMemo(() => {
@@ -965,7 +977,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* 1년 이상 미사용 */}
                 <button
-                  onClick={() => setReturnModalCategory('olderThanYear')}
+                  onClick={() => setShowOptimizeModal(true)}
                   className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.olderThanYear.length > 0
                     ? 'border-amber-200 bg-gradient-to-br from-amber-50/80 to-orange-50/40'
                     : 'border-slate-100 bg-slate-50/60'
@@ -983,7 +995,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
                 {/* 한 번도 미사용 */}
                 <button
-                  onClick={() => setReturnModalCategory('neverUsed')}
+                  onClick={() => setShowOptimizeModal(true)}
                   className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.neverUsed.length > 0
                     ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40'
                     : 'border-slate-100 bg-slate-50/60'
@@ -1001,7 +1013,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
                 {/* 권장량 초과 */}
                 <button
-                  onClick={() => setReturnModalCategory('overstock')}
+                  onClick={() => setShowOptimizeModal(true)}
                   className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.overstock.length > 0
                     ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-blue-50/40'
                     : 'border-slate-100 bg-slate-50/60'
@@ -1486,17 +1498,13 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         )}
 
         {/* 반품 권장 상세 모달 */}
-        {returnModalCategory && (
-          <ReturnCandidateModal
-            initialCategory={returnModalCategory}
-            inventory={inventory}
-            returnRequests={returnRequests}
-            snoozedIds={snoozedIds}
-            onClose={() => setReturnModalCategory(null)}
-            onReturn={onAddOrder}
-            onSnooze={handleSnooze}
+        {showOptimizeModal && (
+          <OptimizeModal
+            deadStockItems={deadStockItems}
+            onAddOrder={onAddOrder}
             managerName={currentUserName}
-            showAlertToast={showAlertToast}
+            hospitalId={hospitalId}
+            onClose={() => setShowOptimizeModal(false)}
           />
         )}
       </div>}

@@ -9,8 +9,8 @@ interface DeadStockItem extends InventoryItem {
 
 interface OptimizeModalProps {
   deadStockItems: DeadStockItem[];
-  onDeleteInventoryItem: (id: string) => void;
-  onUpdateInventoryItem: (item: InventoryItem) => void;
+  onDeleteInventoryItem?: (id: string) => void;
+  onUpdateInventoryItem?: (item: InventoryItem) => void;
   onAddOrder?: (order: Order) => Promise<void>;
   managerName?: string;
   hospitalId?: string;
@@ -20,7 +20,7 @@ interface OptimizeModalProps {
 const SNOOZE_MONTHS = 1;
 const getSnoozeKey = (hospitalId?: string) => `optimize_snooze_${hospitalId || 'local'}`;
 
-const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, managerName, hospitalId, onClose }) => {
+const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onAddOrder, managerName, hospitalId, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
@@ -95,11 +95,6 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const handleReturnConfirm = (item: DeadStockItem) => {
     const qty = parseInt(returnQtyStr, 10);
     if (!qty || qty < 1 || qty > item.currentStock) return;
-    onUpdateInventoryItem({
-      ...item,
-      currentStock: item.currentStock - qty,
-      stockAdjustment: item.stockAdjustment - qty,
-    });
     if (onAddOrder) {
       onAddOrder({
         id: `order_${Date.now()}`,
@@ -129,11 +124,6 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     setIsBulkReturning(true);
     for (const item of bulkReturnEligible) {
       const qty = item.currentStock - KEEP_QTY;
-      onUpdateInventoryItem({
-        ...item,
-        currentStock: KEEP_QTY,
-        stockAdjustment: item.stockAdjustment - qty,
-      });
       if (onAddOrder) {
         await onAddOrder({
           id: `order_${Date.now()}_${item.id}`,
@@ -161,7 +151,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     setDeleteProgress(0);
     setIsDeletingOptimize(true);
     for (const id of ids) {
-      await Promise.resolve(onDeleteInventoryItem(id));
+      if (onDeleteInventoryItem) await Promise.resolve(onDeleteInventoryItem(id));
       setDeleteProgress(prev => prev + 1);
     }
     const remaining = deadStockItems.filter(i => !selectedOptimizeIds.has(i.id));
@@ -574,15 +564,17 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-3a4 4 0 00-8 0v3M8 15h8M12 3v4m0 0l-2-2m2 2l2-2" /></svg>
                 {KEEP_QTY}개 유지 반품 ({bulkReturnEligible.length})
               </button>
-              {/* 선택 품목 삭제 */}
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={!canDeleteSelected || isDeletingOptimize}
-                className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                선택 품목 삭제 ({deletableDisplayed.filter(i => selectedOptimizeIds.has(i.id)).length})
-              </button>
+              {/* 선택 품목 삭제 (삭제 콜백이 있을 때만 표시) */}
+              {onDeleteInventoryItem && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={!canDeleteSelected || isDeletingOptimize}
+                  className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  선택 품목 삭제 ({deletableDisplayed.filter(i => selectedOptimizeIds.has(i.id)).length})
+                </button>
+              )}
             </div>
           </div>
         )}

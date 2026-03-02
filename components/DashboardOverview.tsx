@@ -33,6 +33,7 @@ interface DashboardOverviewProps {
   onGoToPricing: () => void;
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
+  onSurgeryUploadClick?: () => void;
 }
 
 type ShortageEntry = {
@@ -89,6 +90,7 @@ type ActionItem = {
   metaItems?: Array<{ label: string; count: number }>;
   alertNote?: string;
   onClick?: () => void;
+  uploadAction?: () => void;
 };
 
 type ManufacturerUsageRow = {
@@ -223,6 +225,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   planState,
   onboardingStep,
   onResumeOnboarding,
+  onSurgeryUploadClick,
 }) => {
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -662,6 +665,16 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return maxDate ? maxDate.toISOString().slice(0, 10) : null;
   }, [cleanSurgeryRows]);
 
+  const firstSurgeryDate = useMemo(() => {
+    let minDate: Date | null = null;
+    for (const row of cleanSurgeryRows) {
+      const parsed = parseDate(row['날짜']);
+      if (!parsed) continue;
+      if (!minDate || parsed < minDate) minDate = parsed;
+    }
+    return minDate ? minDate.toISOString().slice(0, 10) : null;
+  }, [cleanSurgeryRows]);
+
   const latestOrderDate = useMemo(() => {
     let maxDate: Date | null = null;
     for (const order of orders) {
@@ -996,14 +1009,24 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       });
     }
 
-    if (surgeryStaleDays !== null && surgeryStaleDays >= 7) {
+    if (surgeryStaleDays === null || surgeryStaleDays >= 3) {
+      const uploadSeverity: PriorityLevel =
+        surgeryStaleDays === null || surgeryStaleDays >= 14 ? 'critical' :
+        surgeryStaleDays >= 7 ? 'warning' : 'ok';
+      const periodMeta = firstSurgeryDate && latestSurgeryDate
+        ? `조회 기간: ${formatDate(firstSurgeryDate)} ~ ${formatDate(latestSurgeryDate)}`
+        : undefined;
       items.push({
-        key: 'action-surgery-freshness',
-        title: '수술기록 최신화 필요',
-        description: `마지막 수술기록 반영 후 ${surgeryStaleDays}일 경과`,
+        key: 'action-surgery-upload',
+        title: '수술기록지 업로드',
+        description: surgeryStaleDays === null
+          ? '수술기록 데이터가 없습니다. 엑셀을 업로드해주세요.'
+          : `마지막 업로드: ${formatDate(latestSurgeryDate)} (${surgeryStaleDays}일 전)`,
         tab: 'surgery_database',
-        severity: surgeryStaleDays >= 14 ? 'critical' : 'warning',
-        score: surgeryStaleDays * 3,
+        severity: uploadSeverity,
+        score: surgeryStaleDays === null ? 80 : surgeryStaleDays >= 7 ? surgeryStaleDays * 3 : 5,
+        meta: periodMeta,
+        uploadAction: onSurgeryUploadClick,
       });
     }
 
@@ -1052,11 +1075,14 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     shortageSummary.deficitQty,
     shortageSummary.itemCount,
     surgeryStaleDays,
+    latestSurgeryDate,
+    firstSurgeryDate,
     unregisteredSummary.count,
     unregisteredSummary.usageQty,
     visibleInventory,
     onboardingStep,
     onResumeOnboarding,
+    onSurgeryUploadClick,
   ]);
 
   const maxManufacturerRecentQty = useMemo(
@@ -1165,6 +1191,19 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                               d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
+                        </button>
+                      )}
+                      {item.uploadAction && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); item.uploadAction?.(); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                          title="엑셀 파일 업로드"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          업로드
                         </button>
                       )}
                       {!isOnboarding && (

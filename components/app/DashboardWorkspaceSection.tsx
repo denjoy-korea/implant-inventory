@@ -233,6 +233,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           onGoToPricing={onGoToPricing}
           onboardingStep={onboardingStep}
           onResumeOnboarding={onResumeOnboarding}
+          onSurgeryUploadClick={onSurgeryUploadClick}
         />
       )}
 

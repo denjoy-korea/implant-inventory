@@ -1820,6 +1820,32 @@ const App: React.FC = () => {
       const savedOrder = dbToOrder(created);
       applyOrderToState(savedOrder, order.type === 'fail_exchange' && failUpdateSucceeded);
 
+      // 반품 주문 생성 시 재고 자동 차감
+      if (savedOrder.type === 'return') {
+        const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+        for (const orderItem of savedOrder.items) {
+          const qty = Number(orderItem.quantity || 0);
+          if (qty <= 0) continue;
+          const sizeKey = getSizeMatchKey(orderItem.size, savedOrder.manufacturer);
+          const invItem = state.inventory.find(inv =>
+            simpleNorm(inv.manufacturer) === simpleNorm(savedOrder.manufacturer) &&
+            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            await inventoryService.adjustStock(invItem.id, -qty);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === invItem.id
+                  ? { ...i, currentStock: i.currentStock - qty, stockAdjustment: i.stockAdjustment - qty }
+                  : i
+              ),
+            }));
+          }
+        }
+      }
+
       operationLogService.logOperation(
         'order_create',
         `${order.type === 'fail_exchange' ? '교환' : '보충'} 주문 생성 (${order.manufacturer}, ${order.items.length}건)`,
