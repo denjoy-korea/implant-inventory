@@ -51,20 +51,19 @@ export function ReceiptConfirmationModal({
     const [wrongDeliveryParts, setWrongDeliveryParts] = useState<Record<string, string[]>>({});
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [excludedOrderIds, setExcludedOrderIds] = useState<string[]>([]);
+    const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'delete' | 'reset' } | null>(null);
 
     const handleResetOrder = (orderId: string) => {
         const order = groupedOrder.orders.find(o => o.id === orderId);
         if (!order) return;
 
-        // 입고완료/취소 상태이면 → 미입고 상태로 되돌림
+        // 입고완료/취소 상태이면 → 확인 UI 표시
         if (order.status !== 'ordered') {
-            if (window.confirm('이 주문을 미입고 상태로 되돌리시겠습니까?')) {
-                onUpdateOrderStatus?.(order.id, 'ordered');
-            }
+            setConfirmAction({ orderId, type: 'reset' });
             return;
         }
 
-        // 미입고 상태이면 → 편집 내용만 초기화
+        // 미입고 상태이면 → 편집 내용만 초기화 (확인 불필요)
         setQuantities(prev => {
             const next = { ...prev };
             order.items.forEach((item, idx) => {
@@ -95,14 +94,21 @@ export function ReceiptConfirmationModal({
             resetKeys.forEach(k => delete next[k]);
             return next;
         });
-        // 제외 목록에서도 복원
         setExcludedOrderIds(prev => prev.filter(id => id !== orderId));
     };
 
     const handleDeleteAction = (orderId: string) => {
-        if (window.confirm('정말로 이 주문을 삭제하시겠습니까?')) {
-            onDeleteOrder?.(orderId);
+        setConfirmAction({ orderId, type: 'delete' });
+    };
+
+    const confirmPendingAction = () => {
+        if (!confirmAction) return;
+        if (confirmAction.type === 'delete') {
+            onDeleteOrder?.(confirmAction.orderId);
+        } else {
+            onUpdateOrderStatus?.(confirmAction.orderId, 'ordered');
         }
+        setConfirmAction(null);
     };
 
     const handleQuantityChange = (key: string, val: string) => {
@@ -160,6 +166,9 @@ export function ReceiptConfirmationModal({
         );
 
     const activeOrders = groupedOrder.orders.filter(o => !excludedOrderIds.includes(o.id));
+    const isReturn = groupedOrder.type === 'return';
+    const isExchange = groupedOrder.type === 'fail_exchange';
+    const modalTitle = isReturn ? '반품 확인' : isExchange ? '상세 교환 확인' : '상세 입고 확인';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -167,7 +176,7 @@ export function ReceiptConfirmationModal({
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div>
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight">상세 입고 확인</h3>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
                         <p className="text-sm font-semibold text-slate-500 mt-1">
                             {groupedOrder.date} · {groupedOrder.manufacturer} · {groupedOrder.type === 'replenishment' ? '발주' : groupedOrder.type === 'return' ? '반품' : '교환'}내역
                         </p>
@@ -182,17 +191,29 @@ export function ReceiptConfirmationModal({
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
-                        <div className="text-blue-500 mt-0.5">
+                    <div className={`rounded-2xl p-4 flex gap-3 ${isReturn ? 'bg-amber-50/50 border border-amber-100' : isExchange ? 'bg-violet-50/50 border border-violet-100' : 'bg-blue-50/50 border border-blue-100'}`}>
+                        <div className={isReturn ? 'text-amber-500 mt-0.5' : isExchange ? 'text-violet-500 mt-0.5' : 'text-blue-500 mt-0.5'}>
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
                         <div>
-                            <h4 className="text-sm font-bold text-blue-900">입고 수량 확인</h4>
-                            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                                실제 수령한 품목의 수량을 확인하고 수정해주세요.<br />
-                                • <b>초과 입고:</b> 수량을 올리고 사유를 입력합니다.<br />
-                                • <b>부족 입고:</b> 수량을 내리고 부족분만큼 재발주할지 선택합니다.
-                            </p>
+                            <h4 className={`text-sm font-bold ${isReturn ? 'text-amber-900' : isExchange ? 'text-violet-900' : 'text-blue-900'}`}>{isReturn ? '반품 수량 확인' : isExchange ? '교환 수량 확인' : '입고 수량 확인'}</h4>
+                            {isReturn ? (
+                                <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                    실제 반품 처리할 수량을 확인해주세요.<br />
+                                    • 반품 수량을 조정하여 일부만 반품할 수 있습니다.
+                                </p>
+                            ) : isExchange ? (
+                                <p className="text-xs text-violet-700 mt-1 leading-relaxed">
+                                    교환 처리된 수량을 확인해주세요.<br />
+                                    • 실제 교환된 수량이 다를 경우 수정할 수 있습니다.
+                                </p>
+                            ) : (
+                                <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                                    실제 수령한 품목의 수량을 확인하고 수정해주세요.<br />
+                                    • <b>초과 입고:</b> 수량을 올리고 사유를 입력합니다.<br />
+                                    • <b>부족 입고:</b> 수량을 내리고 부족분만큼 재발주할지 선택합니다.
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -206,29 +227,56 @@ export function ReceiptConfirmationModal({
                                 <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold text-slate-600">주문 ID: <span className="font-mono text-slate-400">{order.id.slice(0, 8)}</span></span>
-                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${order.status === 'ordered' ? 'bg-rose-100 text-rose-700'
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${order.status === 'ordered'
+                                            ? (isReturn ? 'bg-amber-100 text-amber-700' : isExchange ? 'bg-violet-100 text-violet-700' : 'bg-rose-100 text-rose-700')
                                             : order.status === 'cancelled' ? 'bg-slate-100 text-slate-500'
                                                 : 'bg-emerald-100 text-emerald-700'
                                             }`}>
-                                            {order.status === 'ordered' ? '미입고' : order.status === 'cancelled' ? '취소됨' : '입고완료'}
+                                            {order.status === 'ordered'
+                                                ? (isReturn ? '반품 대기' : isExchange ? '미교환' : '미입고')
+                                                : order.status === 'cancelled' ? '취소됨'
+                                                    : (isReturn ? '반품완료' : isExchange ? '교환완료' : '입고완료')}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <button
-                                            onClick={() => handleResetOrder(order.id)}
-                                            title={order.status === 'ordered' ? "입력 초기화" : "미입고 상태로 되돌리기"}
-                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteAction(order.id)}
-                                            title="주문 삭제"
-                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                        </button>
-                                    </div>
+                                    {confirmAction?.orderId === order.id ? (
+                                        <div className="flex items-center gap-2 animate-[fadeIn_0.15s_ease-out]">
+                                            <span className="text-[11px] font-bold text-slate-500">
+                                                {confirmAction.type === 'delete' ? '삭제할까요?' : '미입고로 되돌릴까요?'}
+                                            </span>
+                                            <button
+                                                onClick={confirmPendingAction}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-black text-white transition-all active:scale-95 ${confirmAction.type === 'delete'
+                                                    ? 'bg-rose-500 hover:bg-rose-600'
+                                                    : 'bg-indigo-500 hover:bg-indigo-600'
+                                                    }`}
+                                            >
+                                                확인
+                                            </button>
+                                            <button
+                                                onClick={() => setConfirmAction(null)}
+                                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95"
+                                            >
+                                                취소
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                onClick={() => handleResetOrder(order.id)}
+                                                title={order.status === 'ordered' ? "입력 초기화" : "미입고 상태로 되돌리기"}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteAction(order.id)}
+                                                title="주문 삭제"
+                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="divide-y divide-slate-100">
                                     {order.items.map((item, idx) => {
@@ -253,12 +301,12 @@ export function ReceiptConfirmationModal({
                                                     {order.status === 'ordered' ? (
                                                         <div className="flex items-center gap-6">
                                                             <div className="text-right">
-                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">발주 수량</span>
+                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '반품 수량' : isExchange ? '교환 수량' : '발주 수량'}</span>
                                                                 <span className="text-sm font-black text-slate-800">{item.quantity}개</span>
                                                             </div>
                                                             <div className="w-[1px] h-8 bg-slate-200" />
                                                             <div className="text-center">
-                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">실제 입고</span>
+                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '실제 반품' : isExchange ? '실제 교환' : '실제 입고'}</span>
                                                                 <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-1 bg-white shadow-sm">
                                                                     <button
                                                                         onClick={() => handleQuantityChange(key, String(Math.max(0, currentQty - 1)))}
@@ -281,6 +329,11 @@ export function ReceiptConfirmationModal({
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                    ) : order.status === 'cancelled' ? (
+                                                        <div className="text-right">
+                                                            <span className="block text-[10px] font-bold text-slate-400 mb-1">취소 수량</span>
+                                                            <span className="text-sm font-black text-slate-400 line-through">{item.quantity}개</span>
+                                                        </div>
                                                     ) : (
                                                         <div className="text-right">
                                                             <span className="block text-[10px] font-bold text-emerald-500 mb-1">완료 수량</span>
@@ -288,6 +341,14 @@ export function ReceiptConfirmationModal({
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {/* 취소 사유 표시 */}
+                                                {order.status === 'cancelled' && order.cancelledReason && (
+                                                    <div className="mt-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
+                                                        <span className="text-[10px] font-bold text-slate-400">취소 사유: </span>
+                                                        <span className="text-xs font-semibold text-slate-600">{order.cancelledReason}</span>
+                                                    </div>
+                                                )}
 
                                                 {/* 예외 처리 옵션 */}
                                                 {order.status === 'ordered' && (isOver || isUnder) && (
@@ -470,9 +531,9 @@ export function ReceiptConfirmationModal({
                                     처리 중...
                                 </>
                             ) : isChanged ? (
-                                '수정사항 적용 및 입고완료'
+                                isReturn ? '수정사항 적용 및 반품완료' : isExchange ? '수정사항 적용 및 교환완료' : '수정사항 적용 및 입고완료'
                             ) : (
-                                '전체 일치, 입고완료'
+                                isReturn ? '전체 일치, 반품완료' : isExchange ? '전체 일치, 교환완료' : '전체 일치, 입고완료'
                             )}
                         </button>
                     )}

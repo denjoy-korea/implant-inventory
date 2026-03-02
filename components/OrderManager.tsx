@@ -1,12 +1,13 @@
 
 import React, { useMemo, useState } from 'react';
-import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnReason, ReturnMutationResult } from '../types';
+import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnReason, ReturnMutationResult, ExcelRow } from '../types';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
 import ReturnManager from './ReturnManager';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
+import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
 
 function buildSparklinePath(values: number[], width: number, height: number): string {
   if (values.length === 0) return '';
@@ -27,6 +28,7 @@ interface OrderManagerProps {
   orders: Order[];
   inventory: InventoryItem[];
   returnRequests: ReturnRequest[];
+  surgeryMaster: Record<string, ExcelRow[]>;
   hospitalId?: string;
   currentUserName?: string;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
@@ -34,6 +36,7 @@ interface OrderManagerProps {
   onDeleteOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => void;
+  onAddOrder: (order: Order) => Promise<void>;
   onCreateReturn: (params: {
     manufacturer: string;
     reason: ReturnReason;
@@ -72,6 +75,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
   inventory,
   returnRequests,
+  surgeryMaster,
   hospitalId,
   currentUserName = '관리자',
   onUpdateOrderStatus,
@@ -79,6 +83,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onDeleteOrder,
   onCancelOrder,
   onQuickOrder,
+  onAddOrder,
   onCreateReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
@@ -94,7 +99,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [filterManufacturer, setFilterManufacturer] = useState<string>('all');
 
   // ── 취소 모달 state ──
-  const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
+  const [cancelModalOrder, setCancelModalOrder] = useState<Order[] | null>(null);
   const [isCancelLoading, setIsCancelLoading] = useState(false);
 
   // ── 일괄 주문 모달 state ──
@@ -108,6 +113,32 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
   const [lowStockSearch, setLowStockSearch] = useState('');
   const [lowStockMfrFilter, setLowStockMfrFilter] = useState<string | 'all'>('all');
+
+  // ── 반품 권장 모달 state ──
+  const [returnModalCategory, setReturnModalCategory] = useState<ReturnCategory | null>(null);
+  const [snoozedIds, setSnoozedIds] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem('return_snooze');
+      if (!stored) return {};
+      const parsed = JSON.parse(stored) as Record<string, number>;
+      // 1개월 지난 항목 정리
+      const now = Date.now();
+      const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
+      const cleaned: Record<string, number> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (now - v < ONE_MONTH) cleaned[k] = v;
+      }
+      return cleaned;
+    } catch { return {}; }
+  });
+
+  const handleSnooze = (itemId: string) => {
+    setSnoozedIds(prev => {
+      const next = { ...prev, [itemId]: Date.now() };
+      localStorage.setItem('return_snooze', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   const displayMfr = (name: string) => name === 'IBS' ? 'IBS Implant' : name;
@@ -200,6 +231,64 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         return bSeverity - aSeverity;
       });
   }, [inventory, pendingQtyByItemKey]);
+
+  // ── 반품 권장 품목 계산 ──
+  const returnCandidates = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+    const isExcluded = (item: InventoryItem) => {
+      const mfr = (item.manufacturer || '').toLowerCase();
+      const brand = (item.brand || '').toLowerCase();
+      return mfr.includes('fail') || mfr.includes('교환') || mfr === '보험청구' || brand === '보험청구'
+        || mfr.includes('보험임플란트') || brand.includes('보험임플란트');
+    };
+
+    const now = Date.now();
+    const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
+    const isSnoozed = (id: string) => {
+      const ts = snoozedIds[id];
+      return ts ? (now - ts) < ONE_MONTH : false;
+    };
+
+    const eligible = inventory.filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id));
+
+    const olderThanYear = eligible.filter(i => {
+      if (i.usageCount === 0) return false;
+      const lastDate = i.lastUsedDate ?? null;
+      return lastDate !== null && lastDate < oneYearAgoStr;
+    });
+
+    const neverUsed = eligible.filter(i => i.usageCount === 0);
+
+    const overstock = eligible.filter(i => i.recommendedStock > 0 && i.currentStock > i.recommendedStock);
+
+    return {
+      olderThanYear,
+      neverUsed,
+      overstock,
+      olderThanYearQty: olderThanYear.reduce((s, i) => s + i.currentStock, 0),
+      neverUsedQty: neverUsed.reduce((s, i) => s + i.currentStock, 0),
+      overstockExcess: overstock.reduce((s, i) => s + (i.currentStock - i.recommendedStock), 0),
+      total: olderThanYear.length + neverUsed.length + overstock.length,
+    };
+  }, [inventory, snoozedIds]);
+
+  // ── 교환 권장 품목 (미처리 수술중교환 제조사별) ──
+  const exchangeCandidates = useMemo(() => {
+    const allRows = surgeryMaster['수술기록지'] || [];
+    const pending = allRows.filter(row => row['구분'] === '수술중교환');
+    const byMfr: Record<string, number> = {};
+    pending.forEach(row => {
+      const mfr = String(row['제조사'] || '기타');
+      byMfr[mfr] = (byMfr[mfr] || 0) + 1;
+    });
+    const list = Object.entries(byMfr)
+      .map(([manufacturer, count]) => ({ manufacturer, count }))
+      .sort((a, b) => b.count - a.count);
+    return { list, total: pending.length };
+  }, [surgeryMaster]);
 
   const stats = useMemo(() => {
     const totalOrders = orders.filter(o =>
@@ -387,8 +476,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500" style={{ animationDuration: '0s' }}>
-      {/* 서브탭: 발주 관리 | 반품 관리 */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      {/* 서브탭: 발주 관리 | 반품 관리 (hidden) */}
+      <div className="hidden gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         <button
           onClick={() => setActiveTab('orders')}
           className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'orders'
@@ -414,8 +503,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         </button>
       </div>
 
-      {/* 반품 관리 탭 */}
-      {activeTab === 'returns' && (
+      {/* 반품 관리 탭 — hidden */}
+      {false && activeTab === 'returns' && (
         <ReturnManager
           returnRequests={returnRequests}
           inventory={inventory}
@@ -440,7 +529,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         >
           <div className="hidden md:flex flex-col gap-4">
             {/* Tier 1: Context & Actions */}
-            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hidden">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex flex-wrap items-stretch gap-2 flex-1 min-w-0">
                   <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 flex flex-col justify-center">
@@ -536,8 +625,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </div>
             </div>
 
-            {/* Tier 2: KPI Metrics Strip */}
-            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-2 flex flex-col sm:flex-row divide-y sm:divide-y-0">
+            {/* Tier 2: KPI Metrics Strip — hidden */}
+            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-2 flex flex-col sm:flex-row divide-y sm:divide-y-0 hidden">
 
               {/* 1. 긴급 부족 품목 */}
               <div
@@ -753,168 +842,187 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         </div>
 
         {/* ═══════════════════════════════════════ */}
-        {/* 발주 권장 품목 (제조사별 그룹핑)          */}
-        {/* ═══════════════════════════════════════ */}
+        {/* 발주 권장 품목 (제조사별 카드) */}
         {groupedLowStock.length > 0 && (
           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-            {/* ── Header ── */}
-            <div className="px-4 sm:px-7 pt-5 sm:pt-7 pb-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
-                  <h3 className="text-base font-black text-slate-800 tracking-tight">발주 권장 품목</h3>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Low Stock</span>
-                  <span className="text-xs font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{lowStockItems.length}종 · {stats.lowStockQty}개 부족</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isReadOnly && <span className="text-[10px] font-bold text-slate-400 italic hidden sm:inline">사이즈 클릭 시 즉시 발주</span>}
-                </div>
+            <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                <h3 className="text-base font-black text-slate-800 tracking-tight">발주 권장 품목</h3>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Low Stock</span>
+                <span className="text-xs font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{lowStockItems.length}종 · {stats.lowStockQty}개 부족</span>
               </div>
-
-              {/* ── Search + Manufacturer Filter Tabs ── */}
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                {/* Search */}
-                <div className="relative flex-1 max-w-xs">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                  <input
-                    type="text"
-                    value={lowStockSearch}
-                    onChange={e => setLowStockSearch(e.target.value)}
-                    placeholder="브랜드·사이즈 검색"
-                    className="w-full pl-9 pr-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400 transition-all"
-                  />
-                  {lowStockSearch && (
-                    <button onClick={() => setLowStockSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                </div>
-                {/* Manufacturer filter tabs */}
-                <div className="flex flex-wrap gap-1 bg-slate-100/60 p-1 rounded-xl">
-                  <button
-                    onClick={() => setLowStockMfrFilter('all')}
-                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${lowStockMfrFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                      }`}
-                  >
-                    전체 ({lowStockItems.length})
-                  </button>
-                  {groupedLowStock.map(([mfr, entries]) => (
-                    <button
-                      key={mfr}
-                      onClick={() => setLowStockMfrFilter(lowStockMfrFilter === mfr ? 'all' : mfr)}
-                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${lowStockMfrFilter === mfr ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                        }`}
-                    >
-                      {displayMfr(mfr)} ({entries.length})
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <p className="text-xs text-slate-400 mt-1.5 ml-5">재고가 권장 수량보다 부족한 품목입니다. 제조사에 발주를 진행하세요.</p>
             </div>
-
-            {/* ── Accordion List ── */}
-            <div className="px-4 sm:px-7 pb-5 sm:pb-7 space-y-3">
-              {filteredGroupedLowStock.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-slate-400 font-bold">검색 결과가 없습니다.</p>
-                </div>
-              ) : filteredGroupedLowStock.map(({ mfr, entries, brandEntries }) => {
-                const isExpanded = expandedMfrs.has(mfr);
-                const toggleExpanded = () => {
-                  setExpandedMfrs(prev => {
-                    const next = new Set(prev);
-                    if (next.has(mfr)) next.delete(mfr); else next.add(mfr);
-                    return next;
-                  });
-                };
-                const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
-
-                return (
-                  <div key={mfr} className={`rounded-2xl border transition-all duration-300 ${isExpanded ? 'bg-white border-slate-200 shadow-[0_4px_12px_rgba(15,23,42,0.04)] ring-1 ring-slate-100/50' : 'bg-slate-50/80 border-slate-100 hover:border-slate-200 hover:bg-slate-50 hover:shadow-sm'
-                    }`}>
-                    {/* Manufacturer Header — clickable */}
-                    <button
-                      onClick={toggleExpanded}
-                      className="w-full flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 text-left group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <svg className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
-                        <span className="text-sm font-black text-slate-800 tracking-tight">{displayMfr(mfr)}</span>
-                        <span className="text-[10px] font-bold text-slate-400">{brandEntries.length}개 브랜드</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{entries.length}종</span>
-                        <span className="text-[10px] font-black text-orange-500 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-lg">{totalDeficit}개 부족</span>
-                      </div>
-                    </button>
-
-                    {/* Expanded Content */}
-                    {isExpanded && (
-                      <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3" style={{ animation: 'fadeIn 0.2s ease-out' }}>
-                        {brandEntries.map(([brand, bEntries]) => {
-                          const brandDeficit = bEntries.reduce((s, e) => s + e.remainingDeficit, 0);
-                          return (
-                            <div key={brand} className="bg-slate-50/80 rounded-xl p-3 sm:p-4">
-                              {/* Brand sub-header */}
-                              <div className="flex items-center gap-2 mb-2.5">
-                                <div className="w-1 h-4 rounded-full bg-indigo-400" />
-                                <span className="text-[11px] font-black text-slate-700">{brand}</span>
-                                <span className="text-[9px] font-bold text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded">{bEntries.length}종 · {brandDeficit}개</span>
-                              </div>
-                              {/* Size chips — compact, no brand name */}
-                              <div className="flex flex-wrap gap-1.5">
-                                {bEntries.map(({ item, remainingDeficit, pendingQty }) => {
-                                  const severity = remainingDeficit / Math.max(item.recommendedStock, 1);
-                                  const severityClass = severity >= 0.8
-                                    ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600'
-                                    : severity >= 0.5
-                                      ? 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-500 hover:text-white hover:border-orange-500'
-                                      : 'bg-white border-slate-200 text-slate-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600';
-                                  const readOnlyClass = 'border-slate-200 text-slate-400 cursor-not-allowed opacity-60 bg-slate-50';
-
-                                  return (
-                                    <button
-                                      key={item.id}
-                                      onClick={() => !isReadOnly && onQuickOrder({ ...item, currentStock: item.recommendedStock - remainingDeficit })}
-                                      disabled={isReadOnly}
-                                      title={`${item.brand} ${item.size} — ${remainingDeficit}개 부족${pendingQty > 0 ? ` (주문중 ${pendingQty})` : ''}`}
-                                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${isReadOnly ? readOnlyClass : severityClass
-                                        }`}
-                                    >
-                                      <span>{item.size}</span>
-                                      {pendingQty > 0 && (
-                                        <span className="px-1 py-0.5 bg-slate-200/60 text-slate-500 rounded text-[8px] font-black leading-none">+{pendingQty}</span>
-                                      )}
-                                      <span className={`px-1 py-0.5 rounded text-[8px] font-black leading-none ${severity >= 0.8 ? 'bg-rose-200/80 text-rose-700' : severity >= 0.5 ? 'bg-orange-200/80 text-orange-700' : 'bg-slate-100 text-slate-500'
-                                        }`}>{remainingDeficit}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+            <div className="px-5 sm:px-7 pb-5 sm:pb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {/* 일괄주문 액션 카드 */}
+                <button
+                  onClick={() => {
+                    if (isReadOnly) return;
+                    setShowBulkOrderModal(true);
+                  }}
+                  disabled={isReadOnly}
+                  className={`group relative rounded-2xl border-2 border-dashed p-4 transition-all text-left ${isReadOnly ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50' : 'border-rose-300 bg-white hover:bg-rose-50 hover:shadow-md hover:border-rose-400 cursor-pointer active:scale-[0.98]'}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    <span className="text-xs font-black text-rose-600">일괄주문</span>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* ── Legend ── */}
-            <div className="px-4 sm:px-7 pb-5 sm:pb-7 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">범례</span>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-rose-100 border border-rose-200" /><span className="text-[10px] font-bold text-slate-500">긴급 (≥80%)</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-orange-100 border border-orange-200" /><span className="text-[10px] font-bold text-slate-500">주의 (≥50%)</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-white border border-slate-200" /><span className="text-[10px] font-bold text-slate-500">일반</span></div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">부족 품목을 한번에 발주</p>
+                </button>
+                {groupedLowStock.map(([mfr, entries]) => {
+                  const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
+                  return (
+                    <div
+                      key={mfr}
+                      className="group relative rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40 p-4 transition-all hover:shadow-md"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                        <span className="text-xs font-black text-slate-700 truncate">{displayMfr(mfr)}</span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-rose-600 tabular-nums">{entries.length}</span>
+                        <span className="text-xs font-bold text-slate-400">종</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-rose-400 mt-1">{totalDeficit}개 부족</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
         {/* ═══════════════════════════════════════ */}
-        {/* 주문 분석 차트                            */}
+        {/* 교환 권장 품목 (제조사별)                    */}
         {/* ═══════════════════════════════════════ */}
-        {orders.length > 0 && (
+        {exchangeCandidates.total > 0 && (
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
+                <h3 className="text-base font-black text-slate-800 tracking-tight">교환 권장 품목</h3>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Exchange Candidates</span>
+                <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.total}건 미처리</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 교환 주문을 진행하세요.</p>
+            </div>
+            <div className="px-5 sm:px-7 pb-5 sm:pb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {/* 일괄교환 액션 카드 */}
+                <button
+                  onClick={() => {
+                    if (isReadOnly) return;
+                    window.location.hash = '#/dashboard/fail';
+                  }}
+                  disabled={isReadOnly}
+                  className={`group relative rounded-2xl border-2 border-dashed p-4 transition-all text-left ${isReadOnly ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50' : 'border-violet-300 bg-white hover:bg-violet-50 hover:shadow-md hover:border-violet-400 cursor-pointer active:scale-[0.98]'}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-violet-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    <span className="text-xs font-black text-violet-600">일괄교환</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">교환 주문 일괄 등록</p>
+                </button>
+                {exchangeCandidates.list.map(({ manufacturer, count }) => (
+                  <div
+                    key={manufacturer}
+                    className="group relative rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/80 to-purple-50/40 p-4 transition-all hover:shadow-md"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-4 h-4 text-violet-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      <span className="text-xs font-black text-slate-700 truncate">{manufacturer}</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-violet-600 tabular-nums">{count}</span>
+                      <span className="text-xs font-bold text-slate-400">건</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-violet-400 mt-1">교환 가능</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════ */}
+        {/* 반품 권장 품목                              */}
+        {/* ═══════════════════════════════════════ */}
+        {returnCandidates.total > 0 && (
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <h3 className="text-base font-black text-slate-800 tracking-tight">반품 권장 품목</h3>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Return Candidates</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1.5 ml-5">장기 미사용, 미등록 사용, 과잉 재고 품목을 반품하여 재고를 최적화하세요.</p>
+            </div>
+            <div className="px-5 sm:px-7 pb-5 sm:pb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1년 이상 미사용 */}
+                <button
+                  onClick={() => setReturnModalCategory('olderThanYear')}
+                  className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.olderThanYear.length > 0
+                    ? 'border-amber-200 bg-gradient-to-br from-amber-50/80 to-orange-50/40'
+                    : 'border-slate-100 bg-slate-50/60'
+                    }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span className="text-xs font-black text-slate-700">1년 이상 미사용</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-amber-600 tabular-nums">{returnCandidates.olderThanYear.length}</span>
+                    <span className="text-xs font-bold text-slate-400">품목</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">{returnCandidates.olderThanYearQty}개 보유 중</p>
+                </button>
+
+                {/* 한 번도 미사용 */}
+                <button
+                  onClick={() => setReturnModalCategory('neverUsed')}
+                  className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.neverUsed.length > 0
+                    ? 'border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40'
+                    : 'border-slate-100 bg-slate-50/60'
+                    }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                    <span className="text-xs font-black text-slate-700">한 번도 미사용</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-rose-500 tabular-nums">{returnCandidates.neverUsed.length}</span>
+                    <span className="text-xs font-bold text-slate-400">품목</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">{returnCandidates.neverUsedQty}개 보유 중</p>
+                </button>
+
+                {/* 권장량 초과 */}
+                <button
+                  onClick={() => setReturnModalCategory('overstock')}
+                  className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.overstock.length > 0
+                    ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-blue-50/40'
+                    : 'border-slate-100 bg-slate-50/60'
+                    }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                    <span className="text-xs font-black text-slate-700">권장량 초과</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-indigo-600 tabular-nums">{returnCandidates.overstock.length}</span>
+                    <span className="text-xs font-bold text-slate-400">품목</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">+{returnCandidates.overstockExcess}개 초과 보유</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════ */}
+        {/* 주문 분석 차트 — hidden */}
+        {false && orders.length > 0 && (
           <>
             <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
               <h3 className="text-sm font-black text-slate-800">모바일 주문 요약</h3>
@@ -1107,6 +1215,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <span className="text-[11px] font-bold text-slate-500">{group.totalItems}개 품목</span>
                       <span className="text-sm font-black text-slate-900 tabular-nums">총 {group.totalQuantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                     </div>
+                    {/* 품목 미리보기 */}
+                    {(() => {
+                      const allItems = group.orders.flatMap(o => o.items);
+                      const preview = allItems.slice(0, 2);
+                      return (
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
+                          {preview.map((item, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                              <span className="text-[11px] text-slate-600 font-medium">{item.brand} {item.size}</span>
+                              <span className="text-[11px] text-slate-400">×{item.quantity}</span>
+                            </div>
+                          ))}
+                          {allItems.length > 2 && (
+                            <p className="text-[10px] text-slate-400 font-medium">+ {allItems.length - 2}종 더</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
@@ -1131,8 +1257,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
                             <button
                               onClick={() => {
-                                const firstOrdered = group.orders.find(o => o.status === 'ordered');
-                                if (firstOrdered) setCancelModalOrder(firstOrdered);
+                                const orderedItems = group.orders.filter(o => o.status === 'ordered');
+                                if (orderedItems.length > 0) setCancelModalOrder(orderedItems);
                               }}
                               className="px-3 py-2 rounded-xl text-[11px] font-black bg-rose-50 text-rose-600 border border-rose-200 transition-all active:scale-95"
                             >
@@ -1188,7 +1314,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       </td>
                       <td className="px-6 py-3"><span className="text-[15px] font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
                       <td className="px-6 py-3">
-                        <span className="text-xs font-black text-slate-700">{group.totalItems} 품목</span>
+                        {(() => {
+                          const allItems = group.orders.flatMap(o => o.items);
+                          const preview = allItems.slice(0, 2);
+                          return (
+                            <div className="space-y-0.5">
+                              {preview.map((item, i) => (
+                                <div key={i} className="flex items-center gap-1 text-[12px]">
+                                  <span className="font-bold text-slate-700">{item.brand}</span>
+                                  <span className="text-slate-500">{item.size}</span>
+                                  <span className="text-slate-400 font-normal">×{item.quantity}</span>
+                                </div>
+                              ))}
+                              {allItems.length > 2 && (
+                                <div className="text-[11px] text-slate-400 font-medium">+ {allItems.length - 2}종 더</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-3 text-center font-black text-slate-800 text-lg tabular-nums">{group.totalQuantity}<span className="text-[11px] ml-0.5 font-bold text-slate-400">개</span></td>
                       <td className="px-6 py-3"><span className="text-xs font-bold text-slate-600 bg-slate-100/80 px-2 py-1.5 rounded-lg">{group.managers.join(', ')}</span></td>
@@ -1210,8 +1353,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
                             <button
                               onClick={() => {
-                                const firstOrdered = group.orders.find(o => o.status === 'ordered');
-                                if (firstOrdered) setCancelModalOrder(firstOrdered);
+                                const orderedItems = group.orders.filter(o => o.status === 'ordered');
+                                if (orderedItems.length > 0) setCancelModalOrder(orderedItems);
                               }}
                               className="px-3 py-1.5 rounded-xl text-[11px] font-black text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-all shadow-sm active:scale-95"
                             >
@@ -1259,13 +1402,15 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* 취소 모달 */}
         {cancelModalOrder && (
           <OrderCancelModal
-            order={cancelModalOrder}
+            orders={cancelModalOrder}
             isLoading={isCancelLoading}
             onClose={() => setCancelModalOrder(null)}
-            onConfirm={async (orderId, reason) => {
+            onConfirm={async (reason) => {
               setIsCancelLoading(true);
               try {
-                await onCancelOrder(orderId, reason);
+                for (const o of cancelModalOrder) {
+                  await onCancelOrder(o.id, reason);
+                }
               } finally {
                 setIsCancelLoading(false);
                 setCancelModalOrder(null);
@@ -1280,8 +1425,14 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               g.date === selectedGroupModal.date &&
               g.manufacturer === selectedGroupModal.manufacturer &&
               g.type === selectedGroupModal.type
-            ) || selectedGroupModal
+            ) || null
           ) : null;
+
+          // 그룹 내 모든 주문이 삭제되면 모달 자동 닫힘
+          if (selectedGroupModal && !activeModalGroup) {
+            setTimeout(() => setSelectedGroupModal(null), 0);
+            return null;
+          }
 
           return activeModalGroup && (
             <ReceiptConfirmationModal
@@ -1330,6 +1481,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               });
             }}
             onCancel={() => setShowBulkOrderModal(false)}
+          />
+        )}
+
+        {/* 반품 권장 상세 모달 */}
+        {returnModalCategory && (
+          <ReturnCandidateModal
+            initialCategory={returnModalCategory}
+            inventory={inventory}
+            returnRequests={returnRequests}
+            snoozedIds={snoozedIds}
+            onClose={() => setReturnModalCategory(null)}
+            onReturn={onAddOrder}
+            onSnooze={handleSnooze}
+            managerName={currentUserName}
+            showAlertToast={showAlertToast}
           />
         )}
       </div>}

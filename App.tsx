@@ -1483,9 +1483,11 @@ const App: React.FC = () => {
       return;
     }
 
+    const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+
     setState(prev => ({
       ...prev,
-      orders: prev.orders.filter(o => o.id !== orderId)
+      orders: prev.orders.filter(o => o.id !== orderId),
     }));
 
     const result = await orderService.deleteOrder(orderId, {
@@ -1494,6 +1496,30 @@ const App: React.FC = () => {
 
     if (result.ok) {
       operationLogService.logOperation('order_delete', '주문 삭제', { orderId });
+      // 반품 주문 삭제 시 차감했던 재고 복원
+      if (currentOrder.type === 'return') {
+        for (const orderItem of currentOrder.items) {
+          const qty = Number(orderItem.quantity || 0);
+          if (qty <= 0) continue;
+          const sizeKey = getSizeMatchKey(orderItem.size, currentOrder.manufacturer);
+          const invItem = state.inventory.find(inv =>
+            simpleNorm(inv.manufacturer) === simpleNorm(currentOrder.manufacturer) &&
+            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            await inventoryService.adjustStock(invItem.id, qty);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === invItem.id
+                  ? { ...i, currentStock: i.currentStock + qty, stockAdjustment: i.stockAdjustment + qty }
+                  : i
+              ),
+            }));
+          }
+        }
+      }
       return;
     }
 
@@ -1543,6 +1569,31 @@ const App: React.FC = () => {
 
     if (result.ok) {
       showAlertToast('발주가 취소되었습니다.', 'success');
+      // 반품 주문 취소 시 차감했던 재고 복원
+      if (currentOrder.type === 'return') {
+        const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+        for (const orderItem of currentOrder.items) {
+          const qty = Number(orderItem.quantity || 0);
+          if (qty <= 0) continue;
+          const sizeKey = getSizeMatchKey(orderItem.size, currentOrder.manufacturer);
+          const invItem = state.inventory.find(inv =>
+            simpleNorm(inv.manufacturer) === simpleNorm(currentOrder.manufacturer) &&
+            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            await inventoryService.adjustStock(invItem.id, qty);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === invItem.id
+                  ? { ...i, currentStock: i.currentStock + qty, stockAdjustment: i.stockAdjustment + qty }
+                  : i
+              ),
+            }));
+          }
+        }
+      }
       return;
     }
 
