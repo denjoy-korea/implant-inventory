@@ -1355,18 +1355,28 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </div>
             )}
           </div>
-          <div className="hidden md:block overflow-x-auto relative z-10">
-            <table className="w-full text-left border-collapse">
+          <div className="hidden md:block relative z-10">
+            <table className="w-full text-left border-collapse table-fixed">
+              <colgroup>
+                <col className="w-[110px]" />
+                <col className="w-[64px]" />
+                <col className="w-[120px]" />
+                <col />
+                <col className="w-[72px]" />
+                <col className="w-[80px]" />
+                <col className="w-[80px]" />
+                <col className="w-[130px]" />
+              </colgroup>
               <thead className="bg-slate-50/50 border-b border-slate-100/50 backdrop-blur-sm">
                 <tr>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">주문일자 <span className="text-[8px] tracking-widest text-slate-400">DATE</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">유형 <span className="text-[8px] tracking-widest text-slate-400">TYPE</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">제조사 <span className="text-[8px] tracking-widest text-slate-400">MFR</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">품목 내역 <span className="text-[8px] tracking-widest text-slate-400">ITEM</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center whitespace-nowrap">수량 <span className="text-[8px] tracking-widest text-slate-400">QTY</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">담당자 <span className="text-[8px] tracking-widest text-slate-400">MANAGER</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center whitespace-nowrap">상태 <span className="text-[8px] tracking-widest text-slate-400">STATUS</span></th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right whitespace-nowrap">관리 <span className="text-[8px] tracking-widest text-slate-400">ACTION</span></th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">주문일자</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">유형</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">제조사</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">품목 내역</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">수량</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">담당자</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">상태</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-right">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -1388,12 +1398,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           const first = allItems[0];
                           if (!first) return null;
                           return (
-                            <div className="flex items-center gap-1 text-[12px] whitespace-nowrap">
-                              <span className="font-bold text-slate-700">{first.brand}</span>
-                              <span className="text-slate-500">{first.size}</span>
-                              <span className="text-slate-400">×{first.quantity}</span>
+                            <div className="flex items-center gap-1 text-[12px] min-w-0">
+                              <span className="font-bold text-slate-700 truncate">{first.brand}</span>
+                              <span className="text-slate-500 shrink-0">{first.size}</span>
+                              <span className="text-slate-400 shrink-0">×{first.quantity}</span>
                               {allItems.length > 1 && (
-                                <span className="text-[11px] text-slate-400 font-medium ml-0.5">외 {allItems.length - 1}종</span>
+                                <span className="text-[11px] text-slate-400 font-medium shrink-0 ml-0.5">외 {allItems.length - 1}종</span>
                               )}
                             </div>
                           );
