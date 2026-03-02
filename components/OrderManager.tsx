@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnReason, ReturnMutationResult, ExcelRow } from '../types';
-import { getSizeMatchKey } from '../services/sizeNormalizer';
+import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
 import ReturnManager from './ReturnManager';
@@ -281,7 +281,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     const pending = allRows.filter(row => row['구분'] === '수술중교환');
     const byMfr: Record<string, number> = {};
     pending.forEach(row => {
-      const mfr = String(row['제조사'] || '기타');
+      const raw = String(row['제조사'] || '기타');
+      const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
       byMfr[mfr] = (byMfr[mfr] || 0) + 1;
     });
     const list = Object.entries(byMfr)
