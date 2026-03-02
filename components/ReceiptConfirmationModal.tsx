@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
 import { Order, OrderItem, InventoryItem } from '../types';
 
@@ -170,9 +170,12 @@ export function ReceiptConfirmationModal({
     const isExchange = groupedOrder.type === 'fail_exchange';
     const modalTitle = isReturn ? '반품 확인' : isExchange ? '상세 교환 확인' : '상세 입고 확인';
 
+    const [visible, setVisible] = useState(false);
+    useEffect(() => { const t = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(t); }, []);
+
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/40 backdrop-blur-sm">
-            <div className="bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+        <div className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`}>
+            <div className={`bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-8 sm:scale-95 sm:translate-y-0'}`}>
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                     <div>
