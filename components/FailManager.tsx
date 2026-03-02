@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
-import { getSizeMatchKey } from '../services/sizeNormalizer';
+import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useToast } from '../hooks/useToast';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import FailBulkSetupModal from './FailBulkSetupModal';
@@ -53,6 +53,11 @@ interface MonthlyFailDatum {
 const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened }) => {
   const { toast, showToast } = useToast();
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+  // IBS / IBS Implant 등 표기 변형을 'IBS Implant'로 통일
+  const normalizeMfrName = (raw: string): string => {
+    const s = String(raw || '기타');
+    return isIbsImplantManufacturer(s) ? 'IBS Implant' : s;
+  };
 
   // 1. FAIL 히스토리 전체 추출
   const historyFailList = useMemo(() => {
@@ -68,7 +73,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // 3. 제조사 목록
   const manufacturers = useMemo(() => {
     const set = new Set<string>();
-    historyFailList.forEach(f => set.add(String(f['제조사'] || '기타')));
+    historyFailList.forEach(f => set.add(normalizeMfrName(String(f['제조사'] || '기타'))));
     return Array.from(set).sort();
   }, [historyFailList]);
 
@@ -88,7 +93,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const pendingByManufacturer = useMemo(() => {
     const counts: Record<string, number> = {};
     pendingFailList.forEach(f => {
-      const m = String(f['제조사'] || '기타');
+      const m = normalizeMfrName(String(f['제조사'] || '기타'));
       counts[m] = (counts[m] || 0) + 1;
     });
     return Object.entries(counts).map(([manufacturer, count]) => ({ manufacturer, count }));
@@ -119,7 +124,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const mStats = useMemo(() => {
     const stats: Record<string, { total: number; processed: number; pending: number }> = {};
     historyFailList.forEach(f => {
-      const m = String(f['제조사'] || '기타');
+      const m = normalizeMfrName(String(f['제조사'] || '기타'));
       if (!stats[m]) stats[m] = { total: 0, processed: 0, pending: 0 };
       stats[m].total++;
       if (f['구분'] === '교환완료') stats[m].processed++;
@@ -135,7 +140,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
   const mPendingList = activeM === 'all'
     ? pendingFailList
-    : pendingFailList.filter(f => String(f['제조사'] || '기타') === activeM);
+    : pendingFailList.filter(f => normalizeMfrName(String(f['제조사'] || '기타')) === activeM);
 
   // ============================================================
   // 월별 교환 추세 데이터
@@ -146,7 +151,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       const dateStr = String(f['날짜'] || '');
       if (!dateStr || dateStr.length < 7) return;
       const month = dateStr.substring(0, 7);
-      const m = String(f['제조사'] || '기타');
+      const m = normalizeMfrName(String(f['제조사'] || '기타'));
       if (!monthMap[month]) monthMap[month] = {};
       monthMap[month][m] = (monthMap[month][m] || 0) + 1;
     });
