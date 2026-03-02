@@ -28,21 +28,21 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h3 className="text-base font-bold text-slate-800 mb-1">발주 취소</h3>
-        <p className="text-sm text-slate-500 mb-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
+        <h3 className="text-base font-bold text-slate-800 mb-1 shrink-0">발주 취소</h3>
+        <p className="text-sm text-slate-500 mb-4 shrink-0">
           아래 발주를 취소합니다. 취소된 발주는 이력으로 보존됩니다.
         </p>
 
         {/* 취소 대상 품목 전체 표시 */}
-        <div className="bg-slate-50 rounded-xl px-4 py-3 mb-4">
-          <div className="flex items-center justify-between mb-2">
+        <div className="bg-slate-50 rounded-xl px-4 py-3 mb-4 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between mb-2 shrink-0">
             <p className="text-sm font-semibold text-slate-700">{firstOrder?.manufacturer}</p>
             <span className="text-[10px] font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">
               {allItems.length}종 취소
             </span>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-y-auto max-h-48 pr-1">
             {allItems.map((item, i) => (
               <div key={i} className="flex items-center justify-between">
                 <span className="text-xs text-slate-600 font-medium">{item.brand} {item.size}</span>
@@ -50,10 +50,10 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">발주일 {firstOrder?.date}</p>
+          <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 shrink-0">발주일 {firstOrder?.date}</p>
         </div>
 
-        <div className="mb-5">
+        <div className="mb-5 shrink-0">
           <label className="block text-sm font-bold text-slate-700 mb-2">
             취소 사유
           </label>
@@ -83,7 +83,7 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
           />
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 shrink-0">
           <button
             onClick={onClose}
             disabled={isLoading}
