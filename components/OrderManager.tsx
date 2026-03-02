@@ -118,13 +118,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   // ── 반품 권장 모달 state ──
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
-  const [returnModalCategory, setReturnModalCategory] = useState<ReturnCategory | null>(null);
-  const [snoozedIds, setSnoozedIds] = useState<Record<string, number>>({});
-
-  const handleSnooze = (itemId: string) => {
-    setSnoozedIds(prev => ({ ...prev, [itemId]: Date.now() }));
-  };
-
+  const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
+  const [isBulkReturning, setIsBulkReturning] = useState(false);
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   const displayMfr = (name: string) => name === 'IBS' ? 'IBS Implant' : name;
   const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
@@ -251,6 +246,20 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       overstockExcess: overstock.reduce((s, i) => s + (i.currentStock - i.recommendedStock), 0),
       total: olderThanYear.length + neverUsed.length + overstock.length,
     };
+  }, [inventory]);
+
+  // ── 일괄반품 대상: 현재 재고 2개 초과 품목 (초과분 반품) ──
+  const bulkReturnItems = useMemo(() => {
+    return inventory
+      .filter(i => {
+        if (i.currentStock <= 2) return false;
+        const mfr = (i.manufacturer || '').toLowerCase();
+        const brand = (i.brand || '').toLowerCase();
+        return !mfr.includes('fail') && !mfr.includes('교환')
+          && mfr !== '보험청구' && brand !== '보험청구'
+          && !mfr.includes('보험임플란트') && !brand.includes('보험임플란트');
+      })
+      .map(i => ({ ...i, returnQty: i.currentStock - 2 }));
   }, [inventory]);
 
   // ── 품목최적화 modal용 dead-stock 목록 ──
@@ -437,6 +446,37 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       setExpandedMfrs(new Set([groupedLowStock[0][0]]));
     }
   }, [groupedLowStock.length]);
+
+  // ── 일괄반품 실행 ──
+  const handleBulkReturn = async () => {
+    setIsBulkReturning(true);
+    const today = new Date().toISOString().split('T')[0];
+    const byMfr: Record<string, typeof bulkReturnItems[0][]> = {};
+    for (const item of bulkReturnItems) {
+      const mfr = item.manufacturer || '기타';
+      if (!byMfr[mfr]) byMfr[mfr] = [];
+      byMfr[mfr].push(item);
+    }
+    try {
+      for (const [mfr, items] of Object.entries(byMfr)) {
+        await onAddOrder({
+          id: crypto.randomUUID(),
+          type: 'return',
+          manufacturer: mfr,
+          date: today,
+          items: items.map(i => ({ brand: i.brand, size: i.size, quantity: i.returnQty })),
+          manager: currentUserName || '일괄반품',
+          status: 'ordered',
+        });
+      }
+      showAlertToast(`일괄 반품 등록 완료: ${bulkReturnItems.length}개 품목`, 'success');
+    } catch {
+      showAlertToast('일괄 반품 등록 중 오류가 발생했습니다.', 'error');
+    } finally {
+      setIsBulkReturning(false);
+      setShowBulkReturnConfirm(false);
+    }
+  };
 
   // ── Animated KPI & Specific Metrics ──
   const kpiData = useMemo(() => {
@@ -974,7 +1014,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className="text-xs text-slate-400 mt-1.5 ml-5">장기 미사용, 미등록 사용, 과잉 재고 품목을 반품하여 재고를 최적화하세요.</p>
             </div>
             <div className="px-5 sm:px-7 pb-5 sm:pb-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* 일괄반품 액션 카드 */}
+                <button
+                  onClick={() => { if (isReadOnly || bulkReturnItems.length === 0) return; setShowBulkReturnConfirm(true); }}
+                  disabled={isReadOnly || bulkReturnItems.length === 0}
+                  className={`group relative rounded-2xl border-2 border-dashed p-4 transition-all text-left ${isReadOnly || bulkReturnItems.length === 0 ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50' : 'border-amber-300 bg-white hover:bg-amber-50 hover:shadow-md hover:border-amber-400 cursor-pointer active:scale-[0.98]'}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                    <span className="text-xs font-black text-amber-600">일괄반품</span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-amber-600 tabular-nums">{bulkReturnItems.length}</span>
+                    <span className="text-xs font-bold text-slate-400">품목</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">2개 초과분 일괄 반품</p>
+                </button>
+
                 {/* 1년 이상 미사용 */}
                 <button
                   onClick={() => setShowOptimizeModal(true)}
@@ -1494,6 +1551,20 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               });
             }}
             onCancel={() => setShowBulkOrderModal(false)}
+          />
+        )}
+
+        {/* 일괄반품 확인 모달 */}
+        {showBulkReturnConfirm && (
+          <ConfirmModal
+            title="일괄 반품 등록"
+            message={`${bulkReturnItems.length}개 품목의 2개 초과 재고(총 ${bulkReturnItems.reduce((s, i) => s + i.returnQty, 0)}개)를 반품 주문으로 등록합니다.`}
+            tip="각 품목별로 2개를 남기고 초과분만 반품 처리됩니다."
+            confirmLabel={isBulkReturning ? '처리 중...' : '일괄 반품 등록'}
+            confirmColor="amber"
+            icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>}
+            onConfirm={handleBulkReturn}
+            onCancel={() => setShowBulkReturnConfirm(false)}
           />
         )}
 
