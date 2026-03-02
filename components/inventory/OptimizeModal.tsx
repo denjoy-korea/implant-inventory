@@ -27,6 +27,11 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const [deleteProgress, setDeleteProgress] = useState(0);
   const [deleteTotalCount, setDeleteTotalCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
+  const [isBulkReturning, setIsBulkReturning] = useState(false);
+  const [bulkReturnProgress, setBulkReturnProgress] = useState(0);
+  const [bulkReturnTotal, setBulkReturnTotal] = useState(0);
+  const KEEP_QTY = 2; // 유지할 최소 재고 수
   const [neverStockFilter, setNeverStockFilter] = useState<'all' | 'zero' | 'threePlus'>('all');
   const [returningId, setReturningId] = useState<string | null>(null);
   const [returnQtyStr, setReturnQtyStr] = useState('');
@@ -110,6 +115,44 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     setReturnQtyStr('');
   };
 
+  // 2개 유지 일괄 반품: currentStock > KEEP_QTY 인 선택 항목(없으면 전체) 처리
+  const bulkReturnEligible = displayed.filter(i =>
+    i.currentStock > KEEP_QTY && (selectedOptimizeIds.size === 0 || selectedOptimizeIds.has(i.id))
+  );
+  const bulkReturnTotalQty = bulkReturnEligible.reduce((s, i) => s + (i.currentStock - KEEP_QTY), 0);
+
+  const handleBulkReturnConfirm = async () => {
+    if (bulkReturnEligible.length === 0) return;
+    setShowBulkReturnConfirm(false);
+    setBulkReturnTotal(bulkReturnEligible.length);
+    setBulkReturnProgress(0);
+    setIsBulkReturning(true);
+    for (const item of bulkReturnEligible) {
+      const qty = item.currentStock - KEEP_QTY;
+      onUpdateInventoryItem({
+        ...item,
+        currentStock: KEEP_QTY,
+        stockAdjustment: item.stockAdjustment - qty,
+      });
+      if (onAddOrder) {
+        await onAddOrder({
+          id: `order_${Date.now()}_${item.id}`,
+          type: 'return',
+          manufacturer: item.manufacturer,
+          date: new Date().toISOString().split('T')[0],
+          items: [{ brand: item.brand, size: item.size, quantity: qty }],
+          manager: managerName || '품목 최적화',
+          status: 'ordered',
+        });
+      }
+      setBulkReturnProgress(prev => prev + 1);
+    }
+    setIsBulkReturning(false);
+    setBulkReturnProgress(0);
+    setBulkReturnTotal(0);
+    setSelectedOptimizeIds(new Set());
+  };
+
   const handleDeleteConfirm = async () => {
     if (selectedOptimizeIds.size === 0) return;
     setShowDeleteConfirm(false);
@@ -130,6 +173,39 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
       onClose();
     }
   };
+
+  // 일괄 반품 진행 중 오버레이
+  if (isBulkReturning) {
+    const remaining = bulkReturnTotal - bulkReturnProgress;
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-10 flex flex-col items-center gap-6">
+          <div className="relative flex items-center justify-center">
+            <svg className="w-16 h-16 animate-spin text-amber-200" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+            </svg>
+            <svg className="w-16 h-16 animate-spin text-amber-500 absolute" style={{ animationDuration: '0.7s' }} viewBox="0 0 24 24" fill="none">
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-slate-500 tracking-widest uppercase">반품 처리 중</p>
+            <p className="text-xs text-slate-400 mt-1">각 품목에 {KEEP_QTY}개를 남기고 반품합니다</p>
+          </div>
+          <div className="text-center">
+            <p className="text-7xl font-black tabular-nums text-slate-800 leading-none transition-all duration-300">{remaining}</p>
+            <p className="text-sm font-semibold text-slate-400 mt-2">품목 남음 <span className="text-slate-300">/ {bulkReturnTotal}개</span></p>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-amber-400 h-full rounded-full transition-all duration-300"
+              style={{ width: `${bulkReturnTotal > 0 ? (bulkReturnProgress / bulkReturnTotal) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 삭제 진행 중 오버레이
   if (isDeletingOptimize) {
@@ -413,7 +489,36 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
         </div>
 
         {/* Footer */}
-        {showDeleteConfirm ? (
+        {showBulkReturnConfirm ? (
+          <div className="px-6 py-4 border-t border-amber-100 bg-amber-50 rounded-b-2xl">
+            <div className="flex items-start gap-3 mb-3">
+              <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <div>
+                <p className="text-sm font-bold text-amber-800">일괄 반품 처리하시겠습니까?</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  <span className="font-bold">{bulkReturnEligible.length}개</span> 품목에서 총{' '}
+                  <span className="font-bold">{bulkReturnTotalQty}개</span>를 반품하고, 각 품목에{' '}
+                  <span className="font-bold">{KEEP_QTY}개</span>씩 남깁니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowBulkReturnConfirm(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 bg-white rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleBulkReturnConfirm}
+                className="px-4 py-2 text-sm font-bold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                확인, 일괄 반품
+              </button>
+            </div>
+          </div>
+        ) : showDeleteConfirm ? (
           <div className="px-6 py-4 border-t border-rose-100 bg-rose-50 rounded-b-2xl">
             <div className="flex items-start gap-3 mb-3">
               <svg className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -451,7 +556,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
                 닫기
               </button>
-              {/* 선택 품목 유지: 선택된 항목을 1개월 스누즈 */}
+              {/* 선택 품목 유지 */}
               <button
                 onClick={() => snoozeItems(Array.from(selectedOptimizeIds))}
                 disabled={selectedOptimizeIds.size === 0}
@@ -460,7 +565,16 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 선택 품목 유지 ({selectedOptimizeIds.size})
               </button>
-              {/* 선택 품목 삭제: 재고 0개인 항목만 가능 */}
+              {/* 2개 유지 일괄 반품 */}
+              <button
+                onClick={() => setShowBulkReturnConfirm(true)}
+                disabled={bulkReturnEligible.length === 0}
+                className="px-4 py-2 text-sm font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-3a4 4 0 00-8 0v3M8 15h8M12 3v4m0 0l-2-2m2 2l2-2" /></svg>
+                {KEEP_QTY}개 유지 반품 ({bulkReturnEligible.length})
+              </button>
+              {/* 선택 품목 삭제 */}
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={!canDeleteSelected || isDeletingOptimize}
