@@ -58,8 +58,8 @@ const DentwebGuideModal: React.FC<DentwebGuideModalProps> = ({ onClose }) => {
   const isLast = stepIndex >= DENTWEB_GUIDE_STEPS.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[240] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
+    <div className="fixed inset-0 z-[240] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 sm:px-6 py-4 sm:py-5 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
           <div>
             <h3 className="text-lg font-black">덴트웹 수술기록지 수정 가이드</h3>

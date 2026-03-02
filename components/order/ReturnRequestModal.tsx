@@ -86,8 +86,8 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center sm:justify-center">
-      <div className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={() => !isLoading && onClose()}>
+      <div className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto" onClick={(e) => e.stopPropagation()}>
         {/* Drag handle (mobile only) */}
         <div className="sm:hidden flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-slate-300" />

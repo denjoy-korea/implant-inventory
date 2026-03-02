@@ -315,8 +315,8 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
       </div>
 
       {showFailClaimModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => setShowFailClaimModal(false)}>
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="p-8 flex flex-col items-center text-center">
               <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-5">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -369,8 +369,8 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
       )}
 
       {showFailAlreadyDoneToast && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-sm rounded-[28px] shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setShowFailAlreadyDoneToast(false)}>
+          <div className="bg-white w-full max-w-sm rounded-[28px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="p-7 flex flex-col items-center text-center">
               <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-500 flex items-center justify-center mb-4">
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">

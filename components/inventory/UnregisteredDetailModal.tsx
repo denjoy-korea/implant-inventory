@@ -236,8 +236,8 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
   const recordIds = getRecordIds();
 
   return (
-    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-slate-900/65 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[86vh] flex flex-col">
+    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-slate-900/65 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleClose}>
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[86vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 bg-rose-600 text-white flex items-start justify-between gap-4 shrink-0">
           <div>
             <h3 className="text-lg font-black">수기 입력 데이터 수정 적용</h3>
@@ -738,8 +738,8 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[82vh] flex flex-col">
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[82vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           <div className="px-6 py-5 bg-amber-500 text-white flex items-start justify-between gap-4 shrink-0">
             <div>
               <h3 className="text-lg font-black">수술기록 미등록 품목 상세</h3>

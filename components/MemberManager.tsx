@@ -138,8 +138,8 @@ const PermissionModal: React.FC<PermissionModalProps> = ({ member, onClose, onSa
     );
 
     return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -820,8 +820,8 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             />
         )}
         {inviteUrlModal && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setInviteUrlModal(null)}>
+                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
                             <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

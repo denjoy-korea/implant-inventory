@@ -148,9 +148,9 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
   }, [baseStockInputs, visibleInventory]);
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200" onClick={() => !isSaving && onClose()}>
       {/* 모바일: 풀스크린 / 데스크톱: 중앙 모달 */}
-      <div className="bg-white w-full max-w-6xl h-[100dvh] sm:h-[84vh] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="bg-white w-full max-w-6xl h-[100dvh] sm:h-[84vh] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
 
         {/* ── 헤더 ── */}
         <div className="px-5 sm:px-6 pt-4 pb-3 sm:py-4 border-b border-slate-100 bg-slate-50 shrink-0">
