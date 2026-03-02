@@ -13,39 +13,77 @@ interface OptimizeModalProps {
   onUpdateInventoryItem: (item: InventoryItem) => void;
   onAddOrder?: (order: Order) => Promise<void>;
   managerName?: string;
+  hospitalId?: string;
   onClose: () => void;
 }
 
-const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, managerName, onClose }) => {
+const SNOOZE_MONTHS = 1;
+const getSnoozeKey = (hospitalId?: string) => `optimize_snooze_${hospitalId || 'local'}`;
+
+const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onUpdateInventoryItem, onAddOrder, managerName, hospitalId, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
-  const [deleteProgress, setDeleteProgress] = useState(0); // 삭제 완료된 개수
-  const [deleteTotalCount, setDeleteTotalCount] = useState(0); // 삭제 대상 총 개수
+  const [deleteProgress, setDeleteProgress] = useState(0);
+  const [deleteTotalCount, setDeleteTotalCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [neverStockFilter, setNeverStockFilter] = useState<'all' | 'zero' | 'threePlus'>('all');
   const [returningId, setReturningId] = useState<string | null>(null);
   const [returnQtyStr, setReturnQtyStr] = useState('');
 
+  // ── 유지(스누즈) 상태: localStorage에 { [inventoryId]: ISO expiry } 저장
+  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(getSnoozeKey(hospitalId));
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      // 만료된 항목 제거
+      const now = new Date().toISOString();
+      const cleaned: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v > now) cleaned[k] = v;
+      }
+      return cleaned;
+    } catch { return {}; }
+  });
+
+  const snoozeItems = (ids: string[]) => {
+    const expiry = new Date();
+    expiry.setMonth(expiry.getMonth() + SNOOZE_MONTHS);
+    const next = { ...snoozedMap };
+    ids.forEach(id => { next[id] = expiry.toISOString(); });
+    setSnoozedMap(next);
+    try { localStorage.setItem(getSnoozeKey(hospitalId), JSON.stringify(next)); } catch {}
+    setSelectedOptimizeIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
+  };
+
+  const now = new Date().toISOString();
+  const isItemSnoozed = (id: string) => { const e = snoozedMap[id]; return !!e && e > now; };
+
   const yearItems = deadStockItems.filter(i => i.olderThanYear);
   const neverItems = deadStockItems.filter(i => i.neverUsed);
   const neverZeroItems = neverItems.filter(i => i.currentStock === 0);
   const neverThreePlusItems = neverItems.filter(i => i.currentStock >= 3);
-  const displayed = optimizeFilter === 'year'
+  const displayed = (optimizeFilter === 'year'
     ? yearItems
     : neverStockFilter === 'zero' ? neverZeroItems
     : neverStockFilter === 'threePlus' ? neverThreePlusItems
-    : neverItems;
+    : neverItems
+  ).filter(i => !isItemSnoozed(i.id));
 
-  // 재고 0개인 항목만 삭제 선택 가능
+  // 삭제 가능: 재고 0개만 / 전체 선택: 표시된 모든 항목
   const deletableDisplayed = displayed.filter(i => i.currentStock === 0);
-  const allSelected = deletableDisplayed.length > 0 && deletableDisplayed.every(i => selectedOptimizeIds.has(i.id));
+  const allSelected = displayed.length > 0 && displayed.every(i => selectedOptimizeIds.has(i.id));
+  const canDeleteSelected = selectedOptimizeIds.size > 0 && Array.from(selectedOptimizeIds).every(id => {
+    const item = displayed.find(i => i.id === id);
+    return item ? item.currentStock === 0 : false;
+  });
 
   const toggleAll = () => {
     if (allSelected) {
-      setSelectedOptimizeIds(prev => { const s = new Set(prev); deletableDisplayed.forEach(i => s.delete(i.id)); return s; });
+      setSelectedOptimizeIds(prev => { const s = new Set(prev); displayed.forEach(i => s.delete(i.id)); return s; });
     } else {
-      setSelectedOptimizeIds(prev => { const s = new Set(prev); deletableDisplayed.forEach(i => s.add(i.id)); return s; });
+      setSelectedOptimizeIds(prev => { const s = new Set(prev); displayed.forEach(i => s.add(i.id)); return s; });
     }
   };
 
@@ -312,19 +350,25 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => { if (canDelete) setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; }); }}
-                      className={`transition-colors ${canDelete ? 'cursor-pointer' : 'cursor-default'} ${selectedOptimizeIds.has(item.id) ? 'bg-rose-50' : canDelete ? 'hover:bg-slate-50' : ''}`}
+                      onClick={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                      className={`transition-colors cursor-pointer ${selectedOptimizeIds.has(item.id) ? 'bg-indigo-50/60' : 'hover:bg-slate-50'}`}
                     >
-                      <td className="w-10 px-4 py-3">
-                        {canDelete ? (
-                          <input type="checkbox" checked={selectedOptimizeIds.has(item.id)} onChange={() => {}} className="w-4 h-4 rounded border-slate-300 accent-indigo-600 pointer-events-none" />
-                        ) : (
-                          <svg className="w-4 h-4 text-slate-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                        )}
+                      <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedOptimizeIds.has(item.id)}
+                          onChange={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                          className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer"
+                        />
                       </td>
                       <td className="px-3 py-3">
-                        <div className="text-xs font-bold text-slate-700">{item.brand}</div>
-                        <div className="text-[10px] text-slate-400">{item.manufacturer}</div>
+                        <div className="flex items-center gap-1.5">
+                          {!canDelete && <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                          <div>
+                            <div className="text-xs font-bold text-slate-700">{item.brand}</div>
+                            <div className="text-[10px] text-slate-400">{item.manufacturer}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{item.size}</span>
@@ -341,15 +385,24 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                           <span className="text-[11px] text-amber-700 font-semibold">{item.lastUsedDate}</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {!canDelete && (
+                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!canDelete && (
+                            <button
+                              onClick={() => { setReturningId(item.id); setReturnQtyStr(''); }}
+                              className="px-2 py-1 text-[10px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                            >
+                              반품
+                            </button>
+                          )}
                           <button
-                            onClick={e => { e.stopPropagation(); setReturningId(item.id); setReturnQtyStr(''); }}
-                            className="px-2.5 py-1 text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                            onClick={() => snoozeItems([item.id])}
+                            className="px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                            title="1개월 동안 목록에서 숨김"
                           >
-                            반품
+                            유지
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -388,23 +441,33 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
             </div>
           </div>
         ) : (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-            <p className="text-xs text-slate-500">
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500 shrink-0">
               {selectedOptimizeIds.size > 0
                 ? <><span className="font-bold text-slate-800">{selectedOptimizeIds.size}개</span> 품목 선택됨</>
-                : '재고 0개 품목을 선택해 삭제하거나, 재고가 있는 품목은 반품하세요'}
+                : '항목을 선택해 유지하거나 삭제하세요'}
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
               <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
                 닫기
               </button>
+              {/* 선택 품목 유지: 선택된 항목을 1개월 스누즈 */}
+              <button
+                onClick={() => snoozeItems(Array.from(selectedOptimizeIds))}
+                disabled={selectedOptimizeIds.size === 0}
+                className="px-4 py-2 text-sm font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                선택 품목 유지 ({selectedOptimizeIds.size})
+              </button>
+              {/* 선택 품목 삭제: 재고 0개인 항목만 가능 */}
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                disabled={selectedOptimizeIds.size === 0 || isDeletingOptimize}
+                disabled={!canDeleteSelected || isDeletingOptimize}
                 className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                {isDeletingOptimize ? '삭제 중...' : `선택 품목 삭제 (${selectedOptimizeIds.size})`}
+                선택 품목 삭제 ({deletableDisplayed.filter(i => selectedOptimizeIds.has(i.id)).length})
               </button>
             </div>
           </div>

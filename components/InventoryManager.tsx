@@ -1218,6 +1218,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           onUpdateInventoryItem={onUpdateInventoryItem}
           onAddOrder={onAddOrder}
           managerName={managerName}
+          hospitalId={hospitalId}
           onClose={() => setShowOptimizeModal(false)}
         />
       )}
