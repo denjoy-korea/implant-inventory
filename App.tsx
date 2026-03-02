@@ -1725,9 +1725,10 @@ const App: React.FC = () => {
           ...prev,
           orders: alreadyExists ? prev.orders : [nextOrder, ...prev.orders],
           surgeryMaster: nextSurgeryMaster,
-          // fail_exchange 주문은 FailManager 화면에 교환 이력이 표시되므로 탭 이동 없음
-          // replenishment 주문만 order_management 탭으로 이동
-          ...(nextOrder.type !== 'fail_exchange' ? { dashboardTab: 'order_management' as const } : {}),
+          // fail_exchange: FailManager 화면에 교환 이력 표시 → 탭 이동 없음
+          // return: 품목 최적화 모달에서 처리 → 탭 이동 없음 (모달 유지)
+          // replenishment: order_management 탭으로 이동
+          ...(nextOrder.type === 'replenishment' ? { dashboardTab: 'order_management' as const } : {}),
         };
       });
     };
@@ -1835,16 +1836,59 @@ const App: React.FC = () => {
       }
     }
 
-    // 2. 전체 주문을 입고 완료로 갱신
+    // 2. 전체 주문을 입고/반품 완료로 갱신
     for (const id of orderIdsToReceive) {
       await handleUpdateOrderStatus(id, 'received');
     }
 
-    const msg = updates.length > 0
-      ? `상세 입고 처리가 완료되었습니다. (수정 ${updates.length}건${reorderCount > 0 ? `, 자동 재발주 ${reorderCount}건` : ''})`
-      : '전체 입고 처리가 완료되었습니다.';
+    // 3. 반품 완료 주문의 재고 차감 처리
+    const returnOrderIds = orderIdsToReceive.filter(id => {
+      const order = state.orders.find(o => o.id === id);
+      return order && order.type === 'return';
+    });
+    if (returnOrderIds.length > 0) {
+      const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
+      for (const orderId of returnOrderIds) {
+        const order = state.orders.find(o => o.id === orderId);
+        if (!order) continue;
+        for (const orderItem of order.items) {
+          // 수량 업데이트가 있었다면 그 값을, 없었다면 원래 수량 사용
+          const matchedUpdate = updates.find(u => u.orderId === orderId && u.item.brand === orderItem.brand && u.item.size === orderItem.size);
+          const qtyToDeduct = matchedUpdate ? matchedUpdate.newQuantity : orderItem.quantity;
+          if (qtyToDeduct <= 0) continue;
+
+          const sizeKey = getSizeMatchKey(orderItem.size, order.manufacturer);
+          const invItem = state.inventory.find(inv =>
+            simpleNorm(inv.manufacturer) === simpleNorm(order.manufacturer) &&
+            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            const adjusted = await inventoryService.adjustStock(invItem.id, -qtyToDeduct);
+            if (adjusted) {
+              // 로컬 state 동기화
+              setState(prev => ({
+                ...prev,
+                inventory: prev.inventory.map(item =>
+                  item.id === invItem.id
+                    ? { ...item, currentStock: Math.max(0, item.currentStock - qtyToDeduct) }
+                    : item
+                ),
+              }));
+            }
+          }
+        }
+      }
+    }
+
+    const isReturnOrder = returnOrderIds.length > 0;
+    const msg = isReturnOrder
+      ? `반품 처리가 완료되었습니다. (${returnOrderIds.length}건 반품, 재고 차감 완료)`
+      : updates.length > 0
+        ? `상세 입고 처리가 완료되었습니다. (수정 ${updates.length}건${reorderCount > 0 ? `, 자동 재발주 ${reorderCount}건` : ''})`
+        : '전체 입고 처리가 완료되었습니다.';
     showAlertToast(msg, 'success');
-  }, [handleAddOrder, handleUpdateOrderStatus, handleCreateReturn, state.orders, state.user?.name, showAlertToast]);
+  }, [handleAddOrder, handleUpdateOrderStatus, handleCreateReturn, state.orders, state.inventory, state.user?.name, showAlertToast]);
 
   const {
     enabledManufacturers,
