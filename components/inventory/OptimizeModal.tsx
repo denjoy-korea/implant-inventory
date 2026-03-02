@@ -20,6 +20,8 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState(0); // 삭제 완료된 개수
+  const [deleteTotalCount, setDeleteTotalCount] = useState(0); // 삭제 대상 총 개수
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [neverStockFilter, setNeverStockFilter] = useState<'all' | 'zero' | 'threePlus'>('all');
   const [returningId, setReturningId] = useState<string | null>(null);
@@ -73,17 +75,67 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const handleDeleteConfirm = async () => {
     if (selectedOptimizeIds.size === 0) return;
     setShowDeleteConfirm(false);
+    const ids = Array.from(selectedOptimizeIds);
+    setDeleteTotalCount(ids.length);
+    setDeleteProgress(0);
     setIsDeletingOptimize(true);
-    for (const id of selectedOptimizeIds) {
+    for (const id of ids) {
       await Promise.resolve(onDeleteInventoryItem(id));
+      setDeleteProgress(prev => prev + 1);
     }
     const remaining = deadStockItems.filter(i => !selectedOptimizeIds.has(i.id));
     setSelectedOptimizeIds(new Set());
     setIsDeletingOptimize(false);
+    setDeleteProgress(0);
+    setDeleteTotalCount(0);
     if (remaining.length === 0) {
       onClose();
     }
   };
+
+  // 삭제 진행 중 오버레이
+  if (isDeletingOptimize) {
+    const remaining = deleteTotalCount - deleteProgress;
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-10 flex flex-col items-center gap-6">
+          {/* 스피너 */}
+          <div className="relative flex items-center justify-center">
+            <svg className="w-16 h-16 animate-spin text-rose-200" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+            </svg>
+            <svg className="w-16 h-16 animate-spin text-rose-500 absolute" style={{ animationDuration: '0.7s' }} viewBox="0 0 24 24" fill="none">
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* 타이틀 */}
+          <div className="text-center">
+            <p className="text-sm font-bold text-slate-500 tracking-widest uppercase">진행중입니다</p>
+            <p className="text-xs text-slate-400 mt-1">잠시만 기다려주세요</p>
+          </div>
+
+          {/* 남은 품목 카운터 */}
+          <div className="text-center">
+            <p className="text-7xl font-black tabular-nums text-slate-800 leading-none transition-all duration-300">
+              {remaining}
+            </p>
+            <p className="text-sm font-semibold text-slate-400 mt-2">
+              품목 남음 <span className="text-slate-300">/ {deleteTotalCount}개</span>
+            </p>
+          </div>
+
+          {/* 진행 바 */}
+          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-rose-400 h-full rounded-full transition-all duration-300"
+              style={{ width: `${deleteTotalCount > 0 ? (deleteProgress / deleteTotalCount) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
