@@ -32,6 +32,32 @@ test('trial policy copy is centralized and reused by landing/pricing/signup/lega
   assert.match(legal, /TRIAL_DATA_DELETION_POLICY_TEXT/);
 });
 
+test('trial duration policy is aligned to default 14 days with beta-started 28-day exception', () => {
+  const policy = read('utils/trialPolicy.ts');
+  const types = read('types.ts');
+  const planService = read('services/planService.ts');
+  const systemAdminDomain = read('components/system-admin/systemAdminDomain.ts');
+  const sql = read('supabase/048_trial_policy_14_28_alignment.sql');
+
+  assert.match(types, /export const TRIAL_DAYS = 14;/);
+  assert.match(policy, /export const DEFAULT_TRIAL_DAYS = 14;/);
+  assert.match(policy, /export const BETA_TRIAL_DAYS = 28;/);
+  assert.match(policy, /BETA_TRIAL_CUTOFF_KST_ISO = '2026-04-01T00:00:00\+09:00'/);
+  assert.match(
+    policy,
+    /return isBetaTrialEligibleByStart\(trialStartedAt\) \? BETA_TRIAL_DAYS : DEFAULT_TRIAL_DAYS;/,
+  );
+
+  // Runtime consumers should reuse shared policy helper instead of hard-coding day counts.
+  assert.match(planService, /import \{ getTrialDurationDays \} from '\.\.\/utils\/trialPolicy';/);
+  assert.match(systemAdminDomain, /import \{ getTrialDurationDays \} from '\.\.\/\.\.\/utils\/trialPolicy';/);
+
+  // SQL expiry policy must mirror the same 14/28 rule by trial start timestamp.
+  assert.match(sql, /CREATE OR REPLACE FUNCTION _trial_duration_days/);
+  assert.match(sql, /THEN 28/);
+  assert.match(sql, /ELSE 14/);
+});
+
 test('public pages consistently expose legal links via shared footer', () => {
   const pages = [
     'components/LandingPage.tsx',

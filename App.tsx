@@ -1789,8 +1789,8 @@ const App: React.FC = () => {
       throw new Error('반품 삭제 실패');
     }
 
-    // 삭제 성공 시 재고 복구
-    if (returnReq) {
+    // 삭제 성공 시 재고 복구 — rejected/completed 는 이미 복구됐거나 실제 반출됐으므로 제외
+    if (returnReq && (returnReq.status === 'requested' || returnReq.status === 'picked_up')) {
       for (const item of returnReq.items) {
         const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
         const invItem = state.inventory.find(inv =>
