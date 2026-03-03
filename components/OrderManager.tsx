@@ -1564,12 +1564,18 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{statusLabel}</span>
                       {!isReadOnly && (
                         <div className="flex items-center gap-1.5">
-                          {g.overallStatus === 'requested' && <>
-                            <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'picked_up', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
+                          {g.requests.some(r => r.status === 'requested') && (
+                            <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'requested').forEach(r => handleReturnUpdateStatus(r.id, 'picked_up', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
+                          )}
+                          {g.requests.some(r => r.status === 'picked_up') && (
+                            <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'picked_up').forEach(r => handleReturnUpdateStatus(r.id, 'completed', 'picked_up'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>
+                          )}
+                          {g.overallStatus === 'requested' && (
                             <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'rejected', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
-                          </>}
-                          {g.overallStatus === 'picked_up' && <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'completed', 'picked_up'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>}
-                          {(g.overallStatus === 'completed' || g.overallStatus === 'rejected') && <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>}
+                          )}
+                          {g.requests.every(r => r.status === 'completed' || r.status === 'rejected') && (
+                            <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>
+                          )}
                         </div>
                       )}
                     </div>
