@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { InventoryItem, ReturnRequest, ReturnReason } from '../../types';
 
 export type ReturnCategory = 'olderThanYear' | 'neverUsed' | 'overstock';
@@ -39,6 +39,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     const [cardIndex, setCardIndex] = useState(0);
     const [returnedByBrand, setReturnedByBrand] = useState<Record<string, number>>({});
     const [returnedItemIds, setReturnedItemIds] = useState<Set<string>>(new Set());
+    const bulkRunningRef = useRef(false);
 
     const now = Date.now();
     const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
@@ -139,24 +140,32 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     };
 
     const handleBulkReturn = async () => {
-        const targets = someSelected ? selectedItems : items;
-        if (targets.length === 0) return;
+        // 모바일 터치 이벤트(touchend+click) 등으로 중복 실행 방지
+        if (bulkRunningRef.current) return;
+        bulkRunningRef.current = true;
+        const targets = (someSelected ? selectedItems : items).filter(i => !returnedItemIds.has(i.id));
+        if (targets.length === 0) { bulkRunningRef.current = false; return; }
         setBulkTotal(targets.length);
         setBulkProgress(0);
         setIsBulkReturning(true);
-        for (const item of targets) {
-            const qty = item.currentStock - item.recommendedStock;
-            await onCreateReturn({
-                manufacturer: item.manufacturer,
-                reason: 'excess_stock' as ReturnReason,
-                manager: managerName || '반품 권장',
-                memo: `권장량 초과 반품 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`,
-                items: [{ brand: item.brand, size: item.size, quantity: qty }],
-            });
-            setReturnedItemIds(prev => new Set(prev).add(item.id));
-            setBulkProgress(prev => prev + 1);
+        try {
+            for (const item of targets) {
+                const qty = item.currentStock - item.recommendedStock;
+                await onCreateReturn({
+                    manufacturer: item.manufacturer,
+                    reason: 'excess_stock' as ReturnReason,
+                    manager: managerName || '반품 권장',
+                    memo: `권장량 초과 반품 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`,
+                    items: [{ brand: item.brand, size: item.size, quantity: qty }],
+                });
+                setReturnedItemIds(prev => new Set(prev).add(item.id));
+                setReturnedByBrand(prev => ({ ...prev, [item.brand]: (prev[item.brand] ?? 0) + qty }));
+                setBulkProgress(prev => prev + 1);
+            }
+        } finally {
+            setIsBulkReturning(false);
+            bulkRunningRef.current = false;
         }
-        setIsBulkReturning(false);
         setSelectedIds(new Set());
         showAlertToast(`${targets.length}개 품목 반품이 등록되었습니다.`, 'success');
     };

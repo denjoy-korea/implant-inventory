@@ -1736,14 +1736,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{statusLabel}</span>
                         </td>
                         <td className="px-2 lg:px-4 py-2.5 text-right whitespace-nowrap">
-                          {!isReadOnly && g.overallStatus !== 'mixed' && (
+                          {!isReadOnly && (
                             <div className="flex items-center justify-end gap-1">
-                              {g.overallStatus === 'requested' && <>
-                                <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'picked_up', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
+                              {/* 수거완료: requested 상태인 요청이 있을 때 */}
+                              {g.requests.some(req => req.status === 'requested') && (
+                                <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'requested').forEach(req => handleReturnUpdateStatus(req.id, 'picked_up', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
+                              )}
+                              {/* 반품완료: picked_up 상태인 요청이 있을 때 */}
+                              {g.requests.some(req => req.status === 'picked_up') && (
+                                <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'picked_up').forEach(req => handleReturnUpdateStatus(req.id, 'completed', 'picked_up'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>
+                              )}
+                              {/* 거절: 전체가 requested일 때만 */}
+                              {g.overallStatus === 'requested' && (
                                 <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'rejected', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
-                              </>}
-                              {g.overallStatus === 'picked_up' && <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'completed', 'picked_up'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>}
-                              {(g.overallStatus === 'completed' || g.overallStatus === 'rejected') && <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>}
+                              )}
+                              {/* 삭제: 전체가 완료/거절일 때 */}
+                              {g.requests.every(req => req.status === 'completed' || req.status === 'rejected') && (
+                                <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>
+                              )}
                             </div>
                           )}
                         </td>
