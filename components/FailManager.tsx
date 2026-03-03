@@ -1,11 +1,12 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { ExcelRow, InventoryItem, Order as FailOrder } from '../types';
+import { ExcelRow, InventoryItem, Order as FailOrder, ReturnRequest, ReturnReason } from '../types';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useToast } from '../hooks/useToast';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import FailBulkSetupModal from './FailBulkSetupModal';
 import { surgeryService } from '../services/surgeryService';
+import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 
 // ============================================================
 // UTILITY: Sparkline SVG path builder (same as InventoryManager)
@@ -32,13 +33,22 @@ interface FailManagerProps {
   surgeryMaster: Record<string, ExcelRow[]>;
   inventory: InventoryItem[];
   failOrders: FailOrder[];
+  returnRequests?: ReturnRequest[];
   onAddFailOrder: (order: FailOrder) => void | Promise<void>;
+  onCreateReturn?: (params: {
+    manufacturer: string;
+    reason: ReturnReason;
+    manager: string;
+    memo: string;
+    items: { brand: string; size: string; quantity: number }[];
+  }) => Promise<void>;
   currentUserName: string;
   isReadOnly?: boolean;
   hospitalId?: string;
   onBulkSetupComplete?: () => Promise<void>;
   initialShowBulkModal?: boolean;
   onInitialModalOpened?: () => void;
+  onDeleteOrder?: (orderId: string) => Promise<void>;
 }
 
 interface MonthlyFailDatum {
@@ -50,7 +60,7 @@ interface MonthlyFailDatum {
 // ============================================================
 // COMPONENT
 // ============================================================
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, onAddFailOrder, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, returnRequests = [], onAddFailOrder, onCreateReturn, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened, onDeleteOrder }) => {
   const { toast, showToast } = useToast();
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   // IBS / IBS Implant 등 표기 변형을 'IBS Implant'로 통일
@@ -65,17 +75,56 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return allRows.filter(row => row['구분'] === '수술중교환' || row['구분'] === '교환완료');
   }, [surgeryMaster]);
 
+  // ── 기간 필터: 전체 월 목록 + state ──
+  const allMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    historyFailList.forEach(f => {
+      const d = String(f['날짜'] || '');
+      if (d.length >= 7) monthSet.add(d.substring(0, 7));
+    });
+    return Array.from(monthSet).sort();
+  }, [historyFailList]);
+
+  const [periodStartIdx, setPeriodStartIdx] = useState(0);
+  const [periodEndIdx, setPeriodEndIdx] = useState(0);
+
+  // 초기화: allMonths 변경 시 최근 2개월로 설정
+  useEffect(() => {
+    if (allMonths.length > 0) {
+      setPeriodStartIdx(Math.max(0, allMonths.length - 2));
+      setPeriodEndIdx(allMonths.length - 1);
+    }
+  }, [allMonths.length]);
+
+  const handlePeriodChange = (start: number, end: number) => {
+    setPeriodStartIdx(start);
+    setPeriodEndIdx(end);
+  };
+
+  // ── 기간 필터 적용된 히스토리 ──
+  const filteredHistoryFailList = useMemo(() => {
+    if (allMonths.length === 0) return historyFailList;
+    const startMonth = allMonths[periodStartIdx] || allMonths[0];
+    const endMonth = allMonths[periodEndIdx] || allMonths[allMonths.length - 1];
+    return historyFailList.filter(f => {
+      const d = String(f['날짜'] || '');
+      if (d.length < 7) return false;
+      const month = d.substring(0, 7);
+      return month >= startMonth && month <= endMonth;
+    });
+  }, [historyFailList, allMonths, periodStartIdx, periodEndIdx]);
+
   // 2. 미처리 교환 리스트
   const pendingFailList = useMemo(() => {
-    return historyFailList.filter(row => row['구분'] === '수술중교환');
-  }, [historyFailList]);
+    return filteredHistoryFailList.filter(row => row['구분'] === '수술중교환');
+  }, [filteredHistoryFailList]);
 
   // 3. 제조사 목록
   const manufacturers = useMemo(() => {
     const set = new Set<string>();
-    historyFailList.forEach(f => set.add(normalizeMfrName(String(f['제조사'] || '기타'))));
+    filteredHistoryFailList.forEach(f => set.add(normalizeMfrName(String(f['제조사'] || '기타'))));
     return Array.from(set).sort();
-  }, [historyFailList]);
+  }, [filteredHistoryFailList]);
 
   // 4. 일괄 등록 모달용: 재고에서 유효 제조사 목록
   const availableManufacturers = useMemo(() => {
@@ -99,18 +148,26 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     return Object.entries(counts).map(([manufacturer, count]) => ({ manufacturer, count }));
   }, [pendingFailList]);
 
+  const pendingByManufacturerMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    pendingByManufacturer.forEach(({ manufacturer, count }) => { map[manufacturer] = count; });
+    return map;
+  }, [pendingByManufacturer]);
+
   const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOrderSubmitting, setIsOrderSubmitting] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [showBulkInfo, setShowBulkInfo] = useState(false);
+  const [isAllReturnConfirmOpen, setIsAllReturnConfirmOpen] = useState(false);
+  const [isAllReturnSubmitting, setIsAllReturnSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialShowBulkModal) {
       setIsBulkModalOpen(true);
       onInitialModalOpened?.();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
@@ -126,7 +183,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // 제조사별 통계
   const mStats = useMemo(() => {
     const stats: Record<string, { total: number; processed: number; pending: number }> = {};
-    historyFailList.forEach(f => {
+    filteredHistoryFailList.forEach(f => {
       const m = normalizeMfrName(String(f['제조사'] || '기타'));
       if (!stats[m]) stats[m] = { total: 0, processed: 0, pending: 0 };
       stats[m].total++;
@@ -134,12 +191,31 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       else stats[m].pending++;
     });
     return stats;
-  }, [historyFailList]);
+  }, [filteredHistoryFailList]);
 
   const currentStats = activeM === 'all'
-    ? { total: historyFailList.length, processed: historyFailList.filter(f => f['구분'] === '교환완료').length, pending: pendingFailList.length }
+    ? { total: filteredHistoryFailList.length, processed: filteredHistoryFailList.filter(f => f['구분'] === '교환완료').length, pending: pendingFailList.length }
     : (mStats[activeM] || { total: 0, processed: 0, pending: 0 });
   const currentRemainingFails = currentStats.pending;
+
+  // 반품 대기중 건수 (ReturnRequest 기반: requested 또는 picked_up 상태)
+  const returnPendingByMfr = useMemo(() => {
+    const counts: Record<string, number> = {};
+    returnRequests
+      .filter(r => r.status === 'requested' || r.status === 'picked_up')
+      .forEach(r => {
+        const m = normalizeMfrName(r.manufacturer);
+        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        counts[m] = (counts[m] || 0) + qty;
+      });
+    return counts;
+  }, [returnRequests]);
+
+  const totalReturnPending = Object.values(returnPendingByMfr).reduce((s, v) => s + v, 0);
+  const returnPendingCount = activeM === 'all'
+    ? totalReturnPending
+    : (returnPendingByMfr[activeM] || 0);
+  const actualPendingFails = Math.max(0, currentRemainingFails - returnPendingCount);
 
   const mPendingList = activeM === 'all'
     ? pendingFailList
@@ -150,7 +226,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   const monthlyFailData = useMemo<MonthlyFailDatum[]>(() => {
     const monthMap: Record<string, Record<string, number>> = {};
-    historyFailList.forEach(f => {
+    filteredHistoryFailList.forEach(f => {
       const dateStr = String(f['날짜'] || '');
       if (!dateStr || dateStr.length < 7) return;
       const month = dateStr.substring(0, 7);
@@ -165,49 +241,58 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         byManufacturer,
         total: Object.values(byManufacturer).reduce((s, v) => s + v, 0),
       }));
-  }, [historyFailList]);
+  }, [filteredHistoryFailList]);
 
   // KPI용 sparkline 데이터 (월별 총 교환)
   const failSparkline = useMemo(() => monthlyFailData.map(d => d.total), [monthlyFailData]);
   const exchangeSparkline = useMemo(() => {
     const monthMap: Record<string, number> = {};
-    historyFailList.filter(f => f['구분'] === '교환완료').forEach(f => {
+    filteredHistoryFailList.filter(f => f['구분'] === '교환완료').forEach(f => {
       const d = String(f['날짜'] || '');
       if (!d || d.length < 7) return;
       const month = d.substring(0, 7);
       monthMap[month] = (monthMap[month] || 0) + 1;
     });
     return Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-  }, [historyFailList]);
+  }, [filteredHistoryFailList]);
 
-  // 전체 수술 건수 (교환율 계산용)
+  // 전체 수술 건수 (교환율 계산용) — 동일 기간 필터 적용
   const totalPlacements = useMemo(() => {
     const allRows = surgeryMaster['수술기록지'] || [];
-    return allRows.filter(row => row['구분'] === '식립').length;
-  }, [surgeryMaster]);
+    if (allMonths.length === 0) return allRows.filter(row => row['구분'] === '식립').length;
+    const startMonth = allMonths[periodStartIdx] || allMonths[0];
+    const endMonth = allMonths[periodEndIdx] || allMonths[allMonths.length - 1];
+    return allRows.filter(row => {
+      if (row['구분'] !== '식립') return false;
+      const d = String(row['날짜'] || '');
+      if (d.length < 7) return false;
+      const month = d.substring(0, 7);
+      return month >= startMonth && month <= endMonth;
+    }).length;
+  }, [surgeryMaster, allMonths, periodStartIdx, periodEndIdx]);
 
-  const failRate = totalPlacements > 0 ? (historyFailList.filter(f => f['구분'] === '수술중교환').length / totalPlacements * 100) : 0;
-  const monthlyAvgFail = monthlyFailData.length > 0 ? (historyFailList.length / monthlyFailData.length) : 0;
+  const failRate = totalPlacements > 0 ? (filteredHistoryFailList.filter(f => f['구분'] === '수술중교환').length / totalPlacements * 100) : 0;
+  const monthlyAvgFail = monthlyFailData.length > 0 ? (filteredHistoryFailList.length / monthlyFailData.length) : 0;
 
   // ============================================================
   // 제조사별 교환 분포 (도넛 차트용)
   // ============================================================
   const manufacturerDonut = useMemo(() => {
-    const total = historyFailList.length;
+    const total = filteredHistoryFailList.length;
     if (total === 0) return [];
     return manufacturers.map((m, i) => {
       const count = mStats[m]?.total || 0;
       const percent = Math.round((count / total) * 100);
       return { name: m, count, percent, color: DONUT_COLORS[i % DONUT_COLORS.length] };
     }).sort((a, b) => b.count - a.count);
-  }, [manufacturers, mStats, historyFailList.length]);
+  }, [manufacturers, mStats, filteredHistoryFailList.length]);
 
   // ============================================================
   // 브랜드/규격별 TOP FAIL 랭킹
   // ============================================================
   const topFailSizes = useMemo(() => {
     const counts: Record<string, { brand: string; size: string; count: number }> = {};
-    historyFailList.forEach(f => {
+    filteredHistoryFailList.forEach(f => {
       const b = String(f['브랜드'] || 'Unknown');
       const s = String(f['규격(SIZE)'] || 'Unknown');
       const key = `${b}|${s}`;
@@ -215,14 +300,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       counts[key].count++;
     });
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [historyFailList]);
+  }, [filteredHistoryFailList]);
 
   // ============================================================
   // Animated KPI values
   // ============================================================
-  const animTotal = useCountUp(historyFailList.length);
-  const animProcessed = useCountUp(historyFailList.filter(f => f['구분'] === '교환완료').length);
-  const animPending = useCountUp(pendingFailList.length);
+  const animTotal = useCountUp(filteredHistoryFailList.length);
+  const animProcessed = useCountUp(filteredHistoryFailList.filter(f => f['구분'] === '교환완료').length);
+  const animPending = useCountUp(Math.max(0, pendingFailList.length - totalReturnPending));
   const animFailRate = useCountUp(Math.round(failRate * 10));
   const animMonthlyAvg = useCountUp(Math.round(monthlyAvgFail * 10));
 
@@ -403,38 +488,106 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     }
   };
 
-  const handleOrderSubmit = () => {
-    const validItems = selectedItems.filter(i => i.brand && i.size).map(i => ({ ...i, quantity: Number(i.quantity) }));
-    if (validItems.length === 0) {
-      showToast('유효한 품목을 하나 이상 선택해주세요.', 'error');
-      return;
-    }
-    const totalOrderQty = validItems.reduce((sum, item) => sum + item.quantity, 0);
-    if (totalOrderQty > currentRemainingFails) {
-      showToast(`주문 수량(${totalOrderQty})이 잔여 교환 건수(${currentRemainingFails})를 초과할 수 없습니다.`, 'error');
-      return;
-    }
+  const handleReturnSubmit = () => {
+    if (currentRemainingFails === 0) return;
+    // 반품 품목: 권장 교환 품목 기반, 없으면 제조사/기타/전체건수로 생성
+    const returnItems = recommendedExchangeItems.length > 0
+      ? recommendedExchangeItems.map(item => ({
+        brand: item.brand,
+        size: item.size,
+        quantity: item.remainingToOrder,
+      }))
+      : [{ brand: activeM, size: '기타', quantity: currentRemainingFails }];
+
     setIsOrderSubmitting(true);
-    void Promise.all(
-      validItems.map((item, index) => {
-        const newOrder: FailOrder = {
-          id: `order_${Date.now()}_${index}`,
-          type: 'fail_exchange',
-          manufacturer: activeM,
-          date: new Date().toISOString().split('T')[0],
-          items: [item],
-          manager: currentUserName,
-          status: 'ordered'
-        };
-        return onAddFailOrder(newOrder);
+    if (onCreateReturn) {
+      void onCreateReturn({
+        manufacturer: activeM,
+        reason: 'exchange',
+        manager: currentUserName,
+        memo: `수술중교환 ${currentRemainingFails}건`,
+        items: returnItems,
       })
-    ).then(() => {
-      setIsModalOpen(false);
-    }).catch(() => {
-      showToast('일부 주문 생성에 실패했습니다.', 'error');
-    }).finally(() => {
-      setIsOrderSubmitting(false);
-    });
+        .then(() => {
+          setIsModalOpen(false);
+          showToast('반품 신청이 등록되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
+        })
+        .catch(() => {
+          showToast('반품 처리에 실패했습니다.', 'error');
+        })
+        .finally(() => {
+          setIsOrderSubmitting(false);
+        });
+    } else {
+      const newOrder: FailOrder = {
+        id: `order_${Date.now()}`,
+        type: 'return',
+        manufacturer: activeM,
+        date: new Date().toISOString().split('T')[0],
+        items: returnItems,
+        manager: currentUserName,
+        status: 'ordered',
+      };
+      void Promise.resolve(onAddFailOrder(newOrder))
+        .then(() => {
+          setIsModalOpen(false);
+          showToast('반품 신청이 등록되었습니다. 주문 관리에서 입고 확인 후 완료 처리해 주세요.', 'success');
+        })
+        .catch(() => {
+          showToast('반품 처리에 실패했습니다.', 'error');
+        })
+        .finally(() => {
+          setIsOrderSubmitting(false);
+        });
+    }
+  };
+
+  const handleAllReturnSubmit = async () => {
+    setIsAllReturnSubmitting(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      for (const mfr of manufacturers) {
+        const mfrPending = pendingFailList.filter(
+          f => normalizeMfrName(String(f['제조사'] || '기타')) === mfr
+        );
+        if (mfrPending.length === 0) continue;
+        // 브랜드/규격별 집계
+        const itemMap: Record<string, { brand: string; size: string; quantity: number }> = {};
+        mfrPending.forEach(f => {
+          const b = String(f['브랜드'] || mfr);
+          const s = String(f['규격(SIZE)'] || '기타');
+          const key = `${b}|${s}`;
+          if (!itemMap[key]) itemMap[key] = { brand: b, size: s, quantity: 0 };
+          itemMap[key].quantity++;
+        });
+        if (onCreateReturn) {
+          await onCreateReturn({
+            manufacturer: mfr,
+            reason: 'exchange',
+            manager: currentUserName,
+            memo: `수술중교환 전체 반품처리 (${today})`,
+            items: Object.values(itemMap),
+          });
+        } else {
+          const order: FailOrder = {
+            id: `order_${Date.now()}_${mfr}`,
+            type: 'return',
+            manufacturer: mfr,
+            date: today,
+            items: Object.values(itemMap),
+            manager: currentUserName,
+            status: 'ordered',
+          };
+          await Promise.resolve(onAddFailOrder(order));
+        }
+      }
+      setIsAllReturnConfirmOpen(false);
+      showToast('전체 반품처리가 완료되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
+    } catch {
+      showToast('반품처리에 실패했습니다.', 'error');
+    } finally {
+      setIsAllReturnSubmitting(false);
+    }
   };
 
   // ============================================================
@@ -504,13 +657,13 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         {/* A. Header Strip */}
         <div className="hidden md:block bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 min-w-0">
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">데이터 기간</h4>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Data Period</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">
-                  {monthlyFailData.length > 0
-                    ? `${monthlyFailData[0].month} ~ ${monthlyFailData[monthlyFailData.length - 1].month}`
+                  {allMonths.length > 0
+                    ? `${allMonths[periodStartIdx] || allMonths[0]} ~ ${allMonths[periodEndIdx] || allMonths[allMonths.length - 1]}`
                     : '-'
                   }
                 </p>
@@ -519,7 +672,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">총 교환 레코드</h4>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchange Records</p>
-                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{historyFailList.length}<span className="text-xs font-semibold text-slate-400 ml-1">건</span></p>
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredHistoryFailList.length}<span className="text-xs font-semibold text-slate-400 ml-1">건</span></p>
               </div>
               <div className="h-10 w-px bg-slate-100" />
               <div>
@@ -546,27 +699,29 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   </div>
                 </div>
               )}
-              <div className="relative group">
-                <button
-                  onClick={handleOpenOrderModal}
-                  disabled={isReadOnly || activeM === 'all'}
-                  className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly || activeM === 'all' ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                  반품 및 교환 주문
-                </button>
-                {activeM === 'all' && !isReadOnly && (
-                  <div className="pointer-events-none absolute top-full right-0 mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                    <div className="bg-slate-800 text-white text-[11px] font-medium px-3 py-2 rounded-lg whitespace-nowrap shadow-lg">
-                      아래 제조사 탭을 선택하면 활성화됩니다
-                      <div className="absolute -top-1.5 right-6 w-3 h-3 bg-slate-800 rotate-45" />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+                disabled={isReadOnly}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                반품 처리
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Period Filter Slider */}
+        {allMonths.length > 1 && (
+          <div className="hidden md:block">
+            <DateRangeSlider
+              months={allMonths}
+              startIdx={periodStartIdx}
+              endIdx={periodEndIdx}
+              onChange={handlePeriodChange}
+            />
+          </div>
+        )}
 
         {/* B. KPI Metrics Strip */}
         <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm">
@@ -599,6 +754,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Pending</p>
               <p className={`text-2xl font-bold tabular-nums tracking-tight mt-2 ${animPending > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{animPending}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
               {animPending > 0 && <p className="text-[10px] font-bold text-rose-400 mt-1">⚠ 전량 미처리</p>}
+              {totalReturnPending > 0 && (
+                <p className="text-[10px] font-bold text-amber-500 mt-0.5">반품 대기중 {totalReturnPending}건</p>
+              )}
             </div>
             {/* 교환율 */}
             <div className="p-4 relative overflow-hidden">
@@ -635,8 +793,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
             >
               전체
-              {pendingFailList.length > 0 && (
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === 'all' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{pendingFailList.length}</span>
+              {Math.max(0, pendingFailList.length - totalReturnPending) > 0 && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === 'all' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{Math.max(0, pendingFailList.length - totalReturnPending)}</span>
               )}
             </button>
             {manufacturers.map(m => {
@@ -648,8 +806,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                 >
                   {m}
-                  {stats.pending > 0 && (
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === m ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{stats.pending}</span>
+                  {Math.max(0, stats.pending - (returnPendingByMfr[m] || 0)) > 0 && (
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === m ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{Math.max(0, stats.pending - (returnPendingByMfr[m] || 0))}</span>
                   )}
                 </button>
               );
@@ -662,7 +820,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
               <p className="text-[10px] font-bold text-slate-400">미처리</p>
-              <p className={`text-base font-black tabular-nums ${pendingFailList.length > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{pendingFailList.length}</p>
+              <p className={`text-base font-black tabular-nums ${Math.max(0, pendingFailList.length - totalReturnPending) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{Math.max(0, pendingFailList.length - totalReturnPending)}</p>
+              {totalReturnPending > 0 && <p className="text-[9px] font-bold text-amber-500">반품대기 {totalReturnPending}</p>}
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
               <p className="text-[10px] font-bold text-slate-400">교환완료</p>
@@ -681,22 +840,21 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <option value="all">전체</option>
               {manufacturers.map((m) => (
                 <option key={`mobile-fail-${m}`} value={m}>
-                  {m} (미처리 {mStats[m]?.pending ?? 0})
+                  {m} (미처리 {Math.max(0, (mStats[m]?.pending ?? 0) - (returnPendingByMfr[m] || 0))})
                 </option>
               ))}
             </select>
           </div>
 
           <button
-            onClick={handleOpenOrderModal}
-            disabled={isReadOnly || currentRemainingFails <= 0 || activeM === 'all'}
-            className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${
-              isReadOnly || currentRemainingFails <= 0 || activeM === 'all'
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-indigo-600 text-white active:scale-[0.98]'
-            }`}
+            onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+            disabled={isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)}
+            className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-indigo-600 text-white active:scale-[0.98]'
+              }`}
           >
-            반품/교환 주문 등록
+            반품 처리
           </button>
           {hospitalId && (
             <div>
@@ -704,11 +862,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 <button
                   onClick={() => setIsBulkModalOpen(true)}
                   disabled={isReadOnly}
-                  className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${
-                    isReadOnly
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : 'bg-slate-700 text-white active:scale-[0.98]'
-                  }`}
+                  className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${isReadOnly
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-700 text-white active:scale-[0.98]'
+                    }`}
                 >
                   교환 재고 정리
                 </button>
@@ -746,24 +903,14 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Status</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="relative group">
-                    <button
-                      onClick={handleOpenOrderModal}
-                      disabled={isReadOnly || currentRemainingFails <= 0 || activeM === 'all'}
-                      className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || currentRemainingFails <= 0 || activeM === 'all' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                      반품/교환 주문
-                    </button>
-                    {activeM === 'all' && !isReadOnly && (
-                      <div className="pointer-events-none absolute top-full right-0 mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                        <div className="bg-slate-800 text-white text-[11px] font-medium px-3 py-2 rounded-lg whitespace-nowrap shadow-lg">
-                          위 제조사 탭을 선택하면 활성화됩니다
-                          <div className="absolute -top-1.5 right-6 w-3 h-3 bg-slate-800 rotate-45" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+                    disabled={isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                    반품 처리
+                  </button>
                 </div>
               </div>
               {/* 3-column stats */}
@@ -776,9 +923,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">교환 완료</p>
                   <p className="text-2xl font-black text-emerald-600 tabular-nums">{currentStats.processed}</p>
                 </div>
-                <div className={`rounded-xl p-4 text-center ${currentRemainingFails > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${currentRemainingFails > 0 ? 'text-rose-400' : 'text-slate-400'}`}>미처리 잔여</p>
-                  <p className={`text-2xl font-black tabular-nums ${currentRemainingFails > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{currentRemainingFails}</p>
+                <div className={`rounded-xl p-4 text-center ${actualPendingFails > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${actualPendingFails > 0 ? 'text-rose-400' : 'text-slate-400'}`}>미처리 잔여</p>
+                  <p className={`text-2xl font-black tabular-nums ${actualPendingFails > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{actualPendingFails}</p>
+                  {returnPendingCount > 0 && (
+                    <p className="text-[9px] font-bold text-amber-500 mt-1">반품 대기중 {returnPendingCount}건</p>
+                  )}
                 </div>
               </div>
               {/* FAIL 진행률 바 */}
@@ -1112,8 +1262,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                         </div>
                       ))}
                     </div>
-                    <div className="pt-2 border-t border-slate-50 flex justify-end">
+                    <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-500">담당: {order.manager}</span>
+                      {!isReadOnly && onDeleteOrder && (
+                        <button
+                          onClick={() => void onDeleteOrder(order.id)}
+                          className="text-[10px] font-bold text-slate-400 hover:text-rose-500 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors"
+                        >
+                          삭제
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1131,6 +1289,78 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         <div className="py-40 text-center bg-white rounded-[32px] border border-slate-200 shadow-sm">
           <svg className="w-16 h-16 text-slate-100 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
           <p className="text-slate-500 font-medium italic">데이터가 로드되면 제조사를 선택하여 관리를 시작하세요.</p>
+        </div>
+      )}
+
+      {/* ========================================= */}
+      {/* ALL RETURN CONFIRM MODAL                  */}
+      {/* ========================================= */}
+      {isAllReturnConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => !isAllReturnSubmitting && setIsAllReturnConfirmOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-black text-slate-800">일괄 반품처리</h2>
+                <p className="text-xs text-slate-500 mt-0.5">미처리 잔여 항목 전체를 제조사별로 반품 주문 등록합니다.</p>
+              </div>
+              <button
+                onClick={() => setIsAllReturnConfirmOpen(false)}
+                disabled={isAllReturnSubmitting}
+                className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* 전자장부 안내 */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[11px] text-amber-800 font-semibold">
+              반품처리 후 전자장부에서 주문 금액 변동을 확인하세요.
+            </div>
+
+            {/* 제조사별 미처리 목록 */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품처리 대상</p>
+              {manufacturers.map(mfr => {
+                const cnt = pendingByManufacturerMap[mfr] || 0;
+                if (cnt === 0) return null;
+                return (
+                  <div key={mfr} className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl">
+                    <span className="text-sm font-bold text-slate-700">{mfr}</span>
+                    <span className="text-sm font-black text-rose-600 tabular-nums">{cnt}건</span>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
+                <span className="text-sm font-black text-indigo-700">합계</span>
+                <span className="text-sm font-black text-indigo-700 tabular-nums">{pendingFailList.length}건</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setIsAllReturnConfirmOpen(false)}
+                disabled={isAllReturnSubmitting}
+                className="flex-1 py-3 text-sm font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 rounded-2xl transition-all"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => void handleAllReturnSubmit()}
+                disabled={isAllReturnSubmitting || pendingFailList.length === 0}
+                className="flex-1 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-2xl transition-all active:scale-[0.98]"
+              >
+                {isAllReturnSubmitting ? '처리 중...' : '반품처리 완료'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1153,10 +1383,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           >
             <div className="px-6 py-5 sm:px-8 sm:pt-8 sm:pb-6 flex justify-between items-start gap-3">
               <div>
-                <h3 id="fail-order-modal-title" className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">대체 주문 및 반품 처리</h3>
+                <h3 id="fail-order-modal-title" className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">반품 처리</h3>
                 <p id="fail-order-modal-desc" className="text-sm text-slate-500 mt-1">{activeM} / 반품 가능 잔량: <span className="font-bold text-slate-700">{currentRemainingFails}건</span></p>
               </div>
-              <button ref={orderModalCloseButtonRef} onClick={() => setIsModalOpen(false)} aria-label="대체 주문 모달 닫기" className="mt-1 h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
+              <button ref={orderModalCloseButtonRef} onClick={() => setIsModalOpen(false)} aria-label="반품 처리 모달 닫기" className="mt-1 h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -1168,9 +1398,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                      교환 권장 품목
+                      반품 권장 품목
                     </h4>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recommended for Exchange</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recommended for Return</span>
                   </div>
                   <div
                     ref={recommendedScrollRef}
@@ -1183,20 +1413,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     }}
                   >
                     {recommendedExchangeItems.map((item, idx) => (
-                      <button
-                        type="button"
+                      <div
                         key={idx}
-                        onClick={() => quickAddRecommended(item)}
-                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-3.5 sm:p-4 rounded-2xl cursor-pointer hover:bg-rose-100 hover:scale-105 transition-all group min-w-[150px] text-left"
-                        aria-label={`권장 품목 추가: ${item.brand} ${item.size}, ${item.remainingToOrder}건`}
+                        className="flex-shrink-0 bg-rose-50 border border-rose-100 p-3.5 sm:p-4 rounded-2xl min-w-[150px]"
                       >
                         <div className="flex justify-between items-start mb-2">
                           <span className="text-[10px] font-bold text-rose-400 uppercase tracking-tighter">PENDING {item.remainingToOrder}건</span>
-                          <svg className="w-3 h-3 text-rose-300 group-hover:text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
                         </div>
                         <p className="text-xs font-black text-slate-800 truncate">{item.brand}</p>
-                        <p className="text-[11px] font-bold text-slate-500">{item.size}</p>
-                      </button>
+                        <p className="text-[11px] font-bold text-slate-500">{item.size === '기타' ? '규격정보없음' : item.size}</p>
+                      </div>
                     ))}
                   </div>
                   {recommendedExchangeItems.length > 3 && (
@@ -1213,7 +1439,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                         setRecommendedScrollPct(pct);
                       }}
                       className="w-full mt-2 accent-rose-400 cursor-pointer"
-                      aria-label="교환 권장 품목 스크롤"
+                      aria-label="반품 권장 품목 스크롤"
                     />
                   )}
                 </div>
@@ -1221,109 +1447,41 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">주문일자 (오늘)</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품신청일자</label>
                   <input type="text" value={new Date().toLocaleDateString('ko-KR')} readOnly className="w-full bg-white border border-slate-200 p-3 rounded-xl font-black text-slate-700 shadow-sm outline-none" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품/주문 담당자</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품 담당자</label>
                   <div className="w-full bg-slate-100 border border-slate-200 p-3 rounded-xl font-black text-slate-500 shadow-sm cursor-not-allowed">
                     {currentUserName}
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex justify-between items-end mb-2">
-                  <h4 className="text-sm font-black text-slate-800">교환 요청 품목</h4>
-                  <p className="text-[10px] text-slate-400 italic">* 제조사 교환 합계를 초과하여 주문할 수 없습니다.</p>
+              {/* 전자장부 확인 안내 */}
+              <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5">
+                <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="text-xs text-amber-800 leading-relaxed">
+                  <p className="font-black mb-0.5">반품 처리 후 전자장부 확인 필요</p>
+                  <p className="font-medium">재고 차감은 이미 처리되었습니다. 반품으로 인한 <span className="font-black">주문금액 변동</span>은 전자장부에서 직접 확인하세요.</p>
                 </div>
-
-                {selectedItems.map((item, idx) => {
-                  const brandOptions = Array.from(new Set(availableInventoryForM.map(i => i.brand))).sort();
-                  const sizeOptions = Array.from(new Set(availableInventoryForM
-                    .filter(i => i.brand === item.brand)
-                    .map(i => i.size)))
-                    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-                  return (
-                    <div key={idx} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
-                      <div className="flex-[2]">
-                        <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">
-                          브랜드{brandOptions.length === 1 ? '' : ' 선택'}
-                        </label>
-                        {brandOptions.length === 1 ? (
-                          <div className="w-full min-h-11 px-3 py-2.5 text-xs border border-slate-200 rounded-lg font-black text-slate-700 bg-slate-100 flex items-center cursor-not-allowed">
-                            {brandOptions[0]}
-                          </div>
-                        ) : (
-                          <select
-                            value={item.brand}
-                            onChange={(e) => updateOrderItem(idx, 'brand', e.target.value)}
-                            className="w-full min-h-11 px-3 py-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer"
-                          >
-                            <option value="">브랜드 선택</option>
-                            {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        )}
-                      </div>
-                      <div className="flex-[2]">
-                        <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">규격 선택</label>
-                        <select
-                          value={item.size}
-                          onChange={(e) => updateOrderItem(idx, 'size', e.target.value)}
-                          disabled={!item.brand}
-                          className="w-full min-h-11 px-3 py-2.5 text-xs border border-slate-200 rounded-lg outline-none font-black text-slate-700 bg-slate-50 cursor-pointer disabled:bg-slate-100 disabled:opacity-50"
-                        >
-                          <option value="">규격 선택</option>
-                          {sizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                      <div className="w-full sm:w-24">
-                        <label className="text-[9px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest">수량</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateOrderItem(idx, 'quantity', e.target.value)}
-                          className="w-full min-h-11 px-3 py-2.5 text-xs border border-indigo-200 rounded-lg outline-none font-black text-center text-indigo-600 bg-indigo-50/30"
-                        />
-                      </div>
-                      <button
-                        onClick={() => setSelectedItems(selectedItems.filter((_, i) => i !== idx))}
-                        disabled={selectedItems.length === 1}
-                        className="h-11 w-11 sm:w-auto sm:p-2.5 inline-flex items-center justify-center text-slate-300 hover:text-rose-500 transition-all"
-                        aria-label={`${idx + 1}번째 품목 삭제`}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  );
-                })}
-
-                <button
-                  onClick={() => {
-                    const brands = Array.from(new Set(availableInventoryForM.map(i => i.brand))).sort();
-                    const autoBrand = brands.length === 1 ? brands[0] : '';
-                    setSelectedItems([...selectedItems, { brand: autoBrand, size: '', quantity: 1 }]);
-                  }}
-                  className="w-full min-h-11 py-3 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
-                >
-                  + 추가 품목 입력
-                </button>
               </div>
             </div>
 
             <div className="px-6 py-5 sm:px-8 sm:py-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="text-sm font-bold text-slate-600">
-                총 주문 수량: <span className={`text-xl font-black ml-1 tabular-nums ${selectedItems.reduce((s, i) => s + (Number(i.brand && i.size ? i.quantity : 0)), 0) > currentRemainingFails ? 'text-rose-500 underline decoration-wavy' : 'text-indigo-600'}`}>{selectedItems.reduce((s, i) => s + (Number(i.brand && i.size ? i.quantity : 0)), 0)}</span> <span className="text-slate-400 font-normal">/ {currentRemainingFails}</span>
+                총 반품 건수: <span className="text-xl font-black ml-1 tabular-nums text-rose-600">{currentRemainingFails}</span><span className="text-slate-400 font-normal ml-1">건</span>
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button onClick={() => setIsModalOpen(false)} className="flex-1 sm:flex-none min-h-11 px-6 py-3 text-sm font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 rounded-2xl transition-all">취소</button>
                 <button
-                  onClick={handleOrderSubmit}
-                  disabled={isOrderSubmitting}
-                  className={`flex-1 sm:flex-none min-h-11 px-8 py-3 bg-slate-900 text-white text-sm font-black rounded-2xl active:scale-95 transition-all ${isOrderSubmitting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-700'}`}
+                  onClick={handleReturnSubmit}
+                  disabled={isOrderSubmitting || currentRemainingFails === 0}
+                  className={`flex-1 sm:flex-none min-h-11 px-8 py-3 bg-slate-900 text-white text-sm font-black rounded-2xl active:scale-95 transition-all ${isOrderSubmitting || currentRemainingFails === 0 ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-700'}`}
                 >
-                  {isOrderSubmitting ? '처리 중...' : '주문 확인 및 완료'}
+                  {isOrderSubmitting ? '처리 중...' : '반품 처리 완료'}
                 </button>
               </div>
             </div>

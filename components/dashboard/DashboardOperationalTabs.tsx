@@ -137,7 +137,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           onCloseHistory={onCloseAuditHistory}
         />
       )}
-      {dashboardTab === 'surgery_database' && (
+      {(dashboardTab === 'surgery_database' || dashboardTab === 'surgery_upload') && (
         <SurgeryDashboard
           rows={surgeryMaster['수술기록지'] || []}
           onUpload={() => onTabChange('surgery_upload')}
@@ -152,8 +152,10 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         <FailManager
           surgeryMaster={surgeryMaster}
           inventory={inventory}
-          failOrders={orders.filter(o => o.type === 'fail_exchange')}
+          failOrders={orders.filter(o => o.type === 'fail_exchange' || o.type === 'return')}
+          returnRequests={returnRequests}
           onAddFailOrder={onAddFailOrder}
+          onCreateReturn={onCreateReturn}
           currentUserName={user?.name || '관리자'}
           isReadOnly={isReadOnly}
           hospitalId={user?.hospitalId}
@@ -163,6 +165,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           }}
           initialShowBulkModal={initialShowFailBulkModal}
           onInitialModalOpened={onFailBulkModalOpened}
+          onDeleteOrder={onDeleteOrder}
         />
       )}
       {dashboardTab === 'order_management' && (
@@ -180,6 +183,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             onDeleteOrder={onDeleteOrder}
             onQuickOrder={onQuickOrder}
             onCreateReturn={onCreateReturn}
+            onAddExchangeReturn={onAddFailOrder}
             onUpdateReturnStatus={onUpdateReturnStatus}
             onCompleteReturn={onCompleteReturn}
             onDeleteReturn={onDeleteReturn}

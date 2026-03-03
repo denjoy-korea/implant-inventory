@@ -39,6 +39,7 @@ interface OrderManagerProps {
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => void;
   onCreateReturn: (params: CreateReturnParams) => Promise<void>;
+  onAddExchangeReturn?: (order: Order) => Promise<void>;
   onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
@@ -79,6 +80,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onCancelOrder,
   onQuickOrder,
   onCreateReturn,
+  onAddExchangeReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
   onDeleteReturn,
@@ -115,8 +117,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
   const [isBulkReturning, setIsBulkReturning] = useState(false);
+
+  // ── 교환 권장 품목 반품 처리 모달 state ──
+  const [exchangeReturnTarget, setExchangeReturnTarget] = useState<{ manufacturer: string; count: number } | null>(null);
+  const [isExchangeReturnSubmitting, setIsExchangeReturnSubmitting] = useState(false);
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-  const displayMfr = (name: string) => name === 'IBS' ? 'IBS Implant' : name;
+  const displayMfr = (name: string) => isIbsImplantManufacturer(name) ? 'IBS Implant' : name;
   const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
     `${simpleNormalize(manufacturer)}|${simpleNormalize(brand)}|${getSizeMatchKey(size, manufacturer)}`;
 
@@ -301,11 +307,26 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
       byMfr[mfr] = (byMfr[mfr] || 0) + 1;
     });
+    // 반품 대기중 건수 (ReturnRequest 기반: requested 또는 picked_up)
+    const returnPendingByMfr: Record<string, number> = {};
+    returnRequests
+      .filter(r => r.status === 'requested' || r.status === 'picked_up')
+      .forEach(r => {
+        const mfr = isIbsImplantManufacturer(r.manufacturer) ? 'IBS Implant' : r.manufacturer;
+        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        returnPendingByMfr[mfr] = (returnPendingByMfr[mfr] || 0) + qty;
+      });
     const list = Object.entries(byMfr)
-      .map(([manufacturer, count]) => ({ manufacturer, count }))
+      .map(([manufacturer, count]) => ({
+        manufacturer,
+        count,
+        returnPending: returnPendingByMfr[manufacturer] || 0,
+        actualCount: Math.max(0, count - (returnPendingByMfr[manufacturer] || 0)),
+      }))
       .sort((a, b) => b.count - a.count);
-    return { list, total: pending.length };
-  }, [surgeryMaster]);
+    const totalActual = list.reduce((s, x) => s + x.actualCount, 0);
+    return { list, total: pending.length, totalActual };
+  }, [surgeryMaster, returnRequests]);
 
   const stats = useMemo(() => {
     const totalOrders = orders.filter(o =>
@@ -316,10 +337,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     const receivedOrders = totalOrders.filter(o => o.status === 'received');
     const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
     const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
-    // 반품 통계 (전체 orders 기준, 필터 무관)
-    const returnOrders = orders.filter(o => o.type === 'return');
-    const returnPending = returnOrders.filter(o => o.status === 'ordered');
-    const returnReceived = returnOrders.filter(o => o.status === 'received');
+    // 반품 통계 (ReturnRequest 기반, 필터 무관)
+    const sumReturnQty = (list: typeof returnRequests) =>
+      list.reduce((acc, r) => acc + r.items.reduce((s, i) => s + i.quantity, 0), 0);
+    const returnPending = returnRequests.filter(r => r.status === 'requested' || r.status === 'picked_up');
+    const returnReceived = returnRequests.filter(r => r.status === 'completed');
     return {
       totalCount: totalOrders.length,
       totalQty: sumQty(totalOrders),
@@ -329,12 +351,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       receivedQty: sumQty(receivedOrders),
       lowStockCount: lowStockItems.length,
       lowStockQty: lowStockDeficit,
-      returnCount: returnOrders.length,
-      returnQty: sumQty(returnOrders),
+      returnCount: returnRequests.length,
+      returnQty: sumReturnQty(returnRequests),
       returnPendingCount: returnPending.length,
       returnReceivedCount: returnReceived.length,
     };
-  }, [orders, lowStockItems, filterType]);
+  }, [orders, lowStockItems, filterType, returnRequests]);
 
   const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange' | 'return', number> = useMemo(() => ({
     all: orders.length,
@@ -551,8 +573,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         </button>
       </div>
 
-      {/* 반품 관리 탭 — hidden */}
-      {false && activeTab === 'returns' && (
+      {/* 반품 관리 탭 */}
+      {activeTab === 'returns' && (
         <ReturnManager
           returnRequests={returnRequests}
           inventory={inventory}
@@ -953,9 +975,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <span className="flex h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
                 <h3 className="text-base font-black text-slate-800 tracking-tight">교환 권장 품목</h3>
                 <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Exchange Candidates</span>
-                <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.total}건 미처리</span>
+                <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.totalActual}건 미처리</span>
               </div>
-              <p className="text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 교환 주문을 진행하세요.</p>
+              <p className="text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 반품 처리를 진행하세요.</p>
             </div>
             <div className="px-5 sm:px-7 pb-5 sm:pb-6">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -974,21 +996,36 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   </div>
                   <p className="text-[10px] font-bold text-slate-400 mt-1">교환 주문 일괄 등록</p>
                 </button>
-                {exchangeCandidates.list.map(({ manufacturer, count }) => (
-                  <div
+                {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
+                  <button
                     key={manufacturer}
-                    className="group relative rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/80 to-purple-50/40 p-4 transition-all hover:shadow-md"
+                    onClick={() => {
+                      if (isReadOnly || actualCount === 0 || !onAddExchangeReturn) return;
+                      setExchangeReturnTarget({ manufacturer, count: actualCount });
+                    }}
+                    disabled={isReadOnly || actualCount === 0 || !onAddExchangeReturn}
+                    className={`group relative rounded-2xl border-2 p-4 transition-all text-left w-full ${
+                      returnPending > 0 && actualCount === 0
+                        ? 'border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/30 opacity-70 cursor-default'
+                        : actualCount > 0 && !isReadOnly && onAddExchangeReturn
+                          ? 'border-violet-200 bg-gradient-to-br from-violet-50/80 to-purple-50/40 hover:shadow-md hover:border-violet-400 hover:bg-violet-100/60 active:scale-[0.98] cursor-pointer'
+                          : 'border-violet-200 bg-gradient-to-br from-violet-50/80 to-purple-50/40 cursor-default'
+                    }`}
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <svg className="w-4 h-4 text-violet-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                       <span className="text-xs font-black text-slate-700 truncate">{manufacturer}</span>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-black text-violet-600 tabular-nums">{count}</span>
+                      <span className={`text-2xl font-black tabular-nums ${actualCount > 0 ? 'text-violet-600' : 'text-slate-400'}`}>{actualCount}</span>
                       <span className="text-xs font-bold text-slate-400">건</span>
                     </div>
-                    <p className="text-[10px] font-bold text-violet-400 mt-1">교환 가능</p>
-                  </div>
+                    {returnPending > 0 ? (
+                      <p className="text-[10px] font-bold text-amber-500 mt-1">반품 대기중 {returnPending}건</p>
+                    ) : (
+                      <p className="text-[10px] font-bold text-violet-400 mt-1">반품 가능</p>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
@@ -1473,15 +1510,17 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                               삭제
                             </button>
                           )}
-                          <button
-                            onClick={() => setSelectedGroupModal(group)}
-                            className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 border ${group.overallStatus === 'ordered' || group.overallStatus === 'mixed'
-                              ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                              }`}
-                          >
-                            상세 보기
-                          </button>
+                          {group.overallStatus !== 'cancelled' && (
+                            <button
+                              onClick={() => setSelectedGroupModal(group)}
+                              className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 border ${group.overallStatus === 'ordered' || group.overallStatus === 'mixed'
+                                ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                }`}
+                            >
+                              상세 보기
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1516,6 +1555,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               } finally {
                 setIsCancelLoading(false);
                 setCancelModalOrder(null);
+                setSelectedGroupModal(null);
               }
             }}
           />
@@ -1609,6 +1649,100 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             hospitalId={hospitalId}
             onClose={() => setShowOptimizeModal(false)}
           />
+        )}
+
+        {/* 교환 권장 품목 반품 처리 모달 */}
+        {exchangeReturnTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !isExchangeReturnSubmitting && setExchangeReturnTarget(null)} />
+            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+              {/* Header */}
+              <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">반품 처리</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">{exchangeReturnTarget.manufacturer} / 반품 가능 잔량: <span className="font-black text-slate-700">{exchangeReturnTarget.count}건</span></p>
+                  </div>
+                  <button
+                    onClick={() => setExchangeReturnTarget(null)}
+                    disabled={isExchangeReturnSubmitting}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                {/* 날짜 + 담당자 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">반품신청일자</p>
+                    <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700">
+                      {new Date().toLocaleDateString('ko-KR')}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">반품 담당자</p>
+                    <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700">
+                      {currentUserName}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 전자장부 안내 */}
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5">
+                  <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <div className="text-xs text-amber-800 leading-relaxed">
+                    <p className="font-black mb-0.5">반품 처리 후 전자장부 확인 필요</p>
+                    <p>재고 차감은 이미 처리되었습니다. 반품으로 인한 <span className="font-black">주문금액 변동</span>은 전자장부에서 직접 확인하세요.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-6 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <p className="text-sm font-bold text-slate-600">총 반품 건수: <span className="text-rose-500 font-black">{exchangeReturnTarget.count}건</span></p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExchangeReturnTarget(null)}
+                    disabled={isExchangeReturnSubmitting}
+                    className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!onAddExchangeReturn) return;
+                      setIsExchangeReturnSubmitting(true);
+                      try {
+                        await onAddExchangeReturn({
+                          id: `order_${Date.now()}`,
+                          type: 'return',
+                          manufacturer: exchangeReturnTarget.manufacturer,
+                          date: new Date().toISOString().split('T')[0],
+                          items: [{ brand: exchangeReturnTarget.manufacturer, size: '기타', quantity: exchangeReturnTarget.count }],
+                          manager: currentUserName,
+                          status: 'ordered',
+                        });
+                        setExchangeReturnTarget(null);
+                        showAlertToast('반품 처리 완료. 전자장부에서 주문금액 변동을 확인하세요.', 'success');
+                      } catch {
+                        showAlertToast('반품 처리에 실패했습니다.', 'error');
+                      } finally {
+                        setIsExchangeReturnSubmitting(false);
+                      }
+                    }}
+                    disabled={isExchangeReturnSubmitting}
+                    className="px-5 py-2 text-sm font-black text-white bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {isExchangeReturnSubmitting ? '처리 중...' : '반품 처리 완료'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>}
     </div>

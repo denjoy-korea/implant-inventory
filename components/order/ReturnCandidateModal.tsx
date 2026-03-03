@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { InventoryItem, Order, ReturnRequest } from '../../types';
+import { InventoryItem, ReturnRequest, ReturnReason } from '../../types';
 
 export type ReturnCategory = 'olderThanYear' | 'neverUsed' | 'overstock';
 
@@ -9,7 +9,13 @@ interface ReturnCandidateModalProps {
     returnRequests: ReturnRequest[];
     snoozedIds: Record<string, number>; // id → snooze timestamp
     onClose: () => void;
-    onReturn: (order: Order) => Promise<void>;
+    onCreateReturn: (params: {
+        manufacturer: string;
+        reason: ReturnReason;
+        manager: string;
+        memo: string;
+        items: { brand: string; size: string; quantity: number }[];
+    }) => Promise<void>;
     onSnooze: (itemId: string) => void;
     managerName?: string;
     showAlertToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -48,7 +54,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     returnRequests,
     snoozedIds,
     onClose,
-    onReturn,
+    onCreateReturn,
     onSnooze,
     managerName,
     showAlertToast,
@@ -116,18 +122,15 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 : activeTab === 'neverUsed'
                     ? '한 번도 사용되지 않은 품목'
                     : `권장량 초과 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`;
-            const order: Order = {
-                id: `order_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                type: 'return',
+            const reason = activeTab === 'overstock' ? 'excess_stock' : 'excess_stock';
+            await onCreateReturn({
                 manufacturer: item.manufacturer,
-                date: new Date().toISOString().split('T')[0],
-                items: [{ brand: item.brand, size: item.size, quantity: qty }],
+                reason,
                 manager: managerName || '반품 권장',
-                status: 'ordered',
                 memo,
-            };
-            await onReturn(order);
-            showAlertToast(`${item.brand} ${item.size} ${qty}개 반품이 주문 내역에 등록되었습니다.`, 'success');
+                items: [{ brand: item.brand, size: item.size, quantity: qty }],
+            });
+            showAlertToast(`${item.brand} ${item.size} ${qty}개 반품이 반품 관리에 등록되었습니다.`, 'success');
             setReturningItem(null);
         } catch {
             showAlertToast('반품 등록에 실패했습니다.', 'error');
@@ -315,7 +318,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                                             onClick={(e) => { e.stopPropagation(); handleSnooze(item); }}
                                                             className="px-2.5 py-1 text-[11px] font-bold text-slate-500 border border-slate-200 bg-white rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
                                                         >
-                                                            보유
+                                                            유지
                                                         </button>
                                                     </div>
                                                 </div>
@@ -331,7 +334,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between shrink-0">
                     <p className="text-xs text-slate-400">
-                        <span className="font-bold text-slate-600">{activeItems.length}</span>개 품목 · '보유' 선택 시 1개월간 숨김
+                        <span className="font-bold text-slate-600">{activeItems.length}</span>개 품목 · '유지' 선택 시 1개월간 숨김
                     </p>
                     <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
                         닫기
