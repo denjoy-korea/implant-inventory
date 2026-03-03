@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import MigrationBanner from '../MigrationBanner';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
@@ -6,10 +6,11 @@ import PlanLimitToast, { LimitType } from '../PlanLimitToast';
 import ReadOnlyBanner from '../ReadOnlyBanner';
 import DashboardOverview from '../DashboardOverview';
 import FeatureGate from '../FeatureGate';
-import MemberManager from '../MemberManager';
 import RawDataUploadGuide from '../RawDataUploadGuide';
-import DashboardFixtureEditSection from './DashboardFixtureEditSection';
 import DashboardInventoryMasterSection from './DashboardInventoryMasterSection';
+/* Lazy-loaded tab components — loaded only when user navigates to the tab */
+const MemberManager = lazy(() => import('../MemberManager'));
+const DashboardFixtureEditSection = lazy(() => import('./DashboardFixtureEditSection'));
 import DashboardOperationalTabs from '../dashboard/DashboardOperationalTabs';
 import { ReceiptUpdate } from '../ReceiptConfirmationModal';
 
