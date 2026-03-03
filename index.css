@@ -375,3 +375,16 @@ textarea:focus-visible {
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
+
+@keyframes news-ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-news-ticker {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: news-ticker 40s linear infinite;
+  will-change: transform;
+}

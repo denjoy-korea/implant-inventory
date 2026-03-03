@@ -150,6 +150,16 @@ function daysSince(value: string | null | undefined): number | null {
   return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
 }
 
+function formatDateKorean(value: string | null | undefined): string {
+  const parsed = parseDate(value);
+  if (!parsed) return '기록 없음';
+  const year = parsed.getFullYear();
+  const month = parsed.getMonth() + 1;
+  const day = parsed.getDate();
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][parsed.getDay()];
+  return `${year}년 ${month}월 ${day}일 (${dow})`;
+}
+
 function monthKeyFromDate(value: unknown): string | null {
   const parsed = parseDate(value);
   if (!parsed) return null;
@@ -645,16 +655,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return maxDate ? maxDate.toISOString().slice(0, 10) : null;
   }, [cleanSurgeryRows]);
 
-  const latestOrderDate = useMemo(() => {
-    let maxDate: Date | null = null;
-    for (const order of orders) {
-      const parsed = parseDate(order.date);
-      if (!parsed) continue;
-      if (!maxDate || parsed > maxDate) maxDate = parsed;
-    }
-    return maxDate ? maxDate.toISOString().slice(0, 10) : null;
-  }, [orders]);
-
   const recentMonthKeys = useMemo(() => getRecentMonthKeys(6), []);
 
   const manufacturerUsageSummary = useMemo<ManufacturerUsageSummary>(() => {
@@ -744,6 +744,36 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const surgeryStaleDays = daysSince(latestSurgeryDate);
   const auditStaleDays = daysSince(latestAuditSummary.date);
+
+  const tickerConfig = useMemo(() => {
+    const days = surgeryStaleDays;
+    const dateStr = formatDateKorean(latestSurgeryDate);
+    if (days === null) return {
+      tagClass: 'bg-slate-600', tagText: 'DATA', dotClass: 'bg-slate-300',
+      wrapperClass: 'bg-slate-50 border-slate-200', textClass: 'text-slate-600',
+      message: '수술기록지 데이터가 없습니다  ·  덴트웹에서 수술기록지를 다운로드하여 업로드하세요  ·  정확한 재고 파악을 위해 최신 데이터 등록이 필요합니다',
+    };
+    if (days === 0) return {
+      tagClass: 'bg-emerald-600', tagText: '최신', dotClass: 'bg-emerald-200',
+      wrapperClass: 'bg-emerald-50/60 border-emerald-200', textClass: 'text-emerald-800',
+      message: `최근 수술기록지 등록일  ${dateStr}  ·  오늘 업데이트됨 — 재고 현황이 최신 상태입니다  ·  재고 및 주문 현황을 검토하세요`,
+    };
+    if (days <= 7) return {
+      tagClass: 'bg-slate-700', tagText: '정상', dotClass: 'bg-slate-300',
+      wrapperClass: 'bg-white border-slate-200', textClass: 'text-slate-700',
+      message: `최근 수술기록지 등록일  ${dateStr}  ·  업데이트 후 ${days}일 경과  ·  재고 및 주문 현황을 최신 상태로 유지하세요`,
+    };
+    if (days <= 30) return {
+      tagClass: 'bg-amber-500', tagText: '주의', dotClass: 'bg-amber-200',
+      wrapperClass: 'bg-amber-50 border-amber-200', textClass: 'text-amber-900',
+      message: `최근 수술기록지 등록일  ${dateStr}  ·  업데이트 후 ${days}일 경과  ·  덴트웹에서 최신 수술기록지를 다운로드하여 업로드하세요  ·  오래된 데이터는 재고 정확도를 낮춥니다`,
+    };
+    return {
+      tagClass: 'bg-rose-600', tagText: '경고', dotClass: 'bg-rose-200',
+      wrapperClass: 'bg-rose-50 border-rose-200', textClass: 'text-rose-800',
+      message: `최근 수술기록지 등록일  ${dateStr}  ·  업데이트 후 ${days}일 경과  ·  수술기록지가 오래되었습니다  ·  즉시 업데이트하여 정확한 재고 관리 및 주문 현황을 유지하세요`,
+    };
+  }, [surgeryStaleDays, latestSurgeryDate]);
 
   const hasBaseStockSet = useMemo(
     () => visibleInventory.some((item) => item.initialStock > 0),
@@ -1061,6 +1091,27 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   return (
     <>
     <div className="space-y-5 [&_button]:cursor-pointer">
+
+      {/* ── 수술기록 상태 티커 ─────────────────────────────────── */}
+      <div className={`flex items-center rounded-2xl overflow-hidden border shadow-sm ${tickerConfig.wrapperClass}`}>
+        {/* 상태 태그 */}
+        <div className={`shrink-0 ${tickerConfig.tagClass} px-3.5 py-2.5 flex items-center gap-1.5`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${tickerConfig.dotClass} animate-pulse`} />
+          <span className="text-[10px] font-black text-white tracking-widest">{tickerConfig.tagText}</span>
+        </div>
+        {/* 구분선 */}
+        <div className="w-px self-stretch bg-current opacity-10" />
+        {/* 스크롤 영역 */}
+        <div className="flex-1 overflow-hidden py-2.5">
+          <div className="animate-news-ticker">
+            <span className={`text-xs font-medium ${tickerConfig.textClass} pl-5 pr-16`}>{tickerConfig.message}</span>
+            <span className={`text-xs ${tickerConfig.textClass} opacity-20 pr-16`}>◆ ◆ ◆</span>
+            <span className={`text-xs font-medium ${tickerConfig.textClass} pr-16`}>{tickerConfig.message}</span>
+            <span className={`text-xs ${tickerConfig.textClass} opacity-20 pr-16`}>◆ ◆ ◆</span>
+          </div>
+        </div>
+      </div>
+
       <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -1465,30 +1516,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         <div className="xl:col-span-2 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <h3 className="text-sm font-black text-slate-900 mb-3">데이터 상태</h3>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">최근 수술일</span>
-                <span className="font-bold text-slate-700">{formatDate(latestSurgeryDate)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">최근 주문일</span>
-                <span className="font-bold text-slate-700">{formatDate(latestOrderDate)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">최근 실사일</span>
-                <span className="font-bold text-slate-700">{formatDate(latestAuditSummary.date)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">수술 데이터 경과</span>
-                <span className="font-bold text-slate-700">
-                  {daysSince(latestSurgeryDate) === null ? '-' : `${daysSince(latestSurgeryDate)}일`}
-                </span>
-              </div>
-            </div>
-          </div>
-
           <div className="hidden md:block bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <h3 className="text-sm font-black text-slate-900 mb-3">빠른 실행</h3>
             <div className="grid grid-cols-2 gap-2">
