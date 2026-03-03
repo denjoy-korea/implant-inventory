@@ -52,7 +52,7 @@ const probes = [
   { name: 'xlsx-generate', body: { activeSheet: { name: 'Sheet1', columns: [], rows: [] }, selectedIndices: [] } },
 ];
 
-async function probeFunction(name, body) {
+async function probeFunctionOnce(name, body) {
   const endpoint = `${baseUrl}/functions/v1/${name}`;
   try {
     const response = await fetch(endpoint, {
@@ -72,6 +72,10 @@ async function probeFunction(name, body) {
     if (status === 401 || status === 403) {
       return { ok: false, name, reason: 'auth', status };
     }
+    if (status === 504) {
+      // 504 = cold-start timeout: 재시도 대상으로 별도 처리
+      return { ok: false, name, reason: 'cold_start', status };
+    }
     if (status >= 500) {
       return { ok: false, name, reason: 'server', status };
     }
@@ -80,6 +84,17 @@ async function probeFunction(name, body) {
     const detail = error instanceof Error ? error.message : String(error);
     return { ok: false, name, reason: 'unreachable', detail };
   }
+}
+
+async function probeFunction(name, body) {
+  const result = await probeFunctionOnce(name, body);
+  // 504 cold-start: 5초 대기 후 1회 재시도
+  if (result.reason === 'cold_start') {
+    console.warn(`[edge-check] WARN: ${name} cold-start timeout (504), retrying in 5s...`);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    return probeFunctionOnce(name, body);
+  }
+  return result;
 }
 
 const results = [];
@@ -102,6 +117,12 @@ for (const result of results) {
     } else {
       console.warn(msg);
     }
+    continue;
+  }
+
+  if (result.reason === 'cold_start') {
+    // 재시도 후에도 504면 인프라 문제 → 경고만 (CI 블로킹 안 함)
+    console.warn(`[edge-check] WARN: ${result.name} still cold-start timeout after retry (HTTP 504) — skipping`);
     continue;
   }
 

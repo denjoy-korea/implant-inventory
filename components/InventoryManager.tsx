@@ -22,7 +22,7 @@ interface InventoryManagerProps {
   onUpdateInventoryItem: (updatedItem: InventoryItem) => void;
   surgeryData?: ExcelData | null;
   orders?: Order[];
-  onQuickOrder?: (item: InventoryItem) => void;
+  onQuickOrder?: (item: InventoryItem) => void | Promise<void>;
   onCreateReturn?: (params: CreateReturnParams) => Promise<void>;
   managerName?: string;
   isReadOnly?: boolean;
@@ -580,6 +580,34 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           </span>
         </div>
 
+        {/* 모바일 전용: 품목 최적화 진입 카드 (sticky 영역) */}
+        {!isReadOnly && deadStockItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowOptimizeModal(true)}
+            className="md:hidden w-full bg-white rounded-2xl border border-amber-200 shadow-sm px-4 py-3 text-left active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12l-3-3m0 0l-3 3m3-3v6" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-800">품목 최적화</p>
+                  <p className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                    장기 미사용 <span className="font-black">{deadStockItems.length}종</span> 검토 필요
+                  </p>
+                </div>
+              </div>
+              <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        )}
+
         {/* C. Manufacturer Filter Strip */}
         <div className="hidden md:block bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
           <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
@@ -680,51 +708,53 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
       <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-800">주문 필요 목록</h3>
-          <span className="text-[11px] font-black text-rose-600">{mobileOrderNeededItems.length}종</span>
+          <h3 className="text-sm font-black text-slate-800">재고 부족 현황</h3>
+          {mobileOrderNeededItems.length > 0 && (
+            <span className="text-[11px] font-black text-rose-600">{mobileOrderNeededItems.length}종</span>
+          )}
         </div>
 
         {mobileOrderNeededItems.length === 0 ? (
           <p className="mt-3 text-xs font-semibold text-slate-400">현재 부족 항목이 없습니다.</p>
         ) : (
-          <div className="mt-3 space-y-2">
-            {mobileOrderNeededItems.map(({ item, recommended, deficit, alreadyOrdered }) => (
-              <article
-                key={`mobile-order-needed-${item.id}`}
-                className={`rounded-xl border px-3 py-2.5 ${alreadyOrdered ? 'border-slate-100 bg-slate-50/60 opacity-70' : 'border-rose-100 bg-rose-50/50'}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-slate-500 truncate">{item.manufacturer}</p>
-                    <p className="text-sm font-black text-slate-800 truncate">{item.brand} {item.size}</p>
-                    <p className="text-[11px] font-semibold text-slate-500 mt-1">
-                      현재 {item.currentStock} / 권장 {recommended}
-                    </p>
+          <>
+            <div className="mt-3 space-y-2">
+              {mobileOrderNeededItems.map(({ item, recommended, deficit, alreadyOrdered }) => (
+                <article
+                  key={`mobile-shortage-${item.id}`}
+                  className={`rounded-xl border px-3 py-2.5 ${alreadyOrdered ? 'border-slate-100 bg-slate-50/60 opacity-60' : 'border-rose-100 bg-rose-50/50'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-slate-500 truncate">{item.manufacturer}</p>
+                      <p className="text-sm font-black text-slate-800 truncate">{item.brand} {item.size}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 mt-1">
+                        현재 {item.currentStock} / 권장 {recommended}
+                      </p>
+                    </div>
+                    {alreadyOrdered ? (
+                      <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 shrink-0">
+                        발주됨
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600 shrink-0">
+                        부족 {deficit}
+                      </span>
+                    )}
                   </div>
-                  {alreadyOrdered ? (
-                    <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 shrink-0">
-                      발주 완료
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600 shrink-0">
-                      부족 {deficit}
-                    </span>
-                  )}
-                </div>
-                {!isReadOnly && onQuickOrder && !alreadyOrdered && (
-                  <button
-                    type="button"
-                    onClick={() => onQuickOrder({ ...item, recommendedStock: recommended })}
-                    className="mt-2.5 w-full h-10 rounded-lg bg-indigo-600 text-white text-xs font-black active:scale-[0.99] transition-all"
-                  >
-                    바로 발주
-                  </button>
-                )}
-              </article>
-            ))}
-          </div>
+                </article>
+              ))}
+            </div>
+            <p className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              발주는 하단 주문 탭에서 진행하세요
+            </p>
+          </>
         )}
       </div>
+
       <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         {/* 헤더 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-6 pt-5 pb-4 border-b border-slate-50">

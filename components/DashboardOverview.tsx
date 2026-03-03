@@ -212,7 +212,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   hospitalId,
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   onNavigate,
-  planState,
   onboardingStep,
   onResumeOnboarding,
   onSurgeryUploadClick,

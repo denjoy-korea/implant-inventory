@@ -81,8 +81,8 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   // 호출 시마다 현재 시각 계산 — 모달을 오래 열어둬도 만료된 스누즈가 즉시 해제됨
   const isItemSnoozed = (id: string) => { const e = snoozedMap[id]; return !!e && e > new Date().toISOString(); };
 
-  const yearItems = deadStockItems.filter(i => i.olderThanYear);
-  const neverItems = deadStockItems.filter(i => i.neverUsed);
+  const yearItems = deadStockItems.filter(i => i.olderThanYear && !isItemSnoozed(i.id));
+  const neverItems = deadStockItems.filter(i => i.neverUsed && !isItemSnoozed(i.id));
   const neverZeroItems = neverItems.filter(i => i.currentStock === 0);
   const neverThreePlusItems = neverItems.filter(i => i.currentStock >= 3);
   const displayed = (optimizeFilter === 'year'
@@ -255,7 +255,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-80px)] md:max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100">
           <div className="flex items-start justify-between">
@@ -359,134 +359,209 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
           {displayed.length === 0 ? (
             <div className="py-16 text-center text-slate-400 text-sm">해당하는 품목이 없습니다.</div>
           ) : (
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-100 md:sticky md:top-0">
-                <tr>
-                  <th className="w-10 px-4 py-3">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer" />
-                  </th>
-                  <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">제조사 / 브랜드</th>
-                  <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">규격</th>
-                  <th className="px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">현재재고</th>
-                  <th className="px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">마지막 사용일</th>
-                  <th className="w-20 px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">작업</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
+            <>
+              {/* 모바일: 카드 리스트 */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {/* 전체선택 행 */}
+                <div className="px-4 py-2.5 bg-slate-50 flex items-center gap-3">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer" />
+                  <span className="text-[11px] font-bold text-slate-500">전체 선택 ({displayed.length})</span>
+                </div>
                 {displayed.map(item => {
                   const canDelete = item.currentStock === 0;
                   const isReturning = returningId === item.id;
                   const maxQty = item.currentStock;
+                  const isSelected = selectedOptimizeIds.has(item.id);
 
                   if (isReturning) {
                     const qty = parseInt(returnQtyStr, 10);
                     const isValid = !isNaN(qty) && qty >= 1 && qty <= maxQty;
                     return (
-                      <tr key={item.id} className="bg-amber-50/60">
-                        <td colSpan={6} className="px-4 py-3">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-xs font-bold text-slate-700 truncate">{item.brand}</span>
-                              <span className="text-slate-300">·</span>
-                              <span className="text-xs font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex-shrink-0">{item.size}</span>
-                              <span className="text-[11px] text-slate-400 flex-shrink-0">현재 <span className="font-bold text-slate-600">{maxQty}개</span></span>
+                      <div key={item.id} className="px-4 py-3 bg-amber-50/60">
+                        <p className="text-xs font-bold text-slate-700 mb-2.5">
+                          {item.brand} <span className="font-mono text-slate-500">{item.size}</span>
+                          <span className="ml-2 text-slate-400 font-normal">현재 {maxQty}개</span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-500 font-medium shrink-0">반품 수량</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxQty}
+                            value={returnQtyStr}
+                            onChange={e => setReturnQtyStr(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleReturnConfirm(item); if (e.key === 'Escape') { setReturningId(null); setReturnQtyStr(''); } }}
+                            className="w-20 px-2 py-1.5 text-sm font-bold border border-slate-300 rounded-lg text-center focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+                            placeholder="수량"
+                            autoFocus
+                          />
+                          <span className="text-[11px] text-slate-400 shrink-0">/ {maxQty}개</span>
+                          <button onClick={() => void handleReturnConfirm(item)} disabled={!isValid} className="px-3 py-1.5 text-[11px] font-bold text-white bg-amber-500 rounded-lg disabled:opacity-40 transition-colors">확인</button>
+                          <button onClick={() => { setReturningId(null); setReturnQtyStr(''); }} className="px-3 py-1.5 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">취소</button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                      className={`px-4 py-3 flex items-start gap-3 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50/60' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                        onClick={e => e.stopPropagation()}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.brand}</p>
+                            <p className="text-[11px] text-slate-400">{item.manufacturer}</p>
+                          </div>
+                          <span className={`text-sm font-black tabular-nums shrink-0 ${item.currentStock > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {item.currentStock}개
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{item.size}</span>
+                          {item.neverUsed
+                            ? <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold">미사용</span>
+                            : <span className="text-[11px] text-amber-700 font-semibold">{item.lastUsedDate}</span>
+                          }
+                        </div>
+                        <div className="flex items-center gap-2 mt-2" onClick={e => e.stopPropagation()}>
+                          {!canDelete && (
+                            <button onClick={() => { setReturningId(item.id); setReturnQtyStr(String(item.currentStock)); }} className="px-3 py-1 text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg active:bg-amber-100 transition-colors">반품</button>
+                          )}
+                          <div className="relative group/snooze-tip">
+                            <button onClick={() => snoozeItems([item.id])} className="px-3 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg active:bg-emerald-100 transition-colors">유지</button>
+                            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 rounded-lg bg-slate-900 px-2.5 py-1.5 text-center text-[11px] text-white opacity-0 group-hover/snooze-tip:opacity-100 transition-opacity whitespace-nowrap">
+                              1개월 동안 목록에서 숨김
+                              <span className="absolute top-full left-1/2 -translate-x-1/2 h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900" />
                             </div>
-                            <div className="flex items-center gap-2 ml-auto">
-                              <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">반품 수량</span>
-                              <input
-                                type="number"
-                                min={1}
-                                max={maxQty}
-                                value={returnQtyStr}
-                                onChange={e => setReturnQtyStr(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleReturnConfirm(item); if (e.key === 'Escape') { setReturningId(null); setReturnQtyStr(''); } }}
-                                className="w-20 px-2 py-1 text-sm font-bold border border-slate-300 rounded-lg text-center focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
-                                placeholder="수량"
-                                autoFocus
-                              />
-                              <span className="text-[11px] text-slate-400 flex-shrink-0">/ {maxQty}개</span>
-                              <button
-                                onClick={() => void handleReturnConfirm(item)}
-                                disabled={!isValid}
-                                className="px-3 py-1 text-[11px] font-bold text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                              >
-                                확인
-                              </button>
-                              <button
-                                onClick={() => { setReturningId(null); setReturnQtyStr(''); }}
-                                className="px-3 py-1 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
-                              >
-                                취소
-                              </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 데스크탑: 테이블 */}
+              <table className="hidden md:table w-full">
+                <thead className="bg-slate-50 border-b border-slate-100 md:sticky md:top-0">
+                  <tr>
+                    <th className="w-10 px-4 py-3">
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer" />
+                    </th>
+                    <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">제조사 / 브랜드</th>
+                    <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">규격</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">현재재고</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">마지막 사용일</th>
+                    <th className="w-20 px-3 py-3 text-center text-[11px] font-bold text-slate-500 uppercase">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {displayed.map(item => {
+                    const canDelete = item.currentStock === 0;
+                    const isReturning = returningId === item.id;
+                    const maxQty = item.currentStock;
+
+                    if (isReturning) {
+                      const qty = parseInt(returnQtyStr, 10);
+                      const isValid = !isNaN(qty) && qty >= 1 && qty <= maxQty;
+                      return (
+                        <tr key={item.id} className="bg-amber-50/60">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-xs font-bold text-slate-700 truncate">{item.brand}</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="text-xs font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex-shrink-0">{item.size}</span>
+                                <span className="text-[11px] text-slate-400 flex-shrink-0">현재 <span className="font-bold text-slate-600">{maxQty}개</span></span>
+                              </div>
+                              <div className="flex items-center gap-2 ml-auto">
+                                <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">반품 수량</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={maxQty}
+                                  value={returnQtyStr}
+                                  onChange={e => setReturnQtyStr(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleReturnConfirm(item); if (e.key === 'Escape') { setReturningId(null); setReturnQtyStr(''); } }}
+                                  className="w-20 px-2 py-1 text-sm font-bold border border-slate-300 rounded-lg text-center focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
+                                  placeholder="수량"
+                                  autoFocus
+                                />
+                                <span className="text-[11px] text-slate-400 flex-shrink-0">/ {maxQty}개</span>
+                                <button onClick={() => void handleReturnConfirm(item)} disabled={!isValid} className="px-3 py-1 text-[11px] font-bold text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">확인</button>
+                                <button onClick={() => { setReturningId(null); setReturnQtyStr(''); }} className="px-3 py-1 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">취소</button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                        className={`transition-colors cursor-pointer ${selectedOptimizeIds.has(item.id) ? 'bg-indigo-50/60' : 'hover:bg-slate-50'}`}
+                      >
+                        <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedOptimizeIds.has(item.id)}
+                            onChange={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
+                            className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {!canDelete && <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                            <div>
+                              <div className="text-xs font-bold text-slate-700">{item.brand}</div>
+                              <div className="text-[10px] text-slate-400">{item.manufacturer}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{item.size}</span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`text-xs font-bold tabular-nums ${item.currentStock > 0 ? 'text-slate-700' : 'text-slate-400'}`}>{item.currentStock}개</span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          {item.neverUsed
+                            ? <span className="inline-block px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold">미사용</span>
+                            : <span className="text-[11px] text-amber-700 font-semibold">{item.lastUsedDate}</span>
+                          }
+                        </td>
+                        <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {!canDelete && (
+                              <button onClick={() => { setReturningId(item.id); setReturnQtyStr(String(item.currentStock)); }} className="px-2 py-1 text-[10px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">반품</button>
+                            )}
+                            <div className="relative group/snooze-tip">
+                              <button onClick={() => snoozeItems([item.id])} className="px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap">유지</button>
+                              <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 rounded-lg bg-slate-900 px-2.5 py-1.5 text-center text-[11px] text-white opacity-0 group-hover/snooze-tip:opacity-100 transition-opacity whitespace-nowrap">
+                                1개월 동안 목록에서 숨김
+                                <span className="absolute top-full left-1/2 -translate-x-1/2 h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900" />
+                              </div>
                             </div>
                           </div>
                         </td>
                       </tr>
                     );
-                  }
-
-                  return (
-                    <tr
-                      key={item.id}
-                      onClick={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
-                      className={`transition-colors cursor-pointer ${selectedOptimizeIds.has(item.id) ? 'bg-indigo-50/60' : 'hover:bg-slate-50'}`}
-                    >
-                      <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedOptimizeIds.has(item.id)}
-                          onChange={() => setSelectedOptimizeIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; })}
-                          className="w-4 h-4 rounded border-slate-300 accent-indigo-600 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {!canDelete && <svg className="w-3 h-3 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
-                          <div>
-                            <div className="text-xs font-bold text-slate-700">{item.brand}</div>
-                            <div className="text-[10px] text-slate-400">{item.manufacturer}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{item.size}</span>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`text-xs font-bold tabular-nums ${item.currentStock > 0 ? 'text-slate-700' : 'text-slate-400'}`}>
-                          {item.currentStock}개
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {item.neverUsed ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold">미사용</span>
-                        ) : (
-                          <span className="text-[11px] text-amber-700 font-semibold">{item.lastUsedDate}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-1.5">
-                          {!canDelete && (
-                            <button
-                              onClick={() => { setReturningId(item.id); setReturnQtyStr(''); }}
-                              className="px-2 py-1 text-[10px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
-                            >
-                              반품
-                            </button>
-                          )}
-                          <button
-                            onClick={() => snoozeItems([item.id])}
-                            className="px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap"
-                            title="1개월 동안 목록에서 숨김"
-                          >
-                            유지
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
 
@@ -548,45 +623,64 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
             </div>
           </div>
         ) : (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500 shrink-0">
-              {selectedOptimizeIds.size > 0
-                ? <><span className="font-bold text-slate-800">{selectedOptimizeIds.size}개</span> 품목 선택됨</>
-                : '항목을 선택해 유지하거나 삭제하세요'}
-            </p>
-            <div className="flex gap-2 flex-wrap justify-end">
-              <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-                닫기
-              </button>
-              {/* 선택 품목 유지 */}
-              <button
-                onClick={() => snoozeItems(Array.from(selectedOptimizeIds))}
-                disabled={selectedOptimizeIds.size === 0}
-                className="px-4 py-2 text-sm font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                선택 품목 유지 ({selectedOptimizeIds.size})
-              </button>
-              {/* 2개 유지 일괄 반품 */}
+          <div className="px-4 py-3 border-t border-slate-100">
+            {/* 모바일: 세로 스택 */}
+            <div className="md:hidden flex flex-col gap-2">
               <button
                 onClick={() => setShowBulkReturnConfirm(true)}
                 disabled={bulkReturnEligible.length === 0}
-                className="px-4 py-2 text-sm font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="w-full h-11 flex items-center justify-center gap-1.5 text-sm font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:bg-amber-100"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-3a4 4 0 00-8 0v3M8 15h8M12 3v4m0 0l-2-2m2 2l2-2" /></svg>
                 {KEEP_QTY}개 유지 반품 ({bulkReturnEligible.length})
               </button>
-              {/* 선택 품목 삭제 (삭제 콜백이 있을 때만 표시) */}
               {onDeleteInventoryItem && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={!canDeleteSelected || isDeletingOptimize}
-                  className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  className="w-full h-11 flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-rose-600 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:bg-rose-700"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   선택 품목 삭제 ({deletableDisplayed.filter(i => selectedOptimizeIds.has(i.id)).length})
                 </button>
               )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => snoozeItems(Array.from(selectedOptimizeIds))}
+                  disabled={selectedOptimizeIds.size === 0}
+                  className="flex-1 h-10 flex items-center justify-center gap-1 text-sm font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:bg-emerald-100"
+                >
+                  유지 ({selectedOptimizeIds.size})
+                </button>
+                <button onClick={onClose} className="flex-1 h-10 flex items-center justify-center text-sm font-bold text-slate-600 border border-slate-200 rounded-xl active:bg-slate-50 transition-colors">
+                  닫기
+                </button>
+              </div>
+            </div>
+            {/* 데스크탑: 기존 가로 레이아웃 */}
+            <div className="hidden md:flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-500 shrink-0">
+                {selectedOptimizeIds.size > 0
+                  ? <><span className="font-bold text-slate-800">{selectedOptimizeIds.size}개</span> 품목 선택됨</>
+                  : '항목을 선택해 유지하거나 삭제하세요'}
+              </p>
+              <div className="flex gap-2 flex-wrap justify-end">
+                <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">닫기</button>
+                <button onClick={() => snoozeItems(Array.from(selectedOptimizeIds))} disabled={selectedOptimizeIds.size === 0} className="px-4 py-2 text-sm font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  선택 품목 유지 ({selectedOptimizeIds.size})
+                </button>
+                <button onClick={() => setShowBulkReturnConfirm(true)} disabled={bulkReturnEligible.length === 0} className="px-4 py-2 text-sm font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-3a4 4 0 00-8 0v3M8 15h8M12 3v4m0 0l-2-2m2 2l2-2" /></svg>
+                  {KEEP_QTY}개 유지 반품 ({bulkReturnEligible.length})
+                </button>
+                {onDeleteInventoryItem && (
+                  <button onClick={() => setShowDeleteConfirm(true)} disabled={!canDeleteSelected || isDeletingOptimize} className="px-4 py-2 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    선택 품목 삭제 ({deletableDisplayed.filter(i => selectedOptimizeIds.has(i.id)).length})
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
