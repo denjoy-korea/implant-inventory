@@ -1,3 +1,5 @@
+import { TRIAL_DAYS } from '../../types';
+
 export interface DbHospitalRow {
   id: string;
   name: string;
@@ -14,7 +16,6 @@ export interface DbHospitalRow {
   trial_used: boolean;
 }
 
-const TRIAL_DAYS = 14;
 
 export function getTrialInfo(h: DbHospitalRow): { status: 'unused' | 'active' | 'expired'; daysLeft?: number } {
   if (!h.trial_started_at && !h.trial_used) return { status: 'unused' };

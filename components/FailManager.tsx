@@ -32,6 +32,7 @@ interface FailManagerProps {
   initialShowBulkModal?: boolean;
   onInitialModalOpened?: () => void;
   onDeleteOrder?: (orderId: string) => Promise<void>;
+  onAddFailOrder?: (order: FailOrder) => Promise<void>;
 }
 
 interface MonthlyFailDatum {
@@ -569,7 +570,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* STICKY HEADER + KPI + FILTER              */}
       {/* ========================================= */}
       <div
-        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
+        className="md:sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
       >
 

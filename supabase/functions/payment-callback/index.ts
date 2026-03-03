@@ -11,13 +11,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 type CallbackStatus = "completed" | "failed";
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -63,7 +56,6 @@ async function parseBody(req: Request): Promise<Record<string, unknown>> {
 
   if (contentType.includes("application/json")) {
     try {
-    const corsHeaders = getCorsHeaders(req);
       return asRecord(await req.json());
     } catch {
       return {};
@@ -140,6 +132,14 @@ function isUuid(value: string): boolean {
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

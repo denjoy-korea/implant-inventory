@@ -24,13 +24,6 @@ interface BillingRow {
   payment_status: string;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -45,7 +38,6 @@ function buildCallbackUrl(supabaseUrl: string, billingId: string): string {
 
   let callbackUrl: URL;
   try {
-    const corsHeaders = getCorsHeaders(req);
     callbackUrl = new URL(configuredBase);
   } catch {
     callbackUrl = new URL(defaultBase);
@@ -60,6 +52,14 @@ function buildCallbackUrl(supabaseUrl: string, billingId: string): string {
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

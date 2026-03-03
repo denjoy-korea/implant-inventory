@@ -328,6 +328,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onUpdateOrderStatus={onUpdateOrderStatus}
         onCancelOrder={onCancelOrder}
         onDeleteOrder={onDeleteOrder}
+        onAddFailOrder={onAddOrder}
         onQuickOrder={(item) => onAddOrder(buildQuickOrder(item))}
         onCreateReturn={onCreateReturn}
         onUpdateReturnStatus={onUpdateReturnStatus}
