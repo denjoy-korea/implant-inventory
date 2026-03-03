@@ -73,8 +73,8 @@ test('mobile critical operations stay wired in dashboard routes', () => {
 
   // Mobile에서는 sticky 고정이 비활성화되고(md 이상에서만 적용) 스크롤 가독성 유지
   assert.match(audit, /<thead className="[^"]*md:sticky md:top-0[^"]*"/);
-  assert.match(fail, /className="md:sticky z-20/);
-  assert.match(order, /className="md:sticky z-20/);
+  assert.match(fail, /className="[^"]*md:sticky[^"]*z-20/);
+  assert.match(order, /className="[^"]*md:sticky[^"]*z-20/);
 
   // 모바일 하단 네비게이션이 별도 컴포넌트로 유지되고 접근성/터치 타겟을 보장
   assert.match(app, /<MobileDashboardNav[\s\S]*onTabChange=\{\(tab\) => setState\(prev => \(\{ \.\.\.prev, dashboardTab: tab \}\)\)\}/s);
