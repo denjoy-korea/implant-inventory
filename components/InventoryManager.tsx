@@ -309,59 +309,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   const stickyRef = useRef<HTMLDivElement | null>(null);
   const [stickyHeight, setStickyHeight] = useState(0);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [isMobileStickyCollapsed, setIsMobileStickyCollapsed] = useState(false);
-  const lastScrollYRef = useRef(0);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mediaQuery = window.matchMedia('(max-width: 767px)');
-    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
-    syncViewport();
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', syncViewport);
-      return () => mediaQuery.removeEventListener('change', syncViewport);
-    }
-    mediaQuery.addListener(syncViewport);
-    return () => mediaQuery.removeListener(syncViewport);
-  }, []);
-
-  useEffect(() => {
-    if (!isMobileViewport || typeof window === 'undefined') {
-      setIsMobileStickyCollapsed(false);
-      return;
-    }
-
-    const collapseThreshold = 140;
-    const directionThreshold = 10;
-    let ticking = false;
-    lastScrollYRef.current = window.scrollY;
-
-    const handleScroll = () => {
-      const currentY = window.scrollY;
-      if (ticking) return;
-      ticking = true;
-
-      window.requestAnimationFrame(() => {
-        const delta = currentY - lastScrollYRef.current;
-
-        if (currentY <= 48) {
-          setIsMobileStickyCollapsed(false);
-        } else if (delta > directionThreshold && currentY > collapseThreshold) {
-          setIsMobileStickyCollapsed(true);
-        } else if (delta < -directionThreshold) {
-          setIsMobileStickyCollapsed(false);
-        }
-
-        lastScrollYRef.current = currentY;
-        ticking = false;
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [isMobileViewport]);
 
   useEffect(() => {
     const el = stickyRef.current;
@@ -588,142 +535,35 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           </div>
       </div>{/* end desktop non-sticky */}
 
-      {/* Sticky: 모바일 요약 + 제조사 필터만 고정 */}
+      {/* Sticky: 모바일 요약 요약바 + 데스크톱 제조사 필터 고정 */}
       <div
         ref={stickyRef}
-        className={`sticky z-20 -mt-2 bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 ${isMobileViewport && isMobileStickyCollapsed ? 'space-y-2 pb-2' : 'pb-3'}`}
+        className="sticky z-20 -mt-2 bg-slate-50/80 backdrop-blur-md pb-3"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
       >
-        <div
-          className={`md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all duration-200 ${isMobileStickyCollapsed ? 'p-2.5' : 'p-4 space-y-3'
-            }`}
-        >
-          {isMobileStickyCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setIsMobileStickyCollapsed(false)}
-              className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5"
-              aria-label="모바일 재고 요약 펼치기"
-            >
-              <div className="min-w-0 text-left">
-                <p className="text-[11px] font-black text-slate-700">모바일 재고 요약</p>
-                <p className="text-[10px] font-semibold text-slate-500 truncate">
-                  {selectedManufacturer ?? '전체'} · 부족 {kpiData.shortageCount} · 재고 {kpiData.totalStock.toLocaleString()}개
+        {/* 모바일 전용 컴팩트 요약 바 */}
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            {kpiData.shortageCount > 0 ? (
+              <>
+                <p className="text-xs font-black text-slate-800">발주 필요</p>
+                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                  <span className="text-rose-600 font-black">{kpiData.shortageCount}종</span>
+                  {' · 총 '}
+                  <span className="text-rose-600 font-black">{kpiData.shortageDeficit}개</span>
+                  {' 부족'}
                 </p>
-              </div>
-              <span className="shrink-0 inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-600">
-                펼치기
-              </span>
-            </button>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-800">모바일 재고 요약</h3>
-                <button
-                  type="button"
-                  onClick={() => setIsMobileStickyCollapsed(true)}
-                  className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-500"
-                >
-                  접기
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400">총 품목</p>
-                  <p className="text-base font-black text-slate-800 tabular-nums">{filteredInventory.length}</p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400">부족 품목</p>
-                  <p className={`text-base font-black tabular-nums ${kpiData.shortageCount > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{kpiData.shortageCount}</p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 col-span-2">
-                  <p className="text-[10px] font-bold text-slate-400">현재 재고 합계</p>
-                  <p className={`text-base font-black tabular-nums ${kpiData.totalStock < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                    {kpiData.totalStock.toLocaleString()}개
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="mobile-manufacturer-filter" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">제조사 필터</label>
-                <select
-                  id="mobile-manufacturer-filter"
-                  value={selectedManufacturer ?? '__all__'}
-                  onChange={(event) => setSelectedManufacturer(event.target.value === '__all__' ? null : event.target.value)}
-                  className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-base font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="__all__">전체 ({visibleInventory.length})</option>
-                  {manufacturersList.map((manufacturer) => {
-                    const count = visibleInventory.filter(i => i.manufacturer === manufacturer).length;
-                    return (
-                      <option key={`mobile-mfr-${manufacturer}`} value={manufacturer}>
-                        {manufacturer} ({count})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="relative group/tip-1m-m flex-1">
-                    <button onClick={() => setMonthFactor(1)} className={`w-full h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
-                    <div className="absolute top-full left-0 mt-2 w-64 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-1m-m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
-                      <p>사용량 기반 1개월 재고를 권장량으로 제안합니다.</p>
-                      <p className="mt-1">재고수량이 최적화되는만큼 수술기록지 업데이트를 자주 해서 변동성 확인이 필요합니다.</p>
-                    </div>
-                  </div>
-                  <div className="relative group/tip-2m-m flex-1">
-                    <button onClick={() => setMonthFactor(2)} className={`w-full h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
-                    <div className="absolute top-full right-0 mt-2 w-72 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-2m-m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
-                      <p>사용량 기반 2개월 재고를 권장량으로 제안합니다.</p>
-                      <p className="mt-1 text-slate-300">재고수량이 많아져 재고실사와 관리가 1개월 기준에 비해 비효율적입니다.</p>
-                      <p className="mt-1">현장의 재고량을 파악하면서 주문이 필요한 시점에 수술기록지를 업로드해서 최적의 주문수량 발주를 하시면 됩니다.</p>
-                    </div>
-                  </div>
-                </div>
-                {!isReadOnly && hospitalId && (
-                  <button
-                    onClick={() => void saveMonthFactorForAll(monthFactor)}
-                    disabled={saveStatus === 'saving'}
-                    className={`w-full h-8 rounded-xl text-[11px] font-bold border transition-all ${
-                      saveStatus === 'saved'
-                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                        : saveStatus === 'error'
-                        ? 'bg-rose-50 text-rose-500 border-rose-200'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    {saveStatus === 'saved' ? '저장됨 ✓' : saveStatus === 'error' ? '실패' : saveStatus === 'saving' ? '저장 중...' : '모두에게 저장'}
-                  </button>
-                )}
-              </div>
-
-              {!isReadOnly && (
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => !isEditExhausted && setShowBaseStockModal(true)}
-                    disabled={isEditExhausted}
-                    className={`h-10 px-3 rounded-xl text-[11px] font-black border transition-all ${isEditExhausted
-                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                      : 'bg-white text-slate-700 border-slate-200 active:scale-[0.99]'
-                      }`}
-                  >
-                    기초재고관리{isUnlimited ? '' : isEditExhausted ? ' (한도)' : ` (${maxEdits - editCount}회)`}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openAddItemModal}
-                    className="h-10 px-3 rounded-xl bg-indigo-600 text-white text-xs font-black active:scale-[0.99] transition-all"
-                  >
-                    품목 추가
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-black text-emerald-700">재고 정상</p>
+                <p className="text-[11px] font-semibold text-slate-400 mt-0.5">부족 품목 없음</p>
+              </>
+            )}
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg shrink-0">
+            {monthFactor}개월 기준
+          </span>
         </div>
 
         {/* C. Manufacturer Filter Strip */}
@@ -823,27 +663,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           </div>
         </div>
       )}
-
-      {/* ================================================= */}
-      {/* Usage Analysis Card — redesigned                  */}
-      {/* ================================================= */}
-      <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <h3 className="text-sm font-black text-slate-800">모바일 사용량 요약</h3>
-        {chartData.length > 0 ? (
-          <div className="mt-3 space-y-2">
-            {chartData.slice(0, 3).map((item, idx) => (
-              <div key={`mobile-usage-${item.id}`} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
-                <p className="text-sm font-semibold text-slate-700 truncate">
-                  {idx + 1}. {item.brand} {item.size}
-                </p>
-                <p className="text-sm font-black text-indigo-600 tabular-nums">{item.usageCount}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-xs font-semibold text-slate-400">사용 데이터가 없습니다.</p>
-        )}
-      </div>
 
       <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <div className="flex items-center justify-between">

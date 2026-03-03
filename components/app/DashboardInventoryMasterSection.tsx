@@ -242,15 +242,20 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
       onResolveManualInput={resolveManualSurgeryInput}
       initialShowBaseStockEdit={initialShowBaseStockEdit}
       onBaseStockEditApplied={onBaseStockEditApplied}
-      onQuickOrder={(item) => onAddOrder({
-        id: `order_${Date.now()}`,
-        type: 'replenishment',
-        manufacturer: item.manufacturer,
-        date: new Date().toISOString().split('T')[0],
-        items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }],
-        manager: state.user?.name || '관리자',
-        status: 'ordered',
-      })}
+      onQuickOrder={async (item) => {
+        await onAddOrder({
+          id: `order_${Date.now()}`,
+          type: 'replenishment',
+          manufacturer: item.manufacturer,
+          date: new Date().toISOString().split('T')[0],
+          items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }],
+          manager: state.user?.name || '관리자',
+          status: 'ordered',
+        });
+        // 발주 후 inventory_master 탭 유지 (handleAddOrder가 order_management로 이동시키는 것을 취소)
+        setState(prev => ({ ...prev, dashboardTab: 'inventory_master' }));
+        showAlertToast(`${item.brand} ${item.size} 발주 등록 완료`, 'success');
+      }}
       onCreateReturn={onCreateReturn}
       managerName={state.user?.name}
     />
