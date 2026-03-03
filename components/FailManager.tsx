@@ -153,7 +153,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [selectedItems, setSelectedItems] = useState<{ brand: string, size: string, quantity: number }[]>([]);
   const [hoveredChartIdx, setHoveredChartIdx] = useState<number | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [chartMonthOffset, setChartMonthOffset] = useState(0);
@@ -318,12 +317,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             }
           });
         });
-      selectedItems.forEach(si => {
-        if (simpleNormalize(si.brand) === simpleNormalize(item.brand) &&
-          getSizeMatchKey(si.size, activeM) === getSizeMatchKey(item.size, activeM)) {
-          alreadyOrderedQty += Number(si.quantity || 0);
-        }
-      });
       const invItem = inventory.find(i =>
         simpleNormalize(i.brand) === simpleNormalize(item.brand) &&
         getSizeMatchKey(i.size, activeM) === getSizeMatchKey(item.size, activeM)
@@ -339,16 +332,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       return b.remainingToOrder - a.remainingToOrder;
     });
     return result;
-  }, [activeM, mPendingList, failOrders, selectedItems, isModalOpen, inventory]);
-
-  const availableInventoryForM = useMemo(() => {
-    if (!activeM) return [];
-    const normalizedActiveM = simpleNormalize(activeM);
-    return inventory.filter(i => {
-      const normalizedInvM = simpleNormalize(i.manufacturer);
-      return normalizedInvM.includes(normalizedActiveM) || normalizedActiveM.includes(normalizedInvM);
-    });
-  }, [inventory, activeM]);
+  }, [activeM, mPendingList, failOrders, isModalOpen, inventory]);
 
   const handleOpenOrderModal = () => {
     if (activeM === 'all') {
@@ -359,9 +343,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       showToast('현재 제조사에 반품 가능한 교환 잔여 건수가 없습니다.', 'error');
       return;
     }
-    const brands = Array.from(new Set(availableInventoryForM.map(i => i.brand))).sort();
-    const autoBrand = brands.length === 1 ? brands[0] : '';
-    setSelectedItems([{ brand: autoBrand, size: '', quantity: 1 }]);
     setIsModalOpen(true);
   };
 

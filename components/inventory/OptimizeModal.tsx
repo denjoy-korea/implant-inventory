@@ -44,10 +44,25 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const [returnQtyStr, setReturnQtyStr] = useState('');
 
   // ── 유지(스누즈) 상태: Supabase DB 기반 (기기 간 공유), localStorage fallback
-  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>({});
+  // 초기값은 localStorage에서 동기 로드하여 첫 렌더 flash 방지, 이후 Supabase 값으로 업그레이드
+  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>(() => {
+    if (!hospitalId) return {};
+    try {
+      const raw = localStorage.getItem(`${SNOOZE_DB_KEY}_${hospitalId}`);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      const now = new Date().toISOString();
+      const cleaned: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v > now) cleaned[k] = v;
+      }
+      return cleaned;
+    } catch { return {}; }
+  });
 
   useEffect(() => {
     if (!hospitalId) return;
+    // Supabase에서 최신 데이터 로드 (기기 간 공유 반영)
     void snoozeService.get(hospitalId, SNOOZE_DB_KEY).then(setSnoozedMap);
   }, [hospitalId]);
 

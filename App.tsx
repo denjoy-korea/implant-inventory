@@ -1149,15 +1149,12 @@ const App: React.FC = () => {
     }));
 
     try {
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < changes.length; i += BATCH_SIZE) {
-        const batch = changes.slice(i, i + BATCH_SIZE);
-        const results = await Promise.all(
-          batch.map(change => inventoryService.updateItem(change.id, { initial_stock: change.initialStock }))
-        );
-        if (results.some(result => !result)) {
-          throw new Error('batch_update_failed');
-        }
+      // 단일 RPC 호출로 일괄 업데이트 (개별 PATCH × N → rate limit/CORS 오류 해소)
+      const ok = await inventoryService.batchUpdateInitialStock(
+        changes.map(c => ({ id: c.id, initialStock: c.initialStock }))
+      );
+      if (!ok) {
+        throw new Error('batch_update_failed');
       }
 
       operationLogService.logOperation(
@@ -1672,10 +1669,30 @@ const App: React.FC = () => {
 
     if (result.ok) {
       await loadReturnRequests();
+      // 반품 신청 즉시 재고 차감 (보관소로 이동)
+      for (const item of params.items) {
+        const sizeKey = getSizeMatchKey(item.size, params.manufacturer);
+        const invItem = state.inventory.find(inv =>
+          inv.manufacturer === params.manufacturer &&
+          inv.brand === item.brand &&
+          getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+        );
+        if (invItem) {
+          await inventoryService.adjustStock(invItem.id, -item.quantity);
+          setState(prev => ({
+            ...prev,
+            inventory: prev.inventory.map(i =>
+              i.id === invItem.id
+                ? { ...i, currentStock: i.currentStock - item.quantity, stockAdjustment: i.stockAdjustment - item.quantity }
+                : i
+            ),
+          }));
+        }
+      }
     } else {
       throw new Error('반품 신청 실패');
     }
-  }, [state.user?.hospitalId, loadReturnRequests]);
+  }, [state.user?.hospitalId, state.inventory, loadReturnRequests]);
 
   const handleUpdateReturnStatus = useCallback(async (
     returnId: string,
@@ -1697,10 +1714,40 @@ const App: React.FC = () => {
       if (result.reason === 'conflict') {
         await loadReturnRequests();
       }
+      return result;
+    }
+
+    // 재고 조정: 반품 거절 시 복구, 거절 철회(rejected→requested) 시 재차감
+    const returnReq = returnRequests.find(r => r.id === returnId);
+    if (returnReq) {
+      const needsRestore = status === 'rejected';
+      const needsDeduct = status === 'requested' && currentStatus === 'rejected';
+      if (needsRestore || needsDeduct) {
+        const delta = needsRestore ? 1 : -1;
+        for (const item of returnReq.items) {
+          const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+          const invItem = state.inventory.find(inv =>
+            inv.manufacturer === returnReq.manufacturer &&
+            inv.brand === item.brand &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            await inventoryService.adjustStock(invItem.id, delta * item.quantity);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === invItem.id
+                  ? { ...i, currentStock: i.currentStock + delta * item.quantity, stockAdjustment: i.stockAdjustment + delta * item.quantity }
+                  : i
+              ),
+            }));
+          }
+        }
+      }
     }
 
     return result;
-  }, [loadReturnRequests]);
+  }, [loadReturnRequests, returnRequests, state.inventory]);
 
   const handleCompleteReturn = useCallback(async (returnId: string): Promise<ReturnMutationResult> => {
     const hospitalId = state.user?.hospitalId;
@@ -1718,7 +1765,7 @@ const App: React.FC = () => {
     const result = await returnService.completeReturn(returnId, hospitalId);
 
     if (!result.ok) {
-      // 롤백 (재고 변경은 Realtime 구독이 자동으로 delta 반영하므로 별도 reload 불필요)
+      // 롤백 (재고는 신청 시점에 이미 차감됐으므로 완료 실패 시 재고 변동 없음)
       await loadReturnRequests();
     }
 
@@ -1726,6 +1773,9 @@ const App: React.FC = () => {
   }, [state.user, loadReturnRequests]);
 
   const handleDeleteReturn = useCallback(async (returnId: string) => {
+    // 삭제 전 재고 복구를 위해 미리 저장 (반품 신청 시 차감됐으므로)
+    const returnReq = returnRequests.find(r => r.id === returnId);
+
     setReturnRequests(prev => prev.filter(r => r.id !== returnId));
 
     const result = await returnService.deleteReturnRequest(returnId, 'requested');
@@ -1734,7 +1784,30 @@ const App: React.FC = () => {
       await loadReturnRequests();
       throw new Error('반품 삭제 실패');
     }
-  }, [loadReturnRequests]);
+
+    // 삭제 성공 시 재고 복구
+    if (returnReq) {
+      for (const item of returnReq.items) {
+        const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+        const invItem = state.inventory.find(inv =>
+          inv.manufacturer === returnReq.manufacturer &&
+          inv.brand === item.brand &&
+          getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+        );
+        if (invItem) {
+          await inventoryService.adjustStock(invItem.id, item.quantity);
+          setState(prev => ({
+            ...prev,
+            inventory: prev.inventory.map(i =>
+              i.id === invItem.id
+                ? { ...i, currentStock: i.currentStock + item.quantity, stockAdjustment: i.stockAdjustment + item.quantity }
+                : i
+            ),
+          }));
+        }
+      }
+    }
+  }, [loadReturnRequests, returnRequests, state.inventory]);
 
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update

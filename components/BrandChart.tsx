@@ -143,34 +143,42 @@ const BrandChart: React.FC<BrandChartProps> = ({ data, enabledManufacturers, onT
         <div className="space-y-3">
           {/* 전체 선택/해제 버튼 — IIFE 제거, brandSelectionState 사용 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => onToggleAllBrands(selectedManufacturer, true)}
-              disabled={!brandSelectionState.anyActive}
-              title={!brandSelectionState.anyActive ? '모든 브랜드가 이미 해제되어 있습니다' : '선택된 모든 브랜드를 해제합니다'}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all duration-150 ${
-                brandSelectionState.anyActive
-                  ? 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
-                  : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-              }`}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              전체 해제
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleAllBrands(selectedManufacturer, false)}
-              disabled={brandSelectionState.allActive}
-              title={brandSelectionState.allActive ? '모든 브랜드가 이미 선택되어 있습니다' : '모든 브랜드를 선택합니다'}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all duration-150 ${
-                !brandSelectionState.allActive
-                  ? 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
-                  : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-              }`}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-              전체 선택
-            </button>
+            <div className="relative group/brand-deselect-all">
+              <button
+                type="button"
+                onClick={() => onToggleAllBrands(selectedManufacturer, true)}
+                disabled={!brandSelectionState.anyActive}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all duration-150 ${
+                  brandSelectionState.anyActive
+                    ? 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
+                    : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                전체 해제
+              </button>
+              <div className="absolute top-full left-0 mt-1.5 w-52 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2 shadow-xl opacity-0 group-hover/brand-deselect-all:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                {!brandSelectionState.anyActive ? '모든 브랜드가 이미 해제되어 있습니다' : '선택된 모든 브랜드를 해제합니다'}
+              </div>
+            </div>
+            <div className="relative group/brand-select-all">
+              <button
+                type="button"
+                onClick={() => onToggleAllBrands(selectedManufacturer, false)}
+                disabled={brandSelectionState.allActive}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all duration-150 ${
+                  !brandSelectionState.allActive
+                    ? 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
+                    : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                전체 선택
+              </button>
+              <div className="absolute top-full left-0 mt-1.5 w-52 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2 shadow-xl opacity-0 group-hover/brand-select-all:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                {brandSelectionState.allActive ? '모든 브랜드가 이미 선택되어 있습니다' : '모든 브랜드를 선택합니다'}
+              </div>
+            </div>
             <span className="text-[10px] text-slate-400 font-medium ml-1">
               {brands.filter(v => (brandStats[`${v.manufacturer}\x00${v.brandName}`]?.active ?? 0) > 0).length}/{brands.length} 사용 중
             </span>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { PlanType, BillingCycle, PLAN_NAMES, PLAN_PRICING, PLAN_ORDER, PLAN_LIMITS } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -20,6 +21,8 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   triggerMessage,
   onSelectPlan,
 }) => {
+  useEscapeKey(onClose, isOpen);
+
   if (!isOpen) return null;
 
   const upgradePlans: PlanType[] = ['basic', 'plus', 'business'];
@@ -27,7 +30,12 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-fade-in-up">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upgrade-modal-title"
+        className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-fade-in-up"
+      >
         {/* Header */}
         <div className="text-center mb-6">
           <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -35,7 +43,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
           </div>
-          <h3 className="text-lg font-bold text-slate-900">업그레이드가 필요합니다</h3>
+          <h3 id="upgrade-modal-title" className="text-lg font-bold text-slate-900">업그레이드가 필요합니다</h3>
           <p className="text-sm text-slate-500 mt-1">{triggerMessage}</p>
         </div>
 

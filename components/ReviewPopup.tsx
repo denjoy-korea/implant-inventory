@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { reviewService, ReviewType, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ReviewPopupProps {
   userId: string;
@@ -72,9 +73,14 @@ export default function ReviewPopup({ userId, reviewType, initialLastName = '', 
     onClose();
   };
 
+  useEscapeKey(handleClose);
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-popup-title"
         className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
@@ -85,7 +91,7 @@ export default function ReviewPopup({ userId, reviewType, initialLastName = '', 
               <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black mb-2 ${meta.badgeColor}`}>
                 {meta.badge}
               </span>
-              <h3 className="text-base font-black text-slate-900 leading-snug">{meta.title}</h3>
+              <h3 id="review-popup-title" className="text-base font-black text-slate-900 leading-snug">{meta.title}</h3>
               <p className="text-xs text-slate-500 mt-1">{meta.sub}</p>
             </div>
             <button onClick={handleClose} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors mt-0.5">

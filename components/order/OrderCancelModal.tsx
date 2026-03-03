@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Order } from '../../types';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface OrderCancelModalProps {
   orders: Order[];
@@ -35,12 +36,20 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
 }) => {
   const [reason, setReason] = useState('');
 
+  useEscapeKey(() => { if (!isLoading) onClose(); });
+
   const firstOrder = orders[0];
   const allItems = orders.flatMap(o => o.items);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={() => !isLoading && onClose()}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={() => !isLoading && onClose()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-cancel-modal-title"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* 헤더 */}
         <div className="shrink-0 mb-4">
           {isLoading ? (
@@ -49,7 +58,7 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
               <h3 className="text-base font-bold text-red-500">발주 취소 처리 중...</h3>
             </div>
           ) : (
-            <h3 className="text-base font-bold text-slate-800 mb-1">발주 취소</h3>
+            <h3 id="order-cancel-modal-title" className="text-base font-bold text-slate-800 mb-1">발주 취소</h3>
           )}
           <p className="text-sm text-slate-500">
             {isLoading

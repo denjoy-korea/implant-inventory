@@ -66,9 +66,9 @@ export default function SurgeryDashboardSkeleton() {
                 <Bone className="w-full h-2 rounded-full" />
             </div>
 
-            {/* Charts 2x2 Grid Skeleton */}
+            {/* Charts 2x2 Grid Skeleton — matches actual 4-chart xl:grid-cols-[2.5fr_1fr] */}
             <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
-                {/* Monthly Trend */}
+                {/* Monthly Trend (row 1, col 1) */}
                 <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
                     <div className="flex items-center justify-between mb-6">
                         <div className="space-y-1">
@@ -84,14 +84,14 @@ export default function SurgeryDashboardSkeleton() {
                     <div className="flex items-end gap-2 h-[200px]">
                         {Array.from({ length: 13 }).map((_, i) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-1 justify-end">
-                                <Bone className="w-full rounded" style={{ height: `${30 + Math.random() * 70}%` }} />
+                                <Bone className="w-full rounded" style={{ height: `${30 + (i * 17 % 70)}%` }} />
                                 <Bone className="w-8 h-2 mt-2" />
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Day of Week */}
+                {/* Day of Week (row 1, col 2) */}
                 <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
                     <div className="space-y-1 mb-6">
                         <Bone className="w-28 h-4" />
@@ -100,8 +100,45 @@ export default function SurgeryDashboardSkeleton() {
                     <div className="flex items-end gap-2 h-[200px]">
                         {Array.from({ length: 7 }).map((_, i) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-1 justify-end">
-                                <Bone className="w-full rounded" style={{ height: `${20 + Math.random() * 80}%` }} />
+                                <Bone className="w-full rounded" style={{ height: `${20 + (i * 13 % 80)}%` }} />
                                 <Bone className="w-4 h-2 mt-2" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Placement Trend (row 2, col 1) */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="space-y-1">
+                            <Bone className="w-24 h-4" />
+                            <Bone className="w-20 h-2" />
+                        </div>
+                        <Bone className="w-20 h-6 rounded-lg" />
+                    </div>
+                    <div className="flex items-end gap-2 h-[200px]">
+                        {Array.from({ length: 13 }).map((_, i) => (
+                            <div key={i} className="flex-1 flex flex-col items-center gap-1 justify-end">
+                                <Bone className="w-full rounded" style={{ height: `${25 + (i * 11 % 65)}%` }} />
+                                <Bone className="w-8 h-2 mt-2" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Classification Ratios (row 2, col 2) */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+                    <div className="space-y-1 mb-6">
+                        <Bone className="w-24 h-4" />
+                        <Bone className="w-16 h-2" />
+                    </div>
+                    <Bone className="w-36 h-36 rounded-full mx-auto mb-4" />
+                    <div className="space-y-2">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                                <Bone className="w-3 h-3 rounded-full flex-shrink-0" />
+                                <Bone className="flex-1 h-3 rounded" />
+                                <Bone className="w-10 h-3" />
                             </div>
                         ))}
                     </div>

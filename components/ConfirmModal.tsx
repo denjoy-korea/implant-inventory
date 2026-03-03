@@ -1,5 +1,6 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ConfirmModalProps {
   title: string;
@@ -49,13 +50,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   const c = COLORS[confirmColor];
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  useEscapeKey(onCancel);
 
   return (
     <div
@@ -63,6 +58,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
       onClick={onCancel}
     >
       <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        aria-describedby="confirm-modal-message"
         className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -78,10 +77,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
 
           {/* Title */}
-          <h3 className="text-lg font-bold text-slate-800 mb-2">{title}</h3>
+          <h3 id="confirm-modal-title" className="text-lg font-bold text-slate-800 mb-2">{title}</h3>
 
           {/* Message */}
-          <p className="text-sm text-slate-500 leading-relaxed whitespace-pre-line">{message}</p>
+          <p id="confirm-modal-message" className="text-sm text-slate-500 leading-relaxed whitespace-pre-line">{message}</p>
 
           {/* Tip */}
           {tip && (

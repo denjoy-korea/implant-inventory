@@ -72,18 +72,39 @@ export const inventoryService = {
   ): Promise<DbInventoryItem | null> {
     const normalizedUpdates = { ...updates };
 
-    const { data, error } = await supabase
-      .from('inventory')
-      .update(normalizedUpdates)
-      .eq('id', id)
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('inventory')
+        .update(normalizedUpdates)
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) {
-      console.error('[inventoryService] Update failed:', JSON.stringify(error), 'id:', id);
+      if (error) {
+        console.error('[inventoryService] Update failed:', JSON.stringify(error), 'id:', id);
+        return null;
+      }
+      return data as DbInventoryItem;
+    } catch (networkError) {
+      // TypeError: Failed to fetch 등 네트워크 레벨 오류
+      console.error('[inventoryService] Network error on update:', networkError, 'id:', id);
       return null;
     }
-    return data as DbInventoryItem;
+  },
+
+  /** 기초재고 일괄 수정 (단일 RPC 호출 — 개별 PATCH × N 방식의 rate limit 문제 해소) */
+  async batchUpdateInitialStock(
+    items: Array<{ id: string; initialStock: number }>
+  ): Promise<boolean> {
+    const updates = items.map(i => ({ id: i.id, initial_stock: i.initialStock }));
+    const { error } = await supabase.rpc('batch_update_initial_stock', {
+      updates: updates,
+    });
+    if (error) {
+      console.error('[inventoryService] batchUpdateInitialStock failed:', JSON.stringify(error));
+      return false;
+    }
+    return true;
   },
 
   /** stock_adjustment 증감 (반품/조정 등 delta 방식) */

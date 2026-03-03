@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { DbProfile, UserRole } from '../types';
 import { decryptProfile } from '../services/mappers';
+import ConfirmModal from './ConfirmModal';
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   admin: { label: '운영자', color: 'bg-rose-50 text-rose-600' },
@@ -16,11 +17,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: '대기', color: 'bg-amber-50 text-amber-600' },
 };
 
+interface PendingRoleChange {
+  profileId: string;
+  name: string;
+  newRole: UserRole;
+}
+
 const AdminPanel: React.FC = () => {
   const [profiles, setProfiles] = useState<DbProfile[]>([]);
   const [hospitals, setHospitals] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingRoleChange, setPendingRoleChange] = useState<PendingRoleChange | null>(null);
 
   useEffect(() => {
     loadData();
@@ -46,8 +54,12 @@ const AdminPanel: React.FC = () => {
   };
 
   const updateRole = async (profileId: string, newRole: UserRole) => {
-    await supabase.from('profiles').update({ role: newRole }).eq('id', profileId);
-    loadData();
+    try {
+      await supabase.from('profiles').update({ role: newRole }).eq('id', profileId);
+      loadData();
+    } catch {
+      alert('역할 변경에 실패했습니다. 다시 시도해 주세요.');
+    }
   };
 
   const updateStatus = async (profileId: string, newStatus: 'active' | 'pending') => {
@@ -165,7 +177,11 @@ const AdminPanel: React.FC = () => {
                       <td className="px-6 py-4">
                         <select
                           value={p.role}
-                          onChange={(e) => updateRole(p.id, e.target.value as UserRole)}
+                          onChange={(e) => {
+                            const newRole = e.target.value as UserRole;
+                            if (newRole === p.role) return;
+                            setPendingRoleChange({ profileId: p.id, name: p.name, newRole });
+                          }}
                           className={`text-xs font-bold px-2 py-1 rounded cursor-pointer border-0 ${role.color}`}
                         >
                           <option value="admin">운영자</option>
@@ -226,6 +242,21 @@ const AdminPanel: React.FC = () => {
         <p>Admin Authorization Level: FULL</p>
         <p>Supabase DB Connected</p>
       </div>
+
+      {pendingRoleChange && (
+        <ConfirmModal
+          title="역할 변경 확인"
+          message={`${pendingRoleChange.name}의 역할을 '${ROLE_LABELS[pendingRoleChange.newRole]?.label}'로 변경하시겠습니까?`}
+          tip="이 작업은 해당 사용자의 접근 권한에 즉시 영향을 줍니다."
+          confirmLabel="변경"
+          confirmColor="rose"
+          onConfirm={() => {
+            updateRole(pendingRoleChange.profileId, pendingRoleChange.newRole);
+            setPendingRoleChange(null);
+          }}
+          onCancel={() => setPendingRoleChange(null)}
+        />
+      )}
     </div>
   );
 };

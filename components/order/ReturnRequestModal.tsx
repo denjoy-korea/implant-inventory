@@ -4,6 +4,7 @@ import {
   RETURN_REASON_LABELS,
   InventoryItem,
 } from '../../types';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface ReturnItem {
   brand: string;
@@ -36,6 +37,8 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   const [reason, setReason] = useState<ReturnReason>('excess_stock');
   const [manager, setManager] = useState(currentUserName);
   const [memo, setMemo] = useState('');
+  useEscapeKey(() => { if (!isLoading) onClose(); });
+
   const [items, setItems] = useState<ReturnItem[]>([
     { brand: '', size: '', quantity: 1 },
   ]);
@@ -86,15 +89,21 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={() => !isLoading && onClose()}>
-      <div className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={() => !isLoading && onClose()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="return-request-modal-title"
+        className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Drag handle (mobile only) */}
         <div className="sm:hidden flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-slate-300" />
         </div>
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-base font-bold text-gray-900">반품 신청</h2>
+          <h2 id="return-request-modal-title" className="text-base font-bold text-gray-900">반품 신청</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"

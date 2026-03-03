@@ -87,7 +87,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   showAlertToast,
   isReadOnly,
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'returns'>('orders');
   const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -546,50 +545,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500" style={{ animationDuration: '0s' }}>
-      {/* 서브탭: 발주 관리 | 반품 관리 */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'orders'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
-          발주 관리
-        </button>
-        <button
-          onClick={() => setActiveTab('returns')}
-          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${activeTab === 'returns'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
-          반품 관리
-          {returnRequests.filter(r => r.status === 'requested').length > 0 && (
-            <span className="bg-yellow-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-              {returnRequests.filter(r => r.status === 'requested').length}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* 반품 관리 탭 */}
-      {activeTab === 'returns' && (
-        <ReturnManager
-          returnRequests={returnRequests}
-          inventory={inventory}
-          hospitalId={hospitalId}
-          currentUserName={currentUserName}
-          isReadOnly={isReadOnly ?? false}
-          onCreateReturn={onCreateReturn}
-          onUpdateReturnStatus={onUpdateReturnStatus}
-          onCompleteReturn={onCompleteReturn}
-          onDeleteReturn={onDeleteReturn}
-          showAlertToast={showAlertToast}
-        />
-      )}
-
-      {activeTab === 'orders' && <div className="space-y-6">
+      <div className="space-y-6">
         {/* ═══════════════════════════════════════ */}
         {/* STICKY HEADER + KPI + FILTERS           */}
         {/* ═══════════════════════════════════════ */}
@@ -1744,7 +1700,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             </div>
           </div>
         )}
-      </div>}
+      </div>
+
+      {/* 반품 관리 — 주문내역과 통합 */}
+      <ReturnManager
+        returnRequests={returnRequests}
+        inventory={inventory}
+        hospitalId={hospitalId}
+        currentUserName={currentUserName}
+        isReadOnly={isReadOnly ?? false}
+        onCreateReturn={onCreateReturn}
+        onUpdateReturnStatus={onUpdateReturnStatus}
+        onCompleteReturn={onCompleteReturn}
+        onDeleteReturn={onDeleteReturn}
+        showAlertToast={showAlertToast}
+      />
     </div>
   );
 };
