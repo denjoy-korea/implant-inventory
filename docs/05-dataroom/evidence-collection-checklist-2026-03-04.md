@@ -20,9 +20,9 @@
 | R-03 | 해지 | 해지 처리 근거 | 계정 상태/로그 | CS | 2026-03-14 | TODO |
 | S-01 | 보안 | 스모크 테스트 결과 | `security-smoke-test-checklist.md` 실행 로그 | SRE | 2026-03-16 | **DONE** 2026-03-04 (`04-security-operations/2026-03-04_security_verify-release-run_v1.md`) |
 | S-02 | 보안 | 권한 정책 증빙 | RLS/권한 SQL 버전 | SRE | 2026-03-16 | **DONE** 2026-03-04 (`04-security-operations/2026-03-04_security_rls-policy-index_v1.md`) |
-| S-03 | 보안 | 사고 대응 기록 | incident timeline | SRE | 2026-03-16 | TODO |
+| S-03 | 보안 | 사고 대응 기록 | incident timeline | SRE | 2026-03-16 | **DONE** 2026-03-04 (`04-security-operations/2026-03-04_security_incident-history_v1.md`) |
 | L-01 | 법무 | 이용약관 버전 이력 | 약관 문서 + 변경일 | Legal | 2026-03-14 | **DONE** 2026-03-04 (`05-policy-versioning/2026-03-04_terms-of-service_v1.md`) |
 | L-02 | 법무 | 개인정보 처리방침 버전 | 정책 문서 + 고지 로그 | Legal | 2026-03-14 | **DONE** 2026-03-04 (`05-policy-versioning/2026-03-04_privacy-policy_v1.md`) |
 | L-03 | 법무 | 환불정책 버전 | 정책 문서 + 시행일 | Legal | 2026-03-14 | **DONE** 2026-03-04 (`05-policy-versioning/2026-03-04_refund-policy_v1.md`) |
-| I-01 | 제출본 | 원본 패키지 zip | 01~05 폴더 집계 | PMO | 2026-03-20 | TODO |
+| I-01 | 제출본 | 원본 패키지 zip | 01~05 폴더 집계 | PMO | 2026-03-20 | 구조 완성 2026-03-04 (`06-investor-pack/2026-03-04_investor-pack-index_v1.md`) / zip 조립은 외부 파일 수집 완료 후 |
 | I-02 | 제출본 | 요약본(레드액트) PDF | 외부 공유본 | PMO | 2026-03-20 | TODO |

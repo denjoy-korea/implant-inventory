@@ -663,7 +663,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* Mobile: 발주 필요 목록 (인라인 체크박스 섹션)   */}
         {/* ═══════════════════════════════════════════════ */}
         {lowStockItems.length > 0 && (
-          <div className="hidden bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
+          <div className="md:hidden bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
             {/* 헤더 */}
             <div className="px-4 py-3 bg-rose-50/60 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1486,7 +1486,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* ═══════════════════════════════════════ */}
         {/* 주문 내역 테이블                          */}
         {/* ═══════════════════════════════════════ */}
-        <div className={`bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative ${!historyOnly ? 'hidden md:block' : ''}`}>
+        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative">
           <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
           <div className="px-4 sm:px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
             <div>
