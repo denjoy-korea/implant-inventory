@@ -79,7 +79,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
             const key = i.brand;
             const prev = map.get(key) ?? { count: 0, excess: 0, returnQty: 0 };
             const itemExcess = i.currentStock - i.recommendedStock;
-            const willReturn = someSelected ? selectedIds.has(i.id) : true;
+            const willReturn = selectedIds.has(i.id);
             map.set(key, {
                 count: prev.count + 1,
                 excess: prev.excess + itemExcess,
@@ -87,7 +87,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
             });
         });
         return Array.from(map.entries()).sort((a, b) => b[1].excess - a[1].excess);
-    }, [items, selectedIds, someSelected]);
+    }, [items, selectedIds]);
 
     const toggleAll = () => {
         if (allSelected) {
@@ -318,36 +318,40 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                             {/* 규격 크게 */}
                                             <p className="text-[26px] font-black text-slate-700 mt-2 leading-tight tracking-tight whitespace-nowrap">{mobileItem.size}</p>
 
-                                            {/* 재고 + 초과 */}
-                                            <div className="flex items-end gap-6 mt-3">
-                                                <div>
-                                                    <p className="text-[10px] font-bold text-slate-400 mb-0.5 whitespace-nowrap">현재재고</p>
-                                                    <div className="flex items-end gap-1">
-                                                        <span className="text-[40px] font-black text-slate-900 tabular-nums leading-none">{mobileItem.currentStock}</span>
+                                            {/* 현재재고 · 권장 · 초과 */}
+                                            <div className="flex items-stretch gap-0 mt-4">
+                                                <div className="flex-1 flex flex-col items-center py-3">
+                                                    <p className="text-[10px] font-bold text-slate-400 mb-1.5 whitespace-nowrap">현재재고</p>
+                                                    <div className="flex items-end gap-0.5">
+                                                        <span className="text-[38px] font-black text-slate-900 tabular-nums leading-none">{mobileItem.currentStock}</span>
                                                         <span className="text-sm font-bold text-slate-400 mb-1">개</span>
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[10px] font-bold text-slate-400 mb-0.5 whitespace-nowrap">초과</p>
-                                                    <div className="flex items-end gap-1">
-                                                        <span className="text-[40px] font-black text-indigo-500 tabular-nums leading-none">+{mobileExcess}</span>
+                                                <div className="w-px bg-slate-200 self-stretch mx-1" />
+                                                <div className="flex-1 flex flex-col items-center py-3">
+                                                    <p className="text-[10px] font-bold text-slate-400 mb-1.5 whitespace-nowrap">권장</p>
+                                                    <div className="flex items-end gap-0.5">
+                                                        <span className="text-[38px] font-black text-slate-500 tabular-nums leading-none">{mobileItem.recommendedStock}</span>
+                                                        <span className="text-sm font-bold text-slate-400 mb-1">개</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-px bg-slate-200 self-stretch mx-1" />
+                                                <div className="flex-1 flex flex-col items-center py-3">
+                                                    <p className="text-[10px] font-bold text-slate-400 mb-1.5 whitespace-nowrap">초과</p>
+                                                    <div className="flex items-end gap-0.5">
+                                                        <span className="text-[38px] font-black text-indigo-500 tabular-nums leading-none">+{mobileExcess}</span>
                                                         <span className="text-sm font-bold text-slate-400 mb-1">개</span>
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* 권장 수량 */}
-                                            <p className="text-[11px] text-slate-400 mt-2 whitespace-nowrap">
-                                                권장 <span className="font-bold text-slate-600">{mobileItem.recommendedStock}개</span>
-                                            </p>
 
                                             {mobilePendingQty > 0 && (
                                                 <p className="text-[11px] font-bold text-amber-600 mt-1 whitespace-nowrap">반품예정 {mobilePendingQty}개</p>
                                             )}
                                         </div>
 
-                                        {/* 액션 버튼 */}
-                                        <div className="flex gap-3 mt-4">
+                                        {/* 액션 버튼 3열 */}
+                                        <div className="flex gap-2 mt-4">
                                             <button
                                                 onClick={() => handleSnoozeAndAdvance(mobileItem)}
                                                 className="flex-1 h-14 rounded-2xl border-2 border-teal-200 bg-teal-50 text-teal-700 text-[15px] font-black whitespace-nowrap active:scale-[0.97] transition-transform">
@@ -359,14 +363,12 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                                 className="flex-1 h-14 rounded-2xl bg-amber-500 text-white text-[15px] font-black whitespace-nowrap disabled:opacity-50 active:scale-[0.97] transition-transform">
                                                 반품
                                             </button>
+                                            <button
+                                                onClick={() => setCardIndex(prev => prev + 1)}
+                                                className="flex-1 h-14 rounded-2xl border-2 border-slate-200 bg-white text-slate-400 text-[13px] font-bold whitespace-nowrap active:scale-[0.97] transition-transform">
+                                                건너뛰기
+                                            </button>
                                         </div>
-
-                                        {/* 건너뛰기 */}
-                                        <button
-                                            onClick={() => setCardIndex(prev => prev + 1)}
-                                            className="w-full mt-2.5 py-2 text-xs font-bold text-slate-300 hover:text-slate-500 transition-colors whitespace-nowrap">
-                                            건너뛰기
-                                        </button>
                                     </div>
                                 )}
                             </div>
