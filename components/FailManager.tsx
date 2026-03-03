@@ -71,10 +71,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [periodStartIdx, setPeriodStartIdx] = useState(0);
   const [periodEndIdx, setPeriodEndIdx] = useState(0);
 
-  // 초기화: allMonths 변경 시 최근 2개월로 설정
+  // 초기화: allMonths 변경 시 전체 기간으로 설정
   useEffect(() => {
     if (allMonths.length > 0) {
-      setPeriodStartIdx(Math.max(0, allMonths.length - 2));
+      setPeriodStartIdx(0);
       setPeriodEndIdx(allMonths.length - 1);
     }
   }, [allMonths.length]);
