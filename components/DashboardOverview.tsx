@@ -13,6 +13,7 @@ import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { auditService, AuditHistoryItem } from '../services/auditService';
 import { manufacturerAliasKey, isExchangePrefix } from '../services/appUtils';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
+import { buildSparklinePath } from '../utils/chartUtils';
 import { holidayService } from '../services/holidayService';
 import { failThresholdService, getFailSeverity, FailThresholds } from '../services/failThresholdService';
 import FailThresholdModal from './dashboard/FailThresholdModal';
@@ -163,21 +164,6 @@ function monthKeyFromDate(value: unknown): string | null {
   return `${y}-${m}`;
 }
 
-function buildSparklinePath(values: number[], width: number, height: number): string {
-  if (values.length < 2) return '';
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  const stepX = width / (values.length - 1);
-
-  return values
-    .map((v, index) => {
-      const x = index * stepX;
-      const y = height - ((v - min) / range) * height;
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
 
 function getRecentMonthKeys(count: number): string[] {
   const now = new Date();
