@@ -108,7 +108,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     if (activeBrand === null && brandsList.length > 0) {
       setActiveBrand(brandsList[0]);
     }
-  }, [brandsList]);
+  }, [brandsList, activeBrand]);
 
   const filteredInventory = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

@@ -27,6 +27,9 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
   onClose,
   onAfterSave,
 }) => {
+  // 비unlimited 플랜에서 편집 한도 소진 여부
+  const isLimitExhausted = !isUnlimited && maxEdits > 0 && editCount >= maxEdits;
+
   const [baseStockInputs, setBaseStockInputs] = useState<Record<string, number>>(() => {
     const seeded: Record<string, number> = {};
     visibleInventory.forEach(item => {
@@ -438,9 +441,9 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
             )}
             <button
               onClick={handleApply}
-              disabled={isSaving || visibleInventory.length === 0}
+              disabled={isSaving || visibleInventory.length === 0 || isLimitExhausted}
               className={`w-full h-14 rounded-2xl text-base font-black transition-colors flex items-center justify-center gap-2 ${
-                !isSaving && visibleInventory.length > 0
+                !isSaving && visibleInventory.length > 0 && !isLimitExhausted
                   ? 'bg-indigo-600 text-white active:scale-[0.99]'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
@@ -483,9 +486,9 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               </button>
               <button
                 onClick={handleApply}
-                disabled={isSaving || visibleInventory.length === 0}
+                disabled={isSaving || visibleInventory.length === 0 || isLimitExhausted}
                 className={`px-5 py-2 text-sm font-black rounded-xl transition-colors flex items-center gap-2 ${
-                  !isSaving && visibleInventory.length > 0
+                  !isSaving && visibleInventory.length > 0 && !isLimitExhausted
                     ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 }`}
