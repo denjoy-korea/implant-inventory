@@ -18,8 +18,8 @@
 | R-01 | 환불 | 환불 요청 원문 | 문의/티켓/메일 | CS | 2026-03-14 | TODO |
 | R-02 | 환불 | 환불 승인 근거 | 내부 승인 로그 | CS | 2026-03-14 | TODO |
 | R-03 | 해지 | 해지 처리 근거 | 계정 상태/로그 | CS | 2026-03-14 | TODO |
-| S-01 | 보안 | 스모크 테스트 결과 | `security-smoke-test-checklist.md` 실행 로그 | SRE | 2026-03-16 | TODO |
-| S-02 | 보안 | 권한 정책 증빙 | RLS/권한 SQL 버전 | SRE | 2026-03-16 | TODO |
+| S-01 | 보안 | 스모크 테스트 결과 | `security-smoke-test-checklist.md` 실행 로그 | SRE | 2026-03-16 | **DONE** 2026-03-04 (`04-security-operations/2026-03-04_security_verify-release-run_v1.md`) |
+| S-02 | 보안 | 권한 정책 증빙 | RLS/권한 SQL 버전 | SRE | 2026-03-16 | **DONE** 2026-03-04 (`04-security-operations/2026-03-04_security_rls-policy-index_v1.md`) |
 | S-03 | 보안 | 사고 대응 기록 | incident timeline | SRE | 2026-03-16 | TODO |
 | L-01 | 법무 | 이용약관 버전 이력 | 약관 문서 + 변경일 | Legal | 2026-03-14 | TODO |
 | L-02 | 법무 | 개인정보 처리방침 버전 | 정책 문서 + 고지 로그 | Legal | 2026-03-14 | TODO |

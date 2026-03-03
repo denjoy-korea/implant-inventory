@@ -1,0 +1,61 @@
+name: Daily Traffic Snapshot
+
+on:
+  schedule:
+    # 매일 KST 00:05 (UTC 15:05 전날)
+    - cron: '5 15 * * *'
+  workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: '스냅샷 기준일 (YYYY-MM-DD, 비우면 오늘)'
+        required: false
+        default: ''
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run daily snapshot
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -n "${{ github.event.inputs.snapshot_date }}" ]; then
+            node scripts/admin-traffic-snapshot.mjs 30 --daily --snapshot-date=${{ github.event.inputs.snapshot_date }}
+          else
+            node scripts/admin-traffic-snapshot.mjs 30 --daily
+          fi
+
+      - name: Check snapshot coverage
+        run: node scripts/traffic-snapshot-coverage.mjs 28 27
+
+      - name: Commit snapshot
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/04-report/traffic-kpi-daily/
+          git add docs/04-report/traffic-kpi-coverage.md 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "변경사항 없음 — 스냅샷 최신 상태"
+          else
+            git commit -m "chore: daily traffic snapshot $(date -u '+%Y-%m-%d')"
+            git push
+          fi
