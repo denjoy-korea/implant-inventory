@@ -7,7 +7,6 @@ import { normalizeSurgery } from '../services/normalizationService';
 import { isExchangePrefix, stripExchangePrefix } from '../services/appUtils';
 import { smoothLine, smoothArea } from './surgery-dashboard/shared';
 import AddItemModal from './AddItemModal';
-import EditNoticeModal from './inventory/EditNoticeModal';
 import BaseStockModal from './inventory/BaseStockModal';
 import OptimizeModal from './inventory/OptimizeModal';
 import UnregisteredDetailModal from './inventory/UnregisteredDetailModal';
@@ -83,7 +82,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     monthFactor,
     selectedManufacturer,
     isAddingItem,
-    showEditNotice,
     showBaseStockModal,
     showUnregisteredDetailModal,
     showOptimizeModal,
@@ -93,7 +91,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     editCount,
     setMonthFactor,
     setSelectedManufacturer,
-    setShowEditNotice,
     setShowBaseStockModal,
     setShowUnregisteredDetailModal,
     setShowOptimizeModal,
@@ -513,8 +510,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     </div>
                   </div>
                   <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mt-2 w-fit">
-                    <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월</button>
-                    <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월</button>
+                    <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월분 비축</button>
+                    <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월분 비축</button>
                   </div>
                 </div>
               </div>
@@ -535,7 +532,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 )}
                 {!isReadOnly && (
                   <button
-                    onClick={() => !isEditExhausted && setShowEditNotice(true)}
+                    onClick={() => !isEditExhausted && setShowBaseStockModal(true)}
                     disabled={isEditExhausted}
                     className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${isEditExhausted ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-700 bg-white border-slate-200 hover:bg-slate-50 active:scale-[0.98] shadow-sm'}`}
                   >
@@ -743,15 +740,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월</button>
-                <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월</button>
+                <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
+                <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
               </div>
 
               {!isReadOnly && (
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => !isEditExhausted && setShowEditNotice(true)}
+                    onClick={() => !isEditExhausted && setShowBaseStockModal(true)}
                     disabled={isEditExhausted}
                     className={`h-10 px-3 rounded-xl text-[11px] font-black border transition-all ${isEditExhausted
                       ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
@@ -1257,28 +1254,14 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       )}
 
       {/* ================================================= */}
-      {/* Edit Notice Modal                                 */}
-      {/* ================================================= */}
-      {showEditNotice && (
-        <EditNoticeModal
-          onClose={() => setShowEditNotice(false)}
-          onConfirm={() => {
-            setShowEditNotice(false);
-            setShowBaseStockModal(true);
-          }}
-          isUnlimited={isUnlimited}
-          maxEdits={maxEdits}
-          editCount={editCount}
-        />
-      )}
-
-      {/* ================================================= */}
       {/* Base Stock Modal                                  */}
       {/* ================================================= */}
       {showBaseStockModal && (
         <BaseStockModal
           visibleInventory={visibleInventory}
           isUnlimited={isUnlimited}
+          editCount={editCount}
+          maxEdits={maxEdits}
           hospitalId={hospitalId}
           onRefreshLatestSurgeryUsage={onRefreshLatestSurgeryUsage}
           onBulkUpdateStocks={onBulkUpdateStocks}

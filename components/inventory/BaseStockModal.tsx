@@ -5,6 +5,8 @@ import { planService } from '../../services/planService';
 interface BaseStockModalProps {
   visibleInventory: InventoryItem[];
   isUnlimited: boolean;
+  editCount?: number;
+  maxEdits?: number;
   hospitalId?: string;
   onRefreshLatestSurgeryUsage?: () => Promise<Record<string, number> | null>;
   onBulkUpdateStocks?: (changes: Array<{ id: string; initialStock: number; nextCurrentStock: number }>) => Promise<void>;
@@ -16,6 +18,8 @@ interface BaseStockModalProps {
 const BaseStockModal: React.FC<BaseStockModalProps> = ({
   visibleInventory,
   isUnlimited,
+  editCount = 0,
+  maxEdits = 0,
   hospitalId,
   onRefreshLatestSurgeryUsage,
   onBulkUpdateStocks,
@@ -180,6 +184,22 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* ── 안내 배너 ── */}
+        <div className="px-4 sm:px-6 py-2.5 border-b border-amber-100 bg-amber-50 shrink-0">
+          <div className="flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-amber-800">최초 1회만 사용을 권장합니다</p>
+              <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">시스템 도입 시 기초 재고를 일괄 등록하는 용도입니다. 이후 재고는 발주 입고·재고 실사로 관리하세요.</p>
+            </div>
+            {!isUnlimited && (
+              <span className="shrink-0 text-[11px] font-black text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                잔여 {maxEdits - editCount}회
+              </span>
+            )}
           </div>
         </div>
 
