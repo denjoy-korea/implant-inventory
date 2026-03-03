@@ -80,7 +80,7 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
         <div className="px-4 py-3 rounded-t-2xl border-b border-slate-100 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
           <div className="flex-1 min-w-0" />
           <div className="flex items-center gap-2">
-            <div className="relative hidden md:block" ref={inventoryDetailColumnFilterRef}>
+            <div className="relative" ref={inventoryDetailColumnFilterRef}>
               <button
                 type="button"
                 onClick={onToggleInventoryDetailColumnFilter}
@@ -172,9 +172,15 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-slate-500 truncate">{item.manufacturer}</p>
-                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{item.brand}</p>
-                      <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{item.size}</p>
+                      {inventoryDetailColumnVisibility.manufacturer && (
+                        <p className="text-[11px] font-semibold text-slate-500 truncate">{item.manufacturer}</p>
+                      )}
+                      {inventoryDetailColumnVisibility.brand && (
+                        <p className="text-sm font-black text-slate-800 truncate mt-0.5">{item.brand}</p>
+                      )}
+                      {inventoryDetailColumnVisibility.size && (
+                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{item.size}</p>
+                      )}
                     </div>
                     {isLowStock && (
                       <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600">
@@ -184,22 +190,30 @@ const InventoryDetailSection: React.FC<InventoryDetailSectionProps> = ({
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
-                      <p className="text-[10px] font-bold text-slate-400">현재 재고</p>
-                      <p className={`text-sm font-black tabular-nums ${isLowStock ? 'text-rose-600' : 'text-slate-800'}`}>{item.currentStock}</p>
-                    </div>
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
-                      <p className="text-[10px] font-bold text-slate-400">권장량</p>
-                      <p className="text-sm font-black text-indigo-600 tabular-nums">{recommended}</p>
-                    </div>
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
-                      <p className="text-[10px] font-bold text-slate-400">사용량</p>
-                      <p className="text-sm font-black text-rose-500 tabular-nums">{item.usageCount > 0 ? `-${item.usageCount}` : '0'}</p>
-                    </div>
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
-                      <p className="text-[10px] font-bold text-slate-400">월평균</p>
-                      <p className="text-sm font-black text-slate-700 tabular-nums">{item.monthlyAvgUsage ?? 0}</p>
-                    </div>
+                    {inventoryDetailColumnVisibility.currentStock && (
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                        <p className="text-[10px] font-bold text-slate-400">현재 재고</p>
+                        <p className={`text-sm font-black tabular-nums ${isLowStock ? 'text-rose-600' : 'text-slate-800'}`}>{item.currentStock}</p>
+                      </div>
+                    )}
+                    {inventoryDetailColumnVisibility.recommendedStock && (
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                        <p className="text-[10px] font-bold text-slate-400">권장량</p>
+                        <p className="text-sm font-black text-indigo-600 tabular-nums">{recommended}</p>
+                      </div>
+                    )}
+                    {inventoryDetailColumnVisibility.usageCount && (
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                        <p className="text-[10px] font-bold text-slate-400">사용량</p>
+                        <p className="text-sm font-black text-rose-500 tabular-nums">{item.usageCount > 0 ? `-${item.usageCount}` : '0'}</p>
+                      </div>
+                    )}
+                    {inventoryDetailColumnVisibility.monthlyAvgUsage && (
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                        <p className="text-[10px] font-bold text-slate-400">월평균</p>
+                        <p className="text-sm font-black text-slate-700 tabular-nums">{item.monthlyAvgUsage ?? 0}</p>
+                      </div>
+                    )}
                   </div>
 
                   {!isReadOnly && onQuickOrder && isLowStock && (

@@ -201,6 +201,26 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               </span>
             )}
           </div>
+          {!isUnlimited && maxEdits > 0 && (
+            <div className="mt-2">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-amber-600">사용 횟수</span>
+                <span className="text-[10px] font-bold text-amber-700">{editCount} / {maxEdits}회</span>
+              </div>
+              <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    editCount >= maxEdits
+                      ? 'bg-red-500'
+                      : editCount >= maxEdits * 0.8
+                      ? 'bg-amber-500'
+                      : 'bg-amber-400'
+                  }`}
+                  style={{ width: `${Math.min(100, (editCount / maxEdits) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── 필터 ── */}
