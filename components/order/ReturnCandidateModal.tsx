@@ -126,8 +126,9 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 memo: `권장량 초과 반품 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`,
                 items: [{ brand: item.brand, size: item.size, quantity: qty }],
             });
-            // 반품 완료 → 목록에서 즉시 제거 (inventory prop 업데이트 전에 중복 반품 방지)
+            // 반품 완료 → 중복 방지 + 브랜드 카운터 반영
             setReturnedItemIds(prev => new Set(prev).add(item.id));
+            setReturnedByBrand(prev => ({ ...prev, [item.brand]: (prev[item.brand] ?? 0) + qty }));
             setSelectedIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
             showAlertToast(`${item.brand} ${item.size} ${qty}개 반품이 등록되었습니다.`, 'success');
         } catch {
