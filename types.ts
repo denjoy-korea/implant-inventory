@@ -302,7 +302,37 @@ export type PlanFeature =
   | 'role_management'
   | 'audit_log'
   | 'email_support'
-  | 'priority_support';
+  | 'priority_support'
+  | 'integrations';
+
+// ── 인테그레이션 타입 ─────────────────────────────────────────────
+export type IntegrationProvider = 'notion' | 'slack' | 'solapi';
+
+export interface HospitalIntegration {
+  id: string;
+  hospital_id: string;
+  provider: IntegrationProvider;
+  config: string;       // ENCv2: 암호화된 JSON blob
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotionConfig {
+  api_token: string;
+  database_id: string;
+}
+
+export interface SlackConfig {
+  webhook_url: string;
+}
+
+export interface SolapiConfig {
+  api_key: string;
+  api_secret: string;
+}
+
+export type IntegrationConfig = NotionConfig | SlackConfig | SolapiConfig;
 
 /** 플랜별 제한 */
 export interface PlanLimits {
@@ -358,7 +388,8 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     retentionMonths: 12,
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'auto_stock_alert', 'monthly_report', 'role_management', 'email_support',
+      'brand_analytics', 'auto_stock_alert', 'monthly_report', 'role_management',
+      'email_support', 'integrations',
     ],
   },
   business: {
@@ -370,7 +401,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'auto_stock_alert', 'monthly_report', 'yearly_report',
       'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
-      'email_support', 'priority_support',
+      'email_support', 'priority_support', 'integrations',
     ],
   },
   ultimate: {
@@ -382,7 +413,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'auto_stock_alert', 'monthly_report', 'yearly_report',
       'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
-      'audit_log', 'email_support', 'priority_support',
+      'audit_log', 'email_support', 'priority_support', 'integrations',
     ],
   },
 };

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy } from 'react';
 import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact, MemberPermissions } from '../types';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
+import { integrationService } from '../services/integrationService';
 import { WorkDaySelector } from './WorkDaySelector';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
+const IntegrationManager = lazy(() => import('./IntegrationManager'));
 
 function formatPhoneNumber(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -65,6 +67,10 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [isSavingWorkDays, setIsSavingWorkDays] = useState(false);
   const [workDaysSaved, setWorkDaysSaved] = useState(false);
 
+  // 인테그레이션 상태
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [integrationCount, setIntegrationCount] = useState(0);
+
   // 거래처 관리 상태
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [vendorManufacturers, setVendorManufacturers] = useState<string[]>([]);
@@ -84,6 +90,15 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   // 거래처 데이터 로딩 (master 또는 canManageVendors 권한 보유 staff)
   const canAccessVendors = (isMaster && !isStaff) || (isStaff && !!permissions?.canManageVendors);
   const canAccessWorkDays = isMaster || (isStaff && !!permissions?.canManageWorkDays);
+  const canAccessIntegrations = isMaster && !isStaff && planService.canAccess(plan, 'integrations');
+
+  // 인테그레이션 연결 수 초기 로드
+  useEffect(() => {
+    if (!hospitalId || !canAccessIntegrations) return;
+    void integrationService.getIntegrations(hospitalId).then(list => {
+      setIntegrationCount(list.filter(i => i.is_active).length);
+    });
+  }, [hospitalId, canAccessIntegrations]);
 
   useEffect(() => {
     if (!hospitalId || !canAccessVendors) return;
@@ -337,6 +352,38 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
                 </p>
               </div>
               <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        )}
+
+        {/* 외부 연동 카드 */}
+        {canAccessIntegrations && hospitalId && (
+          <button
+            onClick={() => setShowIntegrationModal(true)}
+            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-violet-50 text-violet-600 group-hover:bg-violet-100 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-800">외부 연동</h3>
+                  {integrationCount > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-700">
+                      {integrationCount}개 연결됨
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                  Notion, Slack, Solapi 등 외부 서비스와 연동합니다.
+                </p>
+              </div>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -689,6 +736,17 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
           </div>
         </div>
       </div>
+    )}
+
+    {/* 외부 연동 모달 */}
+    {showIntegrationModal && hospitalId && (
+      <React.Suspense fallback={null}>
+        <IntegrationManager
+          hospitalId={hospitalId}
+          onClose={() => setShowIntegrationModal(false)}
+          onIntegrationCountChange={setIntegrationCount}
+        />
+      </React.Suspense>
     )}
 
     {confirmModal && (
