@@ -648,6 +648,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const latestSurgeryDate = useMemo(() => {
     let maxDate: Date | null = null;
     for (const row of cleanSurgeryRows) {
+      // 수술중교환 구분은 수술기록 최신일 산정에서 제외
+      if (String(row['구분'] ?? '').trim() === '수술중교환') continue;
       const parsed = parseDate(row['날짜']);
       if (!parsed) continue;
       if (!maxDate || parsed > maxDate) maxDate = parsed;
@@ -1465,14 +1467,14 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-        <div className="xl:col-span-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-black text-slate-900">운영 추이 스냅샷</h3>
             <p className="text-[11px] font-semibold text-slate-500">최근 {Math.max(recentMonthlyTrend.length, 1)}개월</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.12em]">식립 / 교환 월평균 추이</p>
               {isWorkDaysLoading ? (
