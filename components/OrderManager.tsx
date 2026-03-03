@@ -1020,16 +1020,39 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <h3 className="text-base font-black text-slate-800 tracking-tight">발주 권장 품목</h3>
                 <span className="text-xs font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{lowStockItems.length}종 · {stats.lowStockQty}개 부족</span>
               </div>
-              <p className="text-xs text-slate-400 mt-1.5 ml-5">재고가 권장 수량보다 부족한 품목입니다. 제조사에 발주를 진행하세요.</p>
+              <p className="hidden sm:block text-xs text-slate-400 mt-1.5 ml-5">재고가 권장 수량보다 부족한 품목입니다. 제조사에 발주를 진행하세요.</p>
             </div>
             <div className="px-5 sm:px-7 pb-5 sm:pb-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {/* 일괄주문 액션 카드 */}
+              {/* 모바일 레이아웃 */}
+              <div className="sm:hidden space-y-3">
                 <button
-                  onClick={() => {
-                    if (isReadOnly) return;
-                    setShowBulkOrderModal(true);
-                  }}
+                  onClick={() => { if (!isReadOnly) setShowBulkOrderModal(true); }}
+                  disabled={isReadOnly}
+                  className={`w-full h-12 rounded-2xl flex items-center justify-center gap-2 text-sm font-black transition-all active:scale-[0.98] ${isReadOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-rose-500 text-white shadow-sm shadow-rose-200'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                  일괄주문
+                </button>
+                <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+                  {groupedLowStock.map(([mfr, entries]) => {
+                    const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
+                    return (
+                      <div key={mfr} className="flex-none flex flex-col gap-0.5 bg-rose-50 border border-rose-100 rounded-2xl px-3.5 py-2.5 min-w-[90px]">
+                        <span className="text-[11px] font-black text-slate-700 whitespace-nowrap truncate max-w-[100px]">{displayMfr(mfr)}</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="text-xl font-black text-rose-600 tabular-nums leading-none">{entries.length}</span>
+                          <span className="text-[10px] font-bold text-slate-400">종</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-rose-400">{totalDeficit}개 부족</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* 데스크톱 레이아웃 */}
+              <div className="hidden sm:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <button
+                  onClick={() => { if (isReadOnly) return; setShowBulkOrderModal(true); }}
                   disabled={isReadOnly}
                   className={`group relative rounded-2xl border-2 border-dashed p-4 transition-all text-left ${isReadOnly ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50' : 'border-rose-300 bg-white hover:bg-rose-50 hover:shadow-md hover:border-rose-400 cursor-pointer active:scale-[0.98]'}`}
                 >
@@ -1042,10 +1065,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 {groupedLowStock.map(([mfr, entries]) => {
                   const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
                   return (
-                    <div
-                      key={mfr}
-                      className="group relative rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40 p-4 transition-all hover:shadow-md"
-                    >
+                    <div key={mfr} className="group relative rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40 p-4 transition-all hover:shadow-md">
                       <div className="flex items-center gap-2 mb-2">
                         <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
                         <span className="text-xs font-black text-slate-700 truncate">{displayMfr(mfr)}</span>
@@ -1074,16 +1094,50 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <h3 className="text-base font-black text-slate-800 tracking-tight">교환 권장 품목</h3>
                 <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.totalActual}건 미처리</span>
               </div>
-              <p className="text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 반품 처리를 진행하세요.</p>
+              <p className="hidden sm:block text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 반품 처리를 진행하세요.</p>
             </div>
             <div className="px-5 sm:px-7 pb-5 sm:pb-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {/* 일괄교환 액션 카드 */}
+              {/* 모바일 레이아웃 */}
+              <div className="sm:hidden space-y-3">
                 <button
-                  onClick={() => {
-                    if (isReadOnly) return;
-                    window.location.hash = '#/dashboard/fail';
-                  }}
+                  onClick={() => { if (!isReadOnly) window.location.hash = '#/dashboard/fail'; }}
+                  disabled={isReadOnly}
+                  className={`w-full h-12 rounded-2xl flex items-center justify-center gap-2 text-sm font-black transition-all active:scale-[0.98] ${isReadOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-violet-600 text-white shadow-sm shadow-violet-200'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  일괄교환
+                </button>
+                <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+                  {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
+                    <button
+                      key={manufacturer}
+                      onClick={() => { if (!isReadOnly && actualCount > 0) setExchangeReturnTarget({ manufacturer, count: actualCount }); }}
+                      disabled={isReadOnly || actualCount === 0}
+                      className={`flex-none flex flex-col gap-0.5 rounded-2xl px-3.5 py-2.5 min-w-[90px] text-left ${
+                        returnPending > 0 && actualCount === 0
+                          ? 'bg-amber-50 border border-amber-100 opacity-70'
+                          : actualCount > 0 && !isReadOnly
+                            ? 'bg-violet-50 border border-violet-100 active:scale-[0.97]'
+                            : 'bg-violet-50 border border-violet-100'
+                      }`}
+                    >
+                      <span className="text-[11px] font-black text-slate-700 whitespace-nowrap truncate max-w-[100px]">{manufacturer}</span>
+                      <div className="flex items-baseline gap-1 mt-0.5">
+                        <span className={`text-xl font-black tabular-nums leading-none ${actualCount > 0 ? 'text-violet-600' : 'text-slate-400'}`}>{actualCount}</span>
+                        <span className="text-[10px] font-bold text-slate-400">건</span>
+                      </div>
+                      {returnPending > 0
+                        ? <span className="text-[10px] font-bold text-amber-500">대기중 {returnPending}건</span>
+                        : <span className="text-[10px] font-bold text-violet-400">반품 가능</span>
+                      }
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* 데스크톱 레이아웃 */}
+              <div className="hidden sm:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <button
+                  onClick={() => { if (isReadOnly) return; window.location.hash = '#/dashboard/fail'; }}
                   disabled={isReadOnly}
                   className={`group relative rounded-2xl border-2 border-dashed p-4 transition-all text-left ${isReadOnly ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50' : 'border-violet-300 bg-white hover:bg-violet-50 hover:shadow-md hover:border-violet-400 cursor-pointer active:scale-[0.98]'}`}
                 >
@@ -1096,10 +1150,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
                   <button
                     key={manufacturer}
-                    onClick={() => {
-                      if (isReadOnly || actualCount === 0) return;
-                      setExchangeReturnTarget({ manufacturer, count: actualCount });
-                    }}
+                    onClick={() => { if (isReadOnly || actualCount === 0) return; setExchangeReturnTarget({ manufacturer, count: actualCount }); }}
                     disabled={isReadOnly || actualCount === 0}
                     className={`group relative rounded-2xl border-2 p-4 transition-all text-left w-full ${
                       returnPending > 0 && actualCount === 0
@@ -1117,11 +1168,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <span className={`text-2xl font-black tabular-nums ${actualCount > 0 ? 'text-violet-600' : 'text-slate-400'}`}>{actualCount}</span>
                       <span className="text-xs font-bold text-slate-400">건</span>
                     </div>
-                    {returnPending > 0 ? (
-                      <p className="text-[10px] font-bold text-amber-500 mt-1">반품 대기중 {returnPending}건</p>
-                    ) : (
-                      <p className="text-[10px] font-bold text-violet-400 mt-1">반품 가능</p>
-                    )}
+                    {returnPending > 0
+                      ? <p className="text-[10px] font-bold text-amber-500 mt-1">반품 대기중 {returnPending}건</p>
+                      : <p className="text-[10px] font-bold text-violet-400 mt-1">반품 가능</p>
+                    }
                   </button>
                 ))}
               </div>
