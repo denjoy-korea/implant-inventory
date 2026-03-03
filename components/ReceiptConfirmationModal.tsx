@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
-import { Order, OrderItem, InventoryItem } from '../types';
+import { InventoryItem, OrderItem } from '../types';
+import { parseSize } from '../services/sizeNormalizer';
 
 export interface ReceiptUpdate {
     orderId: string;
@@ -25,6 +26,71 @@ interface ReceiptConfirmationModalProps {
     isLoading?: boolean;
 }
 
+// ── Helper: inventory에서 manufacturer+brand 조합의 dimension 목록 추출 ──
+function extractDimensions(inventory: InventoryItem[], manufacturer: string, brand: string) {
+    const items = inventory.filter(
+        inv => inv.manufacturer === manufacturer && inv.brand === brand
+    );
+    const diameters = new Set<string>();
+    const lengths = new Set<string>();
+    const cuffs = new Set<string>();
+    items.forEach(inv => {
+        const parsed = parseSize(inv.size, manufacturer);
+        if (parsed.diameter != null) diameters.add(String(parsed.diameter));
+        if (parsed.length != null) lengths.add(String(parsed.length));
+        if (parsed.cuff != null) cuffs.add(parsed.cuff);
+    });
+    return {
+        diameters: [...diameters].sort((a, b) => Number(a) - Number(b)),
+        lengths: [...lengths].sort((a, b) => Number(a) - Number(b)),
+        cuffs: [...cuffs].sort((a, b) => Number(a) - Number(b)),
+    };
+}
+
+// ── Helper: 선택한 dimension으로 발주 규격 포맷에 맞는 size 문자열 생성 ──
+function buildReceivedSize(
+    orderedSize: string,
+    _manufacturer: string,
+    diameter: string,
+    length: string,
+    cuff: string
+): string {
+    if (!diameter || !length) return orderedSize;
+    // Φ format (OSSTEM, Dio, Neobiotech, etc.)
+    if (/^[Φφ]/.test(orderedSize)) {
+        const parts = orderedSize.split(/\s*[×xX]\s*/);
+        if ((parts.length >= 3 || /[×xX]/.test(orderedSize.replace(/^[Φφ][\d.]+\s*/, ''))) && cuff) {
+            return `Φ${diameter} × ${length} × ${cuff}`;
+        }
+        return `Φ${diameter} × ${length}`;
+    }
+    // Ø x mm format (Dentis, Topplan, Warantec)
+    if (/^[Øø]/.test(orderedSize)) {
+        return `Ø${diameter} x ${length}mm`;
+    }
+    // IBS / Cuff+Phi format
+    if (/^C\s*\d/.test(orderedSize) || /D[:\s]/i.test(orderedSize) || /Cuff/i.test(orderedSize)) {
+        if (cuff) return `C${cuff} Φ${diameter} X ${length}`;
+        return `Φ${diameter} X ${length}`;
+    }
+    // Default fallback (Dentium numeric, etc.)
+    return `Φ${diameter} × ${length}${cuff ? ` × ${cuff}` : ''}`;
+}
+
+interface WrongDeliveryEntry {
+    key: string;
+    orderId: string;
+    manufacturer: string;
+    brand: string;
+    orderedSize: string;
+    deficitQty: number;
+}
+
+type WrongDeliverySelection = { diameter: string; length: string; cuff: string; qty: number };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 export function ReceiptConfirmationModal({
     groupedOrder,
     inventory,
@@ -47,27 +113,28 @@ export function ReceiptConfirmationModal({
     const [memos, setMemos] = useState<Record<string, string>>({});
     const [autoReorders, setAutoReorders] = useState<Record<string, boolean>>({});
     const [returnWrongDelivery, setReturnWrongDelivery] = useState<Record<string, boolean>>({});
-    const [wrongDeliveryParts, setWrongDeliveryParts] = useState<Record<string, string[]>>({});
-    const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [excludedOrderIds, setExcludedOrderIds] = useState<string[]>([]);
     const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'delete' | 'reset' } | null>(null);
+
+    // phase: 'orders' = 주문별 입고 확인, 'wrongDelivery' = 규격 오배송 처리 세션
+    const [phase, setPhase] = useState<'orders' | 'wrongDelivery'>('orders');
+    const [wrongDeliverySelections, setWrongDeliverySelections] = useState<Record<string, WrongDeliverySelection>>({});
 
     // Stepper state
     const [currentOrderIdx, setCurrentOrderIdx] = useState(0);
     const [cardVisible, setCardVisible] = useState(true);
 
-    // 이미 입고완료/취소된 주문은 스텝에서 제외 — 미처리(ordered) 주문만 순서대로 확인
     const activeOrders = groupedOrder.orders.filter(o => !excludedOrderIds.includes(o.id) && o.status === 'ordered');
     const safeIdx = Math.min(currentOrderIdx, Math.max(0, activeOrders.length - 1));
     const currentOrder = activeOrders[safeIdx];
     const isLastStep = safeIdx >= activeOrders.length - 1;
     const hasMultipleOrders = activeOrders.length > 1;
 
-    // Auto-adjust index if activeOrders shrinks (e.g. order excluded)
     useEffect(() => {
         if (currentOrderIdx >= activeOrders.length && activeOrders.length > 0) {
             setCurrentOrderIdx(activeOrders.length - 1);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeOrders.length]);
 
     const goToStep = (newIdx: number) => {
@@ -78,52 +145,60 @@ export function ReceiptConfirmationModal({
         }, 120);
     };
 
+    // 규격 오배송 항목 목록 (체크된 항목 중 부족 수량 > 0)
+    const wrongDeliveryItemList: WrongDeliveryEntry[] = [];
+    groupedOrder.orders.forEach(order => {
+        if (excludedOrderIds.includes(order.id) || order.status !== 'ordered') return;
+        order.items.forEach((item, idx) => {
+            const key = `${order.id}-${idx}`;
+            if (!returnWrongDelivery[key]) return;
+            const currentQty = quantities[key] ?? item.quantity;
+            const deficit = item.quantity - currentQty;
+            if (deficit > 0) {
+                wrongDeliveryItemList.push({
+                    key,
+                    orderId: order.id,
+                    manufacturer: order.manufacturer,
+                    brand: item.brand,
+                    orderedSize: item.size,
+                    deficitQty: deficit,
+                });
+            }
+        });
+    });
+
     const handleResetOrder = (orderId: string) => {
         const order = groupedOrder.orders.find(o => o.id === orderId);
         if (!order) return;
-
         if (order.status !== 'ordered') {
             setConfirmAction({ orderId, type: 'reset' });
             return;
         }
-
         setQuantities(prev => {
             const next = { ...prev };
-            order.items.forEach((item, idx) => {
-                next[`${order.id}-${idx}`] = item.quantity;
-            });
+            order.items.forEach((item, idx) => { next[`${order.id}-${idx}`] = item.quantity; });
             return next;
         });
-
         const resetKeys = order.items.map((_, idx) => `${order.id}-${idx}`);
         setMemos(prev => { const next = { ...prev }; resetKeys.forEach(k => delete next[k]); return next; });
         setAutoReorders(prev => { const next = { ...prev }; resetKeys.forEach(k => delete next[k]); return next; });
         setReturnWrongDelivery(prev => { const next = { ...prev }; resetKeys.forEach(k => delete next[k]); return next; });
-        setWrongDeliveryParts(prev => { const next = { ...prev }; resetKeys.forEach(k => delete next[k]); return next; });
         setExcludedOrderIds(prev => prev.filter(id => id !== orderId));
     };
 
-    const handleDeleteAction = (orderId: string) => {
-        setConfirmAction({ orderId, type: 'delete' });
-    };
+    const handleDeleteAction = (orderId: string) => setConfirmAction({ orderId, type: 'delete' });
 
     const confirmPendingAction = () => {
         if (!confirmAction) return;
-        if (confirmAction.type === 'delete') {
-            onDeleteOrder?.(confirmAction.orderId);
-        } else {
-            onUpdateOrderStatus?.(confirmAction.orderId, 'ordered');
-        }
+        if (confirmAction.type === 'delete') onDeleteOrder?.(confirmAction.orderId);
+        else onUpdateOrderStatus?.(confirmAction.orderId, 'ordered');
         setConfirmAction(null);
     };
 
     const handleQuantityChange = (key: string, val: string) => {
         const parsed = parseInt(val, 10);
-        if (!isNaN(parsed) && parsed >= 0) {
-            setQuantities(prev => ({ ...prev, [key]: parsed }));
-        } else if (val === '') {
-            setQuantities(prev => ({ ...prev, [key]: 0 }));
-        }
+        if (!isNaN(parsed) && parsed >= 0) setQuantities(prev => ({ ...prev, [key]: parsed }));
+        else if (val === '') setQuantities(prev => ({ ...prev, [key]: 0 }));
     };
 
     const handleConfirm = async () => {
@@ -134,6 +209,7 @@ export function ReceiptConfirmationModal({
                 const key = `${order.id}-${idx}`;
                 const newQty = quantities[key];
                 if (newQty !== undefined && newQty !== item.quantity) {
+                    const wdSel = wrongDeliverySelections[key];
                     updates.push({
                         orderId: order.id,
                         item,
@@ -141,24 +217,23 @@ export function ReceiptConfirmationModal({
                         newQuantity: newQty,
                         memo: memos[key],
                         autoReorderDeficit: autoReorders[key],
-                        wrongDeliveryReturn: returnWrongDelivery[key] ? (() => {
-                            const parts = item.size.split(/([\d.]+)/);
-                            const userParts = wrongDeliveryParts[key] || [];
-                            let finalSize = '';
-                            for (let i = 0; i < parts.length; i++) {
-                                if (i % 2 === 0) {
-                                    finalSize += parts[i];
-                                } else {
-                                    finalSize += (userParts[i] !== undefined && userParts[i] !== '') ? userParts[i] : parts[i];
+                        wrongDeliveryReturn:
+                            returnWrongDelivery[key] && wdSel?.diameter && wdSel?.length
+                                ? {
+                                    receivedSize: buildReceivedSize(
+                                        item.size,
+                                        order.manufacturer,
+                                        wdSel.diameter,
+                                        wdSel.length,
+                                        wdSel.cuff
+                                    ),
+                                    quantity: wdSel.qty,
                                 }
-                            }
-                            return { receivedSize: finalSize, quantity: item.quantity - newQty };
-                        })() : undefined
+                                : undefined,
                     });
                 }
             });
         });
-
         const orderIdsToReceive = groupedOrder.orders
             .filter(o => o.status === 'ordered' && !excludedOrderIds.includes(o.id))
             .map(o => o.id);
@@ -168,15 +243,26 @@ export function ReceiptConfirmationModal({
     const handleStepConfirm = async () => {
         if (!isLastStep) {
             goToStep(safeIdx + 1);
+        } else if (wrongDeliveryItemList.length > 0 && phase === 'orders') {
+            // 마지막 주문 확인 완료 → 규격 오배송 처리 세션으로 전환
+            const initialSelections: Record<string, WrongDeliverySelection> = {};
+            wrongDeliveryItemList.forEach(wdi => {
+                const dims = extractDimensions(inventory, wdi.manufacturer, wdi.brand);
+                initialSelections[wdi.key] = {
+                    diameter: dims.diameters[0] || '',
+                    length: dims.lengths[0] || '',
+                    cuff: dims.cuffs[0] || '',
+                    qty: wdi.deficitQty,
+                };
+            });
+            setWrongDeliverySelections(initialSelections);
+            setPhase('wrongDelivery');
         } else {
             await handleConfirm();
         }
     };
 
-    // Progress: completed steps / total
     const progressPct = isLoading ? 100 : (safeIdx / Math.max(activeOrders.length, 1)) * 100;
-
-    // Is current order changed?
     const isCurrentChanged = currentOrder?.status === 'ordered' && currentOrder.items.some(
         (item, idx) => quantities[`${currentOrder.id}-${idx}`] !== item.quantity
     );
@@ -188,10 +274,261 @@ export function ReceiptConfirmationModal({
     const [visible, setVisible] = useState(false);
     useEffect(() => { const t = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(t); }, []);
 
-    return (
-        <div className={`fixed inset-x-0 top-0 bottom-20 sm:inset-0 z-[300] flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`} onClick={() => !isLoading && onClose()}>
-            <div className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`} onClick={(e) => e.stopPropagation()}>
+    // ─── 규격 오배송 처리 세션 UI ─────────────────────────────────────────────
+    if (phase === 'wrongDelivery') {
+        const allSelectionsValid = wrongDeliveryItemList.every(wdi => {
+            const sel = wrongDeliverySelections[wdi.key];
+            return sel && sel.diameter && sel.length;
+        });
 
+        return (
+            <div
+                className={`fixed inset-x-0 top-0 bottom-20 sm:inset-0 z-[300] flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`}
+                onClick={() => !isLoading && onClose()}
+            >
+                <div
+                    className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50 shrink-0">
+                        <div>
+                            <div className="flex items-center gap-2.5">
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight">규격 오배송 처리</h3>
+                                <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 tabular-nums">
+                                    {wrongDeliveryItemList.length}건
+                                </span>
+                            </div>
+                            <p className="text-sm font-semibold text-slate-500 mt-1">
+                                {groupedOrder.date} · {groupedOrder.manufacturer} · 실제 도착 규격 선택 후 반품처리
+                            </p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    {/* Progress bar — full (마지막 단계) */}
+                    <div className="h-1 bg-slate-100 shrink-0">
+                        <div className="h-full w-full bg-rose-400 transition-all duration-500 ease-out" />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                        {/* Info */}
+                        <div className="rounded-2xl p-4 flex gap-3 bg-rose-50/70 border border-rose-100">
+                            <div className="shrink-0 mt-0.5 text-rose-500">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-bold text-rose-900">오배송 규격 선택</h4>
+                                <p className="text-xs text-rose-700 mt-1 leading-relaxed">
+                                    실제로 도착한 잘못된 규격을 선택해주세요.<br />
+                                    • <b>직경 · 길이 · 커프</b>를 목록에서 선택하고 반품 수량을 확인합니다.<br />
+                                    • 완료하면 해당 규격으로 반품처리됩니다.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Wrong delivery items */}
+                        <div className="space-y-4">
+                            {wrongDeliveryItemList.map((wdi, wdIdx) => {
+                                const dims = extractDimensions(inventory, wdi.manufacturer, wdi.brand);
+                                const sel: WrongDeliverySelection = wrongDeliverySelections[wdi.key] ?? {
+                                    diameter: dims.diameters[0] || '',
+                                    length: dims.lengths[0] || '',
+                                    cuff: dims.cuffs[0] || '',
+                                    qty: wdi.deficitQty,
+                                };
+                                const hasCuff = dims.cuffs.length > 0;
+
+                                const updateSel = (field: keyof WrongDeliverySelection, value: string | number) =>
+                                    setWrongDeliverySelections(prev => ({
+                                        ...prev,
+                                        [wdi.key]: { ...sel, [field]: value },
+                                    }));
+
+                                const preview = sel.diameter && sel.length
+                                    ? buildReceivedSize(wdi.orderedSize, wdi.manufacturer, sel.diameter, sel.length, sel.cuff)
+                                    : '—';
+
+                                return (
+                                    <div key={wdi.key} className="border border-rose-200 rounded-2xl overflow-hidden shadow-sm">
+                                        {/* Item header */}
+                                        <div className="bg-rose-50 px-4 py-3 border-b border-rose-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-[11px] font-black text-rose-500 bg-white px-2 py-0.5 rounded-lg border border-rose-200 tabular-nums">#{wdIdx + 1}</span>
+                                                <span className="text-sm font-black text-slate-800">{wdi.brand}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] font-bold text-slate-400">발주:</span>
+                                                    <span className="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">{wdi.orderedSize}</span>
+                                                </div>
+                                            </div>
+                                            <span className="text-[11px] font-black text-rose-600 bg-rose-100 px-2 py-0.5 rounded-lg">오배송 {wdi.deficitQty}개</span>
+                                        </div>
+
+                                        <div className="p-4 space-y-4">
+                                            {/* Dimension selects */}
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600 mb-3">실제 도착한 규격 선택</p>
+                                                <div className={`grid gap-3 ${hasCuff ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                                                    {/* 직경 */}
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">직경 (Φ)</label>
+                                                        {dims.diameters.length > 0 ? (
+                                                            <select
+                                                                value={sel.diameter}
+                                                                onChange={(e) => updateSel('diameter', e.target.value)}
+                                                                className="w-full h-10 px-3 text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 appearance-none cursor-pointer"
+                                                            >
+                                                                {dims.diameters.map(d => (
+                                                                    <option key={d} value={d}>{d}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <input
+                                                                type="text"
+                                                                value={sel.diameter}
+                                                                onChange={(e) => updateSel('diameter', e.target.value)}
+                                                                placeholder="예: 3.5"
+                                                                className="w-full h-10 px-3 text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                                                            />
+                                                        )}
+                                                    </div>
+
+                                                    {/* 길이 */}
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">길이</label>
+                                                        {dims.lengths.length > 0 ? (
+                                                            <select
+                                                                value={sel.length}
+                                                                onChange={(e) => updateSel('length', e.target.value)}
+                                                                className="w-full h-10 px-3 text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 appearance-none cursor-pointer"
+                                                            >
+                                                                {dims.lengths.map(l => (
+                                                                    <option key={l} value={l}>{l}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <input
+                                                                type="text"
+                                                                value={sel.length}
+                                                                onChange={(e) => updateSel('length', e.target.value)}
+                                                                placeholder="예: 11.5"
+                                                                className="w-full h-10 px-3 text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                                                            />
+                                                        )}
+                                                    </div>
+
+                                                    {/* 커프 (optional) */}
+                                                    {hasCuff && (
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">커프</label>
+                                                            <select
+                                                                value={sel.cuff}
+                                                                onChange={(e) => updateSel('cuff', e.target.value)}
+                                                                className="w-full h-10 px-3 text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 appearance-none cursor-pointer"
+                                                            >
+                                                                {dims.cuffs.map(c => (
+                                                                    <option key={c} value={c}>{c}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Preview + 수량 */}
+                                            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                                                <div>
+                                                    <span className="block text-[10px] font-bold text-slate-400 mb-1">반품 규격 미리보기</span>
+                                                    <span className={`text-sm font-black ${preview === '—' ? 'text-slate-300' : 'text-rose-600'}`}>
+                                                        {preview}
+                                                    </span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-[10px] font-bold text-slate-400 mb-1">반품 수량</span>
+                                                    <div className="flex items-center gap-1 border border-rose-200 rounded-xl p-1 bg-white shadow-sm">
+                                                        <button
+                                                            onClick={() => updateSel('qty', Math.max(1, sel.qty - 1))}
+                                                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                                                        </button>
+                                                        <input
+                                                            type="number"
+                                                            className="w-10 text-center text-sm font-black text-slate-800 focus:outline-none appearance-none"
+                                                            value={sel.qty}
+                                                            onChange={(e) => {
+                                                                const v = parseInt(e.target.value, 10);
+                                                                if (!isNaN(v) && v >= 1) updateSel('qty', v);
+                                                            }}
+                                                        />
+                                                        <button
+                                                            onClick={() => updateSel('qty', sel.qty + 1)}
+                                                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                        <button
+                            onClick={() => setPhase('orders')}
+                            disabled={isLoading}
+                            className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                            이전
+                        </button>
+                        <button
+                            onClick={handleConfirm}
+                            disabled={isLoading || !allSelectionsValid}
+                            className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 hover:shadow-md transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    처리 중...
+                                </>
+                            ) : (
+                                <>
+                                    반품처리 완료
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ─── 주문별 입고 확인 단계 UI ─────────────────────────────────────────────
+    return (
+        <div
+            className={`fixed inset-x-0 top-0 bottom-20 sm:inset-0 z-[300] flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`}
+            onClick={() => !isLoading && onClose()}
+        >
+            <div
+                className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                     <div>
@@ -225,7 +562,7 @@ export function ReceiptConfirmationModal({
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                    {/* Info box — compact on step > 0 */}
+                    {/* Info box */}
                     <div className={`rounded-2xl p-4 flex gap-3 ${isReturn ? 'bg-amber-50/50 border border-amber-100' : isExchange ? 'bg-violet-50/50 border border-violet-100' : 'bg-blue-50/50 border border-blue-100'}`}>
                         <div className={`shrink-0 mt-0.5 ${isReturn ? 'text-amber-500' : isExchange ? 'text-violet-500' : 'text-blue-500'}`}>
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -281,19 +618,12 @@ export function ReceiptConfirmationModal({
                                             </span>
                                             <button
                                                 onClick={confirmPendingAction}
-                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-black text-white transition-all active:scale-95 ${confirmAction.type === 'delete'
-                                                    ? 'bg-rose-500 hover:bg-rose-600'
-                                                    : 'bg-indigo-500 hover:bg-indigo-600'
-                                                    }`}
-                                            >
-                                                확인
-                                            </button>
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-black text-white transition-all active:scale-95 ${confirmAction.type === 'delete' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                                            >확인</button>
                                             <button
                                                 onClick={() => setConfirmAction(null)}
                                                 className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95"
-                                            >
-                                                취소
-                                            </button>
+                                            >취소</button>
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-1.5">
@@ -314,6 +644,7 @@ export function ReceiptConfirmationModal({
                                         </div>
                                     )}
                                 </div>
+
                                 <div className="divide-y divide-slate-100">
                                     {currentOrder.items.map((item, idx) => {
                                         const key = `${currentOrder.id}-${idx}`;
@@ -376,10 +707,10 @@ export function ReceiptConfirmationModal({
                                                     )}
                                                 </div>
 
-                                                {currentOrder.status === 'cancelled' && currentOrder.cancelledReason && (
+                                                {currentOrder.status === 'cancelled' && (currentOrder as { cancelledReason?: string }).cancelledReason && (
                                                     <div className="mt-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
                                                         <span className="text-[10px] font-bold text-slate-400">취소 사유: </span>
-                                                        <span className="text-xs font-semibold text-slate-600">{currentOrder.cancelledReason}</span>
+                                                        <span className="text-xs font-semibold text-slate-600">{(currentOrder as { cancelledReason?: string }).cancelledReason}</span>
                                                     </div>
                                                 )}
 
@@ -387,12 +718,10 @@ export function ReceiptConfirmationModal({
                                                     <div className={`mt-4 p-3 rounded-xl border ${isOver ? 'bg-amber-50/50 border-amber-200' : 'bg-rose-50/50 border-rose-200'}`}>
                                                         {isOver ? (
                                                             <div className="space-y-2">
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
-                                                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                                                        {diff}개 초과 입고됨
-                                                                    </span>
-                                                                </div>
+                                                                <span className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                                                    {diff}개 초과 입고됨
+                                                                </span>
                                                                 <input
                                                                     type="text"
                                                                     placeholder="초과 입고 사유를 간단히 입력해주세요 (선택)"
@@ -403,15 +732,14 @@ export function ReceiptConfirmationModal({
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-4">
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
-                                                                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                                                                        {Math.abs(diff)}개 부족 입고됨
-                                                                    </span>
-                                                                </div>
+                                                                <span className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                                                    {Math.abs(diff)}개 부족 입고됨
+                                                                </span>
                                                                 <div className="flex flex-col gap-3">
-                                                                    <div className="text-xs text-rose-600/80 mb-1">어떻게 처리할까요? (선택 사항)</div>
+                                                                    <p className="text-xs text-rose-600/80">어떻게 처리할까요? (선택 사항)</p>
 
+                                                                    {/* 단순 누락 */}
                                                                     <div className="flex flex-col gap-1 p-2.5 rounded-lg bg-rose-50 border border-rose-100 hover:bg-rose-100/50 transition-colors">
                                                                         <label className="flex items-center gap-2 cursor-pointer">
                                                                             <input
@@ -427,7 +755,8 @@ export function ReceiptConfirmationModal({
                                                                         </span>
                                                                     </div>
 
-                                                                    <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-rose-50 border border-rose-100 hover:bg-rose-100/50 transition-colors">
+                                                                    {/* 규격 오배송 (체크만 — 세부 규격은 마지막 단계에서) */}
+                                                                    <div className="flex flex-col gap-1 p-2.5 rounded-lg bg-rose-50 border border-rose-100 hover:bg-rose-100/50 transition-colors">
                                                                         <label className="flex items-center gap-2 cursor-pointer">
                                                                             <input
                                                                                 type="checkbox"
@@ -438,86 +767,18 @@ export function ReceiptConfirmationModal({
                                                                             <span className="text-xs font-bold text-rose-800">규격 오배송 (다른 제품 도착)</span>
                                                                         </label>
                                                                         <span className="text-[11px] text-rose-600/80 pl-6 leading-tight">
-                                                                            주문한 것과 다른 규격이 도착했습니다. 잘못 온 {Math.abs(diff)}개를 교환(반품) 처리합니다.
+                                                                            주문한 것과 다른 규격이 도착했습니다. 잘못 온 {Math.abs(diff)}개를 반품처리합니다.
                                                                         </span>
-                                                                        {returnWrongDelivery[key] && (() => {
-                                                                            const parts = item.size.split(/([\d.]+)/);
-                                                                            const userParts = wrongDeliveryParts[key] || [];
-                                                                            const inventorySizes = inventory
-                                                                                .filter(inv => inv.manufacturer === currentOrder.manufacturer && inv.brand === item.brand)
-                                                                                .map(inv => inv.size.split(/([\d.]+)/));
-
-                                                                            return (
-                                                                                <div className="pl-6 mt-1 flex flex-wrap items-center gap-1.5 bg-white border border-rose-200 rounded-lg px-3 py-2 overflow-hidden focus-within:ring-2 focus-within:ring-rose-500/20">
-                                                                                    {parts.map((part, i) => {
-                                                                                        if (i % 2 === 0) {
-                                                                                            if (!part) return null;
-                                                                                            return <span key={i} className="text-[12px] text-slate-500 font-bold select-none shrink-0 tracking-wide whitespace-pre">{part}</span>;
-                                                                                        } else {
-                                                                                            const options = Array.from(new Set(inventorySizes.map(p => p[i]).filter(Boolean)))
-                                                                                                .map(Number)
-                                                                                                .filter(n => !isNaN(n))
-                                                                                                .sort((a, b) => a - b)
-                                                                                                .map(String);
-                                                                                            const dropdownId = `${key}-${i}`;
-                                                                                            const isDropdownOpen = activeDropdown === dropdownId;
-
-                                                                                            return (
-                                                                                                <div key={i} className="relative flex items-center shrink-0">
-                                                                                                    <input
-                                                                                                        type="text"
-                                                                                                        placeholder={part}
-                                                                                                        className={`text-[12px] py-1 px-1.5 focus:bg-white focus:outline-none font-extrabold text-slate-700 w-14 text-center placeholder:text-slate-300 placeholder:font-normal rounded-md border transition-all ${isDropdownOpen ? 'bg-white border-rose-400 ring-2 ring-rose-500/20' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}
-                                                                                                        value={userParts[i] !== undefined ? userParts[i] : ''}
-                                                                                                        onChange={(e) => {
-                                                                                                            setWrongDeliveryParts(prev => {
-                                                                                                                const next = { ...prev };
-                                                                                                                if (!next[key]) next[key] = [];
-                                                                                                                next[key][i] = e.target.value;
-                                                                                                                return next;
-                                                                                                            });
-                                                                                                            setActiveDropdown(dropdownId);
-                                                                                                        }}
-                                                                                                        onFocus={(e) => {
-                                                                                                            e.target.select();
-                                                                                                            setActiveDropdown(dropdownId);
-                                                                                                        }}
-                                                                                                        onBlur={() => {
-                                                                                                            setTimeout(() => {
-                                                                                                                setActiveDropdown(prev => prev === dropdownId ? null : prev);
-                                                                                                            }, 150);
-                                                                                                        }}
-                                                                                                    />
-
-                                                                                                    {isDropdownOpen && options.length > 0 && (
-                                                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-20 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50 overscroll-contain">
-                                                                                                            {options.map(num => (
-                                                                                                                <button
-                                                                                                                    key={num}
-                                                                                                                    onMouseDown={(e) => { e.preventDefault(); }}
-                                                                                                                    onClick={() => {
-                                                                                                                        setWrongDeliveryParts(prev => {
-                                                                                                                            const next = { ...prev };
-                                                                                                                            if (!next[key]) next[key] = [];
-                                                                                                                            next[key][i] = num;
-                                                                                                                            return next;
-                                                                                                                        });
-                                                                                                                        setActiveDropdown(null);
-                                                                                                                    }}
-                                                                                                                    className="w-full px-2 py-1.5 text-center text-[12px] font-bold text-slate-700 hover:bg-slate-50 hover:text-rose-600 transition-colors"
-                                                                                                                >
-                                                                                                                    {num}
-                                                                                                                </button>
-                                                                                                            ))}
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            );
-                                                                                        }
-                                                                                    })}
-                                                                                </div>
-                                                                            );
-                                                                        })()}
+                                                                        {returnWrongDelivery[key] && (
+                                                                            <div className="pl-6 mt-1 flex items-center gap-1.5">
+                                                                                <svg className="w-3.5 h-3.5 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                                                                </svg>
+                                                                                <span className="text-[11px] font-bold text-rose-600">
+                                                                                    입고 확인 완료 후 도착 규격을 선택합니다
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -531,6 +792,16 @@ export function ReceiptConfirmationModal({
                             </div>
                         )}
                     </div>
+
+                    {/* 규격 오배송 건 있을 때 안내 (마지막 스텝) */}
+                    {isLastStep && wrongDeliveryItemList.length > 0 && (
+                        <div className="flex items-center gap-2.5 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl">
+                            <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <p className="text-xs font-bold text-rose-700">
+                                규격 오배송 {wrongDeliveryItemList.length}건이 있습니다. 다음 단계에서 도착 규격을 선택합니다.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -544,7 +815,6 @@ export function ReceiptConfirmationModal({
                     </button>
 
                     <div className="flex items-center gap-2">
-                        {/* 이전 버튼 — 첫 번째 스텝이 아닐 때만 */}
                         {hasMultipleOrders && safeIdx > 0 && (
                             <button
                                 onClick={() => goToStep(safeIdx - 1)}
@@ -556,7 +826,6 @@ export function ReceiptConfirmationModal({
                             </button>
                         )}
 
-                        {/* 확인/다음/완료 버튼 */}
                         {(activeOrders.length === 0 || groupedOrder.overallStatus === 'received' || groupedOrder.overallStatus === 'cancelled') ? null : (
                             <button
                                 onClick={handleStepConfirm}
@@ -564,6 +833,7 @@ export function ReceiptConfirmationModal({
                                 className={`px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-sm flex items-center gap-2 ${
                                     isLoading ? 'bg-slate-400 cursor-not-allowed' :
                                     !isLastStep ? 'bg-indigo-500 hover:bg-indigo-600 hover:shadow-md' :
+                                    isLastStep && wrongDeliveryItemList.length > 0 ? 'bg-rose-500 hover:bg-rose-600 hover:shadow-md' :
                                     isCurrentChanged
                                         ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 hover:shadow-md'
                                         : 'bg-emerald-500 hover:bg-emerald-600 hover:shadow-md'
@@ -578,10 +848,9 @@ export function ReceiptConfirmationModal({
                                         처리 중...
                                     </>
                                 ) : !isLastStep ? (
-                                    <>
-                                        다음
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                                    </>
+                                    <>다음 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></>
+                                ) : wrongDeliveryItemList.length > 0 ? (
+                                    <>규격 오배송 처리 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></>
                                 ) : isCurrentChanged ? (
                                     isReturn ? '수정사항 적용 및 반품완료' : isExchange ? '수정사항 적용 및 교환완료' : '수정사항 적용 및 입고완료'
                                 ) : (
