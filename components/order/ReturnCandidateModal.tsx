@@ -66,6 +66,17 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
         [items],
     );
 
+    // 브랜드별 집계 (초과량 내림차순)
+    const brandGroups = useMemo(() => {
+        const map = new Map<string, { count: number; excess: number }>();
+        items.forEach(i => {
+            const key = i.brand;
+            const prev = map.get(key) ?? { count: 0, excess: 0 };
+            map.set(key, { count: prev.count + 1, excess: prev.excess + (i.currentStock - i.recommendedStock) });
+        });
+        return Array.from(map.entries()).sort((a, b) => b[1].excess - a[1].excess);
+    }, [items]);
+
     const allSelected = items.length > 0 && items.every(i => selectedIds.has(i.id));
     const someSelected = selectedIds.size > 0;
     const selectedItems = items.filter(i => selectedIds.has(i.id));
@@ -190,13 +201,27 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         </button>
                     </div>
 
-                    {/* Summary */}
-                    <div className="mt-4 inline-flex items-center gap-3 bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3">
-                        <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                        <div>
-                            <p className="text-xs font-bold text-indigo-800">권장량 초과</p>
-                            <p className="text-2xl font-black text-indigo-600 leading-tight tabular-nums">{items.length} <span className="text-sm font-bold">품목</span></p>
-                            <p className="text-[10px] text-indigo-400 mt-0.5">총 +{totalExcess}개 초과 보유</p>
+                    {/* Summary + 브랜드별 분류 */}
+                    <div className="mt-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
+                        {/* 상단 요약 */}
+                        <div className="flex items-center gap-3 mb-3">
+                            <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                            <div>
+                                <p className="text-xs font-bold text-indigo-800">권장량 초과</p>
+                                <p className="text-xl font-black text-indigo-600 leading-tight tabular-nums">{items.length} <span className="text-sm font-bold">품목</span> <span className="text-xs font-bold text-indigo-400">· 총 +{totalExcess}개 초과</span></p>
+                            </div>
+                        </div>
+                        {/* 브랜드별 그리드 */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {brandGroups.map(([brand, { count, excess }]) => (
+                                <div key={brand} className="bg-white/70 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                                    <p className="text-xs font-black text-slate-700 truncate">{brand}</p>
+                                    <div className="text-right shrink-0">
+                                        <span className="text-xs font-bold text-slate-600 tabular-nums">{count}품목</span>
+                                        <span className="text-[10px] text-indigo-500 font-bold ml-1.5 tabular-nums">+{excess}</span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
