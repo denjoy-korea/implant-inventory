@@ -420,7 +420,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
         {/* 불일치 Alert 배너 */}
         {totalMismatched > 0 && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 flex items-start justify-between gap-4">
+          <div className="hidden md:flex bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-rose-700 flex items-center gap-2">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -842,25 +842,31 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
               };
 
               return (
-                <article key={`audit-mobile-${item.id}`} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-slate-400">{item.manufacturer}</p>
-                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{item.brand}</p>
-                      <p className="text-[11px] text-slate-500 mt-1">{item.size}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-slate-400">현재 재고</p>
-                      <p className="text-lg font-black text-slate-900 tabular-nums">{item.currentStock}</p>
-                    </div>
+                <article key={`audit-mobile-${item.id}`} className="bg-white rounded-2xl border border-slate-100 px-4 pt-4 pb-4 shadow-sm">
+                  {/* 제조사 · 브랜드 한 줄 */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[11px] font-semibold text-slate-400 shrink-0">{item.manufacturer}</span>
+                    <span className="text-slate-200 shrink-0">·</span>
+                    <span className="text-sm font-black text-slate-800 truncate">{item.brand}</span>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  {/* 사이즈 — 크게 */}
+                  <p className="text-[22px] font-black text-slate-700 mt-2 leading-tight tracking-tight">{item.size}</p>
+
+                  {/* 현재 재고 — 크게 */}
+                  <div className="flex items-end gap-2 mt-2">
+                    <span className="text-[11px] font-bold text-slate-400 mb-1 shrink-0">현재 재고</span>
+                    <span className="text-5xl font-black text-slate-900 tabular-nums leading-none">{item.currentStock}</span>
+                    <span className="text-base font-bold text-slate-400 mb-0.5">개</span>
+                  </div>
+
+                  {/* 일치 / 불일치 */}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       disabled={!isAuditActive}
                       onClick={() => toggleCheck(true)}
-                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${result?.matched === true
+                      className={`h-12 rounded-xl text-sm font-black transition-all ${result?.matched === true
                           ? 'bg-emerald-500 text-white'
                           : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -871,7 +877,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                       type="button"
                       disabled={!isAuditActive}
                       onClick={() => toggleCheck(false)}
-                      className={`min-h-11 rounded-xl text-xs font-black transition-all ${result?.matched === false
+                      className={`h-12 rounded-xl text-sm font-black transition-all ${result?.matched === false
                           ? 'bg-rose-500 text-white'
                           : 'bg-rose-50 text-rose-700 border border-rose-200'
                         } ${!isAuditActive ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -880,15 +886,17 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                     </button>
                   </div>
 
+                  {/* 불일치 패널 — compact */}
                   {result?.matched === false && (
-                    <div className="mt-3 space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                    <div className="mt-2.5 rounded-xl border border-rose-100 bg-rose-50/40 p-2.5 space-y-2">
+                      {/* 실사 수량 */}
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-rose-500">실사 수량</span>
                         <div className="flex items-center rounded-lg border border-rose-200 bg-white overflow-hidden">
                           <button
                             type="button"
                             onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, (result.actualCount ?? item.currentStock) - 1) } }))}
-                            className="h-9 w-9 text-rose-600 font-black"
+                            className="h-8 w-8 text-rose-600 font-black text-base"
                           >
                             −
                           </button>
@@ -898,28 +906,29 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                             min={0}
                             value={result.actualCount ?? item.currentStock}
                             onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, parseInt(e.target.value) || 0) } }))}
-                            className="w-14 text-center text-sm font-black text-rose-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="w-12 text-center text-sm font-black text-rose-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           />
                           <button
                             type="button"
                             onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: (result.actualCount ?? item.currentStock) + 1 } }))}
-                            className="h-9 w-9 text-rose-600 font-black"
+                            className="h-8 w-8 text-rose-600 font-black text-base"
                           >
                             +
                           </button>
                         </div>
                       </div>
 
+                      {/* 사유 + 완료 */}
                       {isCustom ? (
-                        <div className="space-y-2">
+                        <>
                           <input
                             type="text"
                             value={result.reason || ''}
                             placeholder="사유 직접 입력"
                             onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))}
-                            className="w-full h-11 rounded-xl border border-indigo-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500"
+                            className="w-full h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500"
                           />
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-1.5">
                             <button
                               type="button"
                               disabled={!result.reason?.trim()}
@@ -928,8 +937,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                                 setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                                 confirmItem(item.id);
                               }}
-                              className={`min-h-10 rounded-xl text-xs font-black ${result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                }`}
+                              className={`h-9 rounded-xl text-xs font-black ${result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                             >
                               완료
                             </button>
@@ -939,14 +947,14 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                                 setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
                                 setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: MISMATCH_REASONS[0] } }));
                               }}
-                              className="min-h-10 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
+                              className="h-9 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
                             >
                               목록 선택
                             </button>
                           </div>
-                        </div>
+                        </>
                       ) : (
-                        <div className="space-y-2">
+                        <>
                           <select
                             value={result.reason || MISMATCH_REASONS[0]}
                             onChange={(e) => {
@@ -957,17 +965,17 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                                 setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }));
                               }
                             }}
-                            className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
+                            className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
                           >
                             {MISMATCH_REASONS.map(reason => (
                               <option key={`${item.id}-${reason}`} value={reason}>{reason}</option>
                             ))}
                           </select>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-1.5">
                             <button
                               type="button"
                               onClick={() => confirmItem(item.id)}
-                              className="min-h-10 rounded-xl bg-indigo-600 text-white text-xs font-black"
+                              className="h-9 rounded-xl bg-indigo-600 text-white text-xs font-black"
                             >
                               완료
                             </button>
@@ -977,12 +985,12 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                                 setCustomReasonMode(prev => ({ ...prev, [item.id]: true }));
                                 setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: '' } }));
                               }}
-                              className="min-h-10 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
+                              className="h-9 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
                             >
                               기타 입력
                             </button>
                           </div>
-                        </div>
+                        </>
                       )}
                     </div>
                   )}
