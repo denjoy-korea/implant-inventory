@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { planService } from '../services/planService';
+import { hospitalSettingsService } from '../services/hospitalSettingsService';
 import { InventoryDetailColumnKey, InventoryDetailColumnVisibility, InventoryDetailToolbarState } from '../components/inventory/inventoryTypes';
 import {
   DEFAULT_INVENTORY_DETAIL_COLUMN_VISIBILITY,
@@ -16,6 +17,8 @@ export function useInventoryManagerControls({
   isUnlimited,
 }: UseInventoryManagerControlsParams) {
   const [monthFactor, setMonthFactor] = useState<number>(1);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | null>(null);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [showEditNotice, setShowEditNotice] = useState(false);
@@ -32,6 +35,16 @@ export function useInventoryManagerControls({
   const showOnlyOrderNeededRows = inventoryDetailToolbarState.showOnlyOrderNeededRows;
   const showInventoryDetailColumnFilter = inventoryDetailToolbarState.showColumnFilter;
   const inventoryDetailColumnVisibility = inventoryDetailToolbarState.columnVisibility;
+
+  // 병원 단위 UI 설정 로드 (권장기간 등)
+  useEffect(() => {
+    if (!hospitalId) return;
+    hospitalSettingsService.get(hospitalId).then(settings => {
+      if (settings.monthFactor != null) {
+        setMonthFactor(settings.monthFactor);
+      }
+    });
+  }, [hospitalId]);
 
   useEffect(() => {
     if (!hospitalId || isUnlimited) return;
@@ -86,6 +99,15 @@ export function useInventoryManagerControls({
     setEditCount(prev => prev + 1);
   }, []);
 
+  const saveMonthFactorForAll = useCallback(async (factor: number) => {
+    if (!hospitalId) return;
+    setSaveStatus('saving');
+    const ok = await hospitalSettingsService.set(hospitalId, { monthFactor: factor });
+    setSaveStatus(ok ? 'saved' : 'error');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+  }, [hospitalId]);
+
   const openAddItemModal = useCallback(() => {
     setIsAddingItem(true);
   }, []);
@@ -96,6 +118,7 @@ export function useInventoryManagerControls({
 
   return {
     monthFactor,
+    saveStatus,
     selectedManufacturer,
     isAddingItem,
     showEditNotice,
@@ -116,6 +139,7 @@ export function useInventoryManagerControls({
     setShowInventoryDetailColumnFilter,
     toggleInventoryDetailColumn,
     handleBaseStockSaved,
+    saveMonthFactorForAll,
     openAddItemModal,
     closeAddItemModal,
   };

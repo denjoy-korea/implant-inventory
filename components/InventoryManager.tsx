@@ -77,6 +77,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const isUnlimited = maxEdits === Infinity;
   const {
     monthFactor,
+    saveStatus,
     selectedManufacturer,
     isAddingItem,
     showBaseStockModal,
@@ -95,6 +96,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     setShowInventoryDetailColumnFilter,
     toggleInventoryDetailColumn,
     handleBaseStockSaved,
+    saveMonthFactorForAll,
     openAddItemModal,
     closeAddItemModal,
   } = useInventoryManagerControls({
@@ -412,9 +414,26 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Recommendation</p>
                     </div>
                   </div>
-                  <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mt-2 w-fit">
-                    <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월분 비축</button>
-                    <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월분 비축</button>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-fit">
+                      <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월분 비축</button>
+                      <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월분 비축</button>
+                    </div>
+                    {!isReadOnly && hospitalId && (
+                      <button
+                        onClick={() => void saveMonthFactorForAll(monthFactor)}
+                        disabled={saveStatus === 'saving'}
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all ${
+                          saveStatus === 'saved'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : saveStatus === 'error'
+                            ? 'bg-rose-50 text-rose-500 border-rose-200'
+                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700'
+                        }`}
+                      >
+                        {saveStatus === 'saved' ? '저장됨 ✓' : saveStatus === 'error' ? '실패' : saveStatus === 'saving' ? '저장 중...' : '모두에게 저장'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -642,9 +661,26 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
-                <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
+                  <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
+                </div>
+                {!isReadOnly && hospitalId && (
+                  <button
+                    onClick={() => void saveMonthFactorForAll(monthFactor)}
+                    disabled={saveStatus === 'saving'}
+                    className={`w-full h-8 rounded-xl text-[11px] font-bold border transition-all ${
+                      saveStatus === 'saved'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        : saveStatus === 'error'
+                        ? 'bg-rose-50 text-rose-500 border-rose-200'
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    {saveStatus === 'saved' ? '저장됨 ✓' : saveStatus === 'error' ? '실패' : saveStatus === 'saving' ? '저장 중...' : '모두에게 저장'}
+                  </button>
+                )}
               </div>
 
               {!isReadOnly && (
