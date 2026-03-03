@@ -4,18 +4,16 @@ import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStat
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
-import ReturnManager from './ReturnManager';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
 import OptimizeModal from './inventory/OptimizeModal';
 import { isExchangePrefix } from '../services/appUtils';
 import { OrderHistoryPanel } from './order/OrderHistoryPanel';
-import { buildSparklinePath } from '../utils/chartUtils';
+import ReturnManager from './ReturnManager';
 
 interface OrderManagerProps {
   orders: Order[];
   inventory: InventoryItem[];
-  returnRequests: ReturnRequest[];
   surgeryMaster: Record<string, ExcelRow[]>;
   hospitalId?: string;
   currentUserName?: string;
@@ -29,6 +27,7 @@ interface OrderManagerProps {
   onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
+  returnRequests: ReturnRequest[];
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   isReadOnly?: boolean;
 }
@@ -56,7 +55,6 @@ export interface GroupedOrder {
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
   inventory,
-  returnRequests,
   surgeryMaster,
   hospitalId,
   currentUserName = '관리자',
@@ -70,6 +68,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onUpdateReturnStatus,
   onCompleteReturn,
   onDeleteReturn,
+  returnRequests,
   showAlertToast,
   isReadOnly,
 }) => {
@@ -292,26 +291,17 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
       byMfr[mfr] = (byMfr[mfr] || 0) + 1;
     });
-    // 반품 대기중 건수 (ReturnRequest 기반: requested 또는 picked_up)
-    const returnPendingByMfr: Record<string, number> = {};
-    returnRequests
-      .filter(r => r.status === 'requested' || r.status === 'picked_up')
-      .forEach(r => {
-        const mfr = isIbsImplantManufacturer(r.manufacturer) ? 'IBS Implant' : r.manufacturer;
-        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
-        returnPendingByMfr[mfr] = (returnPendingByMfr[mfr] || 0) + qty;
-      });
     const list = Object.entries(byMfr)
       .map(([manufacturer, count]) => ({
         manufacturer,
         count,
-        returnPending: returnPendingByMfr[manufacturer] || 0,
-        actualCount: Math.max(0, count - (returnPendingByMfr[manufacturer] || 0)),
+        returnPending: 0,
+        actualCount: count,
       }))
       .sort((a, b) => b.count - a.count);
     const totalActual = list.reduce((s, x) => s + x.actualCount, 0);
     return { list, total: pending.length, totalActual };
-  }, [surgeryMaster, returnRequests]);
+  }, [surgeryMaster]);
 
   const stats = useMemo(() => {
     const totalOrders = orders.filter(o =>
@@ -322,11 +312,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     const receivedOrders = totalOrders.filter(o => o.status === 'received');
     const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
     const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
-    // 반품 통계 (ReturnRequest 기반, 필터 무관)
-    const sumReturnQty = (list: typeof returnRequests) =>
-      list.reduce((acc, r) => acc + r.items.reduce((s, i) => s + i.quantity, 0), 0);
-    const returnPending = returnRequests.filter(r => r.status === 'requested' || r.status === 'picked_up');
-    const returnReceived = returnRequests.filter(r => r.status === 'completed');
     return {
       totalCount: totalOrders.length,
       totalQty: sumQty(totalOrders),
@@ -336,12 +321,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       receivedQty: sumQty(receivedOrders),
       lowStockCount: lowStockItems.length,
       lowStockQty: lowStockDeficit,
-      returnCount: returnRequests.length,
-      returnQty: sumReturnQty(returnRequests),
-      returnPendingCount: returnPending.length,
-      returnReceivedCount: returnReceived.length,
     };
-  }, [orders, lowStockItems, filterType, returnRequests]);
+  }, [orders, lowStockItems, filterType]);
 
   const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange' | 'return', number> = useMemo(() => ({
     all: orders.length,
@@ -1300,7 +1281,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       return (
                         <div className="mt-1.5 pt-1.5 border-t border-slate-100">
                           <div className="flex items-center gap-1 flex-wrap">
-                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size}</span>
+                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
                             <span className="text-[11px] text-slate-400">×{first.quantity}</span>
                             {allItems.length > 1 && (
                               <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>

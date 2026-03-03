@@ -8,10 +8,10 @@ import {
   Order,
   OrderStatus,
   PlanType,
-  ReturnMutationResult,
   ReturnRequest,
   ReturnReason,
   ReturnStatus,
+  ReturnMutationResult,
   SurgeryUnregisteredItem,
   User,
 } from '../../types';
@@ -173,7 +173,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           <OrderManager
             orders={orders}
             inventory={inventory}
-            returnRequests={returnRequests}
             surgeryMaster={surgeryMaster}
             hospitalId={user?.hospitalId}
             currentUserName={user?.name}
@@ -184,6 +183,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             onQuickOrder={onQuickOrder}
             onCreateReturn={onCreateReturn}
             onAddExchangeReturn={onAddFailOrder}
+            returnRequests={returnRequests}
             onUpdateReturnStatus={onUpdateReturnStatus}
             onCompleteReturn={onCompleteReturn}
             onDeleteReturn={onDeleteReturn}
