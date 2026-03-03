@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   DashboardTab,
   DEFAULT_WORK_DAYS,
-  ExcelData,
   ExcelRow,
   HospitalPlanState,
   InventoryItem,
@@ -22,16 +21,11 @@ interface DashboardOverviewProps {
   inventory: InventoryItem[];
   orders: Order[];
   surgeryMaster: Record<string, ExcelRow[]>;
-  fixtureData: ExcelData | null;
   surgeryUnregisteredItems?: SurgeryUnregisteredItem[];
   hospitalId?: string;
   hospitalWorkDays?: number[];
   onNavigate: (tab: DashboardTab) => void;
-  isAdmin: boolean;
   planState: HospitalPlanState | null;
-  isMaster?: boolean;
-  onStartTrial: () => void;
-  onGoToPricing: () => void;
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
   onSurgeryUploadClick?: () => void;
@@ -651,16 +645,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return maxDate ? maxDate.toISOString().slice(0, 10) : null;
   }, [cleanSurgeryRows]);
 
-  const firstSurgeryDate = useMemo(() => {
-    let minDate: Date | null = null;
-    for (const row of cleanSurgeryRows) {
-      const parsed = parseDate(row['날짜']);
-      if (!parsed) continue;
-      if (!minDate || parsed < minDate) minDate = parsed;
-    }
-    return minDate ? minDate.toISOString().slice(0, 10) : null;
-  }, [cleanSurgeryRows]);
-
   const latestOrderDate = useMemo(() => {
     let maxDate: Date | null = null;
     for (const order of orders) {
@@ -765,12 +749,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     () => visibleInventory.some((item) => item.initialStock > 0),
     [visibleInventory]
   );
-
-  const thisMonthFailRate = useMemo(() => {
-    const total = thisMonthSurgery.placementQty + thisMonthSurgery.failQty;
-    if (total === 0) return null;
-    return Number(((thisMonthSurgery.failQty / total) * 100).toFixed(1));
-  }, [thisMonthSurgery.placementQty, thisMonthSurgery.failQty]);
 
   const alertCards = useMemo<AlertCard[]>(() => {
     const shortageSeverity: PriorityLevel =
@@ -927,7 +905,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
     const topShortage = shortageEntries[0];
     const topMismatch = latestAuditSummary.topMismatches[0];
-    const topFail = failExchangeEntries[0];
 
     if (shortageSummary.itemCount > 0) {
       items.push({
@@ -1278,7 +1255,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         ))}
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-black text-slate-900">발주 필요 TOP 5</h3>
@@ -1367,7 +1344,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-100"
               >
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">{entry.brand} {entry.size}</p>
+                  <p className="text-xs font-bold text-slate-800 truncate">{entry.size === '기타' || entry.size === '-' ? '규격정보없음' : `${entry.brand} ${entry.size}`}</p>
                   <p className="text-[10px] text-slate-500 truncate">{entry.manufacturer}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">

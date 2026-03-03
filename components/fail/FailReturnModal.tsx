@@ -72,7 +72,6 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                 반품 권장 품목
               </h4>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recommended for Return</span>
             </div>
             <div
               ref={recommendedScrollRef}

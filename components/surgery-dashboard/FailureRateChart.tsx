@@ -53,7 +53,6 @@ export default function FailureRateChart({ stats, mounted }: Props) {
         <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 h-full flex flex-col">
             <div className="mb-6 shrink-0">
                 <h3 className="text-sm font-semibold text-slate-800">골질별 실패율 분석</h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Failure Rate by Bone Density</p>
             </div>
 
             <div className="relative flex-1 flex items-center justify-center min-h-[300px]">

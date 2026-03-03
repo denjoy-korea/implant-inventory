@@ -198,7 +198,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         <div className="py-16 text-center">
                             <svg className="w-12 h-12 text-slate-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             <p className="text-sm font-bold text-slate-400">해당 카테고리에 반품 권장 품목이 없습니다.</p>
-                            <p className="text-xs text-slate-300 mt-1">모든 품목이 정상 상태이거나 보유 처리되었습니다.</p>
+                            <p className="text-xs text-slate-300 mt-1">모든 품목이 정상 상태이거나 유지 처리되었습니다.</p>
                         </div>
                     ) : (
                         <div className="divide-y divide-slate-50">

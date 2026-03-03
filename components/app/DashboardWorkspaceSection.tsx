@@ -114,7 +114,6 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   state,
   setState,
   effectivePlan,
-  isHospitalAdmin,
   isHospitalMaster,
   isSystemAdmin,
   isReadOnly,
@@ -130,7 +129,6 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onGoToPricing,
   onDismissPlanLimitToast,
   onUpgradeFromPlanLimitToast,
-  onStartOverviewTrial,
   onFixtureUploadClick,
   onSurgeryUploadClick,
   onCloseAuditHistory,
@@ -222,16 +220,11 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           inventory={state.inventory}
           orders={state.orders}
           surgeryMaster={state.surgeryMaster}
-          fixtureData={state.fixtureData}
           surgeryUnregisteredItems={surgeryUnregisteredItems}
           hospitalId={state.user?.hospitalId}
           hospitalWorkDays={state.hospitalWorkDays}
           onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
-          isAdmin={isHospitalAdmin}
           planState={state.planState}
-          isMaster={isHospitalMaster || isSystemAdmin}
-          onStartTrial={onStartOverviewTrial}
-          onGoToPricing={onGoToPricing}
           onboardingStep={onboardingStep}
           onResumeOnboarding={onResumeOnboarding}
           onSurgeryUploadClick={onSurgeryUploadClick}

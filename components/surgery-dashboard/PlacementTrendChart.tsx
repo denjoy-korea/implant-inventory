@@ -77,7 +77,6 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-sm font-semibold text-slate-800">추세 분석</h3>
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Trend Analysis</p>
         </div>
         <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
           {SERIES_OPTIONS.map(s => (

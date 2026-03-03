@@ -578,7 +578,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <div className="flex flex-wrap items-stretch gap-2 flex-1 min-w-0">
                   <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 flex flex-col justify-center">
                     <h4 className="text-sm font-semibold text-slate-800">총 레코드</h4>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Records</p>
                     <div className="flex items-baseline gap-1 mt-1">
                       <p className="text-base font-bold text-slate-800 tabular-nums tracking-tight">{animTotal}</p>
                       <span className="text-xs font-semibold text-slate-400">건</span>
@@ -589,7 +588,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-sm font-semibold text-slate-800">보기 필터</h4>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">View Filter</p>
                       </div>
                     </div>
                     <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mt-2 w-fit">
@@ -866,7 +864,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
                 <h3 className="text-base font-black text-slate-800 tracking-tight">발주 권장 품목</h3>
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Low Stock</span>
                 <span className="text-xs font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{lowStockItems.length}종 · {stats.lowStockQty}개 부족</span>
               </div>
               <p className="text-xs text-slate-400 mt-1.5 ml-5">재고가 권장 수량보다 부족한 품목입니다. 제조사에 발주를 진행하세요.</p>
@@ -921,7 +918,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
                 <h3 className="text-base font-black text-slate-800 tracking-tight">교환 권장 품목</h3>
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Exchange Candidates</span>
                 <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.totalActual}건 미처리</span>
               </div>
               <p className="text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 반품 처리를 진행하세요.</p>
@@ -988,7 +984,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
                 <h3 className="text-base font-black text-slate-800 tracking-tight">반품 권장 품목</h3>
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Return Candidates</span>
               </div>
               <p className="text-xs text-slate-400 mt-1.5 ml-5">장기 미사용, 미등록 사용, 과잉 재고 품목을 반품하여 재고를 최적화하세요.</p>
             </div>
@@ -1102,7 +1097,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
                   <div>
                     <h3 className="text-base font-black text-slate-800 tracking-tight">월별 주문 추세</h3>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">Monthly Order Trend</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-white/50 backdrop-blur-sm px-2.5 sm:px-3 py-1.5 rounded-xl border border-white shadow-sm">
                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">발주</span></div>
@@ -1185,7 +1179,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
                 <div>
                   <h3 className="text-base font-black text-slate-800 tracking-tight">제조사별 주문 비율</h3>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5">By Manufacturer</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 mt-4 sm:mt-6 flex-1 relative z-10">
                   <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0">
@@ -1252,7 +1245,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" />
                 주문 내역
               </h3>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 ml-4">Order History</p>
             </div>
             <div className="flex items-center gap-2">
               <button

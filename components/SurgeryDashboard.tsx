@@ -449,12 +449,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
 
   return (
     <div className="space-y-6 pb-16" style={{ animationDuration: '0s' }}>
-      {/* Sticky header + KPI + Range slider wrapper */}
-      <div
-        data-sticky-anchor="surgery-dashboard"
-        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
-        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
-      >
+      {/* Header + KPI (non-sticky, scrolls normally) */}
+      <div className="space-y-4">
         {/* A. Header Strip */}
         <div className="hidden md:block bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -462,7 +458,6 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
               {/* 데이터 기간 + 선택 기간 통합 카드 */}
               <div className="min-w-[190px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">데이터 기간</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Data Period</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">
                   {formatDate(stats.dateRange.min)} <span className="text-slate-300 font-light mx-1">~</span> {formatDate(stats.dateRange.max)}
                 </p>
@@ -477,12 +472,10 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
               </div>
               <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">총 레코드</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Records</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{kpiStats.dateRange.total.toLocaleString()}<span className="text-xs font-semibold text-slate-400 ml-1">cases</span></p>
               </div>
               <div className="min-w-[160px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <h4 className="text-sm font-semibold text-slate-800">다음 다운로드</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Next Download</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{formatDate(stats.nextDownloadDate)}~</p>
                 <p className="text-[10px] text-slate-400 mt-1 leading-tight">마지막 레코드 다음 날부터<br />덴트웹 재다운로드 필요</p>
               </div>
@@ -550,7 +543,15 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         />
 
         {/* C. Date Range Slider */}
-        {months.length > 1 && (
+      </div>{/* end non-sticky wrapper */}
+
+      {/* Sticky: 기간 필터만 고정 */}
+      {months.length > 1 && (
+        <div
+          data-sticky-anchor="surgery-dashboard"
+          className="sticky z-20 -mt-2 pb-1 bg-slate-50"
+          style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.06)' }}
+        >
           <DateRangeSlider
             months={months}
             startIdx={effectiveStart}
@@ -558,8 +559,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
             onChange={handleRangeChange}
             minStartIdx={minStartIdx}
           />
-        )}
-      </div>{/* end sticky wrapper */}
+        </div>
+      )}
 
       {unregisteredFromSurgery.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-3">
@@ -568,7 +569,6 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
               <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black text-slate-800">미등록 품목</span>
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Unregistered</span>
                 <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black">{unregisteredFromSurgery.length}종 · {unregisteredUsageTotal.toLocaleString()}개</span>
               </div>
               <div className="flex flex-wrap gap-1.5 ml-2">
@@ -598,7 +598,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
       <CollapsibleSection
         id="section-charts"
         title="통계 차트"
-        subtitle="Statistical Charts"
+        subtitle=""
         accentColor="slate"
         icon={<svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
         badge="월별 · 요일별 · 구분별"
@@ -616,7 +616,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
       <CollapsibleSection
         id="section-deep"
         title="심층 분석"
-        subtitle="Deep Analysis"
+        subtitle=""
         accentColor="indigo"
         icon={<svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
         badge="제조사 · 치아 부위 · 사이즈"
@@ -637,7 +637,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         <CollapsibleSection
           id="section-clinical"
           title="임상 인사이트"
-          subtitle="Clinical Insight"
+          subtitle=""
           accentColor="rose"
           icon={<svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
           badge="골질 · 초기고정 · 실패율"

@@ -375,26 +375,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* ================================================= */}
-      {/* Sticky Header Block                               */}
-      {/* ================================================= */}
-      <div
-        ref={stickyRef}
-        className={`sticky z-20 pt-px -mt-px bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 ${isMobileViewport && isMobileStickyCollapsed ? 'space-y-2 pb-2' : 'space-y-4 pb-3'
-          }`}
-        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
-      >
-        {/* A. Header Strip */}
-        {/* A. Header Strip (Tier 1 & Tier 2) */}
-        <div className="hidden md:flex flex-col gap-4">
+      {/* Header + KPI: 데스크톱 스크롤 영역 (틀고정 없음) */}
+      <div className="hidden md:flex flex-col gap-4">
           {/* Tier 1: Action and Context Header */}
           <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex flex-wrap items-stretch gap-2 flex-1 min-w-0">
                 <div className="min-w-[150px] flex-1 sm:flex-none rounded-xl border border-slate-100 bg-slate-50 px-4 py-2 flex flex-col justify-center">
                   <h4 className="text-sm font-semibold text-slate-800">총 품목</h4>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Items</p>
-                  <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredInventory.length}<span className="text-xs font-semibold text-slate-400 ml-1">items</span></p>
+                  <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredInventory.length}<span className="text-xs font-semibold text-slate-400 ml-1">종</span></p>
                   {hiddenCategoryCount > 0 && (() => {
                     const isNormal = hiddenCategoryCount === visibleInventory.length + 1;
                     return (
@@ -411,13 +400,25 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-sm font-semibold text-slate-800">권장 기간</h4>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Recommendation</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm w-fit">
-                      <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월분 비축</button>
-                      <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월분 비축</button>
+                      <div className="relative group/tip-1m">
+                        <button onClick={() => setMonthFactor(1)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>1개월분 비축</button>
+                        <div className="absolute top-full left-0 mt-2 w-64 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-1m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                          <p>사용량 기반 1개월 재고를 권장량으로 제안합니다.</p>
+                          <p className="mt-1">재고수량이 최적화되는만큼 수술기록지 업데이트를 자주 해서 변동성 확인이 필요합니다.</p>
+                        </div>
+                      </div>
+                      <div className="relative group/tip-2m">
+                        <button onClick={() => setMonthFactor(2)} className={`px-4 py-1 text-[11px] font-black rounded-lg transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>2개월분 비축</button>
+                        <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-2m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                          <p>사용량 기반 2개월 재고를 권장량으로 제안합니다.</p>
+                          <p className="mt-1 text-slate-300">재고수량이 많아져 재고실사와 관리가 1개월 기준에 비해 비효율적입니다.</p>
+                          <p className="mt-1">현장의 재고량을 파악하면서 주문이 필요한 시점에 수술기록지를 업로드해서 최적의 주문수량 발주를 하시면 됩니다.</p>
+                        </div>
+                      </div>
                     </div>
                     {!isReadOnly && hospitalId && (
                       <button
@@ -479,7 +480,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             {/* 총 사용량 */}
             <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
               <h4 className="text-sm font-semibold text-slate-800">총 사용량</h4>
-              <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Total Usage</p>
               <div className="flex items-baseline gap-1 mt-3">
                 <p className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter leading-none">{kpiData.totalUsage.toLocaleString()}</p>
                 <span className="text-sm font-bold text-slate-400">개</span>
@@ -497,7 +497,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
             {/* 현재 재고 */}
             <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
               <h4 className="text-sm font-semibold text-slate-800">현재 재고</h4>
-              <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Current Stock</p>
               <div className="flex items-baseline gap-1 mt-3">
                 <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none ${kpiData.totalStock < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
                   {kpiData.totalStock.toLocaleString()}
@@ -551,7 +550,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5 group-hover/shortage:text-indigo-400/80 transition-colors">{monthFactor}개월 기준</p>
               <div className="flex items-baseline gap-1 mt-3">
                 <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none transition-colors duration-300 ${kpiData.shortageCount > 0 ? 'text-rose-600 group-hover/shortage:text-indigo-600' : 'text-slate-800 group-hover/shortage:text-indigo-600'}`}>{kpiData.shortageCount}</p>
-                <span className="text-sm font-bold text-slate-400 group-hover/shortage:text-indigo-400 transition-colors">items</span>
+                <span className="text-sm font-bold text-slate-400 group-hover/shortage:text-indigo-400 transition-colors">종</span>
               </div>
               {kpiData.shortageCount > 0 ? (
                 <p className="text-xs font-bold text-slate-500 mt-2 transition-colors group-hover/shortage:text-indigo-500/80">
@@ -577,7 +576,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               return (
                 <div className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50">
                   <h4 className="text-sm font-semibold text-slate-800">재고 건강도</h4>
-                  <p className="text-[11px] text-slate-400 uppercase tracking-widest font-black mt-0.5">Stock Health</p>
                   <div className="flex flex-wrap items-baseline gap-1 mt-3">
                     <p className={`text-2xl font-black tabular-nums tracking-tighter leading-none ${color}`}>{rate}</p>
                     <span className={`text-sm font-bold ${color}`}>%</span>
@@ -588,8 +586,14 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               );
             })()}
           </div>
-        </div>
+      </div>{/* end desktop non-sticky */}
 
+      {/* Sticky: 모바일 요약 + 제조사 필터만 고정 */}
+      <div
+        ref={stickyRef}
+        className={`sticky z-20 -mt-2 bg-slate-50/80 backdrop-blur-md transition-[padding] duration-200 ${isMobileViewport && isMobileStickyCollapsed ? 'space-y-2 pb-2' : 'pb-3'}`}
+        style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)' }}
+      >
         <div
           className={`md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all duration-200 ${isMobileStickyCollapsed ? 'p-2.5' : 'p-4 space-y-3'
             }`}
@@ -663,8 +667,21 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setMonthFactor(1)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
-                  <button onClick={() => setMonthFactor(2)} className={`flex-1 h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
+                  <div className="relative group/tip-1m-m flex-1">
+                    <button onClick={() => setMonthFactor(1)} className={`w-full h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 1 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>1개월분 비축</button>
+                    <div className="absolute top-full left-0 mt-2 w-64 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-1m-m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                      <p>사용량 기반 1개월 재고를 권장량으로 제안합니다.</p>
+                      <p className="mt-1">재고수량이 최적화되는만큼 수술기록지 업데이트를 자주 해서 변동성 확인이 필요합니다.</p>
+                    </div>
+                  </div>
+                  <div className="relative group/tip-2m-m flex-1">
+                    <button onClick={() => setMonthFactor(2)} className={`w-full h-10 rounded-xl text-xs font-black transition-all ${monthFactor === 2 ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>2개월분 비축</button>
+                    <div className="absolute top-full right-0 mt-2 w-72 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/tip-2m-m:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                      <p>사용량 기반 2개월 재고를 권장량으로 제안합니다.</p>
+                      <p className="mt-1 text-slate-300">재고수량이 많아져 재고실사와 관리가 1개월 기준에 비해 비효율적입니다.</p>
+                      <p className="mt-1">현장의 재고량을 파악하면서 주문이 필요한 시점에 수술기록지를 업로드해서 최적의 주문수량 발주를 하시면 됩니다.</p>
+                    </div>
+                  </div>
                 </div>
                 {!isReadOnly && hospitalId && (
                   <button
@@ -874,7 +891,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-6 pt-5 pb-4 border-b border-slate-50">
           <div>
             <h3 className="text-sm font-black text-slate-800 tracking-tight">규격별 사용량 분석</h3>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Usage Analysis by Specification</p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">TOP {Math.min(chartData.length, USAGE_TOP_ITEMS)}</span>

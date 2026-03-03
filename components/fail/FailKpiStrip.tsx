@@ -31,7 +31,6 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 총 교환 발생 */}
       <div className="p-4 relative overflow-hidden">
         <h4 className="text-sm font-semibold text-slate-800">총 교환 발생</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchanges</p>
         <p className="text-2xl font-bold text-slate-800 tabular-nums tracking-tight mt-2">{animTotal}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
         {failSparkline.length > 1 && (
           <svg className="absolute bottom-0 right-2 opacity-30" width="80" height="28">
@@ -43,7 +42,6 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 교환 처리 완료 */}
       <div className="p-4 relative overflow-hidden">
         <h4 className="text-sm font-semibold text-slate-800">교환 처리 완료</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Exchanged</p>
         <p className="text-2xl font-bold text-emerald-600 tabular-nums tracking-tight mt-2">{animProcessed}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
         {exchangeSparkline.length > 1 && (
           <svg className="absolute bottom-0 right-2 opacity-30" width="80" height="28">
@@ -55,7 +53,6 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 미처리 잔여 */}
       <div className="p-4">
         <h4 className="text-sm font-semibold text-slate-800">미처리 잔여</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Pending</p>
         <p className={`text-2xl font-bold tabular-nums tracking-tight mt-2 ${animPending > 0 ? 'text-rose-500' : 'text-slate-800'}`}>{animPending}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
         {animPending > 0 && <p className="text-[10px] font-bold text-rose-400 mt-1">⚠ 전량 미처리</p>}
         {totalReturnPending > 0 && (
@@ -66,7 +63,6 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 교환율 */}
       <div className="p-4 relative overflow-hidden">
         <h4 className="text-sm font-semibold text-slate-800">교환율</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Exchange Rate</p>
         <p className={`text-2xl font-bold tabular-nums tracking-tight mt-2 ${failRate > 20 ? 'text-rose-500' : failRate > 10 ? 'text-amber-500' : 'text-slate-800'}`}>
           {(animFailRate / 10).toFixed(1)}<span className="text-sm font-semibold text-slate-400 ml-0.5">%</span>
         </p>
@@ -80,7 +76,6 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 월 평균 FAIL */}
       <div className="p-4">
         <h4 className="text-sm font-semibold text-slate-800">월 평균</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Avg Monthly</p>
         <p className="text-2xl font-bold text-slate-800 tabular-nums tracking-tight mt-2">
           {(animMonthlyAvg / 10).toFixed(1)}<span className="text-sm font-semibold text-slate-400 ml-1">건/월</span>
         </p>

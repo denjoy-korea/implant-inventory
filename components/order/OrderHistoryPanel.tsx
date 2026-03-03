@@ -84,7 +84,6 @@ export function OrderHistoryPanel({ orders, onClose, onReceiptConfirm, isReadOnl
                                 </svg>
                                 주문 히스토리
                             </h3>
-                            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 ml-6">Order History</p>
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
                             <span className="bg-slate-100 px-2 py-0.5 rounded-lg font-black text-slate-600">{totalOrders}건</span>

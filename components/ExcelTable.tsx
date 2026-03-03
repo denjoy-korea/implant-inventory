@@ -410,9 +410,9 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
       )}
 
       <div className="w-full overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="overflow-x-auto max-h-[calc(100vh-420px)] min-h-[300px] custom-scrollbar">
+        <div className="overflow-x-auto max-h-[calc(100dvh-420px)] min-h-[300px] custom-scrollbar">
           <table className="w-full text-left border-collapse table-auto">
-            <thead className="md:sticky md:top-0 bg-slate-50 z-10 border-b border-slate-200">
+            <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
               <tr>
                 {currentVisibleCols.map((col) => (
                   <th

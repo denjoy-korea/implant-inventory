@@ -187,7 +187,6 @@ export default function ClassificationRatios({ classificationStats, mounted }: P
     <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-violet-400 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-800">구분별 비율</h3>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Classification Ratio</p>
       </div>
       <div className="flex-1 flex flex-col justify-center gap-6">
         <RingGauge

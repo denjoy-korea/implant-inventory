@@ -569,7 +569,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* STICKY HEADER + KPI + FILTER              */}
       {/* ========================================= */}
       <div
-        className="md:sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
+        className="sticky z-20 space-y-4 pt-px pb-3 -mt-px bg-slate-50"
         style={{ top: 'var(--dashboard-header-height, 44px)', boxShadow: '0 4px 12px -4px rgba(0,0,0,0.08)' }}
       >
 
@@ -762,6 +762,58 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 1: 제조사별 현황 + 브랜드/규격 분포      */}
           {/* ========================================= */}
+
+          {/* ROW 1 — Mobile */}
+          <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-4">
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+              {activeM === 'all' ? '전체' : activeM} 교환 현황
+            </h3>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-slate-50 rounded-xl p-3 text-center">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">총 발생</p>
+                <p className="text-xl font-black text-slate-800 tabular-nums mt-1">{currentStats.total}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">교환 완료</p>
+                <p className="text-xl font-black text-emerald-700 tabular-nums mt-1">{currentStats.processed}</p>
+              </div>
+              <div className={`rounded-xl p-3 text-center ${actualPendingFails > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
+                <p className={`text-[9px] font-bold uppercase tracking-widest ${actualPendingFails > 0 ? 'text-rose-400' : 'text-slate-400'}`}>미처리</p>
+                <p className={`text-xl font-black tabular-nums mt-1 ${actualPendingFails > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{actualPendingFails}</p>
+              </div>
+            </div>
+            {currentStats.total > 0 && (
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[10px] font-bold text-slate-400">교환 처리율</span>
+                  <span className="text-[10px] font-black text-indigo-600">{Math.round((currentStats.processed / currentStats.total) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-400 rounded-full transition-all duration-700"
+                    style={{ width: `${(currentStats.processed / currentStats.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {manufacturerDonut.length > 0 && (
+              <div className="pt-2 border-t border-slate-100">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">제조사 분포</h4>
+                <div className="space-y-2">
+                  {manufacturerDonut.map((seg) => (
+                    <div key={seg.name} className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+                      <span className="text-xs font-bold text-slate-700 flex-1 min-w-0 truncate">{seg.name}</span>
+                      <span className="text-xs font-black text-slate-800 tabular-nums">{seg.count}건</span>
+                      <span className="text-[10px] font-bold text-slate-400 w-8 text-right">{seg.percent}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ROW 1 — Desktop */}
           <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 선택된 제조사 현황 카드 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
@@ -850,6 +902,57 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ========================================= */}
           {/* ROW 2: 월별 교환 추세 + TOP FAIL 규격       */}
           {/* ========================================= */}
+
+          {/* ROW 2 — Mobile */}
+          <div className="md:hidden grid grid-cols-1 gap-3">
+            {/* TOP FAIL 규격 */}
+            {topFailSizes.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">교환 다빈도 규격 TOP {Math.min(5, topFailSizes.length)}</h3>
+                <div className="space-y-2.5">
+                  {topFailSizes.slice(0, 5).map((item, idx) => (
+                    <div key={`${item.brand}-${item.size}`} className="flex items-center gap-3">
+                      <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${idx === 0 ? 'bg-rose-500 text-white' : idx === 1 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-700 truncate">{item.brand}</p>
+                        <p className="text-[10px] font-semibold text-slate-400">{item.size}</p>
+                      </div>
+                      <span className="text-sm font-black text-slate-800 tabular-nums">{item.count}<span className="text-[10px] font-semibold text-slate-400 ml-0.5">건</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* 월별 추세 — 미니 막대 */}
+            {visibleMonthlyData.length > 0 && (() => {
+              const recent = visibleMonthlyData.slice(-6);
+              const totals = recent.map(d => manufacturers.reduce((s, m) => s + (d.byManufacturer[m] ?? 0), 0));
+              const maxTotal = Math.max(...totals, 1);
+              return (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">월별 교환 추세</h3>
+                  <div className="space-y-2">
+                    {recent.map((d, i) => (
+                      <div key={d.month} className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 w-12 shrink-0">{d.month.slice(2)}</span>
+                        <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all duration-500"
+                            style={{ width: `${(totals[i] / maxTotal) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-black text-slate-700 w-5 text-right tabular-nums">{totals[i]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ROW 2 — Desktop */}
           <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 월별 추세 차트 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">

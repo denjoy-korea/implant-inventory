@@ -35,7 +35,6 @@ export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted, on
     <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-300 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-800">요일별 식립 패턴</h3>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Weekly Pattern</p>
       </div>
       <svg viewBox={`0 0 ${svgW} ${svgH}`} className={`flex-1 ${CHART_FOCUS_CLASS}`}
         preserveAspectRatio="xMidYMid meet" style={{ touchAction: 'manipulation' }}

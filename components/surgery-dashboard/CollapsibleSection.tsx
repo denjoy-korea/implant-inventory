@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 interface CollapsibleSectionProps {
     id?: string;
     title: string;
-    subtitle: string;
+    subtitle?: string;
     accentColor: 'indigo' | 'rose' | 'slate';
     icon: React.ReactNode;
     badge?: string;
@@ -103,7 +103,7 @@ export default function CollapsibleSection({
                     </div>
                     <div className="text-left">
                         <h3 className="text-sm font-black text-slate-800 tracking-tight">{title}</h3>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">{subtitle}</p>
+                        {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">{subtitle}</p>}
                     </div>
                 </div>
                 <div className="flex items-center gap-3">

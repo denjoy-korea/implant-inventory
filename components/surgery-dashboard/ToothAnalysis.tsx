@@ -99,7 +99,6 @@ export default function ToothAnalysis({ toothAnalysis, toothHeatmap, mounted }: 
     <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-emerald-500 p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
       <div className="mb-5">
         <h3 className="text-sm font-semibold text-slate-800">식립 부위 분석</h3>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Position Distribution & FDI Heatmap</p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
         {/* Ring chart + summary */}

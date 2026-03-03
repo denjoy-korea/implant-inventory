@@ -38,7 +38,6 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
     <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-500 p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
       <div className="mb-5">
         <h3 className="text-sm font-semibold text-slate-800">제조사 분석</h3>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Analysis</p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-28">
         {/* Donut + Legend */}
@@ -94,7 +93,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
         <div className="min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-3 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
-            사이즈별 TOP 5 / Size Ranking
+            사이즈별 TOP 5
           </p>
           {topSizes.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-8">사이즈 데이터 없음</p>
@@ -127,7 +126,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
         <div className="min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-3 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-            교환율 / Exchange Rate
+            교환율
           </p>
           {manufacturerFailStats.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-8">교환 데이터 없음</p>
@@ -161,7 +160,7 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
                 });
               })()}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchange</span>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">총 교환</span>
                 <span className="text-sm font-semibold text-slate-800 tabular-nums">{manufacturerFailStats.reduce((s, f) => s + f.failCount, 0)}건</span>
               </div>
             </div>

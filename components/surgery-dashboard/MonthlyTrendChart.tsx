@@ -40,7 +40,6 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-sm font-semibold text-slate-800">월별 추세</h3>
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Monthly Trend</p>
           {onMonthClick && (
             <p className="text-[10px] text-indigo-400 font-medium mt-1 flex items-center gap-1">
               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" /></svg>

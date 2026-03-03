@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
-import { InventoryItem, OrderItem } from '../types';
+import { InventoryItem, OrderItem, type OrderStatus } from '../types';
 import { parseSize } from '../services/sizeNormalizer';
 
 export interface ReceiptUpdate {
@@ -21,7 +21,7 @@ interface ReceiptConfirmationModalProps {
     inventory: InventoryItem[];
     onClose: () => void;
     onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
-    onUpdateOrderStatus?: (id: string, status: 'ordered' | 'received' | 'cancelled') => void;
+    onUpdateOrderStatus?: (id: string, status: OrderStatus) => void;
     onDeleteOrder?: (id: string) => void;
     isLoading?: boolean;
 }
@@ -600,15 +600,8 @@ export function ReceiptConfirmationModal({
                                 <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold text-slate-600">주문 ID: <span className="font-mono text-slate-400">{currentOrder.id.slice(0, 8)}</span></span>
-                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${currentOrder.status === 'ordered'
-                                            ? (isReturn ? 'bg-amber-100 text-amber-700' : isExchange ? 'bg-violet-100 text-violet-700' : 'bg-rose-100 text-rose-700')
-                                            : currentOrder.status === 'cancelled' ? 'bg-slate-100 text-slate-500'
-                                                : 'bg-emerald-100 text-emerald-700'
-                                            }`}>
-                                            {currentOrder.status === 'ordered'
-                                                ? (isReturn ? '반품 대기' : isExchange ? '미교환' : '미입고')
-                                                : currentOrder.status === 'cancelled' ? '취소됨'
-                                                    : (isReturn ? '반품완료' : isExchange ? '교환완료' : '입고완료')}
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${isReturn ? 'bg-amber-100 text-amber-700' : isExchange ? 'bg-violet-100 text-violet-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            {isReturn ? '반품 대기' : isExchange ? '미교환' : '미입고'}
                                         </span>
                                     </div>
                                     {confirmAction?.orderId === currentOrder.id ? (
@@ -663,56 +656,38 @@ export function ReceiptConfirmationModal({
                                                         </div>
                                                     </div>
 
-                                                    {currentOrder.status === 'ordered' ? (
-                                                        <div className="flex items-center gap-6">
-                                                            <div className="text-right">
-                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '반품 수량' : isExchange ? '교환 수량' : '발주 수량'}</span>
-                                                                <span className="text-sm font-black text-slate-800">{item.quantity}개</span>
-                                                            </div>
-                                                            <div className="w-[1px] h-8 bg-slate-200" />
-                                                            <div className="text-center">
-                                                                <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '실제 반품' : isExchange ? '실제 교환' : '실제 입고'}</span>
-                                                                <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-1 bg-white shadow-sm">
-                                                                    <button
-                                                                        onClick={() => handleQuantityChange(key, String(Math.max(0, currentQty - 1)))}
-                                                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                                                                    </button>
-                                                                    <input
-                                                                        type="number"
-                                                                        className="w-10 text-center text-sm font-black text-slate-800 focus:outline-none appearance-none"
-                                                                        value={currentQty}
-                                                                        onChange={(e) => handleQuantityChange(key, e.target.value)}
-                                                                    />
-                                                                    <button
-                                                                        onClick={() => handleQuantityChange(key, String(currentQty + 1))}
-                                                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ) : currentOrder.status === 'cancelled' ? (
+                                                    <div className="flex items-center gap-3 sm:gap-6">
                                                         <div className="text-right">
-                                                            <span className="block text-[10px] font-bold text-slate-400 mb-1">취소 수량</span>
-                                                            <span className="text-sm font-black text-slate-400 line-through">{item.quantity}개</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-right">
-                                                            <span className="block text-[10px] font-bold text-emerald-500 mb-1">완료 수량</span>
+                                                            <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '반품 수량' : isExchange ? '교환 수량' : '발주 수량'}</span>
                                                             <span className="text-sm font-black text-slate-800">{item.quantity}개</span>
                                                         </div>
-                                                    )}
+                                                        <div className="w-[1px] h-8 bg-slate-200" />
+                                                        <div className="text-center">
+                                                            <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '실제 반품' : isExchange ? '실제 교환' : '실제 입고'}</span>
+                                                            <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-1 bg-white shadow-sm">
+                                                                <button
+                                                                    onClick={() => handleQuantityChange(key, String(Math.max(0, currentQty - 1)))}
+                                                                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                                                                </button>
+                                                                <input
+                                                                    type="number"
+                                                                    className="w-10 text-center text-sm font-black text-slate-800 focus:outline-none appearance-none"
+                                                                    value={currentQty}
+                                                                    onChange={(e) => handleQuantityChange(key, e.target.value)}
+                                                                />
+                                                                <button
+                                                                    onClick={() => handleQuantityChange(key, String(currentQty + 1))}
+                                                                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                {currentOrder.status === 'cancelled' && (currentOrder as { cancelledReason?: string }).cancelledReason && (
-                                                    <div className="mt-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <span className="text-[10px] font-bold text-slate-400">취소 사유: </span>
-                                                        <span className="text-xs font-semibold text-slate-600">{(currentOrder as { cancelledReason?: string }).cancelledReason}</span>
-                                                    </div>
-                                                )}
 
                                                 {currentOrder.status === 'ordered' && (isOver || isUnder) && (
                                                     <div className={`mt-4 p-3 rounded-xl border ${isOver ? 'bg-amber-50/50 border-amber-200' : 'bg-rose-50/50 border-rose-200'}`}>

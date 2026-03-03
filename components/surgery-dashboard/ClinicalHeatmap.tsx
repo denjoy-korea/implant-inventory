@@ -102,7 +102,6 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
             <div className="mb-6 flex justify-between items-start shrink-0">
                 <div>
                     <h3 className="text-sm font-semibold text-slate-800">골질/초기고정 실패율 히트맵</h3>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Failure Rate Matrix</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">

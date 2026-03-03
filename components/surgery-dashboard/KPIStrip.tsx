@@ -94,11 +94,11 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
     : '전월대비';
 
   const metrics = [
-    { ko: '총 식립', en: 'Total Placement', value: animPlacement.toLocaleString(), unit: '개', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'placement', delta: 0, prevValue: 0, badgeLabel: '전월대비', badgeSuffix: '개' },
-    { ko: '월 평균', en: 'Avg Monthly', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: useProgress ? progressAwareDeltas!.placementDelta : sparkline.placementDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthPlacement : sparkline.placementPrev, badgeLabel: compLabel, badgeSuffix: '개' },
-    { ko: '교환율', en: 'Exchange Rate', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: useProgress ? progressAwareDeltas!.failDelta : sparkline.failDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthFail : sparkline.failPrev, badgeLabel: compLabel, badgeSuffix: '건' },
-    { ko: '보험청구', en: 'Insurance Claim', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: useProgress ? progressAwareDeltas!.claimDelta : sparkline.claimDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthClaim : sparkline.claimPrev, badgeLabel: compLabel, badgeSuffix: '건' },
-    { ko: '일 평균', en: 'Avg Daily', value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
+    { ko: '총 식립', value: animPlacement.toLocaleString(), unit: '개', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'placement', delta: 0, prevValue: 0, badgeLabel: '전월대비', badgeSuffix: '개' },
+    { ko: '월 평균', value: (animMonthlyAvg / 10).toFixed(1), unit: '개/월', sparkData: sparkline.placement, sparkColor: '#4F46E5', sparkId: 'monthly', delta: useProgress ? progressAwareDeltas!.placementDelta : sparkline.placementDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthPlacement : sparkline.placementPrev, badgeLabel: compLabel, badgeSuffix: '개' },
+    { ko: '교환율', value: (animFailRate / 10).toFixed(1), unit: '%', sparkData: sparkline.fail, sparkColor: '#F43F5E', sparkId: 'fail', delta: useProgress ? progressAwareDeltas!.failDelta : sparkline.failDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthFail : sparkline.failPrev, badgeLabel: compLabel, badgeSuffix: '건' },
+    { ko: '보험청구', value: animClaim.toLocaleString(), unit: '건', sparkData: sparkline.claim, sparkColor: '#0EA5E9', sparkId: 'claim', delta: useProgress ? progressAwareDeltas!.claimDelta : sparkline.claimDelta, prevValue: useProgress ? progressAwareDeltas!.prevMonthClaim : sparkline.claimPrev, badgeLabel: compLabel, badgeSuffix: '건' },
+    { ko: '일 평균', value: (animDailyAvg / 10).toFixed(1), unit: '개/일', sparkData: sparkline.placement, sparkColor: '#64748b', sparkId: 'daily', delta: dailyDelta, prevValue: 0, badgeLabel: `최근 1개월 (${dailyBasisLabel})`, badgeSuffix: '' },
   ];
 
   return (
@@ -106,7 +106,6 @@ export default function KPIStrip({ animPlacement, animMonthlyAvg, animFailRate, 
       {metrics.map((m, i) => (
         <div key={i} className={`px-4 sm:px-5 xl:px-6 py-4 sm:py-5 hover:bg-slate-50/50 transition-colors ${i === 0 ? 'bg-indigo-50/30 lg:border-r-2 lg:border-r-indigo-200' : ''}`}>
           <h4 className="text-sm font-semibold text-slate-800">{m.ko}</h4>
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mb-2">{m.en}</p>
           <div className="flex items-center gap-1.5" aria-live="polite" aria-atomic="true">
             <p className="text-3xl font-bold text-slate-800 tabular-nums tracking-tight">{m.value}</p>
             <span className="text-xs font-semibold text-slate-400">{m.unit}</span>
