@@ -80,8 +80,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [cancelModalOrder, setCancelModalOrder] = useState<Order[] | null>(null);
   const [isCancelLoading, setIsCancelLoading] = useState(false);
 
-  // ── 일괄 주문 모달 state ──
+  // ── 일괄 주문 모달 state (데스크톱) ──
   const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
+
+  // ── 모바일 인라인 발주 목록 state ──
+  const [unselectedLowStockKeys, setUnselectedLowStockKeys] = useState<Set<string>>(new Set());
+  const [isMobileBulkOrdering, setIsMobileBulkOrdering] = useState(false);
 
   // ── 상세 입고 확인 모달 state ──
   const [selectedGroupModal, setSelectedGroupModal] = useState<GroupedOrder | null>(null);
@@ -459,6 +463,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     }
   };
 
+  // ── 모바일 인라인 발주 실행 ──
+  const handleMobileBulkOrder = async () => {
+    const selected = lowStockItems.filter(e =>
+      !unselectedLowStockKeys.has(buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size))
+    );
+    if (selected.length === 0) return;
+    setIsMobileBulkOrdering(true);
+    try {
+      await Promise.all(selected.map(entry => onQuickOrder(entry.item)));
+      showAlertToast(`${selected.length}품목 발주 완료`, 'success');
+      setUnselectedLowStockKeys(new Set());
+    } catch {
+      showAlertToast('일부 발주 처리에 실패했습니다.', 'error');
+    } finally {
+      setIsMobileBulkOrdering(false);
+    }
+  };
+
   // ── Animated KPI & Specific Metrics ──
   const kpiData = useMemo(() => {
     const pendingReplenishments = orders.filter(o => o.type === 'replenishment' && o.status === 'ordered');
@@ -518,19 +540,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">주문 현황</p>
           <div className="grid grid-cols-2 gap-2">
             <div
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isReadOnly) { alert('읽기 전용 모드입니다.'); return; }
-                if (lowStockItems.length === 0) return;
-                setShowBulkOrderModal(true);
-              }}
-              role="button"
-              tabIndex={0}
-              className={`rounded-xl border px-3 py-3 transition-colors active:scale-[0.98] ${lowStockItems.length > 0 ? 'border-rose-200 bg-rose-50 hover:bg-rose-100 cursor-pointer' : 'border-rose-100 bg-rose-50/80'}`}
+              className={`rounded-xl border px-3 py-3 ${lowStockItems.length > 0 ? 'border-rose-200 bg-rose-50' : 'border-rose-100 bg-rose-50/80'}`}
             >
               <div className="flex justify-between items-start">
                 <p className="text-[10px] font-bold text-rose-500">긴급 부족품</p>
-                {lowStockItems.length > 0 && <span className="bg-white border border-rose-200 text-rose-600 text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm">일괄주문 &gt;</span>}
+                {lowStockItems.length > 0 && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">↓ 아래 목록</span>}
               </div>
               <p className={`text-xl font-black tabular-nums mt-1 ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animLowStock}</p>
             </div>
@@ -563,6 +577,101 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             </div>
           </div>
         </div>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* Mobile: 발주 필요 목록 (인라인 체크박스 섹션)   */}
+        {/* ═══════════════════════════════════════════════ */}
+        {lowStockItems.length > 0 && (
+          <div className="md:hidden bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
+            {/* 헤더 */}
+            <div className="px-4 py-3 bg-rose-50/60 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">발주 필요 목록</span>
+                <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">{lowStockItems.length}</span>
+              </div>
+              <button
+                onClick={() => {
+                  const allSelected = lowStockItems.every(e =>
+                    !unselectedLowStockKeys.has(buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size))
+                  );
+                  if (allSelected) {
+                    setUnselectedLowStockKeys(new Set(
+                      lowStockItems.map(e => buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size))
+                    ));
+                  } else {
+                    setUnselectedLowStockKeys(new Set());
+                  }
+                }}
+                className="text-[10px] font-semibold text-rose-400 hover:text-rose-600 transition-colors"
+              >
+                {lowStockItems.every(e => !unselectedLowStockKeys.has(buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size)))
+                  ? '전체 해제' : '전체 선택'}
+              </button>
+            </div>
+
+            {/* 품목 목록 */}
+            <div className="divide-y divide-rose-50/80">
+              {lowStockItems.map(entry => {
+                const key = buildOrderItemKey(entry.item.manufacturer, entry.item.brand, entry.item.size);
+                const isChecked = !unselectedLowStockKeys.has(key);
+                return (
+                  <label
+                    key={key}
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-rose-50/40 active:bg-rose-50/60 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {
+                        const next = new Set(unselectedLowStockKeys);
+                        if (isChecked) next.add(key);
+                        else next.delete(key);
+                        setUnselectedLowStockKeys(next);
+                      }}
+                      className="w-4 h-4 rounded border-rose-300 text-rose-500 accent-rose-500 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {entry.item.manufacturer}
+                        <span className="text-slate-400 font-normal mx-1">/</span>
+                        {entry.item.brand}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{entry.item.size}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-black text-rose-500">−{entry.remainingDeficit}개</span>
+                      {entry.pendingQty > 0 && (
+                        <p className="text-[9px] text-amber-500 font-semibold">발주 중 {entry.pendingQty}개</p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* 발주하기 버튼 */}
+            <div className="px-4 py-3 border-t border-rose-50 bg-white">
+              {(() => {
+                const selectedCount = lowStockItems.filter(e =>
+                  !unselectedLowStockKeys.has(buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size))
+                ).length;
+                return (
+                  <button
+                    onClick={handleMobileBulkOrder}
+                    disabled={selectedCount === 0 || isMobileBulkOrdering || isReadOnly}
+                    className="w-full py-3 bg-rose-500 hover:bg-rose-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-black rounded-xl transition-all"
+                  >
+                    {isMobileBulkOrdering
+                      ? '발주 중...'
+                      : selectedCount === 0
+                        ? '품목을 선택하세요'
+                        : `선택 ${selectedCount}품목 발주하기`}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════ */}
         {/* STICKY FILTER BAR (mobile) / FILTERS   */}
