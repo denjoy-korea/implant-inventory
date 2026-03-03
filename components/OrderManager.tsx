@@ -581,7 +581,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* ═══════════════════════════════════════ */}
         {/* Mobile KPI Overview (non-sticky)        */}
         {/* ═══════════════════════════════════════ */}
-        <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4">
+        <div className="hidden bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">주문 현황</p>
           <div className="grid grid-cols-2 gap-2">
             <div
@@ -962,7 +962,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           </div>
 
           {/* Mobile: compact sticky filter bar */}
-          <div className="md:hidden px-3 pt-1.5 pb-1 space-y-2">
+          <div className="hidden px-3 pt-1.5 pb-1 space-y-2">
             {/* Type tabs */}
             <div className="flex gap-1">
               {TYPE_TABS.map(({ key, label }) => (
