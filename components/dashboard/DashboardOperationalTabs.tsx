@@ -49,7 +49,6 @@ interface DashboardOperationalTabsProps {
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => Promise<void>;
-  onAddFailOrder?: (order: Order) => Promise<void>;
   onCreateReturn: (params: {
     manufacturer: string;
     reason: ReturnReason;
@@ -92,7 +91,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onCancelOrder,
   onDeleteOrder,
   onQuickOrder,
-  onAddFailOrder,
   onCreateReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
@@ -165,7 +163,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           initialShowBulkModal={initialShowFailBulkModal}
           onInitialModalOpened={onFailBulkModalOpened}
           onDeleteOrder={onDeleteOrder}
-          onAddFailOrder={onAddFailOrder}
         />
       )}
       {dashboardTab === 'order_management' && (

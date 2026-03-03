@@ -32,7 +32,6 @@ interface FailManagerProps {
   initialShowBulkModal?: boolean;
   onInitialModalOpened?: () => void;
   onDeleteOrder?: (orderId: string) => Promise<void>;
-  onAddFailOrder?: (order: FailOrder) => Promise<void>;
 }
 
 interface MonthlyFailDatum {
