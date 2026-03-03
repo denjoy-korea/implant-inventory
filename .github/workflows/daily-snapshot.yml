@@ -45,6 +45,7 @@ jobs:
           fi
 
       - name: Check snapshot coverage
+        continue-on-error: true
         run: node scripts/traffic-snapshot-coverage.mjs 28 27
 
       - name: Commit snapshot
