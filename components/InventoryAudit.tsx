@@ -420,7 +420,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
         {/* 불일치 Alert 배너 */}
         {totalMismatched > 0 && (
-          <div className="hidden md:flex bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 items-start justify-between gap-4">
+          <div className="flex bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-rose-700 flex items-center gap-2">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -886,113 +886,137 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                     </button>
                   </div>
 
-                  {/* 불일치 패널 — compact */}
+                  {/* 불일치 수량 입력 — fixed bottom sheet (스크롤 없이) */}
                   {result?.matched === false && (
-                    <div className="mt-2.5 rounded-xl border border-rose-100 bg-rose-50/40 p-2.5 space-y-2">
-                      {/* 실사 수량 */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-rose-500">실사 수량</span>
-                        <div className="flex items-center rounded-lg border border-rose-200 bg-white overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, (result.actualCount ?? item.currentStock) - 1) } }))}
-                            className="h-8 w-8 text-rose-600 font-black text-base"
-                          >
-                            −
-                          </button>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            value={result.actualCount ?? item.currentStock}
-                            onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, parseInt(e.target.value) || 0) } }))}
-                            className="w-12 text-center text-sm font-black text-rose-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: (result.actualCount ?? item.currentStock) + 1 } }))}
-                            className="h-8 w-8 text-rose-600 font-black text-base"
-                          >
-                            +
-                          </button>
+                    <>
+                      {/* 배경 딤 */}
+                      <div
+                        className="fixed inset-0 z-[140] bg-slate-900/20"
+                        onClick={() => clearSelection()}
+                      />
+                      {/* Bottom sheet */}
+                      <div className="fixed bottom-[72px] left-0 right-0 z-[150] px-3">
+                        <div className="bg-white rounded-2xl border border-rose-100 shadow-2xl p-4 space-y-3">
+                          {/* 헤더 */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-black text-rose-600">불일치 수량 입력</span>
+                            <button
+                              type="button"
+                              onClick={() => clearSelection()}
+                              className="p-1 text-slate-400 hover:text-slate-600"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* 실사 수량 */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-rose-500">실사 수량</span>
+                            <div className="flex items-center rounded-lg border border-rose-200 bg-white overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, (result.actualCount ?? item.currentStock) - 1) } }))}
+                                className="h-9 w-9 text-rose-600 font-black text-base"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                value={result.actualCount ?? item.currentStock}
+                                onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: Math.max(0, parseInt(e.target.value) || 0) } }))}
+                                className="w-14 text-center text-sm font-black text-rose-700 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], actualCount: (result.actualCount ?? item.currentStock) + 1 } }))}
+                                className="h-9 w-9 text-rose-600 font-black text-base"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 사유 + 완료 */}
+                          {isCustom ? (
+                            <>
+                              <input
+                                type="text"
+                                value={result.reason || ''}
+                                placeholder="사유 직접 입력"
+                                onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))}
+                                className="w-full h-11 rounded-xl border border-indigo-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  disabled={!result.reason?.trim()}
+                                  onClick={() => {
+                                    if (!result.reason?.trim()) return;
+                                    setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
+                                    confirmItem(item.id);
+                                  }}
+                                  className={`h-11 rounded-xl text-sm font-black ${result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                >
+                                  완료
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
+                                    setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: MISMATCH_REASONS[0] } }));
+                                  }}
+                                  className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-500"
+                                >
+                                  목록 선택
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <select
+                                value={result.reason || MISMATCH_REASONS[0]}
+                                onChange={(e) => {
+                                  if (e.target.value === '기타') {
+                                    setCustomReasonMode(prev => ({ ...prev, [item.id]: true }));
+                                    setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: '' } }));
+                                  } else {
+                                    setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }));
+                                  }
+                                }}
+                                className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
+                              >
+                                {MISMATCH_REASONS.map(reason => (
+                                  <option key={`${item.id}-${reason}`} value={reason}>{reason}</option>
+                                ))}
+                              </select>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => confirmItem(item.id)}
+                                  className="h-11 rounded-xl bg-indigo-600 text-white text-sm font-black"
+                                >
+                                  완료
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCustomReasonMode(prev => ({ ...prev, [item.id]: true }));
+                                    setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: '' } }));
+                                  }}
+                                  className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-500"
+                                >
+                                  기타 입력
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
-
-                      {/* 사유 + 완료 */}
-                      {isCustom ? (
-                        <>
-                          <input
-                            type="text"
-                            value={result.reason || ''}
-                            placeholder="사유 직접 입력"
-                            onChange={(e) => setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))}
-                            className="w-full h-9 rounded-xl border border-indigo-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500"
-                          />
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                              type="button"
-                              disabled={!result.reason?.trim()}
-                              onClick={() => {
-                                if (!result.reason?.trim()) return;
-                                setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
-                                confirmItem(item.id);
-                              }}
-                              className={`h-9 rounded-xl text-xs font-black ${result.reason?.trim() ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                            >
-                              완료
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomReasonMode(prev => { const { [item.id]: _, ...rest } = prev; return rest; });
-                                setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: MISMATCH_REASONS[0] } }));
-                              }}
-                              className="h-9 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
-                            >
-                              목록 선택
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <select
-                            value={result.reason || MISMATCH_REASONS[0]}
-                            onChange={(e) => {
-                              if (e.target.value === '기타') {
-                                setCustomReasonMode(prev => ({ ...prev, [item.id]: true }));
-                                setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: '' } }));
-                              } else {
-                                setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }));
-                              }
-                            }}
-                            className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
-                          >
-                            {MISMATCH_REASONS.map(reason => (
-                              <option key={`${item.id}-${reason}`} value={reason}>{reason}</option>
-                            ))}
-                          </select>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => confirmItem(item.id)}
-                              className="h-9 rounded-xl bg-indigo-600 text-white text-xs font-black"
-                            >
-                              완료
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomReasonMode(prev => ({ ...prev, [item.id]: true }));
-                                setAuditResults(prev => ({ ...prev, [item.id]: { ...prev[item.id], reason: '' } }));
-                              }}
-                              className="h-9 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-500"
-                            >
-                              기타 입력
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    </>
                   )}
                 </article>
               );
