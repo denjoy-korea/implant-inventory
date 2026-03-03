@@ -604,10 +604,14 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         badge="월별 · 요일별 · 구분별"
         storageKey="surgery-charts"
       >
-        <div className="grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-6">
-          <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+          </div>
           <DayOfWeekChart dayOfWeekStats={kpiStats.dayOfWeekStats} dayInsight={kpiStats.dayInsight} mounted={mounted} onDayClick={handleDayClick} />
-          <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+          <div className="lg:col-span-2">
+            <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+          </div>
           <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
         </div>
       </CollapsibleSection>
