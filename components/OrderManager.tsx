@@ -53,7 +53,18 @@ export interface GroupedOrder {
   overallStatus: OrderStatus | 'mixed';
 }
 
-type UnifiedRow = { kind: 'order'; data: GroupedOrder } | { kind: 'return'; data: ReturnRequest };
+interface GroupedReturnRequest {
+  id: string;            // "requestedDate|manufacturer"
+  date: string;
+  manufacturer: string;
+  requests: ReturnRequest[];
+  totalItems: number;
+  totalQty: number;
+  managers: string[];
+  overallStatus: ReturnStatus | 'mixed';
+}
+
+type UnifiedRow = { kind: 'order'; data: GroupedOrder } | { kind: 'return'; data: GroupedReturnRequest };
 
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
@@ -222,17 +233,42 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [filteredOrders]);
 
+  const groupedReturnRequests = useMemo<GroupedReturnRequest[]>(() => {
+    const map = new Map<string, GroupedReturnRequest>();
+    returnRequests.forEach(r => {
+      const key = `${r.requestedDate}|${simpleNormalize(r.manufacturer)}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key,
+          date: r.requestedDate,
+          manufacturer: r.manufacturer,
+          requests: [],
+          totalItems: 0,
+          totalQty: 0,
+          managers: [],
+          overallStatus: r.status,
+        });
+      }
+      const g = map.get(key)!;
+      g.requests.push(r);
+      g.totalItems += r.items.length;
+      g.totalQty += r.items.reduce((s, i) => s + i.quantity, 0);
+      if (!g.managers.includes(r.manager)) g.managers.push(r.manager);
+    });
+    for (const g of map.values()) {
+      const statuses = new Set(g.requests.map(r => r.status));
+      g.overallStatus = statuses.size === 1 ? g.requests[0].status : 'mixed';
+    }
+    return Array.from(map.values());
+  }, [returnRequests]);
+
   const unifiedRows = useMemo<UnifiedRow[]>(() => {
     const rows: UnifiedRow[] = [
       ...groupedOrders.map(g => ({ kind: 'order' as const, data: g })),
-      ...returnRequests.map(r => ({ kind: 'return' as const, data: r })),
+      ...groupedReturnRequests.map(g => ({ kind: 'return' as const, data: g })),
     ];
-    return rows.sort((a, b) => {
-      const da = a.kind === 'order' ? a.data.date : a.data.requestedDate;
-      const db = b.kind === 'order' ? b.data.date : b.data.requestedDate;
-      return db.localeCompare(da);
-    });
-  }, [groupedOrders, returnRequests]);
+    return rows.sort((a, b) => b.data.date.localeCompare(a.data.date));
+  }, [groupedOrders, groupedReturnRequests]);
 
   const pendingQtyByItemKey = useMemo(() => {
     const qtyMap = new Map<string, number>();
@@ -1487,49 +1523,51 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           <div className="md:hidden px-3 pt-3 pb-3 space-y-2.5 relative z-10">
             {unifiedRows.length > 0 ? unifiedRows.map((row) => {
               if (row.kind === 'return') {
-                const r = row.data;
-                const isActing = returnActionLoadingId === r.id;
-                const totalQty = r.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
-                const first = r.items[0];
+                const g = row.data;
+                const allItems = g.requests.flatMap(r => r.items);
+                const first = allItems[0];
+                const isActing = g.requests.some(r => returnActionLoadingId === r.id);
                 const statusBadgeClass =
-                  r.status === 'requested' ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' :
-                  r.status === 'picked_up' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
-                  r.status === 'completed' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+                  g.overallStatus === 'requested' ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' :
+                  g.overallStatus === 'picked_up' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
+                  g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+                  g.overallStatus === 'mixed' ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' :
                   'bg-slate-100 border border-slate-200 text-slate-500';
+                const statusLabel = g.overallStatus === 'mixed' ? '처리중' : RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus];
                 return (
-                  <article key={`mobile-return-${r.id}`} className="rounded-2xl border border-teal-200 bg-teal-50/40 px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+                  <article key={`mobile-return-${g.id}`} className="rounded-2xl border border-teal-200 bg-teal-50/40 px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-500">{r.requestedDate}</p>
-                        <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(r.manufacturer)}</p>
+                        <p className="text-xs font-semibold text-slate-500">{g.date}</p>
+                        <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(g.manufacturer)}</p>
                       </div>
                       <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
                     </div>
                     <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-500">{r.items.length}개 품목</span>
-                        <span className="text-sm font-black text-slate-900 tabular-nums">총 {totalQty}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
+                        <span className="text-[11px] font-bold text-slate-500">{g.totalItems}개 품목</span>
+                        <span className="text-sm font-black text-slate-900 tabular-nums">총 {g.totalQty}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                       </div>
                       {first && (
                         <div className="mt-1.5 pt-1.5 border-t border-slate-100">
                           <div className="flex items-center gap-1 flex-wrap">
                             <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
                             <span className="text-[11px] text-slate-400">×{first.quantity}</span>
-                            {r.items.length > 1 && <span className="text-[10px] text-slate-400 font-medium">외 {r.items.length - 1}종</span>}
+                            {allItems.length > 1 && <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>}
                           </div>
                         </div>
                       )}
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{RETURN_STATUS_LABELS[r.status]}</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{statusLabel}</span>
                       {!isReadOnly && (
                         <div className="flex items-center gap-1.5">
-                          {r.status === 'requested' && <>
-                            <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'picked_up', 'requested')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
-                            <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'rejected', 'requested')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
+                          {g.overallStatus === 'requested' && <>
+                            <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'picked_up', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
+                            <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'rejected', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
                           </>}
-                          {r.status === 'picked_up' && <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'completed', 'picked_up')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>}
-                          {(r.status === 'completed' || r.status === 'rejected') && <button disabled={isActing} onClick={() => handleReturnDelete(r.id)} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>}
+                          {g.overallStatus === 'picked_up' && <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'completed', 'picked_up'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>}
+                          {(g.overallStatus === 'completed' || g.overallStatus === 'rejected') && <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnDelete(r.id))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>}
                         </div>
                       )}
                     </div>
@@ -1660,46 +1698,50 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <tbody className="divide-y divide-slate-50">
                 {unifiedRows.length > 0 ? unifiedRows.map((row) => {
                   if (row.kind === 'return') {
-                    const r = row.data;
-                    const isActing = returnActionLoadingId === r.id;
-                    const totalQty = r.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
-                    const first = r.items[0];
+                    const g = row.data;
+                    const isActing = g.requests.some(req => returnActionLoadingId === req.id);
+                    const allItems = g.requests.flatMap(req => req.items);
+                    const first = allItems[0];
                     const statusBadgeClass =
-                      r.status === 'requested' ? 'bg-yellow-50 border border-yellow-100 text-yellow-700' :
-                      r.status === 'picked_up' ? 'bg-blue-50 border border-blue-100 text-blue-700' :
-                      r.status === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
+                      g.overallStatus === 'requested' ? 'bg-yellow-50 border border-yellow-100 text-yellow-700' :
+                      g.overallStatus === 'picked_up' ? 'bg-blue-50 border border-blue-100 text-blue-700' :
+                      g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
+                      g.overallStatus === 'mixed' ? 'bg-purple-50 border border-purple-100 text-purple-700' :
                       'bg-slate-100 text-slate-400';
+                    const statusLabel =
+                      g.overallStatus === 'mixed' ? '처리중' :
+                      RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus];
                     return (
-                      <tr key={`return-${r.id}`} className="group transition-all duration-300 border-l-[3px] border-l-teal-400 bg-teal-50/25 hover:bg-teal-50/50">
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{r.requestedDate}</span></td>
+                      <tr key={`return-${g.id}`} className="group transition-all duration-300 border-l-[3px] border-l-teal-400 bg-teal-50/25 hover:bg-teal-50/50">
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{g.date}</span></td>
                         <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
                           <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
                         </td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(r.manufacturer)}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(g.manufacturer)}</span></td>
                         <td className="px-2 lg:px-4 py-2.5">
                           {first && (
                             <div className="flex items-center gap-1 text-[11px] min-w-0">
                               <span className="font-bold text-slate-700 truncate">{first.brand}</span>
                               <span className="text-slate-500 shrink-0">{first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
                               <span className="text-slate-400 shrink-0">×{first.quantity}</span>
-                              {r.items.length > 1 && <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-0.5">외 {r.items.length - 1}종</span>}
+                              {allItems.length > 1 && <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-0.5">외 {allItems.length - 1}종</span>}
                             </div>
                           )}
                         </td>
-                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{totalQty}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{r.manager}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{g.totalQty}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{g.managers.join(', ')}</span></td>
                         <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{RETURN_STATUS_LABELS[r.status]}</span>
+                          <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{statusLabel}</span>
                         </td>
                         <td className="px-2 lg:px-4 py-2.5 text-right whitespace-nowrap">
-                          {!isReadOnly && (
+                          {!isReadOnly && g.overallStatus !== 'mixed' && (
                             <div className="flex items-center justify-end gap-1">
-                              {r.status === 'requested' && <>
-                                <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'picked_up', 'requested')} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
-                                <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'rejected', 'requested')} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
+                              {g.overallStatus === 'requested' && <>
+                                <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'picked_up', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
+                                <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'rejected', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
                               </>}
-                              {r.status === 'picked_up' && <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'completed', 'picked_up')} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>}
-                              {(r.status === 'completed' || r.status === 'rejected') && <button disabled={isActing} onClick={() => handleReturnDelete(r.id)} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>}
+                              {g.overallStatus === 'picked_up' && <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'completed', 'picked_up'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>}
+                              {(g.overallStatus === 'completed' || g.overallStatus === 'rejected') && g.requests.map(req => <button key={req.id} disabled={isActing} onClick={() => handleReturnDelete(req.id)} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>)}
                             </div>
                           )}
                         </td>
