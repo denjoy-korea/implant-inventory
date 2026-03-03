@@ -27,6 +27,7 @@ interface ReturnManagerProps {
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  embedded?: boolean;
 }
 
 type StatusFilter = 'all' | ReturnStatus;
@@ -63,6 +64,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
   onCompleteReturn,
   onDeleteReturn,
   showAlertToast,
+  embedded = false,
 }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [filterManufacturer, setFilterManufacturer] = useState('');
@@ -157,9 +159,10 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 헤더 */}
+      {/* 헤더: embedded 모드에서는 섹션 제목 숨김, 버튼만 오른쪽 정렬 */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-gray-700">반품 관리</h3>
+        {!embedded && <h3 className="text-sm font-bold text-gray-700">반품 관리</h3>}
+        {embedded && <span className="text-xs font-black text-slate-500 tracking-wide">반품 신청 내역</span>}
         {!isReadOnly && (
           <button
             onClick={() => setShowModal(true)}
@@ -171,7 +174,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
       </div>
 
       {/* 필터 */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-3">
+      <div className={embedded ? 'space-y-3' : 'bg-white border border-gray-200 rounded-xl p-3 space-y-3'}>
         {/* 상태 필터 */}
         <div className="flex flex-wrap gap-1.5">
           {(Object.entries(STATUS_FILTER_LABELS) as [StatusFilter, string][]).map(([k, v]) => (

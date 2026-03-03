@@ -1243,7 +1243,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             <div>
               <h3 className="text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" />
-                주문 내역
+                주문/반품 내역
               </h3>
             </div>
             <div className="flex items-center gap-2">
@@ -1259,7 +1259,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </svg>
                 히스토리
               </button>
-              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length}건</span>
+              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length + returnRequests.length}건</span>
             </div>
           </div>
           <div className="md:hidden px-3 pt-3 pb-3 space-y-2.5 relative z-10">
@@ -1477,6 +1477,23 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* ── 반품 신청 섹션 (주문/반품 내역 통합) ── */}
+          <div className="border-t border-slate-100 px-4 sm:px-7 py-5">
+            <ReturnManager
+              embedded
+              returnRequests={returnRequests}
+              inventory={inventory}
+              hospitalId={hospitalId}
+              currentUserName={currentUserName}
+              isReadOnly={isReadOnly ?? false}
+              onCreateReturn={onCreateReturn}
+              onUpdateReturnStatus={onUpdateReturnStatus}
+              onCompleteReturn={onCompleteReturn}
+              onDeleteReturn={onDeleteReturn}
+              showAlertToast={showAlertToast}
+            />
+          </div>
         </div>
 
         {/* 취소 모달 */}
@@ -1683,19 +1700,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         )}
       </div>
 
-      {/* 반품 관리 — 주문내역과 통합 */}
-      <ReturnManager
-        returnRequests={returnRequests}
-        inventory={inventory}
-        hospitalId={hospitalId}
-        currentUserName={currentUserName}
-        isReadOnly={isReadOnly ?? false}
-        onCreateReturn={onCreateReturn}
-        onUpdateReturnStatus={onUpdateReturnStatus}
-        onCompleteReturn={onCompleteReturn}
-        onDeleteReturn={onDeleteReturn}
-        showAlertToast={showAlertToast}
-      />
     </div>
   );
 };
