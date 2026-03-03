@@ -78,8 +78,8 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     setSelectedOptimizeIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
   };
 
-  const now = new Date().toISOString();
-  const isItemSnoozed = (id: string) => { const e = snoozedMap[id]; return !!e && e > now; };
+  // 호출 시마다 현재 시각 계산 — 모달을 오래 열어둬도 만료된 스누즈가 즉시 해제됨
+  const isItemSnoozed = (id: string) => { const e = snoozedMap[id]; return !!e && e > new Date().toISOString(); };
 
   const yearItems = deadStockItems.filter(i => i.olderThanYear);
   const neverItems = deadStockItems.filter(i => i.neverUsed);
