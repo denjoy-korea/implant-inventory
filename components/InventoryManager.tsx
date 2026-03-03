@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, Order } from '../types';
+import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, CreateReturnParams } from '../types';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
@@ -26,7 +26,7 @@ interface InventoryManagerProps {
   onUpdateInventoryItem: (updatedItem: InventoryItem) => void;
   surgeryData?: ExcelData | null;
   onQuickOrder?: (item: InventoryItem) => void;
-  onAddOrder?: (order: Order) => Promise<void>;
+  onCreateReturn?: (params: CreateReturnParams) => Promise<void>;
   managerName?: string;
   isReadOnly?: boolean;
   userId?: string;
@@ -65,7 +65,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   onUpdateInventoryItem,
   surgeryData,
   onQuickOrder,
-  onAddOrder,
+  onCreateReturn,
   managerName,
   isReadOnly,
   userId,
@@ -1216,7 +1216,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           deadStockItems={deadStockItems}
           onDeleteInventoryItem={onDeleteInventoryItem}
           onUpdateInventoryItem={onUpdateInventoryItem}
-          onAddOrder={onAddOrder}
+          onCreateReturn={onCreateReturn}
           managerName={managerName}
           hospitalId={hospitalId}
           onClose={() => setShowOptimizeModal(false)}

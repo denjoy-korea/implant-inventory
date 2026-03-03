@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { InventoryItem, Order } from '../../types';
+import { InventoryItem, CreateReturnParams } from '../../types';
 
 interface DeadStockItem extends InventoryItem {
   neverUsed: boolean;
@@ -11,16 +11,22 @@ interface OptimizeModalProps {
   deadStockItems: DeadStockItem[];
   onDeleteInventoryItem?: (id: string) => void;
   onUpdateInventoryItem?: (item: InventoryItem) => void;
-  onAddOrder?: (order: Order) => Promise<void>;
+  onCreateReturn?: (params: CreateReturnParams) => Promise<void>;
   managerName?: string;
   hospitalId?: string;
   onClose: () => void;
 }
 
+const buildOptimizeMemo = (item: DeadStockItem): string => {
+  if (item.olderThanYear) return `품목 최적화 반품 (마지막 사용: ${item.lastUsedDate || '기록 없음'})`;
+  if (item.neverUsed) return '품목 최적화 반품 (한 번도 미사용)';
+  return '품목 최적화 반품';
+};
+
 const SNOOZE_MONTHS = 1;
 const getSnoozeKey = (hospitalId?: string) => `optimize_snooze_${hospitalId || 'local'}`;
 
-const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onAddOrder, managerName, hospitalId, onClose }) => {
+const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onCreateReturn, managerName, hospitalId, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
@@ -92,18 +98,16 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     }
   };
 
-  const handleReturnConfirm = (item: DeadStockItem) => {
+  const handleReturnConfirm = async (item: DeadStockItem) => {
     const qty = parseInt(returnQtyStr, 10);
     if (!qty || qty < 1 || qty > item.currentStock) return;
-    if (onAddOrder) {
-      onAddOrder({
-        id: `order_${Date.now()}`,
-        type: 'return',
+    if (onCreateReturn) {
+      await onCreateReturn({
         manufacturer: item.manufacturer,
-        date: new Date().toISOString().split('T')[0],
-        items: [{ brand: item.brand, size: item.size, quantity: qty }],
+        reason: 'excess_stock',
         manager: managerName || '품목 최적화',
-        status: 'ordered',
+        memo: buildOptimizeMemo(item),
+        items: [{ brand: item.brand, size: item.size, quantity: qty }],
       });
     }
     setReturningId(null);
@@ -124,15 +128,13 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     setIsBulkReturning(true);
     for (const item of bulkReturnEligible) {
       const qty = item.currentStock - KEEP_QTY;
-      if (onAddOrder) {
-        await onAddOrder({
-          id: `order_${Date.now()}_${item.id}`,
-          type: 'return',
+      if (onCreateReturn) {
+        await onCreateReturn({
           manufacturer: item.manufacturer,
-          date: new Date().toISOString().split('T')[0],
-          items: [{ brand: item.brand, size: item.size, quantity: qty }],
+          reason: 'excess_stock',
           manager: managerName || '품목 최적화',
-          status: 'ordered',
+          memo: buildOptimizeMemo(item),
+          items: [{ brand: item.brand, size: item.size, quantity: qty }],
         });
       }
       setBulkReturnProgress(prev => prev + 1);
@@ -387,14 +389,14 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
                                 max={maxQty}
                                 value={returnQtyStr}
                                 onChange={e => setReturnQtyStr(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter' && isValid) handleReturnConfirm(item); if (e.key === 'Escape') { setReturningId(null); setReturnQtyStr(''); } }}
+                                onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleReturnConfirm(item); if (e.key === 'Escape') { setReturningId(null); setReturnQtyStr(''); } }}
                                 className="w-20 px-2 py-1 text-sm font-bold border border-slate-300 rounded-lg text-center focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200"
                                 placeholder="수량"
                                 autoFocus
                               />
                               <span className="text-[11px] text-slate-400 flex-shrink-0">/ {maxQty}개</span>
                               <button
-                                onClick={() => handleReturnConfirm(item)}
+                                onClick={() => void handleReturnConfirm(item)}
                                 disabled={!isValid}
                                 className="px-3 py-1 text-[11px] font-bold text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                               >

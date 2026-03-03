@@ -1820,31 +1820,6 @@ const App: React.FC = () => {
       const savedOrder = dbToOrder(created);
       applyOrderToState(savedOrder, order.type === 'fail_exchange' && failUpdateSucceeded);
 
-      // 반품 주문 생성 시 재고 자동 차감
-      if (savedOrder.type === 'return') {
-        const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-        for (const orderItem of savedOrder.items) {
-          const qty = Number(orderItem.quantity || 0);
-          if (qty <= 0) continue;
-          const sizeKey = getSizeMatchKey(orderItem.size, savedOrder.manufacturer);
-          const invItem = state.inventory.find(inv =>
-            simpleNorm(inv.manufacturer) === simpleNorm(savedOrder.manufacturer) &&
-            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
-            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-          );
-          if (invItem) {
-            await inventoryService.adjustStock(invItem.id, -qty);
-            setState(prev => ({
-              ...prev,
-              inventory: prev.inventory.map(i =>
-                i.id === invItem.id
-                  ? { ...i, currentStock: i.currentStock - qty, stockAdjustment: i.stockAdjustment - qty }
-                  : i
-              ),
-            }));
-          }
-        }
-      }
 
       operationLogService.logOperation(
         'order_create',
@@ -2143,6 +2118,7 @@ const App: React.FC = () => {
 
       const surgeryRecord = String(row['수술기록'] || '');
       if (surgeryRecord.includes('[GBR Only]')) return;
+      if (surgeryRecord.includes('[일괄등록]')) return;
 
       const manufacturer = String(row['제조사'] || '').trim();
       const brand = String(row['브랜드'] || '').trim();

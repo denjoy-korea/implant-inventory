@@ -252,6 +252,10 @@ export const orderService = {
     size: string,
     newQuantity: number
   ): Promise<boolean> {
+    // DB check constraint (order_items_quantity_check) requires quantity >= 1.
+    // 수령 0개인 경우 수량 업데이트를 건너뛰고(원본 수량 유지), 재발주 로직에서 처리.
+    if (newQuantity <= 0) return true;
+
     const { error } = await supabase
       .from('order_items')
       .update({ quantity: newQuantity })

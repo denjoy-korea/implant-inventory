@@ -299,6 +299,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           refreshLatestSurgeryUsage={inventoryMaster.refreshLatestSurgeryUsage}
           resolveManualSurgeryInput={inventoryMaster.resolveManualSurgeryInput}
           onAddOrder={onAddOrder}
+          onCreateReturn={onCreateReturn}
           showAlertToast={inventoryMaster.onShowAlertToast}
         />
       )}

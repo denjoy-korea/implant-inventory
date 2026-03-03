@@ -179,7 +179,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             onCancelOrder={onCancelOrder}
             onDeleteOrder={onDeleteOrder}
             onQuickOrder={onQuickOrder}
-            onAddOrder={onAddFailOrder}
             onCreateReturn={onCreateReturn}
             onUpdateReturnStatus={onUpdateReturnStatus}
             onCompleteReturn={onCompleteReturn}

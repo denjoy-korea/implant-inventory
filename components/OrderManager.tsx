@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnReason, ReturnMutationResult, ExcelRow } from '../types';
+import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams } from '../types';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
@@ -9,7 +9,7 @@ import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
 import OptimizeModal from './inventory/OptimizeModal';
 import { isExchangePrefix } from '../services/appUtils';
-import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
+import { OrderHistoryPanel } from './order/OrderHistoryPanel';
 
 function buildSparklinePath(values: number[], width: number, height: number): string {
   if (values.length === 0) return '';
@@ -38,14 +38,7 @@ interface OrderManagerProps {
   onDeleteOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem) => void;
-  onAddOrder: (order: Order) => Promise<void>;
-  onCreateReturn: (params: {
-    manufacturer: string;
-    reason: ReturnReason;
-    manager: string;
-    memo: string;
-    items: { brand: string; size: string; quantity: number }[];
-  }) => Promise<void>;
+  onCreateReturn: (params: CreateReturnParams) => Promise<void>;
   onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
@@ -85,7 +78,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onDeleteOrder,
   onCancelOrder,
   onQuickOrder,
-  onAddOrder,
   onCreateReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
@@ -110,6 +102,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   // ── 상세 입고 확인 모달 state ──
   const [selectedGroupModal, setSelectedGroupModal] = useState<GroupedOrder | null>(null);
   const [isReceiptConfirming, setIsReceiptConfirming] = useState(false);
+
+  // ── 주문 히스토리 패널 state ──
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
   // ── 발주 권장 품목 UI state ──
   const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
@@ -450,7 +445,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   // ── 일괄반품 실행 ──
   const handleBulkReturn = async () => {
     setIsBulkReturning(true);
-    const today = new Date().toISOString().split('T')[0];
     const byMfr: Record<string, typeof bulkReturnItems[0][]> = {};
     for (const item of bulkReturnItems) {
       const mfr = item.manufacturer || '기타';
@@ -458,17 +452,18 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       byMfr[mfr].push(item);
     }
     try {
-      for (const [mfr, items] of Object.entries(byMfr)) {
-        await onAddOrder({
-          id: crypto.randomUUID(),
-          type: 'return',
-          manufacturer: mfr,
-          date: today,
-          items: items.map(i => ({ brand: i.brand, size: i.size, quantity: i.returnQty })),
-          manager: currentUserName || '일괄반품',
-          status: 'ordered',
-        });
-      }
+      await Promise.all(
+        Object.entries(byMfr).map(([mfr, items]) => {
+          const totalQty = items.reduce((s, i) => s + i.returnQty, 0);
+          return onCreateReturn({
+            manufacturer: mfr,
+            reason: 'excess_stock',
+            manager: currentUserName || '일괄반품',
+            memo: `일괄 반품 (${items.length}개 품목, 총 ${totalQty}개)`,
+            items: items.map(i => ({ brand: i.brand, size: i.size, quantity: i.returnQty })),
+          });
+        })
+      );
       showAlertToast(`일괄 반품 등록 완료: ${bulkReturnItems.length}개 품목`, 'success');
     } catch {
       showAlertToast('일괄 반품 등록 중 오류가 발생했습니다.', 'error');
@@ -1244,6 +1239,25 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         )}
 
         {/* ═══════════════════════════════════════ */}
+        {/* 주문 히스토리 패널                        */}
+        {/* ═══════════════════════════════════════ */}
+        {showHistoryPanel && (
+          <OrderHistoryPanel
+            orders={orders}
+            isReadOnly={isReadOnly}
+            onClose={() => setShowHistoryPanel(false)}
+            onReceiptConfirm={(order) => {
+              const group = groupedOrders.find(g =>
+                g.date === order.date &&
+                g.manufacturer === order.manufacturer &&
+                g.type === order.type
+              );
+              if (group) setSelectedGroupModal(group);
+            }}
+          />
+        )}
+
+        {/* ═══════════════════════════════════════ */}
         {/* 주문 내역 테이블                          */}
         {/* ═══════════════════════════════════════ */}
         <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative">
@@ -1256,7 +1270,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </h3>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-0.5 ml-4">Order History</p>
             </div>
-            <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length}건</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowHistoryPanel(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all border ${showHistoryPanel
+                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                  }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                히스토리
+              </button>
+              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length}건</span>
+            </div>
           </div>
           <div className="md:hidden px-3 pb-3 space-y-2.5 relative z-10">
             {groupedOrders.length > 0 ? groupedOrders.map((group) => {
@@ -1576,7 +1604,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {showOptimizeModal && (
           <OptimizeModal
             deadStockItems={deadStockItems}
-            onAddOrder={onAddOrder}
+            onCreateReturn={onCreateReturn}
             managerName={currentUserName}
             hospitalId={hospitalId}
             onClose={() => setShowOptimizeModal(false)}

@@ -624,6 +624,14 @@ export interface DbOrderItem {
 export type ReturnReason = 'excess_stock' | 'defective' | 'exchange';
 export type ReturnStatus = 'requested' | 'picked_up' | 'completed' | 'rejected';
 
+export interface CreateReturnParams {
+  manufacturer: string;
+  reason: ReturnReason;
+  manager: string;
+  memo: string;
+  items: { brand: string; size: string; quantity: number }[];
+}
+
 export const RETURN_REASON_LABELS: Record<ReturnReason, string> = {
   excess_stock: '초과재고',
   defective:    '제품하자',

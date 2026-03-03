@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 import { DbSurgeryRecord, ExcelRow } from '../types';
 import { excelRowToDbSurgery } from './mappers';
 import { hashPatientInfo, decryptPatientInfo } from './cryptoUtils';
-import { getSizeMatchKey } from './sizeNormalizer';
+import { getSizeMatchKey, isIbsImplantManufacturer } from './sizeNormalizer';
 
 export const surgeryService = {
   /** 수술기록 목록 조회 — 날짜 범위 필터 지원 (서버사이드) */
@@ -362,13 +362,21 @@ export const surgeryService = {
     let totalInserted = 0;
 
     for (const { manufacturer, targetCount } of reconciles) {
-      const { data: pending, error: fetchError } = await supabase
+      // IBS Implant는 DB에 'IBS', 'IBS Implant' 등 여러 표기로 저장될 수 있으므로
+      // 모든 변형을 포함해 조회한다
+      const ibsVariants = ['IBS', 'IBS Implant', 'IBS-Implant', 'IBSImplant', 'ibs implant'];
+      let baseQuery = supabase
         .from('surgery_records')
         .select('id')
         .eq('hospital_id', hospitalId)
         .eq('classification', '수술중교환')
-        .eq('manufacturer', manufacturer)
         .order('date', { ascending: true });
+
+      const pendingQuery = isIbsImplantManufacturer(manufacturer)
+        ? baseQuery.in('manufacturer', ibsVariants)
+        : baseQuery.eq('manufacturer', manufacturer);
+
+      const { data: pending, error: fetchError } = await pendingQuery;
 
       if (fetchError) {
         console.error('[surgeryService] bulkReconcileFails fetch failed:', fetchError);

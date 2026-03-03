@@ -1013,9 +1013,15 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const uploadSeverity: PriorityLevel =
         surgeryStaleDays === null || surgeryStaleDays >= 14 ? 'critical' :
         surgeryStaleDays >= 7 ? 'warning' : 'ok';
-      const periodMeta = firstSurgeryDate && latestSurgeryDate
-        ? `조회 기간: ${formatDate(firstSurgeryDate)} ~ ${formatDate(latestSurgeryDate)}`
-        : undefined;
+      // 덴트웹 조회 시작일 = 마지막 업로드 다음날
+      const dentwebStartDate = latestSurgeryDate ? (() => {
+        const d = new Date(latestSurgeryDate);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().slice(0, 10);
+      })() : null;
+      const dentwebMeta = dentwebStartDate
+        ? `덴트웹: ${formatDate(dentwebStartDate)}부터 조회 후 다운로드 → 업로드`
+        : '덴트웹에서 수술기록 다운로드 후 업로드하세요.';
       items.push({
         key: 'action-surgery-upload',
         title: '수술기록지 업로드',
@@ -1025,7 +1031,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         tab: 'surgery_database',
         severity: uploadSeverity,
         score: surgeryStaleDays === null ? 80 : surgeryStaleDays >= 7 ? surgeryStaleDays * 3 : 5,
-        meta: periodMeta,
+        meta: dentwebMeta,
         uploadAction: onSurgeryUploadClick,
       });
     }
@@ -1076,7 +1082,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     shortageSummary.itemCount,
     surgeryStaleDays,
     latestSurgeryDate,
-    firstSurgeryDate,
     unregisteredSummary.count,
     unregisteredSummary.usageQty,
     visibleInventory,
@@ -1197,13 +1202,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); item.uploadAction?.(); }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-slate-900 hover:bg-slate-700 transition-colors"
                           title="엑셀 파일 업로드"
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                           </svg>
-                          업로드
+                          데이터 업데이트
                         </button>
                       )}
                       {!isOnboarding && (

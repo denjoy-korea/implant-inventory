@@ -5,6 +5,7 @@ import {
   ExcelData,
   InventoryItem,
   Order,
+  CreateReturnParams,
   PlanType,
   PLAN_LIMITS,
   PLAN_NAMES,
@@ -51,6 +52,7 @@ interface DashboardInventoryMasterSectionProps {
   refreshLatestSurgeryUsage: () => Promise<Record<string, number> | null>;
   resolveManualSurgeryInput: (params: ResolveManualSurgeryInputParams) => Promise<ResolveManualSurgeryInputResult>;
   onAddOrder: (order: Order) => Promise<void>;
+  onCreateReturn: (params: CreateReturnParams) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   initialShowBaseStockEdit?: boolean;
   onBaseStockEditApplied?: () => void;
@@ -68,6 +70,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
   refreshLatestSurgeryUsage,
   resolveManualSurgeryInput,
   onAddOrder,
+  onCreateReturn,
   showAlertToast,
   initialShowBaseStockEdit,
   onBaseStockEditApplied,
@@ -248,7 +251,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
         manager: state.user?.name || '관리자',
         status: 'ordered',
       })}
-      onAddOrder={onAddOrder}
+      onCreateReturn={onCreateReturn}
       managerName={state.user?.name}
     />
   );
