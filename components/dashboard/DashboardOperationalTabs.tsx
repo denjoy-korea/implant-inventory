@@ -44,7 +44,6 @@ interface DashboardOperationalTabsProps {
   onLoadHospitalData: (user: User) => Promise<void>;
   onTabChange: (tab: DashboardTab) => void;
   onWorkDaysChange: (workDays: number[]) => void;
-  onAddFailOrder: (order: Order) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
@@ -87,7 +86,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onLoadHospitalData,
   onTabChange,
   onWorkDaysChange,
-  onAddFailOrder,
   onUpdateOrderStatus,
   onConfirmReceipt,
   onCancelOrder,
@@ -154,7 +152,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           inventory={inventory}
           failOrders={orders.filter(o => o.type === 'fail_exchange' || o.type === 'return')}
           returnRequests={returnRequests}
-          onAddFailOrder={onAddFailOrder}
           onCreateReturn={onCreateReturn}
           currentUserName={user?.name || '관리자'}
           isReadOnly={isReadOnly}
@@ -182,7 +179,6 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             onDeleteOrder={onDeleteOrder}
             onQuickOrder={onQuickOrder}
             onCreateReturn={onCreateReturn}
-            onAddExchangeReturn={onAddFailOrder}
             returnRequests={returnRequests}
             onUpdateReturnStatus={onUpdateReturnStatus}
             onCompleteReturn={onCompleteReturn}

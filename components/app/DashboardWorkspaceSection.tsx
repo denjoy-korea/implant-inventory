@@ -331,7 +331,6 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           setState(prev => ({ ...prev, dashboardTab: tab }));
         }}
         onWorkDaysChange={(workDays) => setState(prev => ({ ...prev, hospitalWorkDays: workDays }))}
-        onAddFailOrder={onAddOrder}
         onUpdateOrderStatus={onUpdateOrderStatus}
         onCancelOrder={onCancelOrder}
         onDeleteOrder={onDeleteOrder}

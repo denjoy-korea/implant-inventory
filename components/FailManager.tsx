@@ -18,8 +18,7 @@ interface FailManagerProps {
   inventory: InventoryItem[];
   failOrders: FailOrder[];
   returnRequests?: ReturnRequest[];
-  onAddFailOrder: (order: FailOrder) => void | Promise<void>;
-  onCreateReturn?: (params: {
+  onCreateReturn: (params: {
     manufacturer: string;
     reason: ReturnReason;
     manager: string;
@@ -44,7 +43,7 @@ interface MonthlyFailDatum {
 // ============================================================
 // COMPONENT
 // ============================================================
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, returnRequests = [], onAddFailOrder, onCreateReturn, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened, onDeleteOrder }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, returnRequests = [], onCreateReturn, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened, onDeleteOrder }) => {
   const { toast, showToast } = useToast();
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   // IBS / IBS Implant 등 표기 변형을 'IBS Implant'로 통일
@@ -225,6 +224,33 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         total: Object.values(byManufacturer).reduce((s, v) => s + v, 0),
       }));
   }, [filteredHistoryFailList]);
+
+  // 차트 크기 고정용: 전체 기간 기준 월별 데이터 (기간 필터 미적용)
+  const allMonthlyFailData = useMemo<MonthlyFailDatum[]>(() => {
+    const monthMap: Record<string, Record<string, number>> = {};
+    historyFailList.forEach(f => {
+      const dateStr = String(f['날짜'] || '');
+      if (!dateStr || dateStr.length < 7) return;
+      const month = dateStr.substring(0, 7);
+      const m = normalizeMfrName(String(f['제조사'] || '기타'));
+      if (!monthMap[month]) monthMap[month] = {};
+      monthMap[month][m] = (monthMap[month][m] || 0) + 1;
+    });
+    return Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, byManufacturer]) => ({
+        month,
+        byManufacturer,
+        total: Object.values(byManufacturer).reduce((s, v) => s + v, 0),
+      }));
+  }, [historyFailList]);
+
+  // 필터된 월별 값 빠른 조회용 맵
+  const filteredMonthlyMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    monthlyFailData.forEach(d => { map[d.month] = d.byManufacturer; });
+    return map;
+  }, [monthlyFailData]);
 
   // KPI용 sparkline 데이터 (월별 총 교환)
   const failSparkline = useMemo(() => monthlyFailData.map(d => d.total), [monthlyFailData]);
@@ -428,46 +454,23 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       : [{ brand: activeM, size: '기타', quantity: currentRemainingFails }];
 
     setIsOrderSubmitting(true);
-    if (onCreateReturn) {
-      void onCreateReturn({
-        manufacturer: activeM,
-        reason: 'exchange',
-        manager: currentUserName,
-        memo: `수술중교환 ${currentRemainingFails}건`,
-        items: returnItems,
+    void onCreateReturn({
+      manufacturer: activeM,
+      reason: 'exchange',
+      manager: currentUserName,
+      memo: `수술중교환 ${currentRemainingFails}건`,
+      items: returnItems,
+    })
+      .then(() => {
+        setIsModalOpen(false);
+        showToast('반품 신청이 등록되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
       })
-        .then(() => {
-          setIsModalOpen(false);
-          showToast('반품 신청이 등록되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
-        })
-        .catch(() => {
-          showToast('반품 처리에 실패했습니다.', 'error');
-        })
-        .finally(() => {
-          setIsOrderSubmitting(false);
-        });
-    } else {
-      const newOrder: FailOrder = {
-        id: `order_${Date.now()}`,
-        type: 'return',
-        manufacturer: activeM,
-        date: new Date().toISOString().split('T')[0],
-        items: returnItems,
-        manager: currentUserName,
-        status: 'ordered',
-      };
-      void Promise.resolve(onAddFailOrder(newOrder))
-        .then(() => {
-          setIsModalOpen(false);
-          showToast('반품 신청이 등록되었습니다. 주문 관리에서 입고 확인 후 완료 처리해 주세요.', 'success');
-        })
-        .catch(() => {
-          showToast('반품 처리에 실패했습니다.', 'error');
-        })
-        .finally(() => {
-          setIsOrderSubmitting(false);
-        });
-    }
+      .catch(() => {
+        showToast('반품 처리에 실패했습니다.', 'error');
+      })
+      .finally(() => {
+        setIsOrderSubmitting(false);
+      });
   };
 
   const handleAllReturnSubmit = async () => {
@@ -488,31 +491,18 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           if (!itemMap[key]) itemMap[key] = { brand: b, size: s, quantity: 0 };
           itemMap[key].quantity++;
         });
-        if (onCreateReturn) {
-          await onCreateReturn({
-            manufacturer: mfr,
-            reason: 'exchange',
-            manager: currentUserName,
-            memo: `수술중교환 전체 반품처리 (${today})`,
-            items: Object.values(itemMap),
-          });
-        } else {
-          const order: FailOrder = {
-            id: `order_${Date.now()}_${mfr}`,
-            type: 'return',
-            manufacturer: mfr,
-            date: today,
-            items: Object.values(itemMap),
-            manager: currentUserName,
-            status: 'ordered',
-          };
-          await Promise.resolve(onAddFailOrder(order));
-        }
+        await onCreateReturn({
+          manufacturer: mfr,
+          reason: 'exchange',
+          manager: currentUserName,
+          memo: `수술중교환 전체 반품 처리 (${today})`,
+          items: Object.values(itemMap),
+        });
       }
       setIsAllReturnConfirmOpen(false);
-      showToast('전체 반품처리가 완료되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
+      showToast('전체 반품 처리가 완료되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
     } catch {
-      showToast('반품처리에 실패했습니다.', 'error');
+      showToast('반품 처리에 실패했습니다.', 'error');
     } finally {
       setIsAllReturnSubmitting(false);
     }
@@ -550,19 +540,20 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   // 월별 차트: 스와이프 오프셋으로 보이는 월 범위 슬라이스
   const CHART_MAX_VISIBLE = 12;
-  const chartDataLength = monthlyFailData.length;
+  // 차트 크기는 전체 기간 기준으로 고정
+  const chartDataLength = allMonthlyFailData.length;
   const maxOffset = Math.max(0, chartDataLength - CHART_MAX_VISIBLE);
   const clampedOffset = Math.min(Math.max(chartMonthOffset, 0), maxOffset);
   const visibleMonthlyData = chartDataLength > CHART_MAX_VISIBLE
-    ? monthlyFailData.slice(clampedOffset, clampedOffset + CHART_MAX_VISIBLE)
-    : monthlyFailData;
+    ? allMonthlyFailData.slice(clampedOffset, clampedOffset + CHART_MAX_VISIBLE)
+    : allMonthlyFailData;
 
   // 월별 차트 상수 (grouped bar용)
   const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
   const CHART_AREA_H = 280;
-  const getMonthlyFailValue = (datum: MonthlyFailDatum, manufacturer: string): number => datum.byManufacturer[manufacturer] ?? 0;
+  // 막대 높이는 필터된 값 기준
   const maxBarVal = Math.max(
-    ...visibleMonthlyData.flatMap(d => manufacturers.map(m => getMonthlyFailValue(d, m))),
+    ...monthlyFailData.flatMap(d => manufacturers.map(m => d.byManufacturer[m] ?? 0)),
     1
   );
   const chartTickStep = Math.ceil(maxBarVal / 4) || 1;
@@ -588,7 +579,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             <div className="flex items-center gap-6 min-w-0">
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">데이터 기간</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Data Period</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">
                   {allMonths.length > 0
                     ? `${allMonths[periodStartIdx] || allMonths[0]} ~ ${allMonths[periodEndIdx] || allMonths[allMonths.length - 1]}`
@@ -599,13 +589,11 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="h-10 w-px bg-slate-100" />
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">총 교환 레코드</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchange Records</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{filteredHistoryFailList.length}<span className="text-xs font-semibold text-slate-400 ml-1">건</span></p>
               </div>
               <div className="h-10 w-px bg-slate-100" />
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">총 식립 대비</h4>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">vs Total Placement</p>
                 <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{totalPlacements}<span className="text-xs font-semibold text-slate-400 ml-1">cases</span></p>
               </div>
             </div>
@@ -780,7 +768,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM === 'all' ? '전체' : activeM} 교환 현황</h3>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Status</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -831,7 +818,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             {/* RIGHT: 제조사별 교환 분포 (도넛 차트) */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <h3 className="text-sm font-black text-slate-800 tracking-tight">제조사 분석</h3>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Manufacturer Analysis</p>
               <div className="flex items-center gap-4 mt-4">
                 {/* Donut */}
                 <svg viewBox="0 0 120 120" className="w-28 h-28 shrink-0">
@@ -870,7 +856,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h3 className="text-sm font-black text-slate-800 tracking-tight">월별 교환 추세</h3>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5">Monthly Trend</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {manufacturers.map((m, i) => (
@@ -881,7 +866,10 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   ))}
                 </div>
               </div>
-              {monthlyFailData.length > 0 ? (() => {
+              {allMonthlyFailData.length > 0 ? (() => {
+                const filterStart = allMonths[periodStartIdx] || allMonths[0] || '';
+                const filterEnd = allMonths[periodEndIdx] || allMonths[allMonths.length - 1] || '';
+                const inRange = (month: string) => month >= filterStart && month <= filterEnd;
                 const nMfr = manufacturers.length || 1;
                 const MONTH_W = Math.max(48, Math.min(68, Math.floor(680 / visibleMonthlyData.length)));
                 const GROUP_W = MONTH_W - 10;
@@ -965,7 +953,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                             )}
                             {/* Bars */}
                             {manufacturers.map((m, mi) => {
-                              const val = getMonthlyFailValue(d, m);
+                              const val = filteredMonthlyMap[d.month]?.[m] ?? 0;
                               const barH = chartYMax > 0 ? (val / chartYMax) * CHART_AREA_H : 0;
                               const bx = groupX + mi * (BAR_W + BAR_GAP);
                               const by = CHART_PAD.t + CHART_AREA_H - barH;
@@ -986,7 +974,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                               y={CHART_PAD.t + CHART_AREA_H + 14}
                               textAnchor="middle"
                               fontSize="8"
-                              fill={isHov ? '#1e293b' : '#94a3b8'}
+                              fill={isHov ? '#1e293b' : inRange(d.month) ? '#94a3b8' : '#e2e8f0'}
                               fontWeight={isHov ? '800' : '600'}
                             >
                               {d.month.slice(2)}
@@ -1034,7 +1022,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                             </text>
                             {/* Data rows */}
                             {manufacturers.map((m, mi) => {
-                              const val = getMonthlyFailValue(d, m);
+                              const val = filteredMonthlyMap[d.month]?.[m] ?? 0;
                               const ry = TY + T_PAD + 16 + mi * T_ROW_H;
                               return (
                                 <g key={m}>
@@ -1060,7 +1048,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             {/* RIGHT: TOP FAIL 규격 랭킹 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <h3 className="text-sm font-black text-slate-800 tracking-tight">교환 다빈도 규격</h3>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-0.5 mb-4">Top 5 / Size Ranking</p>
               {topFailSizes.length > 0 ? (
                 <div className="space-y-3">
                   {topFailSizes.map((item, idx) => (
@@ -1083,7 +1070,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               {/* 교환율 by manufacturer */}
               {manufacturers.length > 0 && (
                 <div className="mt-6 pt-4 border-t border-slate-100">
-                  <h4 className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-3">교환율 / Exchange Rate</h4>
+                  <h4 className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-3">교환율</h4>
                   <div className="space-y-2.5">
                     {manufacturers.map((m, i) => {
                       const failCount = mStats[m]?.total || 0;
@@ -1120,7 +1107,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                   교환 주문 이력
                 </h3>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium mt-0.5">Exchange Order History · {activeM}</p>
               </div>
               <span className="text-[10px] font-bold text-slate-500">{activeOrders.length}건</span>
             </div>
@@ -1137,7 +1123,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     <div className="space-y-1">
                       {order.items.map((item, idx) => (
                         <div key={idx} className="flex justify-between text-[11px] font-bold">
-                          <span className="text-slate-500">{item.brand} {item.size}</span>
+                          <span className="text-slate-500">{item.brand} {item.size === '기타' || item.size === '-' ? '규격정보없음' : item.size}</span>
                           <span className="text-slate-800 tabular-nums">{item.quantity}개</span>
                         </div>
                       ))}
@@ -1187,7 +1173,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             {/* Header */}
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-base font-black text-slate-800">일괄 반품처리</h2>
+                <h2 className="text-base font-black text-slate-800">일괄 반품 처리</h2>
                 <p className="text-xs text-slate-500 mt-0.5">미처리 잔여 항목 전체를 제조사별로 반품 주문 등록합니다.</p>
               </div>
               <button
@@ -1201,12 +1187,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
             {/* 전자장부 안내 */}
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[11px] text-amber-800 font-semibold">
-              반품처리 후 전자장부에서 주문 금액 변동을 확인하세요.
+              반품 처리 후 전자장부에서 주문 금액 변동을 확인하세요.
             </div>
 
             {/* 제조사별 미처리 목록 */}
             <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품처리 대상</p>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품 처리 대상</p>
               {manufacturers.map(mfr => {
                 const cnt = pendingByManufacturerMap[mfr] || 0;
                 if (cnt === 0) return null;
@@ -1237,7 +1223,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 disabled={isAllReturnSubmitting || pendingFailList.length === 0}
                 className="flex-1 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-2xl transition-all active:scale-[0.98]"
               >
-                {isAllReturnSubmitting ? '처리 중...' : '반품처리 완료'}
+                {isAllReturnSubmitting ? '처리 중...' : '반품 처리 완료'}
               </button>
             </div>
           </div>

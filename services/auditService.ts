@@ -37,6 +37,7 @@ export const auditService = {
       actual_stock: e.actualStock,
       difference: e.difference,
       reason: e.reason,
+      performed_by: e.performedBy ?? null,
     }));
 
     const { error: auditError } = await supabase
