@@ -10,6 +10,8 @@
 > 2. 온보딩 위자드 (기초재고 템플릿 + 단계별 가이드)
 > 3. Free → Paid 전환 넛지 시스템
 
+> **구현 상태 (2026-03-03)**: 온보딩 위자드, 넛지 시스템 P0 완료. 결제 PG는 P1 (유료 15개소 초과 시).
+
 ---
 
 ## 1. 결제 플로우 — 계좌이체 + 세금계산서 (현행 유지)
@@ -83,100 +85,96 @@ Toss Payments PG 연동은 유료 고객 15개소 초과 시점에 검토.
 
 ### 2.2 온보딩 위자드 플로우
 
+> **의도적 변경 (D1)**: 설계 초안의 5-step (Brand Select + Stock Input) →
+> 실무 기반 7-step (덴트웹 Fixture Upload) 플로우로 전환.
+> 덴트웹 데이터를 직접 업로드하는 방식이 치과 실무에 더 적합함.
+
+**실제 구현 플로우 (7 steps)**:
+
 ```
-[Step 1] 환영 화면 + 진행 표시 (30초)
-    → 병원명 확인, "3단계로 준비됩니다" 안내
+[Step 1] 환영 화면
+    → 병원명 확인, 온보딩 안내
 
-[Step 2] 브랜드 템플릿 선택 (2분)
-    → 사용 중인 임플란트 브랜드 체크박스
-    → Osstem / IBS / Dentium / Dio / Neobiotech / 기타
+[Step 2] 덴트웹 픽스처 다운로드 안내
+    → 덴트웹에서 픽스처 데이터 내보내기 가이드
 
-[Step 3] 기초재고 간편 입력 (5분)
-    → 선택 브랜드의 주요 규격 목록 자동 표시
-    → 각 규격별 현재 재고 수량만 입력
-    → "나중에 상세 수정 가능" 안내
+[Step 3] 픽스처 파일 업로드 (핵심)
+    → Excel 파일 업로드 → 데이터 가공 → 재고 마스터 생성
+    → DashboardFixtureEditSection으로 이동 옵션
 
-[Step 4] 수술기록 업로드 안내 (2분)
-    → 덴트웹 내보내기 방법 GIF 가이드
-    → 엑셀 샘플 다운로드
-    → "지금 건너뛰기" 옵션 포함
+[Step 4] 덴트웹 수술기록 다운로드 안내
+    → 수술기록 내보내기 방법 안내
 
-[Step 5] 완료 + 첫 대시보드 진입
-    → "재고 N종 등록 완료!" 성공 메시지
-    → 대시보드에서 부족분 확인 유도
+[Step 5] 수술기록 업로드 안내
+    → ExcelTable 업로드 → 재고 자동 차감
+
+[Step 6] 재고 실사 안내
+    → InventoryAudit 사용법 안내
+
+[Step 7] 교환 관리 안내 (완료)
+    → FailManager 사용법 + 완료
 ```
 
-### 2.3 신규 컴포넌트 설계
+### 2.3 실제 구현 컴포넌트
 
-#### 파일 구조
+#### 파일 구조 (실제)
 
 ```
 components/
-  OnboardingWizard.tsx         ← 메인 위자드 컨테이너
+  OnboardingWizard.tsx         ← 메인 위자드 컨테이너 (7 steps)
   onboarding/
     Step1Welcome.tsx
-    Step2BrandSelect.tsx
-    Step3StockInput.tsx
-    Step4UploadGuide.tsx
-    Step5Complete.tsx
+    Step2DenwebFixtureDownload.tsx   ← 덴트웹 픽스처 다운로드 안내
+    Step2FixtureUpload.tsx           ← 픽스처 파일 업로드
+    Step3FailAudit.tsx               ← (현재 플로우에서 교환 관리 안내)
+    Step4DenwebSurgeryDownload.tsx   ← 덴트웹 수술기록 다운로드 안내
+    Step4UploadGuide.tsx             ← 수술기록 업로드 안내
+    Step6InventoryAudit.tsx          ← 재고 실사 안내
+    OnboardingToast.tsx              ← 온보딩 진행 상태 토스트
 services/
-  onboardingService.ts         ← 온보딩 진행 상태 관리
+  onboardingService.ts         ← 온보딩 진행 상태 관리 (localStorage + Supabase)
 ```
 
-#### `OnboardingWizard.tsx` 인터페이스
+#### `OnboardingWizard.tsx` 인터페이스 (실제)
 
 ```typescript
 interface OnboardingWizardProps {
   hospitalId: string;
   hospitalName: string;
   plan: PlanType;
-  onComplete: () => void;   // 위자드 완료 → 대시보드 진입
-  onSkip: () => void;       // 전체 건너뛰기
+  onSkip: () => void;
+  onGoToFixtureEdit: (file: File, corrections: Record<string, string>) => void;
+  onGoToFailManager: () => void;
+  initialStep: number;
 }
-
-// 온보딩 완료 여부: hospitals 테이블에 onboarding_completed_at TIMESTAMPTZ 컬럼 추가
-// 또는: localStorage 'denjoy_onboarding_done_{hospitalId}' 플래그
 ```
 
-#### `Step2BrandSelect.tsx` — 브랜드 템플릿
-
-`fixtureReferenceBase.ts` 실제 데이터 기준으로 구현. 설계 초안 대비 변경 사항:
-
-| 항목 | 설계 초안 | 실제 구현 |
-|------|---------|---------|
-| IBS 브랜드명 | Magicore C3 / Magicore S3 | IBS Implant (덴트웹 실제 명칭) |
-| 추가 브랜드 | — | 메가젠, Straumann, 덴티스 추가 |
-| 제품 라인 | OSSTEM 2개, Dentium 1개 | OSSTEM 3개, Dentium 2개, DIO 2개 등 확장 |
-
-**최종 브랜드 목록 (8개)**:
-OSSTEM / IBS / Dentium / DIO / 네오바이오텍 / 메가젠 / Straumann / 덴티스
-
-```typescript
-// UI: 체크박스 카드 그리드 (2열)
-// 선택된 브랜드의 모든 규격을 Step3에서 수량 입력
-```
-
-#### `onboardingService.ts` 설계
+#### `onboardingService.ts` 실제 API
 
 ```typescript
 export const onboardingService = {
-  isCompleted: (hospitalId: string): boolean => {
-    return !!localStorage.getItem(`denjoy_onboarding_done_${hospitalId}`);
-  },
-
-  markCompleted: (hospitalId: string): void => {
-    localStorage.setItem(`denjoy_onboarding_done_${hospitalId}`, new Date().toISOString());
-  },
-
-  // 선택 브랜드로 재고 항목 일괄 생성
-  async createStockFromTemplate(
-    hospitalId: string,
-    items: { manufacturer: string; brand: string; size: string; quantity: number }[]
-  ): Promise<number> {
-    // inventoryService.bulkInsert() 활용
-  },
+  // 플래그 키 (localStorage + Supabase OB_FLAG 비트필드)
+  isWelcomeSeen(hospitalId: string): boolean
+  markWelcomeSeen(hospitalId: string): void
+  isFailAuditDone(hospitalId: string): boolean
+  markFailAuditDone(hospitalId: string): void
+  markFixtureDownloaded(hospitalId: string): void
+  markSurgeryDownloaded(hospitalId: string): void
+  markInventoryAuditSeen(hospitalId: string): void
+  markFixtureSaved(hospitalId: string): void
+  markDismissed(hospitalId: string): void
+  isSnoozed(hospitalId: string): boolean
+  snooze(hospitalId: string, hours?: number): void
 };
+
+// localStorage 키 패턴: denjoy_ob_v2_*_{hospitalId}
+// Supabase 동기화: OB_FLAG 비트필드 (hospital_integrations 테이블 재사용)
 ```
+
+> **의도적 변경 (D1)**:
+> - `isCompleted` / `markCompleted` → 세분화된 플래그 API로 교체
+> - `createStockFromTemplate()` 미구현 → 픽스처 업로드 기반으로 대체
+> - localStorage 단일 키 → 다중 플래그 + Supabase 동기화
 
 ### 2.4 온보딩 위자드 노출 조건
 
@@ -217,9 +215,11 @@ const shouldShowOnboarding =
 | **T1: 데이터 만료 임박** | 만료 7일 전 | "수술기록이 7일 후 삭제됩니다" |
 | **T2: 기능 한계 도달** | 재고 90/100 품목 | "재고 한도 90% 도달, 10개 남음" |
 | **T3: 업로드 횟수 소진** | Free 월 1회 초과 시도 | "이번 달 업로드 한도 초과" |
-| **T4: 14일 체험 만료 D-3** | 체험 만료 3일 전 | "체험 3일 남음, 연간 결제 시 20% 할인" |
+| **T4: 28일 체험 만료 D-3** | 체험 만료 3일 전 | "체험 3일 남음, 연간 결제 시 20% 할인" |
 | **T5: 체험 만료 당일** | 만료 0일 | "오늘 만료. 연간 결제로 전환 시 20% 할인" |
-| **T6: 활성 사용 후 14일** | 마지막 로그인 14일 후 | 재참여 유도 (이메일) |
+| **T6: 활성 사용 후 14일** | 마지막 로그인 14일 후 | 재참여 유도 (이메일, P1) |
+
+> **TRIAL_DAYS 변경**: 설계 초안 14일 → 실제 **28일** (`types.ts: TRIAL_DAYS = 28`). 베타 기간 4주 확장 (D2).
 
 ### 3.2 인앱 넛지 컴포넌트 설계
 
@@ -395,8 +395,32 @@ Week 3~: 고객 반응 보며 이메일 시퀀스 / Toss PG 검토
 
 ---
 
+---
+
+## 8. 설계 대비 추가 구현 항목 (Added Features)
+
+설계에 없었으나 구현 과정에서 추가된 컴포넌트 및 기능:
+
+| 항목 | 파일 | 설명 |
+|------|------|------|
+| PricingPaymentModal | `components/PricingPaymentModal.tsx` | 플랜 선택 → 결제 안내 모달 (계좌이체/세금계산서) |
+| TrialConsentModal | `components/TrialConsentModal.tsx` | 체험 시작 동의 모달 |
+| WaitlistModal | `components/WaitlistModal.tsx` | 품절 플랜 대기 신청 모달 |
+| Plan Finder Quiz | `components/PlanFinderQuiz.tsx` | 요금제 추천 퀴즈 (3단계) |
+| AuthSignupPlanSelect | `components/auth/AuthSignupPlanSelect.tsx` | 가입 플로우 플랜 선택 단계 |
+| AuthSignupRoleSelect | `components/auth/AuthSignupRoleSelect.tsx` | 가입 플로우 역할 선택 단계 |
+| makePaymentService | `services/makePaymentService.ts` | Make.com 웹훅 결제 프록시 서비스 |
+| trialPolicy.ts | `utils/trialPolicy.ts` | 베타 체험 정책 상수/유틸 (TRIAL_DAYS, 문구 등) |
+| Plan Availability | `planService.getPlanAvailability()` | 품절/대기 플랜 가용성 조회 (인위적 희소성 전략) |
+| Beta Trial (28일) | `types.ts: TRIAL_DAYS = 28` | 베타 기간 확장 (설계 14일 → 28일) |
+
+**Gap Analysis**: P0 Strict 73.8% → 의도적 변경 포함 92.9% PASS
+
+---
+
 **Created**: 2026-02-22
+**Updated**: 2026-03-03
 **Feature**: product-strategy
-**Phase**: Design
+**Phase**: Implemented
 **Ref Plan**: `docs/01-plan/features/product-strategy.plan.md`
-**Status**: Draft
+**Status**: ✅ P0 Complete (P1 보류: Toss PG, 이메일 시퀀스)

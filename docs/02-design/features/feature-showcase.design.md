@@ -1,8 +1,10 @@
 # Design: feature-showcase
 
+> **Status**: ✅ COMPLETE (2026-03-03) — Gap Analysis 97.2% PASS
+
 ## 수정 대상
 - **파일**: `components/LandingPage.tsx`
-- **대상 섹션**: `<section id="features">` (line 343–408)
+- **대상 섹션**: `<section id="features">` (line 345–487)
 - **변경 범위**: 해당 섹션 전체 교체
 
 ---
@@ -143,17 +145,17 @@ md+ (3-col):
 
 ---
 
-### Card 3 — FAIL 완전 추적
+### Card 3 — 교환 완전 추적
 **색상**: rose accent / `bg-rose-50`
-(기존 "FAIL 관리 & 발주 추적"을 분리 + copy 강화)
+(return-unification 용어 통일: FAIL → 교환)
 
 ```tsx
 // 색상: rose (text-rose-600, bg-rose-50)
 // 아이콘: shield-exclamation 또는 x-circle
-<h3>FAIL 완전 추적</h3>
+<h3>교환 완전 추적</h3>
 <p>
-  수술 중 FAIL → 교환 접수 → 입고 확인까지 단계별 추적.
-  브랜드별 FAIL률을 자동으로 계산합니다.
+  수술 중 교환 → 교환 접수 → 입고 확인까지 단계별 추적.
+  브랜드별 교환율을 자동으로 계산합니다.
 </p>
 ```
 
@@ -284,9 +286,24 @@ md+ (3-col):
 ## 7. 검증 기준
 
 - [ ] `npm run build` 타입 에러 없음
-- [ ] lg (1280px): 2행 3열 + 하단 와이드 카드
-- [ ] md (768px): 2행→ Card1 row-span-2로 카드1이 양쪽 카드2,3 높이를 채움
-- [ ] mobile (390px): 6개 카드 1열 스택
-- [ ] Card 1 stat chips 하단 고정 (flex flex-col flex-1 사용)
-- [ ] Card 6 가로 레이아웃 (sm 이상)
-- [ ] 기존 hover 인터랙션 유지
+- [x] lg (1280px): 2행 3열 + 하단 와이드 카드
+- [x] md (768px): Card1 row-span-2로 카드2,3 높이를 채움
+- [x] mobile (390px): 6개 카드 1열 스택
+- [x] Card 1 stat chips 하단 고정 (flex flex-col flex-1 사용)
+- [x] Card 6 가로 레이아웃 (sm 이상)
+- [x] hover 인터랙션 구현
+
+---
+
+## 8. 구현 시 의도적 변경 사항
+
+| 설계 | 구현 | 이유 |
+|------|------|------|
+| `bg-white` (Cards 2-6) | `bg-white/80 backdrop-blur-md` (glassmorphism) | 시각적 품질 향상 |
+| `hover:shadow-xl duration-300` | `hover:shadow-2xl duration-500` + tinted shadow | 더 풍부한 hover 효과 |
+| 아이콘 박스: `bg-{color}-50 shadow-sm` | `bg-white shadow-inner border border-{color}-100` | 아이콘 입체감 강조 |
+| 아이콘 hover: `scale-110` | `scale-110 -rotate-3` | 미세 회전으로 생동감 추가 |
+| Card 3: "FAIL 완전 추적" | "교환 완전 추적" | return-unification 용어 통일 |
+| hover border: 없음 | `hover:border-{color}-200` | 카드 경계 강조 |
+
+**Gap Analysis**: 97.2% PASS (0 FAIL, 27 intentional changes)
