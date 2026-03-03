@@ -1225,7 +1225,59 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+      {/* Alert Cards — 모바일: 이슈 있는 카드만 표시 */}
+      <section className="md:hidden space-y-2">
+        {(() => {
+          const actionableCards = alertCards.filter(c => c.severity !== 'ok');
+          if (actionableCards.length === 0) {
+            return (
+              <div className="flex items-center gap-3 px-4 py-3.5 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-emerald-800">모든 항목 정상</p>
+                  <p className="text-[11px] text-emerald-600 mt-0.5">실사 · 입고 · 교환 · 미등록 이상 없음</p>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className="space-y-2">
+              {actionableCards.map((card) => (
+                <button
+                  key={card.key}
+                  onClick={() => onNavigate(card.tab)}
+                  style={{ borderLeftColor: card.severity === 'critical' ? '#e11d48' : '#f59e0b' }}
+                  className="w-full text-left bg-white border border-slate-100 border-l-4 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 shadow-sm active:scale-[0.98] transition-all"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-700">{card.title}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">{card.hint}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <p className="text-xl font-black text-slate-900 leading-none tabular-nums">{card.value}</p>
+                      <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{card.sub}</p>
+                    </div>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${PRIORITY_BADGE[card.severity].className}`}>
+                      {PRIORITY_BADGE[card.severity].label}
+                    </span>
+                    <svg className="w-4 h-4 text-slate-300 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* Alert Cards — 데스크톱: 전체 5개 표시 */}
+      <section className="hidden md:grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         {alertCards.map((card, index) => (
           <button
             key={card.key}
@@ -1437,7 +1489,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="hidden md:block bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <h3 className="text-sm font-black text-slate-900 mb-3">빠른 실행</h3>
             <div className="grid grid-cols-2 gap-2">
               {[
