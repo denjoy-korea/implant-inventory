@@ -58,10 +58,10 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
 
     const items = useMemo(() =>
         inventory
-            .filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id) && !returnedItemIds.has(i.id))
+            .filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id))
             .filter(i => i.recommendedStock > 0 && i.currentStock > i.recommendedStock)
             .sort((a, b) => (b.currentStock - b.recommendedStock) - (a.currentStock - a.recommendedStock)),
-        [inventory, isExcluded, isSnoozed, returnedItemIds],
+        [inventory, isExcluded, isSnoozed],
     );
 
     const totalExcess = useMemo(() =>
@@ -412,11 +412,33 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                     {items.map(item => {
                                         const excess = item.currentStock - item.recommendedStock;
                                         const isSelected = selectedIds.has(item.id);
+                                        const isReturned = returnedItemIds.has(item.id);
                                         const pendingQty = returnRequests
                                             .filter(r => r.manufacturer === item.manufacturer && (r.status === 'requested' || r.status === 'picked_up'))
                                             .flatMap(r => r.items)
                                             .filter(ri => ri.brand === item.brand && ri.size === item.size)
                                             .reduce((s, ri) => s + ri.quantity, 0);
+
+                                        if (isReturned) {
+                                            return (
+                                                <tr key={item.id} className="bg-emerald-50/40 opacity-60">
+                                                    <td className="pl-6 pr-2 py-3" />
+                                                    <td className="px-3 py-3">
+                                                        <p className="text-xs font-black text-slate-500">{item.brand}</p>
+                                                        <p className="text-[11px] text-slate-400">{item.manufacturer}</p>
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{item.size}</span>
+                                                    </td>
+                                                    <td colSpan={3} className="px-3 py-3 text-right">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[11px] font-black rounded-lg">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                            반품 등록 완료
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
 
                                         return (
                                             <tr key={item.id} className={`group transition-colors ${isSelected ? 'bg-indigo-50/40' : 'hover:bg-slate-50/60'}`}>
