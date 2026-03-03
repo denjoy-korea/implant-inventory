@@ -10,6 +10,7 @@ import OptimizeModal from './inventory/OptimizeModal';
 import { isExchangePrefix } from '../services/appUtils';
 import { OrderHistoryPanel } from './order/OrderHistoryPanel';
 import ReturnRequestModal from './order/ReturnRequestModal';
+import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
 
 interface OrderManagerProps {
   orders: Order[];
@@ -108,6 +109,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   // ── 반품 권장 모달 state ──
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
+  const [showReturnCandidateModal, setShowReturnCandidateModal] = useState(false);
+  const [returnCandidateCategory, setReturnCandidateCategory] = useState<ReturnCategory>('overstock');
   const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
   const [isBulkReturning, setIsBulkReturning] = useState(false);
 
@@ -1149,7 +1152,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
                 {/* 1. 권장량 초과 */}
                 <button
-                  onClick={() => setShowOptimizeModal(true)}
+                  onClick={() => { setReturnCandidateCategory('overstock'); setShowReturnCandidateModal(true); }}
                   className={`group relative rounded-2xl border-2 p-4 transition-all text-left hover:shadow-md cursor-pointer ${returnCandidates.overstock.length > 0
                     ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-blue-50/40'
                     : 'border-slate-100 bg-slate-50/60'
@@ -1857,6 +1860,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>}
             onConfirm={handleBulkReturn}
             onCancel={() => setShowBulkReturnConfirm(false)}
+          />
+        )}
+
+        {/* 권장량 초과 목록 모달 */}
+        {showReturnCandidateModal && (
+          <ReturnCandidateModal
+            initialCategory={returnCandidateCategory}
+            inventory={inventory}
+            returnRequests={returnRequests}
+            snoozedIds={{}}
+            onClose={() => setShowReturnCandidateModal(false)}
+            onCreateReturn={onCreateReturn}
+            onSnooze={() => {}}
+            managerName={currentUserName}
+            showAlertToast={showAlertToast}
           />
         )}
 
