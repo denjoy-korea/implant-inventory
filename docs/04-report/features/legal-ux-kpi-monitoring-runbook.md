@@ -43,7 +43,8 @@ node --test scripts/mobile-critical-flow.test.mjs
 2. KPI 스냅샷 생성 (14일)
 ```bash
 set -a; source .env.local; set +a
-node scripts/admin-traffic-snapshot.mjs 14
+node scripts/admin-traffic-snapshot.mjs 14 --daily
+npm run report:traffic:coverage
 ```
 
 사전 조건:
@@ -52,7 +53,8 @@ node scripts/admin-traffic-snapshot.mjs 14
   - `SUPABASE_SERVICE_ROLE_KEY`
 
 3. 산출물 확인
-- 생성 파일: `docs/04-report/traffic-kpi-snapshot-YYYY-MM-DD.md`
+- 생성 파일: `docs/04-report/traffic-kpi-daily/traffic-kpi-snapshot-YYYY-MM-DD.md`
+- 커버리지 보고서: `docs/04-report/traffic-kpi-coverage.md`
 - 확인 항목:
   - 이벤트 퍼널 step CVR
   - 결제 요청 성공/실패 세션

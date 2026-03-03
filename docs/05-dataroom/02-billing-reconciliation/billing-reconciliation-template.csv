@@ -1,0 +1,1 @@
+customer_id,customer_name,contract_id,billing_id,invoice_date,billing_amount,payment_status,payment_date,collected_amount,refund_amount,refund_date,termination_date,evidence_invoice,evidence_payment,evidence_refund,evidence_contract,owner,review_status,notes

@@ -9,7 +9,7 @@
 - `node --test scripts/mobile-critical-flow.test.mjs` → `12 passed / 0 failed`
 - `npm run typecheck` → PASS
 - `npm run build` → PASS
-- `set -a; source .env.local; set +a; node scripts/admin-traffic-snapshot.mjs 14` → `SUPABASE_SERVICE_ROLE_KEY` 미설정으로 실행 보류
+- `set -a; source .env.local; set +a; node scripts/admin-traffic-snapshot.mjs 14 --daily` → `SUPABASE_SERVICE_ROLE_KEY` 미설정으로 실행 보류
 
 ## 1) 핵심 플로우 회귀 점검
 - [x] 랜딩 `무료로 시작하기` 클릭 시 `signup` 이동 (정적 회귀 테스트)
@@ -51,5 +51,6 @@
 
 운영 메모:
 - KPI 스냅샷 스크립트는 `SUPABASE_SERVICE_ROLE_KEY` 설정 후 실행 가능
-- 실행 명령: `set -a; source .env.local; set +a; SUPABASE_SERVICE_ROLE_KEY=<key> node scripts/admin-traffic-snapshot.mjs 14`
+- 실행 명령: `set -a; source .env.local; set +a; SUPABASE_SERVICE_ROLE_KEY=<key> node scripts/admin-traffic-snapshot.mjs 14 --daily`
+- 커버리지 점검: `npm run report:traffic:coverage`
 - KPI 정의/판단 기준: `docs/04-report/features/legal-ux-kpi-monitoring-runbook.md`

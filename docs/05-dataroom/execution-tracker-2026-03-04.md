@@ -9,11 +9,11 @@
 | WS4-03 | Release | `verify:premerge` 3연속 Green | 맹준호 | denjoy | 2026-03-10 | IN_PROGRESS | 게이트 실행 로그 |
 | WS4-04 | Release | `verify:release` 1회 Green | 맹준호 | denjoy | 2026-03-11 | DONE | release 실행 로그 |
 | WS3-01 | Funnel | 이벤트 스키마 동결 | denjoy | 맹준호 | 2026-03-05 | IN_PROGRESS | 이벤트 명세 문서 |
-| WS3-02 | Funnel | 일별 스냅샷 자동화 구축 | 맹준호 | denjoy | 2026-03-11 | TODO | `scripts/admin-traffic-snapshot.mjs` |
+| WS3-02 | Funnel | 일별 스냅샷 자동화 구축 | 맹준호 | denjoy | 2026-03-11 | IN_PROGRESS | `scripts/admin-traffic-snapshot.mjs`, `scripts/traffic-snapshot-coverage.mjs` |
 | WS3-03 | Funnel | session_id 누락률 주간 점검 | denjoy | 맹준호 | Weekly | TODO | KPI 점검 로그 |
 | WS5-01 | Data Room | 데이터룸 구조 생성 | denjoy | 맹준호 | 2026-03-06 | DONE | `docs/05-dataroom/` |
 | WS5-02 | Data Room | 증빙 수집 체크리스트 배포 | denjoy | 맹준호 | 2026-03-06 | DONE | `evidence-collection-checklist-2026-03-04.md` |
-| WS5-03 | Data Room | 청구-수금-환불 대사표 작성 | denjoy | 맹준호 | 2026-03-12 | TODO | `02-billing-reconciliation/` |
+| WS5-03 | Data Room | 청구-수금-환불 대사표 작성 | denjoy | 맹준호 | 2026-03-12 | IN_PROGRESS | `02-billing-reconciliation/billing-reconciliation-template.csv` |
 | WS5-04 | Data Room | 법무 패키지(약관/개인정보/환불정책) | 외부 법무자문 | denjoy | 2026-03-14 | BLOCKED | `05-policy-versioning/` |
 | WS5-05 | Data Room | 보안 운영 증빙 첨부 | 맹준호 | denjoy | 2026-03-16 | IN_PROGRESS | `04-security-operations/` |
 | WS5-06 | Data Room | 투자자 제출본 원본/요약본 제작 | denjoy | 맹준호 | 2026-03-20 | TODO | `06-investor-pack/` |

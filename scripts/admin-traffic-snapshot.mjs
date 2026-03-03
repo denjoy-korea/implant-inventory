@@ -4,6 +4,10 @@ import process from 'node:process';
 
 import { computeTrafficKpiSnapshot } from './funnel-kpi-utils.mjs';
 
+const KST_TIMEZONE = 'Asia/Seoul';
+const DAILY_REPORT_REL_DIR = path.join('docs', '04-report', 'traffic-kpi-daily');
+const DEFAULT_REPORT_REL_DIR = path.join('docs', '04-report');
+
 function getDotEnvValue(key) {
   const envPath = path.join(process.cwd(), '.env.local');
   try {
@@ -26,15 +30,113 @@ function formatPct(value) {
   return `${value}%`;
 }
 
+function formatKstDate(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: KST_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
 function toKstIso(date = new Date()) {
   const kstOffsetMs = 9 * 60 * 60 * 1000;
   return new Date(date.getTime() + kstOffsetMs).toISOString().replace('Z', '+09:00');
 }
 
-async function fetchPageViews({ supabaseUrl, serviceRoleKey, days }) {
-  const sinceIso = new Date(Date.now() - days * 86400_000).toISOString();
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const options = {
+    days: 30,
+    snapshotDate: null,
+    outDir: null,
+    daily: false,
+    help: false,
+  };
+
+  for (const arg of args) {
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+    if (/^\d+$/.test(arg)) {
+      options.days = Number(arg);
+      continue;
+    }
+    if (arg === '--daily') {
+      options.daily = true;
+      continue;
+    }
+    if (arg.startsWith('--snapshot-date=')) {
+      options.snapshotDate = arg.split('=')[1] || null;
+      continue;
+    }
+    if (arg.startsWith('--out-dir=')) {
+      options.outDir = arg.split('=')[1] || null;
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  return options;
+}
+
+function isValidYmd(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00+09:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return formatKstDate(parsed) === value;
+}
+
+function resolveWindow({ days, snapshotDate }) {
+  if (snapshotDate) {
+    const snapshotStartUtc = new Date(`${snapshotDate}T00:00:00+09:00`);
+    const untilUtc = new Date(snapshotStartUtc.getTime() + 86400_000);
+    const sinceUtc = new Date(untilUtc.getTime() - days * 86400_000);
+    return {
+      snapshotLabel: snapshotDate,
+      sinceIso: sinceUtc.toISOString(),
+      untilIso: untilUtc.toISOString(),
+    };
+  }
+
+  const now = new Date();
+  return {
+    snapshotLabel: formatKstDate(now),
+    sinceIso: new Date(now.getTime() - days * 86400_000).toISOString(),
+    untilIso: null,
+  };
+}
+
+function resolveReportDir({ daily, outDir }) {
+  if (outDir) {
+    return path.isAbsolute(outDir)
+      ? outDir
+      : path.join(process.cwd(), outDir);
+  }
+  const rel = daily ? DAILY_REPORT_REL_DIR : DEFAULT_REPORT_REL_DIR;
+  return path.join(process.cwd(), rel);
+}
+
+function printUsage() {
+  console.log('Usage: node scripts/admin-traffic-snapshot.mjs [days] [--snapshot-date=YYYY-MM-DD] [--daily] [--out-dir=PATH]');
+  console.log('Examples:');
+  console.log('  node scripts/admin-traffic-snapshot.mjs 30');
+  console.log('  node scripts/admin-traffic-snapshot.mjs 30 --daily');
+  console.log('  node scripts/admin-traffic-snapshot.mjs 30 --snapshot-date=2026-03-04 --daily');
+}
+
+async function fetchPageViews({ supabaseUrl, serviceRoleKey, sinceIso, untilIso }) {
   const select = encodeURIComponent('page,session_id,user_id,referrer,event_type,event_data,created_at');
-  const baseUrl = `${supabaseUrl}/rest/v1/page_views?select=${select}&created_at=gte.${encodeURIComponent(sinceIso)}&order=created_at.asc`;
+  const filterParts = [
+    `select=${select}`,
+    `created_at=gte.${encodeURIComponent(sinceIso)}`,
+  ];
+  if (untilIso) {
+    filterParts.push(`created_at=lt.${encodeURIComponent(untilIso)}`);
+  }
+  filterParts.push('order=created_at.asc');
+  const baseUrl = `${supabaseUrl}/rest/v1/page_views?${filterParts.join('&')}`;
 
   const pageSize = 1000;
   let from = 0;
@@ -70,12 +172,15 @@ async function fetchPageViews({ supabaseUrl, serviceRoleKey, days }) {
   return rows;
 }
 
-function renderMarkdownReport({ days, rows, snapshot }) {
+function renderMarkdownReport({ days, rows, snapshot, snapshotLabel, sinceIso, untilIso }) {
   const generatedAt = toKstIso(new Date());
   const lines = [];
   lines.push(`# 관리자 트래픽 KPI 스냅샷 (${days}일)`);
   lines.push('');
   lines.push(`- 생성시각(KST): ${generatedAt}`);
+  lines.push(`- 스냅샷 기준일(KST): ${snapshotLabel}`);
+  lines.push(`- 집계구간 시작(UTC): ${sinceIso}`);
+  lines.push(`- 집계구간 종료(UTC): ${untilIso ?? '(현재 시각)'}`);
   lines.push(`- 원본 row 수: ${rows.length}`);
   lines.push(`- 고유 세션 수: ${snapshot.uniqueSessions}`);
   lines.push(`- 로그인 전환 세션: ${snapshot.convertedSessions} (${formatPct(snapshot.conversionRate)})`);
@@ -116,11 +221,25 @@ function renderMarkdownReport({ days, rows, snapshot }) {
 }
 
 async function main() {
-  const daysArg = Number(process.argv[2] ?? 30);
-  if (!Number.isFinite(daysArg) || daysArg <= 0) {
+  const options = parseArgs(process.argv);
+  if (options.help) {
+    printUsage();
+    return;
+  }
+
+  if (!Number.isFinite(options.days) || options.days <= 0) {
     throw new Error('days must be a positive number (example: node scripts/admin-traffic-snapshot.mjs 30)');
   }
-  const days = Math.round(daysArg);
+  const days = Math.round(options.days);
+
+  if (options.snapshotDate && !isValidYmd(options.snapshotDate)) {
+    throw new Error('snapshot-date must be YYYY-MM-DD in KST.');
+  }
+
+  const window = resolveWindow({
+    days,
+    snapshotDate: options.snapshotDate,
+  });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL ?? getDotEnvValue('VITE_SUPABASE_URL');
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? getDotEnvValue('SUPABASE_SERVICE_ROLE_KEY') ?? null;
@@ -132,13 +251,28 @@ async function main() {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is required (process env or .env.local) for admin snapshot.');
   }
 
-  const rows = await fetchPageViews({ supabaseUrl, serviceRoleKey, days });
+  const rows = await fetchPageViews({
+    supabaseUrl,
+    serviceRoleKey,
+    sinceIso: window.sinceIso,
+    untilIso: window.untilIso,
+  });
   const snapshot = computeTrafficKpiSnapshot(rows);
-  const markdown = renderMarkdownReport({ days, rows, snapshot });
+  const markdown = renderMarkdownReport({
+    days,
+    rows,
+    snapshot,
+    snapshotLabel: window.snapshotLabel,
+    sinceIso: window.sinceIso,
+    untilIso: window.untilIso,
+  });
 
-  const reportDir = path.join(process.cwd(), 'docs', '04-report');
+  const reportDir = resolveReportDir({
+    daily: options.daily,
+    outDir: options.outDir,
+  });
   mkdirSync(reportDir, { recursive: true });
-  const reportPath = path.join(reportDir, `traffic-kpi-snapshot-${new Date().toISOString().slice(0, 10)}.md`);
+  const reportPath = path.join(reportDir, `traffic-kpi-snapshot-${window.snapshotLabel}.md`);
   writeFileSync(reportPath, markdown, 'utf8');
 
   // Console summary for immediate verification in CI / terminal.

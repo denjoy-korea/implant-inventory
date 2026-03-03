@@ -6,3 +6,7 @@
 2. 수금 확인 내역
 3. 환불 차감 내역
 4. 청구-수금-환불 대사표(고객별)
+
+템플릿:
+
+- `billing-reconciliation-template.csv`
