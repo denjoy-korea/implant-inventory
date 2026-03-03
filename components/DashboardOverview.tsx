@@ -1589,50 +1589,47 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <h4 className="text-xs font-black text-slate-800">월별 사용 히트맵 (최근 6개월)</h4>
                 <div className="mt-3 overflow-x-auto">
-                  <div className="min-w-[480px] space-y-1">
-                    <div
-                      className="grid gap-1"
-                      style={{ gridTemplateColumns: `120px repeat(${recentMonthKeys.length}, minmax(0, 1fr))` }}
-                    >
-                      <div className="text-[10px] font-bold text-slate-400 px-2 py-1">제조사</div>
-                      {recentMonthKeys.map((month) => (
-                        <div key={`head-${month}`} className="text-[10px] font-bold text-slate-400 text-center px-1 py-1">
-                          {month.slice(5)}
-                        </div>
-                      ))}
-                    </div>
-
-                    {manufacturerUsageSummary.rows.slice(0, 5).map((row) => (
-                      <div
-                        key={`${row.manufacturer}-heatmap`}
-                        className="grid gap-1"
-                        style={{ gridTemplateColumns: `120px repeat(${recentMonthKeys.length}, minmax(0, 1fr))` }}
-                      >
-                        <div className="h-8 rounded-md bg-slate-50 px-2 inline-flex items-center text-[11px] font-bold text-slate-700 truncate">
-                          {row.manufacturer}
-                        </div>
-                        {row.monthly.map((monthly) => {
-                          const intensity = row.recentQty > 0 ? monthly.qty / row.recentQty : 0;
-                          const tone =
-                            monthly.qty <= 0
-                              ? 'bg-slate-100 text-slate-400'
-                              : intensity >= 0.35
-                                ? 'bg-indigo-500 text-white'
-                                : intensity >= 0.2
-                                  ? 'bg-indigo-200 text-indigo-700'
-                                  : 'bg-indigo-100 text-indigo-600';
-                          return (
-                            <div
-                              key={`${row.manufacturer}|${monthly.month}`}
-                              className={`h-8 rounded-md text-[10px] font-bold inline-flex items-center justify-center ${tone}`}
-                            >
-                              {monthly.qty}
+                  <table className="border-separate border-spacing-1" style={{ minWidth: `${116 + recentMonthKeys.length * 68}px` }}>
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-10 bg-white w-[116px] min-w-[116px] text-[10px] font-bold text-slate-400 text-left px-2 py-1 align-middle">제조사</th>
+                        {recentMonthKeys.map((month) => (
+                          <th key={`head-${month}`} className="min-w-[64px] text-[10px] font-bold text-slate-400 text-center px-1 py-1 align-middle font-normal">
+                            {month.slice(5)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {manufacturerUsageSummary.rows.slice(0, 5).map((row) => (
+                        <tr key={`${row.manufacturer}-heatmap`}>
+                          <td className="sticky left-0 z-10 bg-white w-[116px] min-w-[116px] h-8 align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
+                            <div className="h-8 rounded-md bg-slate-50 px-2 flex items-center text-[11px] font-bold text-slate-700 truncate">
+                              {row.manufacturer}
                             </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
+                          </td>
+                          {row.monthly.map((monthly) => {
+                            const intensity = row.recentQty > 0 ? monthly.qty / row.recentQty : 0;
+                            const tone =
+                              monthly.qty <= 0
+                                ? 'bg-slate-100 text-slate-400'
+                                : intensity >= 0.35
+                                  ? 'bg-indigo-500 text-white'
+                                  : intensity >= 0.2
+                                    ? 'bg-indigo-200 text-indigo-700'
+                                    : 'bg-indigo-100 text-indigo-600';
+                            return (
+                              <td key={`${row.manufacturer}|${monthly.month}`} className="h-8 align-middle">
+                                <div className={`h-8 rounded-md text-[10px] font-bold flex items-center justify-center ${tone}`}>
+                                  {monthly.qty}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-500">수술기록지의 식립/수술중교환 수량 기준 집계</p>
               </div>

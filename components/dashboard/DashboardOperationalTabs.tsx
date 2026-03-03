@@ -64,6 +64,7 @@ interface DashboardOperationalTabsProps {
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
   onFailAuditDone?: () => void;
+  orderHistoryOnly?: boolean;
 }
 
 const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
@@ -100,6 +101,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   initialShowFailBulkModal,
   onFailBulkModalOpened,
   onFailAuditDone,
+  orderHistoryOnly,
 }) => {
   const prevTabRef = useRef<DashboardTab>(dashboardTab);
 
@@ -185,6 +187,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             onDeleteReturn={onDeleteReturn}
             showAlertToast={showAlertToast}
             isReadOnly={isReadOnly}
+            historyOnly={orderHistoryOnly}
           />
         </FeatureGate>
       )}

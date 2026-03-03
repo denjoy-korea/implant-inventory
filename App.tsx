@@ -192,6 +192,7 @@ const App: React.FC = () => {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileOrderNav, setMobileOrderNav] = useState<'order' | 'receipt'>('order');
   const [dashboardHeaderHeight, setDashboardHeaderHeight] = useState(44);
   const [isOffline, setIsOffline] = useState<boolean>(() => (
     typeof navigator !== 'undefined' ? !navigator.onLine : false
@@ -295,9 +296,7 @@ const App: React.FC = () => {
     state.currentView === 'notices' ||
     state.currentView === 'reviews';
   const showMobilePublicNav = isPublicBottomNavView && isNarrowViewport;
-  const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management', 'fail_management'];
-  const mobileMoreTabs: DashboardTab[] = ['settings', 'fixture_upload', 'fixture_edit', 'member_management', 'audit_log'];
-  const isMoreTabActive = mobileMoreTabs.includes(state.dashboardTab);
+  const mobilePrimaryTabs: DashboardTab[] = ['overview', 'inventory_master', 'order_management'];
 
   useEffect(() => {
     if (requiresBillingProgramSetup) return;
@@ -2320,7 +2319,7 @@ const App: React.FC = () => {
               setIsMobileMenuOpen(false);
             }
           }}
-          isCollapsed={showMobileDashboardNav ? !isMobileMenuOpen : isSidebarCollapsed}
+          isCollapsed={showMobileDashboardNav ? true : isSidebarCollapsed}
           onToggleCollapse={() => {
             if (showMobileDashboardNav) {
               setIsMobileMenuOpen(false);
@@ -2346,14 +2345,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {showMobileDashboardNav && isMobileMenuOpen && (
-        <button
-          type="button"
-          onClick={() => setIsMobileMenuOpen(false)}
-          className="fixed inset-0 z-[270] bg-slate-900/35 backdrop-blur-[1px]"
-          aria-label="메뉴 닫기"
-        />
-      )}
 
       {/* Main Content Wrapper - System Admin has no Header in Dashboard UNLESS simulating User View */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -2549,6 +2540,7 @@ const App: React.FC = () => {
                             setShowOnboardingComplete(true);
                             if (user) loadHospitalData(user); // 완료 후 대시보드 수치 갱신 (백그라운드)
                           },
+                          orderHistoryOnly: showMobileDashboardNav && mobileOrderNav === 'receipt',
                           onboardingStep: firstIncompleteStep,
                           onResumeOnboarding: firstIncompleteStep != null ? () => {
                             const hid = state.user?.hospitalId ?? '';
@@ -2568,8 +2560,8 @@ const App: React.FC = () => {
                   dashboardTab={state.dashboardTab}
                   userPermissions={state.user?.permissions}
                   effectiveAccessRole={effectiveAccessRole}
-                  isMoreTabActive={isMoreTabActive}
-                  onOpenMoreMenu={() => setIsMobileMenuOpen(true)}
+                  lastOrderNav={mobileOrderNav}
+                  onOrderNavChange={setMobileOrderNav}
                   onTabChange={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
                   getDashboardTabTitle={getDashboardTabTitle}
                 />

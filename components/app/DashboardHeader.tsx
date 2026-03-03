@@ -82,18 +82,6 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       />
 
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-        {showMobileDashboardNav && (
-          <button
-            type="button"
-            onClick={onOpenMobileMenu}
-            className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 active:scale-[0.98] transition-all"
-            aria-label="메뉴 열기"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
-        )}
         <span className="hidden lg:inline text-xs text-slate-400 font-medium">{dateLabel}</span>
         <div className="hidden lg:block h-4 w-px bg-slate-200" />
         <h1 className="text-xs sm:text-sm font-bold text-slate-700 truncate whitespace-nowrap leading-tight max-w-[42vw] sm:max-w-none">

@@ -58,13 +58,14 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   const order = read('components/OrderManager.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
 
-  assert.ok(
-    /<DashboardOperationalTabs[\s\S]*onAddFailOrder=\{handleAddOrder\}/s.test(app)
-      || /<DashboardOperationalTabs[\s\S]*onAddFailOrder=\{onAddOrder\}/s.test(workspace),
-    'DashboardOperationalTabs should stay wired to fail/order handlers in App or DashboardWorkspaceSection',
-  );
+  assert.match(app, /onAddOrder:\s*handleAddOrder,/);
+  assert.match(app, /onDeleteOrder:\s*handleDeleteOrder,/);
+  assert.match(app, /onCreateReturn:\s*handleCreateReturn,/);
+  assert.match(workspace, /onQuickOrder=\{\(item\) => onAddOrder\(buildQuickOrder\(item\)\)\}/);
+  assert.match(workspace, /onDeleteOrder=\{onDeleteOrder\}/);
+  assert.match(workspace, /onCreateReturn=\{onCreateReturn\}/);
   assert.match(tabs, /dashboardTab === 'inventory_audit'[\s\S]*<InventoryAudit/s);
-  assert.match(tabs, /dashboardTab === 'fail_management'[\s\S]*<FailManager[\s\S]*onAddFailOrder=\{onAddFailOrder\}/s);
+  assert.match(tabs, /dashboardTab === 'fail_management'[\s\S]*<FailManager[\s\S]*onCreateReturn=\{onCreateReturn\}[\s\S]*onDeleteOrder=\{onDeleteOrder\}/s);
   assert.match(
     tabs,
     /dashboardTab === 'order_management'[\s\S]*<OrderManager[\s\S]*onUpdateOrderStatus=\{onUpdateOrderStatus\}[\s\S]*onDeleteOrder=\{onDeleteOrder\}/s,
@@ -81,8 +82,12 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   assert.match(mobileNav, /className=\{`min-h-11 rounded-xl/);
   assert.match(mobileNav, /aria-label=\{getDashboardTabTitle\(tab\)\}/);
 
-  // 아이콘 전용 삭제 버튼 접근성 라벨 유지
-  assert.match(order, /title="주문 삭제"\s+aria-label="주문 삭제"/);
+  // 삭제 액션은 아이콘 라벨 또는 텍스트 버튼 중 하나로 접근 가능해야 함
+  assert.ok(
+    /title="주문 삭제"\s+aria-label="주문 삭제"/.test(order)
+      || />\s*삭제\s*<\/button>/.test(order),
+    'OrderManager should keep an accessible delete action (icon label or visible text)',
+  );
 });
 
 test('analyze page shows upload requirement checklist and disabled reasons', () => {

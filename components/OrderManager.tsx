@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams } from '../types';
+import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_STATUS_LABELS, RETURN_REASON_LABELS } from '../types';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
@@ -9,7 +9,7 @@ import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationMo
 import OptimizeModal from './inventory/OptimizeModal';
 import { isExchangePrefix } from '../services/appUtils';
 import { OrderHistoryPanel } from './order/OrderHistoryPanel';
-import ReturnManager from './ReturnManager';
+import ReturnRequestModal from './order/ReturnRequestModal';
 
 interface OrderManagerProps {
   orders: Order[];
@@ -29,6 +29,7 @@ interface OrderManagerProps {
   returnRequests: ReturnRequest[];
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   isReadOnly?: boolean;
+  historyOnly?: boolean;
 }
 
 type LowStockEntry = {
@@ -51,6 +52,8 @@ export interface GroupedOrder {
   overallStatus: OrderStatus | 'mixed';
 }
 
+type UnifiedRow = { kind: 'order'; data: GroupedOrder } | { kind: 'return'; data: ReturnRequest };
+
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
   inventory,
@@ -69,6 +72,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   returnRequests,
   showAlertToast,
   isReadOnly,
+  historyOnly,
 }) => {
   const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
@@ -94,10 +98,13 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   // ── 주문 히스토리 패널 state ──
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
+  // ── 반품 신청 모달 state ──
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [isCreatingReturn, setIsCreatingReturn] = useState(false);
+  const [returnActionLoadingId, setReturnActionLoadingId] = useState<string | null>(null);
+
   // ── 발주 권장 품목 UI state ──
   const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
-  const [lowStockSearch, setLowStockSearch] = useState('');
-  const [lowStockMfrFilter, setLowStockMfrFilter] = useState<string | 'all'>('all');
 
   // ── 반품 권장 모달 state ──
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
@@ -107,6 +114,51 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   // ── 교환 권장 품목 반품 처리 모달 state ──
   const [exchangeReturnTarget, setExchangeReturnTarget] = useState<{ manufacturer: string; count: number } | null>(null);
   const [isExchangeReturnSubmitting, setIsExchangeReturnSubmitting] = useState(false);
+
+  // ── 반품 신청 액션 핸들러 ──
+  const handleReturnCreate = async (params: CreateReturnParams) => {
+    setIsCreatingReturn(true);
+    try {
+      await onCreateReturn(params);
+      setShowReturnModal(false);
+      showAlertToast('반품 신청이 등록되었습니다.', 'success');
+    } catch {
+      showAlertToast('반품 신청에 실패했습니다.', 'error');
+    } finally {
+      setIsCreatingReturn(false);
+    }
+  };
+
+  const handleReturnUpdateStatus = async (returnId: string, newStatus: ReturnStatus, currentStatus: ReturnStatus) => {
+    setReturnActionLoadingId(returnId);
+    try {
+      if (newStatus === 'completed') {
+        const result = await onCompleteReturn(returnId);
+        if (result.ok) showAlertToast('반품 완료 처리되었습니다.', 'success');
+        else showAlertToast(result.reason === 'conflict' ? '상태가 변경되어 반영할 수 없습니다.' : '처리 중 오류가 발생했습니다.', 'error');
+      } else {
+        const result = await onUpdateReturnStatus(returnId, newStatus, currentStatus);
+        if (result.ok) showAlertToast(`상태가 "${RETURN_STATUS_LABELS[newStatus]}"(으)로 변경되었습니다.`, 'success');
+        else showAlertToast(result.reason === 'conflict' ? '상태가 변경되어 반영할 수 없습니다.' : '처리 중 오류가 발생했습니다.', 'error');
+      }
+    } finally {
+      setReturnActionLoadingId(null);
+    }
+  };
+
+  const handleReturnDelete = async (returnId: string) => {
+    if (!confirm('반품 신청을 삭제하시겠습니까?')) return;
+    setReturnActionLoadingId(returnId);
+    try {
+      await onDeleteReturn(returnId);
+      showAlertToast('반품 신청이 삭제되었습니다.', 'success');
+    } catch {
+      showAlertToast('삭제에 실패했습니다.', 'error');
+    } finally {
+      setReturnActionLoadingId(null);
+    }
+  };
+
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   const displayMfr = (name: string) => isIbsImplantManufacturer(name) ? 'IBS Implant' : name;
   const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
@@ -166,6 +218,18 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       return { ...g, overallStatus };
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [filteredOrders]);
+
+  const unifiedRows = useMemo<UnifiedRow[]>(() => {
+    const rows: UnifiedRow[] = [
+      ...groupedOrders.map(g => ({ kind: 'order' as const, data: g })),
+      ...returnRequests.map(r => ({ kind: 'return' as const, data: r })),
+    ];
+    return rows.sort((a, b) => {
+      const da = a.kind === 'order' ? a.data.date : a.data.requestedDate;
+      const db = b.kind === 'order' ? b.data.date : b.data.requestedDate;
+      return db.localeCompare(da);
+    });
+  }, [groupedOrders, returnRequests]);
 
   const pendingQtyByItemKey = useMemo(() => {
     const qtyMap = new Map<string, number>();
@@ -351,7 +415,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       .map(([month, data]) => ({ month, ...data }));
   }, [orders]);
 
-  const orderSparkline = useMemo(() => monthlyOrderData.map(d => d.total), [monthlyOrderData]);
 
   // ── 제조사별 주문 분포 (도넛) ──
   const manufacturerDonut = useMemo(() => {
@@ -403,27 +466,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     return Object.entries(groups).sort(([, a], [, b]) => b.length - a.length);
   }, [lowStockItems]);
 
-  // ── 필터링 + 브랜드별 그룹핑 ──
-  const filteredGroupedLowStock = useMemo(() => {
-    const searchLower = lowStockSearch.trim().toLowerCase();
-    return groupedLowStock
-      .filter(([mfr]) => lowStockMfrFilter === 'all' || mfr === lowStockMfrFilter)
-      .map(([mfr, entries]) => {
-        const filtered = searchLower
-          ? entries.filter(e => e.item.brand.toLowerCase().includes(searchLower) || e.item.size.toLowerCase().includes(searchLower))
-          : entries;
-        // brand sub-grouping
-        const brandGroups: Record<string, LowStockEntry[]> = {};
-        filtered.forEach(e => {
-          const b = e.item.brand;
-          if (!brandGroups[b]) brandGroups[b] = [];
-          brandGroups[b].push(e);
-        });
-        const brandEntries = Object.entries(brandGroups).sort(([, a], [, b]) => b.length - a.length);
-        return { mfr, entries: filtered, brandEntries };
-      })
-      .filter(g => g.entries.length > 0);
-  }, [groupedLowStock, lowStockSearch, lowStockMfrFilter]);
 
   // Auto-expand first manufacturer on initial load
   React.useEffect(() => {
@@ -502,7 +544,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   }, [orders, lowStockItems]);
 
   const animPendingRep = useCountUp(kpiData.pendingRepCount);
-  const animReceived = useCountUp(kpiData.receivedCount);
   const animExcRet = useCountUp(kpiData.pendingExcRetCount);
   const animLowStock = useCountUp(kpiData.lowStockCount);
   const animTotal = useCountUp(stats.totalCount);
@@ -533,6 +574,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-500" style={{ animationDuration: '0s' }}>
       <div className="space-y-6">
+        {!historyOnly && (<>
         {/* ═══════════════════════════════════════ */}
         {/* Mobile KPI Overview (non-sticky)        */}
         {/* ═══════════════════════════════════════ */}
@@ -1323,6 +1365,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             </div>
           </>
         )}
+        </>)}
 
         {/* ═══════════════════════════════════════ */}
         {/* 주문 히스토리 패널                        */}
@@ -1356,6 +1399,15 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </h3>
             </div>
             <div className="flex items-center gap-2">
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowReturnModal(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+                  반품 신청
+                </button>
+              )}
               <button
                 onClick={() => setShowHistoryPanel(v => !v)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all border ${showHistoryPanel
@@ -1368,11 +1420,62 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </svg>
                 히스토리
               </button>
-              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{groupedOrders.length + returnRequests.length}건</span>
+              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{unifiedRows.length}건</span>
             </div>
           </div>
           <div className="md:hidden px-3 pt-3 pb-3 space-y-2.5 relative z-10">
-            {groupedOrders.length > 0 ? groupedOrders.map((group) => {
+            {unifiedRows.length > 0 ? unifiedRows.map((row) => {
+              if (row.kind === 'return') {
+                const r = row.data;
+                const isActing = returnActionLoadingId === r.id;
+                const totalQty = r.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
+                const first = r.items[0];
+                const statusBadgeClass =
+                  r.status === 'requested' ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' :
+                  r.status === 'picked_up' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
+                  r.status === 'completed' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+                  'bg-slate-100 border border-slate-200 text-slate-500';
+                return (
+                  <article key={`mobile-return-${r.id}`} className="rounded-2xl border border-teal-200 bg-teal-50/40 px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-500">{r.requestedDate}</p>
+                        <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(r.manufacturer)}</p>
+                      </div>
+                      <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
+                    </div>
+                    <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-500">{r.items.length}개 품목</span>
+                        <span className="text-sm font-black text-slate-900 tabular-nums">총 {totalQty}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
+                      </div>
+                      {first && (
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
+                            <span className="text-[11px] text-slate-400">×{first.quantity}</span>
+                            {r.items.length > 1 && <span className="text-[10px] text-slate-400 font-medium">외 {r.items.length - 1}종</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{RETURN_STATUS_LABELS[r.status]}</span>
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-1.5">
+                          {r.status === 'requested' && <>
+                            <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'picked_up', 'requested')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
+                            <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'rejected', 'requested')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
+                          </>}
+                          {r.status === 'picked_up' && <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'completed', 'picked_up')} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>}
+                          {(r.status === 'completed' || r.status === 'rejected') && <button disabled={isActing} onClick={() => handleReturnDelete(r.id)} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              }
+              const group = row.data;
               const typeBadgeClass = group.type === 'replenishment'
                 ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
                 : group.type === 'return'
@@ -1381,7 +1484,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               return (
                 <article
                   key={`mobile-group-${group.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
+                  className={`rounded-2xl border px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] ${
+                    group.type === 'replenishment' ? 'border-indigo-100 bg-indigo-50/30' :
+                    group.type === 'return' ? 'border-amber-100 bg-amber-50/30' :
+                    'border-rose-100 bg-rose-50/30'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -1398,7 +1505,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <span className="text-[11px] font-bold text-slate-500">{group.totalItems}개 품목</span>
                       <span className="text-sm font-black text-slate-900 tabular-nums">총 {group.totalQuantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                     </div>
-                    {/* 품목 미리보기 */}
                     {(() => {
                       const allItems = group.orders.flatMap(o => o.items);
                       const first = allItems[0];
@@ -1425,8 +1531,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           <span className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">취소됨</span>
                           {!isReadOnly && (
                             <button
-                              title="주문 삭제"
-                              aria-label="주문 삭제"
                               onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
                               className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all active:scale-95"
                             >
@@ -1464,7 +1568,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               );
             }) : (
               <div className="px-4 py-10 text-center">
-                <p className="text-sm font-semibold text-slate-500">표시할 주문 내역이 없습니다.</p>
+                <p className="text-sm font-semibold text-slate-500">표시할 내역이 없습니다.</p>
               </div>
             )}
           </div>
@@ -1493,11 +1597,62 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {groupedOrders.length > 0 ? groupedOrders.map((group, idx) => {
-                  const accentHoverClass = group.type === 'replenishment' ? 'hover:border-l-indigo-500' : group.type === 'return' ? 'hover:border-l-amber-500' : 'hover:border-l-rose-500';
-                  const isEven = idx % 2 === 1;
+                {unifiedRows.length > 0 ? unifiedRows.map((row) => {
+                  if (row.kind === 'return') {
+                    const r = row.data;
+                    const isActing = returnActionLoadingId === r.id;
+                    const totalQty = r.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
+                    const first = r.items[0];
+                    const statusBadgeClass =
+                      r.status === 'requested' ? 'bg-yellow-50 border border-yellow-100 text-yellow-700' :
+                      r.status === 'picked_up' ? 'bg-blue-50 border border-blue-100 text-blue-700' :
+                      r.status === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
+                      'bg-slate-100 text-slate-400';
+                    return (
+                      <tr key={`return-${r.id}`} className="group transition-all duration-300 border-l-[3px] border-l-teal-400 bg-teal-50/25 hover:bg-teal-50/50">
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{r.requestedDate}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
+                        </td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(r.manufacturer)}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5">
+                          {first && (
+                            <div className="flex items-center gap-1 text-[11px] min-w-0">
+                              <span className="font-bold text-slate-700 truncate">{first.brand}</span>
+                              <span className="text-slate-500 shrink-0">{first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
+                              <span className="text-slate-400 shrink-0">×{first.quantity}</span>
+                              {r.items.length > 1 && <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-0.5">외 {r.items.length - 1}종</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{totalQty}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{r.manager}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{RETURN_STATUS_LABELS[r.status]}</span>
+                        </td>
+                        <td className="px-2 lg:px-4 py-2.5 text-right whitespace-nowrap">
+                          {!isReadOnly && (
+                            <div className="flex items-center justify-end gap-1">
+                              {r.status === 'requested' && <>
+                                <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'picked_up', 'requested')} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
+                                <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'rejected', 'requested')} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
+                              </>}
+                              {r.status === 'picked_up' && <button disabled={isActing} onClick={() => handleReturnUpdateStatus(r.id, 'completed', 'picked_up')} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>}
+                              {(r.status === 'completed' || r.status === 'rejected') && <button disabled={isActing} onClick={() => handleReturnDelete(r.id)} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const group = row.data;
+                  const rowBgClass = group.type === 'replenishment'
+                    ? 'border-l-indigo-300 bg-indigo-50/15 hover:bg-indigo-50/40'
+                    : group.type === 'return'
+                      ? 'border-l-amber-300 bg-amber-50/20 hover:bg-amber-50/40'
+                      : 'border-l-rose-300 bg-rose-50/20 hover:bg-rose-50/40';
                   return (
-                    <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] border-l-transparent ${accentHoverClass} hover:bg-slate-50/80 hover:shadow-[inset_0_0_12px_rgba(99,102,241,0.08)] ${isEven ? 'bg-slate-50/30' : ''}`}>
+                    <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] ${rowBgClass}`}>
                       <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{group.date}</span></td>
                       <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
                         <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[44px] ${group.type === 'replenishment' ? 'bg-indigo-50 border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-amber-50 border border-amber-100 text-amber-700' : 'bg-rose-50 border border-rose-100 text-rose-700'}`}>
@@ -1550,8 +1705,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           )}
                           {group.overallStatus === 'cancelled' && !isReadOnly && (
                             <button
-                              title="주문 삭제"
-                              aria-label="주문 삭제"
                               onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
                               className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95"
                             >
@@ -1586,24 +1739,18 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </tbody>
             </table>
           </div>
-
-          {/* ── 반품 신청 섹션 (주문/반품 내역 통합) ── */}
-          <div className="border-t border-slate-100 px-4 sm:px-7 py-5">
-            <ReturnManager
-              embedded
-              returnRequests={returnRequests}
-              inventory={inventory}
-              hospitalId={hospitalId}
-              currentUserName={currentUserName}
-              isReadOnly={isReadOnly ?? false}
-              onCreateReturn={onCreateReturn}
-              onUpdateReturnStatus={onUpdateReturnStatus}
-              onCompleteReturn={onCompleteReturn}
-              onDeleteReturn={onDeleteReturn}
-              showAlertToast={showAlertToast}
-            />
-          </div>
         </div>
+
+        {/* 반품 신청 모달 */}
+        {showReturnModal && (
+          <ReturnRequestModal
+            inventory={inventory}
+            currentUserName={currentUserName}
+            isLoading={isCreatingReturn}
+            onClose={() => setShowReturnModal(false)}
+            onConfirm={handleReturnCreate}
+          />
+        )}
 
         {/* 취소 모달 */}
         {cancelModalOrder && (

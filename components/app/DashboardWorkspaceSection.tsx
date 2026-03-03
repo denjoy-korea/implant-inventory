@@ -108,6 +108,7 @@ export interface DashboardWorkspaceSectionProps {
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
+  orderHistoryOnly?: boolean;
 }
 
 const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
@@ -148,6 +149,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onFailAuditDone,
   onboardingStep,
   onResumeOnboarding,
+  orderHistoryOnly,
 }) => {
   const buildQuickOrder = (item: InventoryItem): Order => ({
     id: `order_${Date.now()}`,
@@ -338,6 +340,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         initialShowFailBulkModal={initialShowFailBulkModal}
         onFailBulkModalOpened={onFailBulkModalOpened}
         onFailAuditDone={onFailAuditDone}
+        orderHistoryOnly={orderHistoryOnly}
       />
     </div>
   );

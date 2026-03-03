@@ -314,6 +314,20 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     <>
       <div className="space-y-5 animate-in fade-in duration-500 pb-20">
 
+        {/* 모바일 진행률 - 최상단 고정 */}
+        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-3 shadow-sm sticky top-0 z-10">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+            <span>실사 진행률</span>
+            <span className="tabular-nums text-slate-700">{totalAudited}/{totalItems} ({progressPct}%)</span>
+          </div>
+          <div className="mt-2 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${totalMismatched > 0 ? 'bg-rose-500' : 'bg-indigo-500'}`}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+
         {/* KPI 카드 */}
         <div className="hidden md:block bg-white/90 backdrop-blur-md border border-white/60 rounded-[28px] overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
           {/* 장식용 백그라운드 효과 */}
@@ -389,26 +403,6 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           </div>
         </div>
 
-        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-slate-400">대상 품목</p>
-              <p className="text-lg font-black text-slate-800 tabular-nums">{totalItems}</p>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-emerald-50/70 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-emerald-500">완료</p>
-              <p className="text-lg font-black text-emerald-600 tabular-nums">{totalAudited}</p>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-rose-50/70 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-rose-500">불일치</p>
-              <p className="text-lg font-black text-rose-600 tabular-nums">{totalMismatched}</p>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-orange-50/70 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-orange-500">오차 수량</p>
-              <p className="text-lg font-black text-orange-600 tabular-nums">{totalMismatchedQty}</p>
-            </div>
-          </div>
-        </div>
 
         {/* 진행률 프로그레스 바 */}
         <div className="hidden md:flex bg-white/80 backdrop-blur-sm border border-white/60 rounded-[20px] px-6 py-4 items-center gap-5 shadow-sm">
@@ -423,18 +417,6 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           <span className={`text-[13px] font-black tabular-nums whitespace-nowrap tracking-tight drop-shadow-sm ${progressPct === 100 ? 'text-emerald-500' : 'text-indigo-500'}`}>{progressPct}%</span>
         </div>
 
-        <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-3 shadow-sm">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-            <span>실사 진행률</span>
-            <span className="tabular-nums text-slate-700">{totalAudited}/{totalItems} ({progressPct}%)</span>
-          </div>
-          <div className="mt-2 h-2.5 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${totalMismatched > 0 ? 'bg-rose-500' : 'bg-indigo-500'}`}
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
 
         {/* 불일치 Alert 배너 */}
         {totalMismatched > 0 && (
@@ -462,8 +444,8 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           </div>
         )}
 
-        {/* 검색 + 제조사 필터 */}
-        <div className="flex flex-col sm:flex-row gap-2">
+        {/* 검색 + 제조사 필터 (모바일 숨김) */}
+        <div className="hidden md:flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
@@ -491,10 +473,46 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           )}
         </div>
 
-        {/* 브랜드 탭 + 버튼 */}
+        {/* 모바일 전용 실사 버튼 */}
+        <div className="md:hidden">
+          {!isAuditActive ? (
+            <button
+              onClick={() => setIsAuditActive(true)}
+              className="w-full py-3.5 text-[14px] font-black bg-indigo-600 text-white rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:bg-indigo-700"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              재고실사진행
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              {confirmedItems.length > 0 && (
+                <button
+                  onClick={() => {
+                    const lastId = confirmedItems[confirmedItems.length - 1];
+                    setConfirmedItems(prev => prev.slice(0, -1));
+                    setAuditResults(prev => { const { [lastId]: _, ...rest } = prev; return rest; });
+                    setCustomReasonMode(prev => { const { [lastId]: _, ...rest } = prev; return rest; });
+                  }}
+                  className="flex-1 py-3 text-sm font-bold text-indigo-500 bg-white border border-indigo-200 rounded-xl active:bg-indigo-50 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                  되돌리기
+                </button>
+              )}
+              <button
+                onClick={handleAuditClose}
+                className="flex-1 py-3 text-sm font-bold text-slate-500 bg-white border border-slate-200 rounded-xl active:bg-slate-50 transition-all"
+              >
+                초기화
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 브랜드 탭 + 버튼 (데스크톱) */}
         {brandsList.length > 0 && (
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex gap-1.5 overflow-x-auto pb-1 md:flex-wrap">
+            <div className="hidden md:flex gap-1.5 overflow-x-auto pb-1 md:flex-wrap">
               <button
                 onClick={() => setActiveBrand(null)}
                 className={`px-3.5 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${activeBrand === null ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
@@ -520,22 +538,16 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                 );
               })}
             </div>
-            {/* 실사 버튼 */}
-            <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+            {/* 실사 버튼 (데스크톱) */}
+            <div className="hidden md:flex items-center gap-2 flex-nowrap">
               {!isAuditActive ? (
-                <div className="relative group">
-                  {/* 럭셔리 글로우 백그라운드 */}
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-xl blur opacity-50 group-hover:opacity-80 transition duration-1000 animate-pulse-glow"></div>
-                  <button
-                    onClick={() => setIsAuditActive(true)}
-                    className="relative px-6 py-2.5 text-[13px] font-black bg-slate-900 text-white rounded-xl shadow-2xl hover:bg-slate-800 active:scale-95 transition-all flex items-center gap-2 min-h-11 border border-slate-700/50 overflow-hidden"
-                  >
-                    {/* 은은한 광택(Shine) 오버레이 */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none"></div>
-                    <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                    <span className="tracking-wide">재고실사진행</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => setIsAuditActive(true)}
+                  className="px-5 py-2.5 text-[13px] font-black bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2 min-h-11"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                  <span>재고실사진행</span>
+                </button>
               ) : (
                 <>
                   {confirmedItems.length > 0 && (
@@ -774,12 +786,33 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         </div>
 
         <div className="md:hidden space-y-3">
-          {pendingAuditItems.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
-              <p className="text-sm font-semibold text-slate-500">현재 브랜드 실사 항목이 없습니다.</p>
+          {/* 실사 진행 중 + 전 품목 완료 */}
+          {isAuditActive && pendingAuditItems.length === 0 && (
+            <div className="bg-white rounded-2xl border border-emerald-100 p-8 text-center shadow-sm space-y-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto">
+                <svg className="w-7 h-7 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="text-sm font-bold text-slate-700">전 품목 실사 완료!</p>
+              <button
+                onClick={handleAuditComplete}
+                className="w-full min-h-12 rounded-xl bg-slate-800 text-white text-sm font-black active:scale-[0.98] transition-all"
+              >
+                실사 완료 · 재고 반영
+              </button>
             </div>
-          ) : (
-            pendingAuditItems.map((item) => {
+          )}
+          {/* 진행 중 위치 표시 */}
+          {isAuditActive && pendingAuditItems.length > 0 && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-slate-400">
+                {filteredInventory.length - pendingAuditItems.length + 1} / {filteredInventory.length}
+              </span>
+              <span className="text-[11px] font-bold text-indigo-500">{pendingAuditItems[0].manufacturer}</span>
+            </div>
+          )}
+          {isAuditActive && pendingAuditItems.slice(0, 1).map((item) => {
               const result = auditResults[item.id];
               const isCustom = customReasonMode[item.id];
               const confirmItem = (id: string) => setConfirmedItems(prev => (prev.includes(id) ? prev : [...prev, id]));
@@ -955,8 +988,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
                   )}
                 </article>
               );
-            })
-          )}
+          })}
         </div>
 
         {/* 실사 이력 모달 */}

@@ -6,9 +6,9 @@ interface MobileDashboardNavProps {
   dashboardTab: DashboardTab;
   userPermissions?: MemberPermissions | null;
   effectiveAccessRole: UserRole;
-  isMoreTabActive: boolean;
-  onOpenMoreMenu: () => void;
+  lastOrderNav: 'order' | 'receipt';
   onTabChange: (tab: DashboardTab) => void;
+  onOrderNavChange: (nav: 'order' | 'receipt') => void;
   getDashboardTabTitle: (tab: DashboardTab) => string;
 }
 
@@ -17,9 +17,9 @@ const MobileDashboardNav: React.FC<MobileDashboardNavProps> = ({
   dashboardTab,
   userPermissions,
   effectiveAccessRole,
-  isMoreTabActive,
-  onOpenMoreMenu,
+  lastOrderNav,
   onTabChange,
+  onOrderNavChange,
   getDashboardTabTitle,
 }) => {
   return (
@@ -27,13 +27,16 @@ const MobileDashboardNav: React.FC<MobileDashboardNavProps> = ({
       <div className="grid grid-cols-5 gap-1 px-2 py-1.5">
         {mobilePrimaryTabs.map((tab) => {
           const isBlocked = !canAccessTab(tab, userPermissions, effectiveAccessRole);
-          const isActive = dashboardTab === tab;
+          const isActive = tab === 'order_management'
+            ? dashboardTab === 'order_management' && lastOrderNav === 'order'
+            : dashboardTab === tab;
           return (
             <button
               key={`mobile-tab-${tab}`}
               type="button"
               onClick={() => {
                 if (isBlocked) return;
+                if (tab === 'order_management') onOrderNavChange('order');
                 onTabChange(tab);
               }}
               className={`min-h-11 rounded-xl px-2 py-1.5 text-[10px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
@@ -61,27 +64,48 @@ const MobileDashboardNav: React.FC<MobileDashboardNavProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
               )}
-              {tab === 'fail_management' && (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              )}
-              <span className="truncate">{tab === 'inventory_master' ? '재고' : tab === 'order_management' ? '주문' : tab === 'fail_management' ? '교환' : '홈'}</span>
+              <span className="truncate">
+                {tab === 'inventory_master' ? '재고' : tab === 'order_management' ? '주문' : '홈'}
+              </span>
             </button>
           );
         })}
+
+        {/* 수령 - 주문/반품내역 (order_management) */}
         <button
           type="button"
-          onClick={onOpenMoreMenu}
+          onClick={() => {
+            onOrderNavChange('receipt');
+            onTabChange('order_management');
+          }}
           className={`min-h-11 rounded-xl px-2 py-1.5 text-[10px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
-            isMoreTabActive ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:bg-slate-100'
+            dashboardTab === 'order_management' && lastOrderNav === 'receipt'
+              ? 'text-indigo-600 bg-indigo-50'
+              : 'text-slate-500 hover:bg-slate-100'
           }`}
-          aria-label="더보기 메뉴"
+          aria-label="수령"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
-          <span>더보기</span>
+          <span>수령</span>
+        </button>
+
+        {/* 실사 */}
+        <button
+          type="button"
+          onClick={() => onTabChange('inventory_audit')}
+          className={`min-h-11 rounded-xl px-2 py-1.5 text-[10px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+            dashboardTab === 'inventory_audit'
+              ? 'text-indigo-600 bg-indigo-50'
+              : 'text-slate-500 hover:bg-slate-100'
+          }`}
+          aria-label="실사"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          <span>실사</span>
         </button>
       </div>
     </nav>
