@@ -305,7 +305,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                                 <span className="text-xs font-bold text-indigo-600 tabular-nums">+{excess}개</span>
                                             </td>
                                             <td className="pl-3 pr-6 py-3.5">
-                                                <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center justify-end gap-1.5">
                                                     <button
                                                         onClick={() => setReturningItem({ item, qty: String(excess) })}
                                                         className="px-2.5 py-1 text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
