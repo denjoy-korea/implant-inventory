@@ -454,8 +454,8 @@ export const PLAN_ORDER: Record<PlanType, number> = {
   ultimate: 4,
 };
 
-/** 체험 기간 (일) — 베타 4주 */
-export const TRIAL_DAYS = 28;
+/** 체험 기본 기간 (일) — 베타 신청분 28일은 utils/trialPolicy.ts에서 계산 */
+export const TRIAL_DAYS = 14;
 
 // ============================================
 // Supabase Database Types

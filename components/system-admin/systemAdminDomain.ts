@@ -1,3 +1,5 @@
+import { getTrialDurationDays } from '../../utils/trialPolicy';
+
 export interface DbHospitalRow {
   id: string;
   name: string;
@@ -14,13 +16,12 @@ export interface DbHospitalRow {
   trial_used: boolean;
 }
 
-const TRIAL_DAYS = 14;
-
 export function getTrialInfo(h: DbHospitalRow): { status: 'unused' | 'active' | 'expired'; daysLeft?: number } {
   if (!h.trial_started_at && !h.trial_used) return { status: 'unused' };
   if (h.trial_used) return { status: 'expired' };
   if (h.trial_started_at) {
-    const trialEnd = new Date(new Date(h.trial_started_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const trialDays = getTrialDurationDays(h.trial_started_at);
+    const trialEnd = new Date(new Date(h.trial_started_at).getTime() + trialDays * 24 * 60 * 60 * 1000);
     if (new Date() < trialEnd) {
       const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
       return { status: 'active', daysLeft };

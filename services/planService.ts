@@ -8,9 +8,9 @@ import {
   PLAN_LIMITS,
   PLAN_ORDER,
   PLAN_PRICING,
-  TRIAL_DAYS,
 } from '../types';
 import { UNLIMITED_DAYS } from '../constants';
+import { getTrialDurationDays } from '../utils/trialPolicy';
 
 export const planService = {
   /** 병원의 플랜 상태 조회 */
@@ -181,8 +181,9 @@ export const planService = {
     const planState = await this.getHospitalPlan(hospitalId);
     if (!planState.trialStartedAt || planState.trialUsed) return planState;
 
+    const trialDurationDays = getTrialDurationDays(planState.trialStartedAt);
     const trialEnd = new Date(
-      new Date(planState.trialStartedAt).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000
+      new Date(planState.trialStartedAt).getTime() + trialDurationDays * 24 * 60 * 60 * 1000
     );
     if (new Date() < trialEnd) return planState;
 
@@ -488,8 +489,9 @@ export const planService = {
   }): HospitalPlanState {
     const now = new Date();
     const trialStarted = data.trial_started_at ? new Date(data.trial_started_at) : null;
+    const trialDurationDays = getTrialDurationDays(data.trial_started_at);
     const trialEnd = trialStarted
-      ? new Date(trialStarted.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
+      ? new Date(trialStarted.getTime() + trialDurationDays * 24 * 60 * 60 * 1000)
       : null;
     const isTrialActive = trialStarted !== null
       && !data.trial_used

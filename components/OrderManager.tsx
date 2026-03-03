@@ -624,7 +624,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* Mobile: 발주 필요 목록 (인라인 체크박스 섹션)   */}
         {/* ═══════════════════════════════════════════════ */}
         {lowStockItems.length > 0 && (
-          <div className="md:hidden bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
+          <div className="hidden bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden">
             {/* 헤더 */}
             <div className="px-4 py-3 bg-rose-50/60 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1010,7 +1010,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* ═══════════════════════════════════════ */}
         {/* 발주 권장 품목 (제조사별 카드) */}
         {groupedLowStock.length > 0 && (
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="hidden md:block bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
@@ -1064,7 +1064,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* 교환 권장 품목 (제조사별)                    */}
         {/* ═══════════════════════════════════════ */}
         {exchangeCandidates.total > 0 && (
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="hidden md:block bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
@@ -1130,7 +1130,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* 반품 권장 품목                              */}
         {/* ═══════════════════════════════════════ */}
         {returnCandidates.total > 0 && (
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="hidden md:block bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />

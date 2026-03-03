@@ -1,6 +1,9 @@
-const BETA_TRIAL_DEADLINE_KST = new Date('2026-03-31T23:59:59+09:00');
+export const BETA_TRIAL_CUTOFF_KST_ISO = '2026-04-01T00:00:00+09:00';
+const BETA_TRIAL_CUTOFF_KST = new Date(BETA_TRIAL_CUTOFF_KST_ISO);
+const BETA_TRIAL_DEADLINE_KST = new Date(BETA_TRIAL_CUTOFF_KST.getTime() - 1000);
 
 export const DEFAULT_TRIAL_DAYS = 14;
+export const BETA_TRIAL_DAYS = 28;
 export const TRIAL_DATA_RETENTION_GRACE_DAYS = 15;
 
 export const TRIAL_OFFER_LABEL = `${DEFAULT_TRIAL_DAYS}일 무료 체험`;
@@ -20,6 +23,28 @@ export const SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT = '구독 중이거나 유�
 
 export function isBetaTrialApplicationOpen(now: Date = new Date()): boolean {
   return now.getTime() <= BETA_TRIAL_DEADLINE_KST.getTime();
+}
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function isBetaTrialEligibleByStart(trialStartedAt: Date | string | null | undefined): boolean {
+  const trialStart = toDate(trialStartedAt);
+  if (!trialStart) return false;
+  return trialStart.getTime() < BETA_TRIAL_CUTOFF_KST.getTime();
+}
+
+export function getTrialDurationDays(trialStartedAt: Date | string | null | undefined): number {
+  return isBetaTrialEligibleByStart(trialStartedAt) ? BETA_TRIAL_DAYS : DEFAULT_TRIAL_DAYS;
+}
+
+export function getTrialEndAt(trialStartedAt: Date | string | null | undefined): Date | null {
+  const trialStart = toDate(trialStartedAt);
+  if (!trialStart) return null;
+  return new Date(trialStart.getTime() + getTrialDurationDays(trialStart) * 24 * 60 * 60 * 1000);
 }
 
 export function getBetaTrialOfferText(now: Date = new Date()): string | null {

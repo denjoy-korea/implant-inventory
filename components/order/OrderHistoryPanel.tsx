@@ -75,34 +75,30 @@ export function OrderHistoryPanel({ orders, onClose, onReceiptConfirm, isReadOnl
             <div className="bg-white rounded-[28px] border border-slate-200 shadow-md ring-1 ring-slate-100/50 overflow-hidden">
 
                 {/* Header */}
-                <div className="px-5 sm:px-7 py-4 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <div>
-                            <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                                주문 히스토리
-                            </h3>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                <div className="px-5 sm:px-7 py-4 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2 whitespace-nowrap shrink-0">
+                            <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            주문 히스토리
+                        </h3>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold whitespace-nowrap">
                             <span className="bg-slate-100 px-2 py-0.5 rounded-lg font-black text-slate-600">{totalOrders}건</span>
                             <span className="text-slate-300">·</span>
-                            <span>{sortedDates.length}개 날짜</span>
-                            <span className="text-slate-300">·</span>
-                            <span>총 {totalItems}개</span>
+                            <span className="hidden sm:inline">총 {totalItems}개</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         <button
                             onClick={() => setExpandedDates(new Set(sortedDates))}
-                            className="text-[10px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+                            className="hidden sm:block text-[10px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
                         >
                             전체 펼치기
                         </button>
                         <button
                             onClick={() => setExpandedDates(new Set())}
-                            className="text-[10px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+                            className="hidden sm:block text-[10px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
                         >
                             전체 접기
                         </button>
