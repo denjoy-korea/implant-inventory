@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InventoryItem, CreateReturnParams } from '../../types';
+import { snoozeService } from '../../services/snoozeService';
 
 interface DeadStockItem extends InventoryItem {
   neverUsed: boolean;
@@ -24,7 +25,7 @@ const buildOptimizeMemo = (item: DeadStockItem): string => {
 };
 
 const SNOOZE_MONTHS = 1;
-const getSnoozeKey = (hospitalId?: string) => `optimize_snooze_${hospitalId || 'local'}`;
+const SNOOZE_DB_KEY = 'optimize_snooze';
 
 const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onCreateReturn, managerName, hospitalId, onClose }) => {
   const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
@@ -42,21 +43,13 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   const [returningId, setReturningId] = useState<string | null>(null);
   const [returnQtyStr, setReturnQtyStr] = useState('');
 
-  // ── 유지(스누즈) 상태: localStorage에 { [inventoryId]: ISO expiry } 저장
-  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>(() => {
-    try {
-      const raw = localStorage.getItem(getSnoozeKey(hospitalId));
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      // 만료된 항목 제거
-      const now = new Date().toISOString();
-      const cleaned: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (v > now) cleaned[k] = v;
-      }
-      return cleaned;
-    } catch { return {}; }
-  });
+  // ── 유지(스누즈) 상태: Supabase DB 기반 (기기 간 공유), localStorage fallback
+  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!hospitalId) return;
+    void snoozeService.get(hospitalId, SNOOZE_DB_KEY).then(setSnoozedMap);
+  }, [hospitalId]);
 
   const snoozeItems = (ids: string[]) => {
     const expiry = new Date();
@@ -64,7 +57,9 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
     const next = { ...snoozedMap };
     ids.forEach(id => { next[id] = expiry.toISOString(); });
     setSnoozedMap(next);
-    try { localStorage.setItem(getSnoozeKey(hospitalId), JSON.stringify(next)); } catch {}
+    if (hospitalId) {
+      void snoozeService.set(hospitalId, SNOOZE_DB_KEY, next);
+    }
     setSelectedOptimizeIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
   };
 
