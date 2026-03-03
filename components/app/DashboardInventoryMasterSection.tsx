@@ -78,6 +78,7 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
   return (
     <InventoryManager
       inventory={state.inventory}
+      orders={state.orders}
       isReadOnly={isReadOnly}
       userId={state.user?.email}
       hospitalId={state.user?.hospitalId}

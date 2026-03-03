@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { InventoryItem, ExcelData, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, CreateReturnParams } from '../types';
+import { InventoryItem, ExcelData, Order, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, CreateReturnParams } from '../types';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { useSparklineSeries } from '../hooks/useSparklineSeries';
 import { isExchangePrefix, stripExchangePrefix } from '../services/appUtils';
@@ -21,6 +21,7 @@ interface InventoryManagerProps {
   onAddInventoryItem: (newItem: InventoryItem) => boolean | void | Promise<boolean | void>;
   onUpdateInventoryItem: (updatedItem: InventoryItem) => void;
   surgeryData?: ExcelData | null;
+  orders?: Order[];
   onQuickOrder?: (item: InventoryItem) => void;
   onCreateReturn?: (params: CreateReturnParams) => Promise<void>;
   managerName?: string;
@@ -60,6 +61,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   onAddInventoryItem,
   onUpdateInventoryItem,
   surgeryData,
+  orders = [],
   onQuickOrder,
   onCreateReturn,
   managerName,
@@ -164,19 +166,31 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     inventoryDetailRows.reduce((sum, item) => sum + item.currentStock, 0)
   ), [inventoryDetailRows]);
 
+  /** 발주 대기 중(ordered)인 품목 키 집합: "제조사|브랜드|사이즈" */
+  const pendingOrderKeys = useMemo(() => {
+    const keys = new Set<string>();
+    orders
+      .filter(o => o.status === 'ordered' && o.type === 'replenishment')
+      .forEach(o => o.items.forEach(i => keys.add(`${o.manufacturer}|${i.brand}|${i.size}`)));
+    return keys;
+  }, [orders]);
+
   const mobileOrderNeededItems = useMemo(() => (
     filteredInventory
       .map((item) => {
         const recommended = Math.max(1, Math.ceil((item.recommendedStock ?? 0) * monthFactor));
         const deficit = Math.max(0, recommended - item.currentStock);
-        return { item, recommended, deficit };
+        const alreadyOrdered = pendingOrderKeys.has(`${item.manufacturer}|${item.brand}|${item.size}`);
+        return { item, recommended, deficit, alreadyOrdered };
       })
       .filter((row) => row.deficit > 0)
       .sort((a, b) => {
+        // 발주 완료 항목은 하단으로
+        if (a.alreadyOrdered !== b.alreadyOrdered) return a.alreadyOrdered ? 1 : -1;
         if (b.deficit !== a.deficit) return b.deficit - a.deficit;
         return b.item.usageCount - a.item.usageCount;
       })
-  ), [filteredInventory, monthFactor]);
+  ), [filteredInventory, monthFactor, pendingOrderKeys]);
 
   // 사용량 차트 데이터 (TOP 7)
   const chartData = useMemo(() => {
@@ -674,10 +688,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           <p className="mt-3 text-xs font-semibold text-slate-400">현재 부족 항목이 없습니다.</p>
         ) : (
           <div className="mt-3 space-y-2">
-            {mobileOrderNeededItems.map(({ item, recommended, deficit }) => (
+            {mobileOrderNeededItems.map(({ item, recommended, deficit, alreadyOrdered }) => (
               <article
                 key={`mobile-order-needed-${item.id}`}
-                className="rounded-xl border border-rose-100 bg-rose-50/50 px-3 py-2.5"
+                className={`rounded-xl border px-3 py-2.5 ${alreadyOrdered ? 'border-slate-100 bg-slate-50/60 opacity-70' : 'border-rose-100 bg-rose-50/50'}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -687,11 +701,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       현재 {item.currentStock} / 권장 {recommended}
                     </p>
                   </div>
-                  <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600 shrink-0">
-                    부족 {deficit}
-                  </span>
+                  {alreadyOrdered ? (
+                    <span className="inline-flex items-center rounded-lg bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 shrink-0">
+                      발주 완료
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-600 shrink-0">
+                      부족 {deficit}
+                    </span>
+                  )}
                 </div>
-                {!isReadOnly && onQuickOrder && (
+                {!isReadOnly && onQuickOrder && !alreadyOrdered && (
                   <button
                     type="button"
                     onClick={() => onQuickOrder({ ...item, recommendedStock: recommended })}
