@@ -37,6 +37,8 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     const [bulkProgress, setBulkProgress] = useState(0);
     const [bulkTotal, setBulkTotal] = useState(0);
     const [cardIndex, setCardIndex] = useState(0);
+    const [returnedByBrand, setReturnedByBrand] = useState<Record<string, number>>({});
+    const [returnedItemIds, setReturnedItemIds] = useState<Set<string>>(new Set());
 
     const now = Date.now();
     const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
@@ -56,10 +58,10 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
 
     const items = useMemo(() =>
         inventory
-            .filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id))
+            .filter(i => !isExcluded(i) && i.currentStock > 0 && !isSnoozed(i.id) && !returnedItemIds.has(i.id))
             .filter(i => i.recommendedStock > 0 && i.currentStock > i.recommendedStock)
             .sort((a, b) => (b.currentStock - b.recommendedStock) - (a.currentStock - a.recommendedStock)),
-        [inventory, isExcluded, isSnoozed],
+        [inventory, isExcluded, isSnoozed, returnedItemIds],
     );
 
     const totalExcess = useMemo(() =>
@@ -79,15 +81,24 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
             const key = i.brand;
             const prev = map.get(key) ?? { count: 0, excess: 0, returnQty: 0 };
             const itemExcess = i.currentStock - i.recommendedStock;
-            const willReturn = selectedIds.has(i.id);
+            const selectedQty = selectedIds.has(i.id) ? itemExcess : 0;
             map.set(key, {
                 count: prev.count + 1,
                 excess: prev.excess + itemExcess,
-                returnQty: prev.returnQty + (willReturn ? itemExcess : 0),
+                returnQty: prev.returnQty + selectedQty,
             });
         });
+        // 모바일 wizard 반품 수량 누적 (재고 차감 후 items에서 사라진 품목도 포함)
+        Object.entries(returnedByBrand).forEach(([brand, qty]) => {
+            const existing = map.get(brand);
+            if (existing) {
+                map.set(brand, { ...existing, returnQty: existing.returnQty + qty });
+            } else {
+                map.set(brand, { count: 0, excess: 0, returnQty: qty });
+            }
+        });
         return Array.from(map.entries()).sort((a, b) => b[1].excess - a[1].excess);
-    }, [items, selectedIds]);
+    }, [items, selectedIds, returnedByBrand]);
 
     const toggleAll = () => {
         if (allSelected) {
@@ -115,6 +126,9 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 memo: `권장량 초과 반품 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`,
                 items: [{ brand: item.brand, size: item.size, quantity: qty }],
             });
+            // 반품 완료 → 목록에서 즉시 제거 (inventory prop 업데이트 전에 중복 반품 방지)
+            setReturnedItemIds(prev => new Set(prev).add(item.id));
+            setSelectedIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
             showAlertToast(`${item.brand} ${item.size} ${qty}개 반품이 등록되었습니다.`, 'success');
         } catch {
             showAlertToast('반품 등록에 실패했습니다.', 'error');
@@ -138,6 +152,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 memo: `권장량 초과 반품 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`,
                 items: [{ brand: item.brand, size: item.size, quantity: qty }],
             });
+            setReturnedItemIds(prev => new Set(prev).add(item.id));
             setBulkProgress(prev => prev + 1);
         }
         setIsBulkReturning(false);
@@ -162,6 +177,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     // 모바일 카드 wizard: 각 액션 후 다음 카드로 이동
     const handleReturnAndAdvance = async (item: InventoryItem, qty: number) => {
         await handleReturn(item, qty);
+        setReturnedByBrand(prev => ({ ...prev, [item.brand]: (prev[item.brand] ?? 0) + qty }));
         setCardIndex(prev => prev + 1);
     };
 
@@ -240,8 +256,8 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Summary + 브랜드별 분류 (데스크톱 전용) */}
-                    <div className="hidden sm:block mt-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
+                    {/* Summary + 브랜드별 분류 */}
+                    <div className="mt-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
                         {/* 상단 요약 */}
                         <div className="flex items-center gap-3 mb-3">
                             <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
@@ -272,7 +288,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                     {/* 모바일 진행 바 */}
                     {items.length > 0 && (
                         <div className="sm:hidden mt-3">
-                            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                                 <div
                                     className="bg-indigo-400 h-full rounded-full transition-all duration-300"
                                     style={{ width: `${Math.min((cardIndex / items.length) * 100, 100)}%` }}
