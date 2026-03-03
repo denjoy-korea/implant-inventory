@@ -32,7 +32,6 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     showAlertToast,
 }) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [returningItem, setReturningItem] = useState<{ item: InventoryItem; qty: string } | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isBulkReturning, setIsBulkReturning] = useState(false);
     const [bulkProgress, setBulkProgress] = useState(0);
@@ -98,7 +97,6 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 items: [{ brand: item.brand, size: item.size, quantity: qty }],
             });
             showAlertToast(`${item.brand} ${item.size} ${qty}개 반품이 등록되었습니다.`, 'success');
-            setReturningItem(null);
         } catch {
             showAlertToast('반품 등록에 실패했습니다.', 'error');
         } finally {
@@ -234,53 +232,11 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                 {items.map(item => {
                                     const excess = item.currentStock - item.recommendedStock;
                                     const isSelected = selectedIds.has(item.id);
-                                    const isReturning = returningItem?.item.id === item.id;
                                     const pendingQty = returnRequests
                                         .filter(r => r.manufacturer === item.manufacturer && (r.status === 'requested' || r.status === 'picked_up'))
                                         .flatMap(r => r.items)
                                         .filter(ri => ri.brand === item.brand && ri.size === item.size)
                                         .reduce((s, ri) => s + ri.quantity, 0);
-
-                                    if (isReturning) {
-                                        const qty = parseInt(returningItem!.qty, 10);
-                                        const isValid = !isNaN(qty) && qty >= 1 && qty <= excess;
-                                        return (
-                                            <tr key={item.id} className="bg-indigo-50/60">
-                                                <td className="pl-6 pr-2 py-3" />
-                                                <td className="px-3 py-3">
-                                                    <p className="text-xs font-black text-slate-800">{item.brand}</p>
-                                                    <p className="text-[11px] text-slate-400">{item.manufacturer}</p>
-                                                </td>
-                                                <td className="px-3 py-3">
-                                                    <span className="text-xs font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{item.size}</span>
-                                                </td>
-                                                <td colSpan={3} className="px-3 py-3 pr-6">
-                                                    <div className="flex items-center justify-end gap-2 flex-wrap">
-                                                        <span className="text-[11px] text-slate-500 shrink-0">반품 수량 <span className="font-bold text-slate-700">(최대 {excess}개)</span></span>
-                                                        <input
-                                                            type="number" min={1} max={excess}
-                                                            value={returningItem!.qty}
-                                                            onChange={e => setReturningItem({ item, qty: e.target.value })}
-                                                            onKeyDown={e => {
-                                                                if (e.key === 'Enter' && isValid) handleReturn(item, qty);
-                                                                if (e.key === 'Escape') setReturningItem(null);
-                                                            }}
-                                                            className="w-20 px-2 py-1 text-sm font-bold border border-slate-300 rounded-lg text-center focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
-                                                            autoFocus
-                                                        />
-                                                        <button onClick={() => handleReturn(item, qty)} disabled={!isValid || isProcessing}
-                                                            className="px-3 py-1 text-[11px] font-bold text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 disabled:opacity-40 transition-colors">
-                                                            {isProcessing ? '처리 중...' : '확인'}
-                                                        </button>
-                                                        <button onClick={() => setReturningItem(null)}
-                                                            className="px-3 py-1 text-[11px] font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">
-                                                            취소
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    }
 
                                     return (
                                         <tr key={item.id} className={`group transition-colors ${isSelected ? 'bg-indigo-50/40' : 'hover:bg-slate-50/60'}`}>
@@ -307,8 +263,9 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                             <td className="pl-3 pr-6 py-3.5">
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     <button
-                                                        onClick={() => setReturningItem({ item, qty: String(excess) })}
-                                                        className="px-2.5 py-1 text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
+                                                        onClick={() => handleReturn(item, excess)}
+                                                        disabled={isProcessing}
+                                                        className="px-2.5 py-1 text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-50 rounded-lg hover:bg-amber-100 disabled:opacity-40 transition-colors whitespace-nowrap">
                                                         반품
                                                     </button>
                                                     <button
