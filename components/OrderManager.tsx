@@ -546,8 +546,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500" style={{ animationDuration: '0s' }}>
-      {/* 서브탭: 발주 관리 | 반품 관리 (hidden) */}
-      <div className="hidden gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      {/* 서브탭: 발주 관리 | 반품 관리 */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         <button
           onClick={() => setActiveTab('orders')}
           className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'orders'

@@ -122,7 +122,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 : activeTab === 'neverUsed'
                     ? '한 번도 사용되지 않은 품목'
                     : `권장량 초과 (권장: ${item.recommendedStock}, 현재: ${item.currentStock})`;
-            const reason = activeTab === 'overstock' ? 'excess_stock' : 'excess_stock';
+            const reason: ReturnReason = 'excess_stock';
             await onCreateReturn({
                 manufacturer: item.manufacturer,
                 reason,
