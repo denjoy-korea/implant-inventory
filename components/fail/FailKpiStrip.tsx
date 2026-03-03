@@ -45,7 +45,7 @@ const FailKpiStrip: React.FC<FailKpiStripProps> = ({
       {/* 총 교환 발생 */}
       <div className="p-4 relative overflow-hidden">
         <h4 className="text-sm font-semibold text-slate-800">총 교환 발생</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchangeures</p>
+        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Total Exchanges</p>
         <p className="text-2xl font-bold text-slate-800 tabular-nums tracking-tight mt-2">{animTotal}<span className="text-sm font-semibold text-slate-400 ml-1">건</span></p>
         {failSparkline.length > 1 && (
           <svg className="absolute bottom-0 right-2 opacity-30" width="80" height="28">

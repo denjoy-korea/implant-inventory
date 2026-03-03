@@ -84,9 +84,9 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
                 setRecommendedScrollPct(max > 0 ? (el.scrollLeft / max) * 100 : 0);
               }}
             >
-              {recommendedExchangeItems.map((item, idx) => (
+              {recommendedExchangeItems.map((item) => (
                 <div
-                  key={idx}
+                  key={`${item.brand}|${item.size}`}
                   className="flex-shrink-0 bg-rose-50 border border-rose-100 p-3.5 sm:p-4 rounded-2xl min-w-[150px]"
                 >
                   <div className="flex justify-between items-start mb-2">

@@ -200,8 +200,8 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     return () => clearTimeout(timer);
   }, [progressPct, activeBrand, brandsList, isAuditActive, brandStats]);
 
-  const handleAuditComplete = () => setShowAuditSummary(true);
-  const handleAuditClose = () => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); };
+  const handleAuditComplete = useCallback(() => setShowAuditSummary(true), []);
+  const handleAuditClose = useCallback(() => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); }, []);
 
   useEffect(() => {
     if (showHistory) historyCloseButtonRef.current?.focus();

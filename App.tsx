@@ -1615,6 +1615,9 @@ const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
 
   const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
+  // ref로 항상 최신 배열을 참조 — async callback의 stale closure 방지
+  const returnRequestsRef = useRef<ReturnRequest[]>([]);
+  useEffect(() => { returnRequestsRef.current = returnRequests; }, [returnRequests]);
 
   const loadReturnRequests = useCallback(async () => {
     const raw = await returnService.getReturnRequests();
@@ -1718,7 +1721,8 @@ const App: React.FC = () => {
     }
 
     // 재고 조정: 반품 거절 시 복구, 거절 철회(rejected→requested) 시 재차감
-    const returnReq = returnRequests.find(r => r.id === returnId);
+    // ref로 최신 배열을 참조 (낙관적 업데이트 이후 stale closure 방지)
+    const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
     if (returnReq) {
       const needsRestore = status === 'rejected';
       const needsDeduct = status === 'requested' && currentStatus === 'rejected';
@@ -1773,12 +1777,13 @@ const App: React.FC = () => {
   }, [state.user, loadReturnRequests]);
 
   const handleDeleteReturn = useCallback(async (returnId: string) => {
-    // 삭제 전 재고 복구를 위해 미리 저장 (반품 신청 시 차감됐으므로)
-    const returnReq = returnRequests.find(r => r.id === returnId);
+    // ref로 최신 배열을 참조 — 낙관적 제거 전에 항목 확보 (stale closure 방지)
+    const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
 
     setReturnRequests(prev => prev.filter(r => r.id !== returnId));
 
-    const result = await returnService.deleteReturnRequest(returnId, 'requested');
+    // 현재 실제 status를 서버에 전달 (hardcoded 'requested' 제거)
+    const result = await returnService.deleteReturnRequest(returnId, returnReq?.status ?? 'requested');
 
     if (!result.ok) {
       await loadReturnRequests();
@@ -1996,7 +2001,7 @@ const App: React.FC = () => {
                 ...prev,
                 inventory: prev.inventory.map(item =>
                   item.id === invItem.id
-                    ? { ...item, currentStock: Math.max(0, item.currentStock - qtyToDeduct) }
+                    ? { ...item, currentStock: Math.max(0, item.currentStock - qtyToDeduct), stockAdjustment: item.stockAdjustment - qtyToDeduct }
                     : item
                 ),
               }));
