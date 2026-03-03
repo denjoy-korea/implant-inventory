@@ -1400,7 +1400,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* ═══════════════════════════════════════ */}
         {/* 주문 내역 테이블                          */}
         {/* ═══════════════════════════════════════ */}
-        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative">
+        <div className={`bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative ${!historyOnly ? 'hidden md:block' : ''}`}>
           <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
           <div className="px-4 sm:px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
             <div>
