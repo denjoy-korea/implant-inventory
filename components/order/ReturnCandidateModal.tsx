@@ -40,6 +40,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     const [returnedByBrand, setReturnedByBrand] = useState<Record<string, number>>({});
     const [returnedItemIds, setReturnedItemIds] = useState<Set<string>>(new Set());
     const bulkRunningRef = useRef(false);
+    const returnRunningRef = useRef(false);
 
     const now = Date.now();
     const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
@@ -118,6 +119,9 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     };
 
     const handleReturn = async (item: InventoryItem, qty: number) => {
+        // 모바일 touchend+click 이중 발화 방지
+        if (returnRunningRef.current) return;
+        returnRunningRef.current = true;
         setIsProcessing(true);
         try {
             await onCreateReturn({
@@ -136,6 +140,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
             showAlertToast('반품 등록에 실패했습니다.', 'error');
         } finally {
             setIsProcessing(false);
+            returnRunningRef.current = false;
         }
     };
 
@@ -185,9 +190,9 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     };
 
     // 모바일 카드 wizard: 각 액션 후 다음 카드로 이동
+    // ※ setReturnedByBrand는 handleReturn 내부에서 처리 (여기서 중복 호출 금지)
     const handleReturnAndAdvance = async (item: InventoryItem, qty: number) => {
         await handleReturn(item, qty);
-        setReturnedByBrand(prev => ({ ...prev, [item.brand]: (prev[item.brand] ?? 0) + qty }));
         setCardIndex(prev => prev + 1);
     };
 
@@ -210,6 +215,13 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
             .reduce((s, ri) => s + ri.quantity, 0)
         : 0;
     const mobileAllDone = cardIndex >= items.length && items.length > 0;
+
+    // 모바일 wizard 완료 시 1.2초 후 자동 닫기 → 주문/반품 목록 자동 노출
+    React.useEffect(() => {
+        if (!mobileAllDone) return;
+        const t = setTimeout(onClose, 1200);
+        return () => clearTimeout(t);
+    }, [mobileAllDone, onClose]);
 
     // 일괄 반품 진행 오버레이
     if (isBulkReturning) {
