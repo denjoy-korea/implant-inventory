@@ -66,20 +66,27 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
         [items],
     );
 
-    // 브랜드별 집계 (초과량 내림차순)
-    const brandGroups = useMemo(() => {
-        const map = new Map<string, { count: number; excess: number }>();
-        items.forEach(i => {
-            const key = i.brand;
-            const prev = map.get(key) ?? { count: 0, excess: 0 };
-            map.set(key, { count: prev.count + 1, excess: prev.excess + (i.currentStock - i.recommendedStock) });
-        });
-        return Array.from(map.entries()).sort((a, b) => b[1].excess - a[1].excess);
-    }, [items]);
-
     const allSelected = items.length > 0 && items.every(i => selectedIds.has(i.id));
     const someSelected = selectedIds.size > 0;
     const selectedItems = items.filter(i => selectedIds.has(i.id));
+
+    // 브랜드별 집계 (초과량 내림차순)
+    // returnQty: 실제로 반품될 수량 — 선택한 항목이 있으면 선택분만, 없으면 전체 초과분
+    const brandGroups = useMemo(() => {
+        const map = new Map<string, { count: number; excess: number; returnQty: number }>();
+        items.forEach(i => {
+            const key = i.brand;
+            const prev = map.get(key) ?? { count: 0, excess: 0, returnQty: 0 };
+            const itemExcess = i.currentStock - i.recommendedStock;
+            const willReturn = someSelected ? selectedIds.has(i.id) : true;
+            map.set(key, {
+                count: prev.count + 1,
+                excess: prev.excess + itemExcess,
+                returnQty: prev.returnQty + (willReturn ? itemExcess : 0),
+            });
+        });
+        return Array.from(map.entries()).sort((a, b) => b[1].excess - a[1].excess);
+    }, [items, selectedIds, someSelected]);
 
     const toggleAll = () => {
         if (allSelected) {
@@ -213,12 +220,17 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         </div>
                         {/* 브랜드별 그리드 */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {brandGroups.map(([brand, { count, excess }]) => (
-                                <div key={brand} className="bg-white/70 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                                    <p className="text-xs font-black text-slate-700 truncate">{brand}</p>
+                            {brandGroups.map(([brand, { count, excess, returnQty }]) => (
+                                <div key={brand} className="bg-white/70 rounded-lg px-3 py-2.5 flex items-start justify-between gap-2">
+                                    <p className="text-xs font-black text-slate-700 truncate pt-0.5">{brand}</p>
                                     <div className="text-right shrink-0">
-                                        <span className="text-xs font-bold text-slate-600 tabular-nums">{count}품목</span>
-                                        <span className="text-[10px] text-indigo-500 font-bold ml-1.5 tabular-nums">+{excess}</span>
+                                        <div>
+                                            <span className="text-xs font-bold text-slate-600 tabular-nums">{count}품목</span>
+                                            <span className="text-[10px] text-indigo-400 font-bold ml-1.5 tabular-nums">+{excess}</span>
+                                        </div>
+                                        <div className={`mt-0.5 text-[11px] font-black tabular-nums ${returnQty > 0 ? 'text-amber-600' : 'text-slate-300'}`}>
+                                            반품 {returnQty}개
+                                        </div>
                                     </div>
                                 </div>
                             ))}
