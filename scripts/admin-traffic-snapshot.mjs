@@ -51,6 +51,7 @@ function parseArgs(argv) {
     snapshotDate: null,
     outDir: null,
     daily: false,
+    allowAnonFallback: false,
     help: false,
   };
 
@@ -65,6 +66,10 @@ function parseArgs(argv) {
     }
     if (arg === '--daily') {
       options.daily = true;
+      continue;
+    }
+    if (arg === '--allow-anon-fallback') {
+      options.allowAnonFallback = true;
       continue;
     }
     if (arg.startsWith('--snapshot-date=')) {
@@ -119,11 +124,12 @@ function resolveReportDir({ daily, outDir }) {
 }
 
 function printUsage() {
-  console.log('Usage: node scripts/admin-traffic-snapshot.mjs [days] [--snapshot-date=YYYY-MM-DD] [--daily] [--out-dir=PATH]');
+  console.log('Usage: node scripts/admin-traffic-snapshot.mjs [days] [--snapshot-date=YYYY-MM-DD] [--daily] [--out-dir=PATH] [--allow-anon-fallback]');
   console.log('Examples:');
   console.log('  node scripts/admin-traffic-snapshot.mjs 30');
   console.log('  node scripts/admin-traffic-snapshot.mjs 30 --daily');
   console.log('  node scripts/admin-traffic-snapshot.mjs 30 --snapshot-date=2026-03-04 --daily');
+  console.log('  node scripts/admin-traffic-snapshot.mjs 14 --daily --allow-anon-fallback');
 }
 
 async function fetchPageViews({ supabaseUrl, serviceRoleKey, sinceIso, untilIso }) {
@@ -243,17 +249,27 @@ async function main() {
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL ?? getDotEnvValue('VITE_SUPABASE_URL');
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? getDotEnvValue('SUPABASE_SERVICE_ROLE_KEY') ?? null;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? getDotEnvValue('VITE_SUPABASE_ANON_KEY') ?? null;
 
   if (!supabaseUrl) {
     throw new Error('VITE_SUPABASE_URL is required (env or .env.local).');
   }
-  if (!serviceRoleKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required (process env or .env.local) for admin snapshot.');
+  let accessKey = serviceRoleKey;
+  let accessMode = 'service_role';
+  if (!accessKey && options.allowAnonFallback) {
+    accessKey = anonKey;
+    accessMode = 'anon';
+  }
+  if (!accessKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required (env or .env.local). If unavailable, use --allow-anon-fallback with VITE_SUPABASE_ANON_KEY.');
+  }
+  if (accessMode === 'anon') {
+    console.warn('[admin-traffic-snapshot] WARN: using anon key fallback. KPI coverage may be limited by RLS.');
   }
 
   const rows = await fetchPageViews({
     supabaseUrl,
-    serviceRoleKey,
+    serviceRoleKey: accessKey,
     sinceIso: window.sinceIso,
     untilIso: window.untilIso,
   });
@@ -277,6 +293,7 @@ async function main() {
 
   // Console summary for immediate verification in CI / terminal.
   console.log(`[admin-traffic-snapshot] wrote ${reportPath}`);
+  console.log(`[admin-traffic-snapshot] accessMode=${accessMode}`);
   console.log(`[admin-traffic-snapshot] rows=${rows.length}, uniqueSessions=${snapshot.uniqueSessions}, conversionRate=${snapshot.conversionRate}%`);
   snapshot.eventFunnel.forEach((stage, index) => {
     const cvr = index === 0 ? '-' : `${stage.stepCvr}%`;
