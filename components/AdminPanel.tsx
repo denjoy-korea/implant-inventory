@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { DbProfile, UserRole } from '../types';
+import { DbBillingHistory, DbProfile, UserRole } from '../types';
 import { decryptProfile } from '../services/mappers';
 import ConfirmModal from './ConfirmModal';
 
@@ -17,18 +17,50 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: '대기', color: 'bg-amber-50 text-amber-600' },
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  completed: { label: '완료', color: 'bg-emerald-50 text-emerald-600' },
+  pending:   { label: '대기', color: 'bg-amber-50 text-amber-600' },
+  failed:    { label: '실패', color: 'bg-rose-50 text-rose-600' },
+  cancelled: { label: '취소', color: 'bg-slate-100 text-slate-500' },
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  card: '신용카드',
+  transfer: '계좌이체',
+  free: '무료',
+  trial: '체험',
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  free: 'Free', basic: 'Basic', plus: 'Plus', business: 'Business',
+};
+
+function formatKRW(amount: number): string {
+  return amount.toLocaleString('ko-KR') + '원';
+}
+
 interface PendingRoleChange {
   profileId: string;
   name: string;
   newRole: UserRole;
 }
 
+type AdminTab = 'users' | 'payments';
+
 const AdminPanel: React.FC = () => {
+  const [tab, setTab] = useState<AdminTab>('users');
+
+  // --- 회원 탭 ---
   const [profiles, setProfiles] = useState<DbProfile[]>([]);
   const [hospitals, setHospitals] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRoleChange, setPendingRoleChange] = useState<PendingRoleChange | null>(null);
+
+  // --- 결제 탭 ---
+  const [billingRows, setBillingRows] = useState<DbBillingHistory[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingFilter, setBillingFilter] = useState<string>('all');
 
   useEffect(() => {
     loadData();
@@ -52,6 +84,23 @@ const AdminPanel: React.FC = () => {
     }
     setIsLoading(false);
   };
+
+  const loadBilling = useCallback(async () => {
+    setBillingLoading(true);
+    const query = supabase
+      .from('billing_history')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (billingFilter !== 'all') query.eq('payment_status', billingFilter);
+    const { data } = await query;
+    setBillingRows((data as DbBillingHistory[]) ?? []);
+    setBillingLoading(false);
+  }, [billingFilter]);
+
+  useEffect(() => {
+    if (tab === 'payments') loadBilling();
+  }, [tab, loadBilling]);
 
   const updateRole = async (profileId: string, newRole: UserRole) => {
     try {
@@ -81,8 +130,137 @@ const AdminPanel: React.FC = () => {
   const activeCount = profiles.filter(p => p.status === 'active').length;
   const masterCount = profiles.filter(p => p.role === 'master').length;
 
+  const completedPayments = billingRows.filter(r => r.payment_status === 'completed');
+  const totalRevenue = completedPayments.reduce((s, r) => s + r.amount, 0);
+
   return (
     <div className="max-w-6xl mx-auto my-10 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* 탭 */}
+      <div className="flex gap-1 mb-8 bg-slate-100 p-1 rounded-2xl w-fit">
+        <button
+          onClick={() => setTab('users')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          회원 관리
+        </button>
+        <button
+          onClick={() => setTab('payments')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab === 'payments' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          결제 내역
+        </button>
+      </div>
+
+      {/* 결제 탭 */}
+      {tab === 'payments' && (
+        <div>
+          <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                결제 내역
+              </h2>
+              <p className="text-slate-500 mt-1">전체 병원의 결제 기록을 조회합니다.</p>
+            </div>
+            <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">전체</p>
+                <p className="text-2xl font-black text-indigo-600">{billingRows.length}</p>
+              </div>
+              <div className="w-px h-8 bg-slate-100" />
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">완료</p>
+                <p className="text-2xl font-black text-emerald-500">{completedPayments.length}</p>
+              </div>
+              <div className="w-px h-8 bg-slate-100" />
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">총 수익</p>
+                <p className="text-2xl font-black text-violet-500">{formatKRW(totalRevenue)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
+              <div className="flex gap-1">
+                {(['all', 'completed', 'pending', 'failed', 'cancelled'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setBillingFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${billingFilter === f ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'}`}
+                  >
+                    {f === 'all' ? '전체' : (PAYMENT_STATUS_LABELS[f]?.label ?? f)}
+                  </button>
+                ))}
+              </div>
+              <button onClick={loadBilling} className="ml-auto p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" title="새로고침">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+
+            {billingLoading ? (
+              <div className="py-20 text-center text-slate-400">불러오는 중...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/50 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                      <th className="px-5 py-3">병원</th>
+                      <th className="px-5 py-3">플랜</th>
+                      <th className="px-5 py-3">주기</th>
+                      <th className="px-5 py-3">결제 수단</th>
+                      <th className="px-5 py-3 text-right">금액</th>
+                      <th className="px-5 py-3">상태</th>
+                      <th className="px-5 py-3">결제 참조번호</th>
+                      <th className="px-5 py-3">일시</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {billingRows.map(row => {
+                      const ps = PAYMENT_STATUS_LABELS[row.payment_status] ?? { label: row.payment_status, color: 'bg-slate-100 text-slate-500' };
+                      return (
+                        <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-5 py-3 font-medium text-slate-700">
+                            {row.hospital_id ? (hospitals[row.hospital_id] || row.hospital_id.slice(0, 8) + '…') : '-'}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600">{PLAN_LABELS[row.plan] ?? row.plan}</td>
+                          <td className="px-5 py-3 text-slate-500">{row.billing_cycle === 'yearly' ? '연간' : row.billing_cycle === 'monthly' ? '월간' : '-'}</td>
+                          <td className="px-5 py-3 text-slate-500">{PAYMENT_METHOD_LABELS[row.payment_method] ?? row.payment_method ?? '-'}</td>
+                          <td className="px-5 py-3 text-right font-bold text-slate-800">{formatKRW(row.amount)}</td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${ps.color}`}>{ps.label}</span>
+                          </td>
+                          <td className="px-5 py-3 text-xs text-slate-400 font-mono">
+                            {row.payment_ref ? (
+                              <span title={row.payment_ref}>{row.payment_ref.slice(0, 16)}{row.payment_ref.length > 16 ? '…' : ''}</span>
+                            ) : (row.description ?? '-')}
+                          </td>
+                          <td className="px-5 py-3 text-xs text-slate-400 whitespace-nowrap">
+                            {new Date(row.created_at).toLocaleString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {billingRows.length === 0 && (
+                      <tr><td colSpan={8} className="py-20 text-center text-slate-400">결제 내역이 없습니다.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 회원 탭 */}
+      {tab === 'users' && (
+      <div>
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
@@ -242,6 +420,8 @@ const AdminPanel: React.FC = () => {
         <p>Admin Authorization Level: FULL</p>
         <p>Supabase DB Connected</p>
       </div>
+      </div>
+      )}
 
       {pendingRoleChange && (
         <ConfirmModal
