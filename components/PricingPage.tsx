@@ -464,8 +464,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         );
         resetPaymentForm();
       }
-    } catch {
-      showToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : '결제 요청 중 오류가 발생했습니다.';
+      showToast(errMsg, 'error');
       pageViewService.trackEvent(
         'pricing_payment_request_error',
         {
@@ -476,7 +477,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         },
         'pricing',
       );
-      setPaymentRequestError('결제 요청 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 도입 상담으로 전환해 주세요.');
+      setPaymentRequestError(errMsg);
     } finally {
       setIsSubmitting(false);
     }

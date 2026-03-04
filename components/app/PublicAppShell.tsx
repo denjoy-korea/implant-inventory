@@ -124,9 +124,9 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
       });
 
       if (result.error && result.error !== 'user_cancel') {
-        showAlertToast(result.error, 'error');
+        throw new Error(result.error);
       }
-      // 취소는 조용히 처리 (toast 없음)
+      // 취소는 조용히 처리
       return false; // 성공 시 여기까지 도달 안 함
     }
     : undefined;

@@ -250,34 +250,30 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
             </div>
           )}
 
-          <div>
-            <label htmlFor="pricing-payment-contact-name" className="block text-xs font-bold text-slate-500 mb-1">담당자 이름 *</label>
-            <input
-              id="pricing-payment-contact-name"
-              type="text"
-              value={contactName}
-              onChange={(e) => onContactNameChange(e.target.value)}
-              placeholder="홍길동"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="pricing-payment-contact-name" className="block text-xs font-bold text-slate-500 mb-1">담당자 이름 *</label>
+              <input
+                id="pricing-payment-contact-name"
+                type="text"
+                value={contactName}
+                onChange={(e) => onContactNameChange(e.target.value)}
+                placeholder="홍길동"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="pricing-payment-contact-phone" className="block text-xs font-bold text-slate-500 mb-1">연락처 *</label>
+              <input
+                id="pricing-payment-contact-phone"
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => onContactPhoneChange(e.target.value)}
+                placeholder="010-1234-5678"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor="pricing-payment-contact-phone" className="block text-xs font-bold text-slate-500 mb-1">연락처 (결제 문자 수신) *</label>
-            <input
-              id="pricing-payment-contact-phone"
-              type="tel"
-              value={contactPhone}
-              onChange={(e) => onContactPhoneChange(e.target.value)}
-              placeholder="010-1234-5678"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-
-          <p className="text-xs text-slate-400 leading-relaxed">
-            {paymentMethod === 'card'
-              ? '결제 버튼 클릭 시 토스페이먼츠 카드 결제 화면으로 이동합니다. 결제 완료 즉시 플랜이 활성화됩니다.'
-              : '결제 버튼 클릭 시 토스페이먼츠 계좌이체 화면으로 이동합니다. 이체 완료 즉시 플랜이 활성화됩니다.'}
-          </p>
 
           {onRequestConsultation && (
             <button
@@ -327,14 +323,11 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 결제 안내와 개인정보 처리에 동의합니다.
               </span>
             </label>
-            <div className="mt-2 ml-6 flex items-center gap-2 text-[11px]">
+            <div className="mt-1.5 ml-6 flex items-center gap-2 text-[11px]">
               <button type="button" onClick={() => setShowTerms(true)} className="text-indigo-600 hover:underline">이용약관</button>
               <span className="text-slate-300">·</span>
               <button type="button" onClick={() => setShowPrivacy(true)} className="text-indigo-600 hover:underline">개인정보처리방침</button>
             </div>
-            <p className="mt-1 ml-6 text-[11px] text-slate-500 leading-relaxed">
-              서비스 안정성 및 보안 패치를 위한 앱 업데이트 고지가 포함될 수 있습니다.
-            </p>
           </div>
 
           <div className="flex gap-3">
