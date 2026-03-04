@@ -1,0 +1,109 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { tossPaymentService } from '../../services/tossPaymentService';
+
+type PageState = 'loading' | 'success' | 'fail';
+
+interface PaymentRedirectPageProps {
+  /** 완료(성공/실패 확인) 후 호출 — pricing 페이지로 이동 */
+  onComplete: () => void;
+}
+
+const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete }) => {
+  const isSuccessPath = window.location.pathname === '/payment/success';
+  const [pageState, setPageState] = useState<PageState>('loading');
+  const [message, setMessage] = useState('');
+  const processedRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (!isSuccessPath) {
+      // /payment/fail — TossPayments가 code, message, orderId를 전달
+      const raw = params.get('message') || '결제가 취소되었습니다.';
+      setMessage(decodeURIComponent(raw));
+      setPageState('fail');
+      return;
+    }
+
+    if (processedRef.current) return;
+    processedRef.current = true;
+
+    const paymentKey = params.get('paymentKey') || '';
+    const orderId = params.get('orderId') || '';
+    const amount = Number(params.get('amount') || '0');
+
+    if (!paymentKey || !orderId || !amount) {
+      setMessage('결제 정보가 올바르지 않습니다. 다시 시도해주세요.');
+      setPageState('fail');
+      return;
+    }
+
+    tossPaymentService
+      .confirmPayment(paymentKey, orderId, amount)
+      .then(({ ok, error }) => {
+        if (ok) {
+          setPageState('success');
+          setTimeout(onComplete, 2500);
+        } else {
+          setMessage(error || '결제 승인에 실패했습니다.');
+          setPageState('fail');
+        }
+      });
+  }, [isSuccessPath, onComplete]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-8 text-center">
+        {/* 로고 */}
+        <div className="mb-6">
+          <span className="text-2xl font-black text-indigo-600 tracking-tight">DenJOY</span>
+        </div>
+
+        {pageState === 'loading' && (
+          <>
+            <div className="w-14 h-14 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+            <h2 className="text-lg font-bold text-slate-800 mb-1">결제 처리 중</h2>
+            <p className="text-slate-500 text-sm">잠시만 기다려주세요...</p>
+          </>
+        )}
+
+        {pageState === 'success' && (
+          <>
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">결제 완료!</h2>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              플랜이 성공적으로 활성화되었습니다.
+              <br />잠시 후 서비스로 이동합니다...
+            </p>
+          </>
+        )}
+
+        {pageState === 'fail' && (
+          <>
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">결제 실패</h2>
+            <p className="text-slate-400 text-sm leading-relaxed mb-6">
+              {message || '결제가 처리되지 않았습니다.'}
+            </p>
+            <button
+              onClick={onComplete}
+              className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
+            >
+              다시 시도하기
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default PaymentRedirectPage;

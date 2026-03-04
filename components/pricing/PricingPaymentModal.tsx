@@ -275,8 +275,8 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
 
           <p className="text-xs text-slate-400 leading-relaxed">
             {paymentMethod === 'card'
-              ? '결제 요청 후 입력하신 연락처로 카드결제 안내 문자가 발송됩니다. 문자 내 링크를 통해 결제를 완료하시면 플랜이 즉시 활성화됩니다.'
-              : '결제 요청 후 입력하신 연락처로 계좌이체 안내 문자가 발송됩니다. 입금 확인 후 플랜이 활성화되며, 증빙 서류가 발행됩니다.'}
+              ? '결제 버튼 클릭 시 토스페이먼츠 카드 결제 화면으로 이동합니다. 결제 완료 즉시 플랜이 활성화됩니다.'
+              : '결제 버튼 클릭 시 토스페이먼츠 계좌이체 화면으로 이동합니다. 이체 완료 즉시 플랜이 활성화됩니다.'}
           </p>
 
           {onRequestConsultation && (
@@ -350,7 +350,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               disabled={isSubmitting || !contactName.trim() || !contactPhone.trim() || !agreedToPaymentPolicy}
               className="flex-1 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? '처리 중...' : paymentMethod === 'card' ? '카드결제 요청' : '계좌이체 요청'}
+              {isSubmitting ? '처리 중...' : paymentMethod === 'card' ? '카드로 결제하기' : '계좌이체로 결제하기'}
             </button>
           </div>
         </div>

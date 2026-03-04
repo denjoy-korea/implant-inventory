@@ -15,8 +15,7 @@ import {
   View,
 } from '../../types';
 import { ToastType } from '../../hooks/useToast';
-import { hospitalService } from '../../services/hospitalService';
-import { makePaymentService } from '../../services/makePaymentService';
+import { tossPaymentService } from '../../services/tossPaymentService';
 import { planService } from '../../services/planService';
 
 const LandingPage = lazy(() => import('../LandingPage'));
@@ -109,37 +108,26 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
       plan: PlanType,
       billing: BillingCycle,
       contactName: string,
-      contactPhone: string,
+      _contactPhone: string,
       paymentMethod: 'card' | 'transfer',
-      receiptType?: 'cash_receipt' | 'tax_invoice'
+      _receiptType?: 'cash_receipt' | 'tax_invoice'
     ) => {
-      try {
-        const hospital = await hospitalService.getHospitalById(user.hospitalId!);
-        const result = await makePaymentService.requestPayment({
-          hospitalId: user.hospitalId!,
-          hospitalName: hospital?.name || '',
-          plan,
-          billingCycle: billing,
-          contactName,
-          contactPhone,
-          paymentMethod,
-          receiptType,
-        });
+      // TossPayments SDK 결제 시작:
+      // 성공 시 → /payment/success 로 full redirect (이 함수는 반환되지 않음)
+      // 취소/오류 시 → error 반환
+      const result = await tossPaymentService.requestPayment({
+        hospitalId: user.hospitalId!,
+        plan,
+        billingCycle: billing,
+        customerName: contactName.trim(),
+        paymentMethod,
+      });
 
-        if (result.success) {
-          showAlertToast('결제 요청이 완료되었습니다. 입력하신 연락처로 결제 안내 문자가 발송됩니다.', 'success');
-          const ps = await planService.getHospitalPlan(user.hospitalId!);
-          onPlanStateActivated(ps);
-          return true;
-        }
-
-        showAlertToast(result.error || '결제 요청에 실패했습니다. 다시 시도해주세요.', 'error');
-        return false;
-      } catch (err) {
-        console.error('[PublicAppShell] Payment request error:', err);
-        showAlertToast('결제 요청 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
-        return false;
+      if (result.error && result.error !== 'user_cancel') {
+        showAlertToast(result.error, 'error');
       }
+      // 취소는 조용히 처리 (toast 없음)
+      return false; // 성공 시 여기까지 도달 안 함
     }
     : undefined;
 
