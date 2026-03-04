@@ -31,6 +31,7 @@ import SystemAdminTrafficTab from './system-admin/tabs/SystemAdminTrafficTab';
 import SystemAdminContentTab from './system-admin/tabs/SystemAdminContentTab';
 import SystemAdminConsultationTab from './system-admin/tabs/SystemAdminConsultationTab';
 import SystemAdminIntegrationsTab from './system-admin/tabs/SystemAdminIntegrationsTab';
+import SystemAdminBillingTab from './system-admin/tabs/SystemAdminBillingTab';
 import { consultationService, ConsultationRequest, ConsultationStatus } from '../services/consultationService';
 import {
     PlanAssignModal,
@@ -1380,6 +1381,10 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
                                 {activeTab === 'integrations' && (
                                     <SystemAdminIntegrationsTab />
+                                )}
+
+                                {activeTab === 'billing' && (
+                                    <SystemAdminBillingTab />
                                 )}
                             </>
                         )}

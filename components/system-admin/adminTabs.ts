@@ -14,7 +14,8 @@ export type AdminTab =
   | 'traffic'
   | 'content'
   | 'consultations'
-  | 'integrations';
+  | 'integrations'
+  | 'billing';
 
 const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   overview: '시스템 개요',
@@ -33,6 +34,7 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   content: '콘텐츠 관리',
   consultations: '상담 관리',
   integrations: '연동 설정',
+  billing: '결제 내역',
 };
 
 export function getAdminTabTitle(tab: AdminTab): string {
