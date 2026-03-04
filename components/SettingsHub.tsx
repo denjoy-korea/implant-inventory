@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy } from 'react';
 import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact, MemberPermissions } from '../types';
+import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from '../services/hospitalSettingsService';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
@@ -33,6 +34,10 @@ interface SettingsHubProps {
   onWorkDaysChange?: (workDays: number[]) => void;
   /** staff 세부 권한 (master는 무시) */
   permissions?: MemberPermissions | null;
+  /** 권장재고 산출 설정 */
+  stockCalcSettings?: StockCalcSettings;
+  /** 권장재고 산출 설정 변경 콜백 */
+  onStockCalcSettingsChange?: (settings: StockCalcSettings) => Promise<void>;
 }
 
 interface SettingsCard {
@@ -53,7 +58,7 @@ function getMinPlanForFeature(feature: PlanFeature): PlanType {
   return 'business';
 }
 
-const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId, hospitalWorkDays, onWorkDaysChange, permissions }) => {
+const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff, plan, hospitalId, hospitalWorkDays, onWorkDaysChange, permissions, stockCalcSettings, onStockCalcSettingsChange }) => {
   const [resetRequest, setResetRequest] = useState<DbResetRequest | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetReason, setResetReason] = useState('');
@@ -66,6 +71,16 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [localWorkDays, setLocalWorkDays] = useState<number[]>(hospitalWorkDays ?? DEFAULT_WORK_DAYS);
   const [isSavingWorkDays, setIsSavingWorkDays] = useState(false);
   const [workDaysSaved, setWorkDaysSaved] = useState(false);
+
+  // 권장재고 산출 설정 상태
+  const [localCalcSettings, setLocalCalcSettings] = useState<StockCalcSettings>(
+    stockCalcSettings ?? DEFAULT_STOCK_CALC_SETTINGS
+  );
+  const [isSavingCalcSettings, setIsSavingCalcSettings] = useState(false);
+  const [calcSettingsSaved, setCalcSettingsSaved] = useState(false);
+
+  // 권장재고 산출 설정 모달
+  const [showCalcSettingsModal, setShowCalcSettingsModal] = useState(false);
 
   // 인테그레이션 상태
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
@@ -86,6 +101,11 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   useEffect(() => {
     if (hospitalWorkDays) setLocalWorkDays(hospitalWorkDays);
   }, [hospitalWorkDays]);
+
+  // stockCalcSettings prop 변경 시 로컬 상태 동기화
+  useEffect(() => {
+    if (stockCalcSettings) setLocalCalcSettings(stockCalcSettings);
+  }, [stockCalcSettings]);
 
   // 거래처 데이터 로딩 (master 또는 canManageVendors 권한 보유 staff)
   const canAccessVendors = (isMaster && !isStaff) || (isStaff && !!permissions?.canManageVendors);
@@ -168,6 +188,30 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   };
 
   const workDaysChanged = JSON.stringify([...(hospitalWorkDays ?? DEFAULT_WORK_DAYS)].sort()) !== JSON.stringify([...localWorkDays].sort());
+
+  const handleSaveCalcSettings = async () => {
+    if (!onStockCalcSettingsChange) return;
+    // validation: trendFloor < trendCeiling
+    if (localCalcSettings.trendFloor >= localCalcSettings.trendCeiling) {
+      showToast('추세 하한은 상한보다 작아야 합니다.', 'error');
+      return;
+    }
+    setIsSavingCalcSettings(true);
+    try {
+      await onStockCalcSettingsChange(localCalcSettings);
+      setCalcSettingsSaved(true);
+      setTimeout(() => setCalcSettingsSaved(false), 3000);
+    } catch {
+      showToast('설정 저장에 실패했습니다. 다시 시도해주세요.', 'error');
+    } finally {
+      setIsSavingCalcSettings(false);
+    }
+  };
+
+  const calcSettingsChanged =
+    localCalcSettings.safetyMultiplier !== (stockCalcSettings ?? DEFAULT_STOCK_CALC_SETTINGS).safetyMultiplier ||
+    localCalcSettings.trendCeiling !== (stockCalcSettings ?? DEFAULT_STOCK_CALC_SETTINGS).trendCeiling ||
+    localCalcSettings.trendFloor !== (stockCalcSettings ?? DEFAULT_STOCK_CALC_SETTINGS).trendFloor;
 
   // 현재 활성 초기화 요청 조회
   useEffect(() => {
@@ -352,6 +396,31 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
                 </p>
               </div>
               <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        )}
+
+        {/* 권장재고 산출 설정 카드 */}
+        {isMaster && !isStaff && hospitalId && onStockCalcSettingsChange && (
+          <button
+            onClick={() => setShowCalcSettingsModal(true)}
+            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-violet-50 text-violet-600 group-hover:bg-violet-100 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-800">권장재고 산출 설정</h3>
+                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                  안전재고 배수·추세 반영 범위 등 권장량 계산 파라미터를 조정합니다.
+                </p>
+              </div>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -603,6 +672,128 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         </div>
       )}
     </div>
+
+    {/* 권장재고 산출 설정 모달 */}
+    {showCalcSettingsModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        onClick={() => setShowCalcSettingsModal(false)}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* 헤더 */}
+          <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-bold text-slate-900">권장재고 산출 설정</h3>
+              <p className="text-xs text-slate-500">변경 즉시 전체 재고 권장량이 재계산됩니다</p>
+            </div>
+            <button
+              onClick={() => setShowCalcSettingsModal(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 내용 */}
+          <div className="px-6 py-5 space-y-5">
+            {/* 급증일 안전재고 배수 */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-semibold text-slate-700">급증일 안전재고 배수</label>
+                <span className="text-xs text-slate-400">현재: <span className="font-bold text-slate-600">{localCalcSettings.safetyMultiplier}×</span></span>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">일일 최대 사용량에 곱하는 안전재고 계수. 값이 클수록 보수적으로 재고를 유지합니다.</p>
+              <div className="flex flex-wrap gap-2">
+                {[1.5, 2, 2.5, 3, 3.5, 4].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setLocalCalcSettings(s => ({ ...s, safetyMultiplier: v }))}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                      localCalcSettings.safetyMultiplier === v
+                        ? 'bg-violet-600 text-white shadow-sm shadow-violet-200'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {v}×
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 추세 반영 상한 */}
+            <div className="flex items-center justify-between py-3 border-t border-slate-100">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">추세 반영 상한</p>
+                <p className="text-xs text-slate-500 mt-0.5">트렌드 상승 반영 최대 배수 (110%~150%)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLocalCalcSettings(s => ({ ...s, trendCeiling: Math.max(s.trendFloor + 0.05, +(s.trendCeiling - 0.05).toFixed(2)) }))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base transition-colors flex items-center justify-center"
+                >−</button>
+                <span className="w-14 text-center text-sm font-bold text-slate-700">{Math.round(localCalcSettings.trendCeiling * 100)}%</span>
+                <button
+                  onClick={() => setLocalCalcSettings(s => ({ ...s, trendCeiling: Math.min(1.5, +(s.trendCeiling + 0.05).toFixed(2)) }))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base transition-colors flex items-center justify-center"
+                >+</button>
+              </div>
+            </div>
+
+            {/* 추세 반영 하한 */}
+            <div className="flex items-center justify-between py-3 border-t border-slate-100">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">추세 반영 하한</p>
+                <p className="text-xs text-slate-500 mt-0.5">트렌드 하락 반영 최소 배수 (50%~95%)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLocalCalcSettings(s => ({ ...s, trendFloor: Math.max(0.5, +(s.trendFloor - 0.05).toFixed(2)) }))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base transition-colors flex items-center justify-center"
+                >−</button>
+                <span className="w-14 text-center text-sm font-bold text-slate-700">{Math.round(localCalcSettings.trendFloor * 100)}%</span>
+                <button
+                  onClick={() => setLocalCalcSettings(s => ({ ...s, trendFloor: Math.min(s.trendCeiling - 0.05, +(s.trendFloor + 0.05).toFixed(2)) }))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base transition-colors flex items-center justify-center"
+                >+</button>
+              </div>
+            </div>
+          </div>
+
+          {/* 푸터 */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
+            {calcSettingsSaved ? (
+              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                저장되었습니다
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400">
+                {calcSettingsChanged ? '변경사항이 있습니다' : '현재 저장된 설정입니다'}
+              </span>
+            )}
+            <button
+              onClick={handleSaveCalcSettings}
+              disabled={isSavingCalcSettings || !calcSettingsChanged}
+              className="px-5 py-2 text-sm font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-violet-200"
+            >
+              {isSavingCalcSettings ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* 거래처 관리 모달 */}
     {showVendorModal && (

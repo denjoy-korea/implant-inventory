@@ -43,7 +43,11 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
     { brand: '', size: '', quantity: 1 },
   ]);
 
-  const manufacturers = Array.from(new Set(inventory.map(i => i.manufacturer))).sort();
+  const manufacturers = Array.from(new Set(
+    inventory
+      .map(i => i.manufacturer)
+      .filter(m => !m.includes('보험임플란트') && !m.includes('수술중교환'))
+  )).sort();
 
   const brandsForMfr = Array.from(
     new Set(inventory.filter(i => i.manufacturer === manufacturer).map(i => i.brand))

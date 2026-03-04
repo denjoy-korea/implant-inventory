@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem } from '../types';
+import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem, DetectedFail, FailCandidate } from '../types';
+import { failDetectionService } from '../services/failDetectionService';
+import FailDetectionModal from './fail/FailDetectionModal';
 import { useCountUp } from './surgery-dashboard/shared';
 import { useSurgeryStats } from './surgery-dashboard/useSurgeryStats';
 import { holidayService } from '../services/holidayService';
@@ -161,6 +163,9 @@ interface SurgeryDashboardProps {
   hospitalWorkDays?: number[];
   /** 플랜 상태 — 날짜 범위 슬라이더 잠금 기준 */
   planState?: HospitalPlanState | null;
+  hospitalId?: string;
+  isReadOnly?: boolean;
+  currentUserName?: string;
 }
 
 const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
@@ -171,15 +176,26 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   onGoInventoryMaster,
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   planState,
+  hospitalId,
+  isReadOnly,
+  currentUserName = '관리자',
 }) => {
   const [mounted, setMounted] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
   const [dataViewerDayFilter, setDataViewerDayFilter] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [detectedFails, setDetectedFails] = useState<DetectedFail[]>([]);
+  const [isScanLoading, setIsScanLoading] = useState(false);
+  const [scanCandidates, setScanCandidates] = useState<FailCandidate[] | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 50);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!hospitalId) return;
+    failDetectionService.getDetectedFails(hospitalId).then(setDetectedFails).catch(() => {});
+  }, [hospitalId]);
 
   // workDaysMap 없이 먼저 월 목록 추출을 위해 stats를 한 번 계산 (workDaysMap 미전달 → 25일 폴백)
   const rawStats = useSurgeryStats(rows);
@@ -229,6 +245,40 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   const handleDayClick = useCallback((dayName: string) => {
     setDataViewerDayFilter(dayName);
     setShowDataViewer(true);
+  }, []);
+
+  const confirmedReimplantCount = useMemo(() => detectedFails.filter(f => f.status === 'confirmed').length, [detectedFails]);
+  const pendingReimplantCount = useMemo(() => detectedFails.filter(f => f.status === 'pending').length, [detectedFails]);
+
+  const handleScanAll = useCallback(async () => {
+    if (!hospitalId) return;
+    setIsScanLoading(true);
+    try {
+      const candidates = await failDetectionService.scanAllRecords(hospitalId);
+      if (candidates.length > 0) {
+        setScanCandidates(candidates);
+      } else {
+        setIsScanLoading(false);
+      }
+    } catch {
+      setIsScanLoading(false);
+    }
+  }, [hospitalId]);
+
+  const handleScanModalClose = useCallback(async () => {
+    setScanCandidates(null);
+    setIsScanLoading(false);
+    if (hospitalId) {
+      failDetectionService.getDetectedFails(hospitalId).then(setDetectedFails).catch(() => {});
+    }
+  }, [hospitalId]);
+
+  const handleReimplantStatusUpdate = useCallback(async (id: string, status: 'confirmed' | 'dismissed', confirmedBy?: string) => {
+    await failDetectionService.updateStatus(id, status, confirmedBy);
+    setDetectedFails(prev => prev.map(f => f.id === id
+      ? { ...f, status, confirmed_by: confirmedBy ?? null, confirmed_at: new Date().toISOString() }
+      : f,
+    ));
   }, []);
 
   // Filtered rows for charts below the slider
@@ -655,11 +705,114 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         </CollapsibleSection>
       )}
 
+      {/* G. 재식립 감지 현황 */}
+      {hospitalId && (
+        <CollapsibleSection
+          id="section-reimplant"
+          title="재식립 감지 현황"
+          subtitle=""
+          accentColor="rose"
+          icon={<svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>}
+          badge={`확인 ${confirmedReimplantCount}건 · 미확인 ${pendingReimplantCount}건`}
+          storageKey="surgery-reimplant"
+        >
+          <div className="space-y-4">
+            {/* KPI + 스캔 버튼 */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex gap-3">
+                <div className="rounded-xl bg-rose-50 border border-rose-100 px-4 py-2.5 text-center">
+                  <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wide">재식립 확인</p>
+                  <p className="text-2xl font-black text-rose-600 tabular-nums mt-0.5">{confirmedReimplantCount}<span className="text-xs font-semibold text-rose-400 ml-0.5">건</span></p>
+                </div>
+                <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-2.5 text-center">
+                  <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wide">미확인</p>
+                  <p className="text-2xl font-black text-amber-600 tabular-nums mt-0.5">{pendingReimplantCount}<span className="text-xs font-semibold text-amber-400 ml-0.5">건</span></p>
+                </div>
+              </div>
+              {!isReadOnly && (
+                <button
+                  onClick={handleScanAll}
+                  disabled={isScanLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-rose-100"
+                >
+                  {isScanLoading ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  )}
+                  전체 기록 스캔
+                </button>
+              )}
+            </div>
+
+            {/* 목록 */}
+            {detectedFails.filter(f => f.status !== 'dismissed').length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                <svg className="w-8 h-8 mx-auto mb-2 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                감지된 재식립이 없습니다
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {detectedFails.filter(f => f.status !== 'dismissed').map(fail => (
+                  <div key={fail.id} className={`rounded-xl border p-3 ${fail.status === 'confirmed' ? 'border-rose-100 bg-rose-50/50' : 'border-amber-100 bg-amber-50/50'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-800">#{fail.tooth_number} 치아</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fail.status === 'confirmed' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
+                            {fail.status === 'confirmed' ? '재식립 확인' : '미확인'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          <div className="bg-slate-50 rounded-lg px-2.5 py-1.5">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">원래 식립</p>
+                            <p className="text-[11px] font-semibold text-slate-700">{fail.original_date} · {fail.original_manufacturer} {fail.original_brand}{fail.original_size ? ` ${fail.original_size}` : ''}</p>
+                          </div>
+                          <div className="bg-rose-50 rounded-lg px-2.5 py-1.5">
+                            <p className="text-[9px] font-bold text-rose-400 uppercase tracking-wide">재식립</p>
+                            <p className="text-[11px] font-semibold text-rose-700">{fail.reimplant_date} · {fail.reimplant_manufacturer} {fail.reimplant_brand}{fail.reimplant_size ? ` ${fail.reimplant_size}` : ''}</p>
+                          </div>
+                        </div>
+                      </div>
+                      {!isReadOnly && fail.status === 'pending' && (
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => handleReimplantStatusUpdate(fail.id, 'confirmed', currentUserName)}
+                            className="px-2.5 py-1 text-[10px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition-colors"
+                          >확인</button>
+                          <button
+                            onClick={() => handleReimplantStatusUpdate(fail.id, 'dismissed')}
+                            className="px-2.5 py-1 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                          >무시</button>
+                        </div>
+                      )}
+                    </div>
+                    {fail.status === 'confirmed' && fail.confirmed_by && (
+                      <p className="text-[9px] text-slate-400 mt-1.5">확인: {fail.confirmed_by} · {fail.confirmed_at ? new Date(fail.confirmed_at).toLocaleDateString('ko-KR') : ''}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleSection>
+      )}
+
       {/* Floating TOC */}
       <FloatingTOC hasClinical={clinicalStats.hasClinicalData} />
 
       {/* Data Viewer Modal */}
       {showDataViewer && <DataViewerModal rows={filteredRows} initialDayFilter={dataViewerDayFilter} onClose={() => { setShowDataViewer(false); setDataViewerDayFilter(null); }} />}
+
+      {/* Reimplant Detection Modal (scan results) */}
+      {scanCandidates && hospitalId && (
+        <FailDetectionModal
+          candidates={scanCandidates}
+          hospitalId={hospitalId}
+          currentUserName={currentUserName}
+          onClose={handleScanModalClose}
+        />
+      )}
     </div>
   );
 };

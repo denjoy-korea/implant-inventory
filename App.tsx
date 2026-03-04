@@ -13,12 +13,13 @@ import type { NudgeType } from './components/UpgradeNudge';
 import type { LimitType } from './components/PlanLimitToast';
 
 /* ── Lazy imports (route-level code splitting) ── */
+const FailDetectionModal = lazy(() => import('./components/fail/FailDetectionModal'));
 const DashboardGuardedContent = lazy(() => import('./components/app/DashboardGuardedContent'));
 const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRouteSection'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem } from './types';
+import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem, FailCandidate } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
 import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
 import { authService } from './services/authService';
@@ -27,11 +28,13 @@ import { surgeryService } from './services/surgeryService';
 import { orderService } from './services/orderService';
 import { returnService } from './services/returnService';
 import { hospitalService } from './services/hospitalService';
+import { hospitalSettingsService, StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from './services/hospitalSettingsService';
 import { planService } from './services/planService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
 import { dbToExcelRowBatch, dbToOrder, dbToReturnRequest, fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
+import { failDetectionService } from './services/failDetectionService';
 import { onboardingService } from './services/onboardingService';
 import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
 import { isExchangePrefix } from './services/appUtils';
@@ -135,6 +138,7 @@ const App: React.FC = () => {
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
   const [billingProgramError, setBillingProgramError] = useState('');
+  const [pendingFailCandidates, setPendingFailCandidates] = useState<FailCandidate[]>([]);
   const [forcedOnboardingStep, setForcedOnboardingStep] = useState<number | null>(null);
   const [toastCompletedLabel, setToastCompletedLabel] = useState<string | null>(null);
   const prevFirstIncompleteStepRef = useRef<number | null>(null);
@@ -719,6 +723,7 @@ const App: React.FC = () => {
   }, [normalize]);
 
   const syncInventoryWithUsageAndOrders = useCallback(() => {
+    const calcSettings = stockCalcSettingsRef.current;
     setState(prev => {
       const records = prev.surgeryMaster['수술기록지'] || [];
       if (records.length === 0 && prev.inventory.length === 0) return prev;
@@ -882,7 +887,7 @@ const App: React.FC = () => {
           : recent30Avg > 0
             ? 1.05
             : 1;
-        const trendFactor = clamp(trendRatio, 0.8, 1.25);
+        const trendFactor = clamp(trendRatio, calcSettings.trendFloor, calcSettings.trendCeiling);
 
         const volatilityBase = Math.max(recent30Avg, monthlyDailyAvg, 0.2);
         const volatilityRatio = dailyMax > 0 ? dailyMax / volatilityBase : 1;
@@ -913,7 +918,7 @@ const App: React.FC = () => {
         const currentStock = item.initialStock + (item.stockAdjustment ?? 0) + totalReceived - totalUsage;
         // 권장량은 보수적으로 유지: 예측값은 긴급도 전용으로만 사용
         const demandBase = Math.max(monthlyAvg, lastMonthUsage);
-        const recommended = Math.max(Math.ceil(demandBase), dailyMax * 2, 1);
+        const recommended = Math.max(Math.ceil(demandBase), dailyMax * calcSettings.safetyMultiplier, 1);
 
         // 마지막 사용일: mergedDailyQty의 날짜 키 중 최신값
         const lastUsedDate = totalUsage > 0 && datedEntries.length > 0
@@ -1331,6 +1336,18 @@ const App: React.FC = () => {
                 'surgery_upload',
                 `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
               );
+              // FAIL 자동 감지 (재식립)
+              try {
+                const failCandidates = await failDetectionService.detectReimplantationFails(
+                  savedRecords,
+                  state.user.hospitalId,
+                );
+                if (failCandidates.length > 0) {
+                  setPendingFailCandidates(failCandidates);
+                }
+              } catch {
+                // 감지 실패는 업로드 성공에 영향 없음
+              }
               return true;
             }
             setState(prev => ({ ...prev, isLoading: false }));
@@ -1421,12 +1438,13 @@ const App: React.FC = () => {
     const nextReceivedDate = status === 'received'
       ? new Date().toISOString().split('T')[0]
       : undefined;
+    const confirmedBy = status === 'received' ? (state.user?.name || undefined) : undefined;
 
     setState(prev => ({
       ...prev,
       orders: prev.orders.map(o =>
         o.id === orderId
-          ? { ...o, status, receivedDate: nextReceivedDate }
+          ? { ...o, status, receivedDate: nextReceivedDate, confirmedBy }
           : o
       )
     }));
@@ -1434,6 +1452,7 @@ const App: React.FC = () => {
     const result = await orderService.updateStatus(orderId, status, {
       expectedCurrentStatus: currentOrder.status,
       receivedDate: nextReceivedDate,
+      confirmedBy,
     });
 
     if (result.ok) {
@@ -1618,6 +1637,22 @@ const App: React.FC = () => {
   const returnRequestsRef = useRef<ReturnRequest[]>([]);
   useEffect(() => { returnRequestsRef.current = returnRequests; }, [returnRequests]);
 
+  // 권장재고 산출 설정 — ref로 최신 값 유지 (stale closure 방지)
+  const stockCalcSettingsRef = useRef<StockCalcSettings>(DEFAULT_STOCK_CALC_SETTINGS);
+
+  // hospitalId 변경 시 설정 로드 → ref 갱신 → 재계산
+  useEffect(() => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return;
+    hospitalSettingsService.get(hospitalId).then(s => {
+      if (s.stockCalcSettings) {
+        stockCalcSettingsRef.current = s.stockCalcSettings;
+        syncInventoryWithUsageAndOrders();
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.user?.hospitalId]);
+
   const loadReturnRequests = useCallback(async () => {
     const raw = await returnService.getReturnRequests();
     const mapped = raw.map(r => dbToReturnRequest(r));
@@ -1664,6 +1699,7 @@ const App: React.FC = () => {
         requested_date: new Date().toISOString().split('T')[0],
         completed_date: null,
         manager: params.manager,
+        confirmed_by: null,
         memo: params.memo || null,
       },
       params.items
@@ -1701,12 +1737,13 @@ const App: React.FC = () => {
     status: ReturnStatus,
     currentStatus: ReturnStatus
   ): Promise<ReturnMutationResult> => {
+    const confirmedBy = status === 'completed' ? (state.user?.name || undefined) : undefined;
     // 낙관적 업데이트
     setReturnRequests(prev =>
-      prev.map(r => r.id === returnId ? { ...r, status } : r)
+      prev.map(r => r.id === returnId ? { ...r, status, ...(confirmedBy ? { confirmedBy } : {}) } : r)
     );
 
-    const result = await returnService.updateStatus(returnId, status, currentStatus);
+    const result = await returnService.updateStatus(returnId, status, currentStatus, confirmedBy);
 
     if (!result.ok) {
       // 롤백
@@ -1813,6 +1850,15 @@ const App: React.FC = () => {
     }
   }, [loadReturnRequests, returnRequests, state.inventory]);
 
+  const handleStockCalcSettingsChange = useCallback(async (settings: StockCalcSettings) => {
+    const hospitalId = state.user?.hospitalId;
+    if (!hospitalId) return;
+    stockCalcSettingsRef.current = settings;
+    syncInventoryWithUsageAndOrders();
+    const current = await hospitalSettingsService.get(hospitalId);
+    await hospitalSettingsService.set(hospitalId, { ...current, stockCalcSettings: settings });
+  }, [state.user?.hospitalId, syncInventoryWithUsageAndOrders]);
+
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update
     let failRecordIds: string[] = [];
@@ -1878,6 +1924,7 @@ const App: React.FC = () => {
           manager: order.manager,
           status: order.status,
           received_date: order.receivedDate || null,
+          confirmed_by: order.confirmedBy || null,
           memo: order.memo || null,
           cancelled_reason: order.cancelledReason || null,
         },
@@ -2524,20 +2571,28 @@ const App: React.FC = () => {
                           onUpdateReturnStatus: handleUpdateReturnStatus,
                           onCompleteReturn: handleCompleteReturn,
                           onDeleteReturn: handleDeleteReturn,
+                          stockCalcSettings: stockCalcSettingsRef.current,
+                          onStockCalcSettingsChange: handleStockCalcSettingsChange,
                           onAuditSessionComplete: () => {
                             const hid = state.user?.hospitalId ?? '';
                             onboardingService.markInventoryAuditSeen(hid);
-                            onboardingService.clearDismissed(hid);
-                            setOnboardingDismissed(false);
-                            setForcedOnboardingStep(7);
-                            setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+                            // 온보딩이 아직 완료되지 않은 경우에만 step 7로 안내
+                            if (!onboardingService.isFailAuditDone(hid)) {
+                              onboardingService.clearDismissed(hid);
+                              setOnboardingDismissed(false);
+                              setForcedOnboardingStep(7);
+                              setState(prev => ({ ...prev, dashboardTab: 'overview' }));
+                            }
                           },
                           initialShowFailBulkModal: autoOpenFailBulkModal,
                           onFailBulkModalOpened: () => setAutoOpenFailBulkModal(false),
                           onFailAuditDone: () => {
                             const user = state.user;
-                            onboardingService.markFailAuditDone(user?.hospitalId ?? '');
-                            setShowOnboardingComplete(true);
+                            const hid = user?.hospitalId ?? '';
+                            const wasAlreadyDone = onboardingService.isFailAuditDone(hid);
+                            onboardingService.markFailAuditDone(hid);
+                            // 온보딩이 이미 완료된 상태면 완료 모달 표시 생략
+                            if (!wasAlreadyDone) setShowOnboardingComplete(true);
                             if (user) loadHospitalData(user); // 완료 후 대시보드 수치 갱신 (백그라운드)
                           },
                           orderHistoryOnly: showMobileDashboardNav && mobileOrderNav === 'receipt',
@@ -2659,6 +2714,17 @@ const App: React.FC = () => {
           }}
         />
       </Suspense>
+
+      {pendingFailCandidates.length > 0 && state.user?.hospitalId && (
+        <Suspense fallback={null}>
+          <FailDetectionModal
+            candidates={pendingFailCandidates}
+            hospitalId={state.user.hospitalId}
+            currentUserName={state.user.name}
+            onClose={() => setPendingFailCandidates([])}
+          />
+        </Suspense>
+      )}
 
       <AppGlobalOverlays
         planLimitModal={planLimitModal}

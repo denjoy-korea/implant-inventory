@@ -23,46 +23,51 @@ export const inventoryService = {
   async addItem(
     item: Omit<DbInventoryItem, 'id' | 'created_at' | 'updated_at'>
   ): Promise<DbInventoryItem | null> {
-    // 중복 등록 사전 차단: 동일 병원/제조사/브랜드/규격이면 기존 레코드를 반환
-    const { data: existing, error: existingError } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('hospital_id', item.hospital_id)
-      .eq('manufacturer', item.manufacturer)
-      .eq('brand', item.brand)
-      .eq('size', item.size)
-      .maybeSingle();
+    try {
+      // 중복 등록 사전 차단: 동일 병원/제조사/브랜드/규격이면 기존 레코드를 반환
+      const { data: existing, error: existingError } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('hospital_id', item.hospital_id)
+        .eq('manufacturer', item.manufacturer)
+        .eq('brand', item.brand)
+        .eq('size', item.size)
+        .maybeSingle();
 
-    if (existingError) {
-      console.error('[inventoryService] Duplicate pre-check failed:', existingError);
-    }
-    if (existing) {
-      return existing as DbInventoryItem;
-    }
-
-    const { data, error } = await supabase
-      .from('inventory')
-      .insert(item)
-      .select()
-      .single();
-
-    if (error) {
-      // UNIQUE INDEX 충돌 시(예: 동시 등록) 기존 항목을 재조회하여 반환
-      if (error.code === '23505') {
-        const { data: dup } = await supabase
-          .from('inventory')
-          .select('*')
-          .eq('hospital_id', item.hospital_id)
-          .eq('manufacturer', item.manufacturer)
-          .eq('brand', item.brand)
-          .eq('size', item.size)
-          .maybeSingle();
-        if (dup) return dup as DbInventoryItem;
+      if (existingError) {
+        console.error('[inventoryService] Duplicate pre-check failed:', existingError);
       }
-      console.error('[inventoryService] Insert failed:', error);
+      if (existing) {
+        return existing as DbInventoryItem;
+      }
+
+      const { data, error } = await supabase
+        .from('inventory')
+        .insert(item)
+        .select()
+        .single();
+
+      if (error) {
+        // UNIQUE INDEX 충돌 시(예: 동시 등록) 기존 항목을 재조회하여 반환
+        if (error.code === '23505') {
+          const { data: dup } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('hospital_id', item.hospital_id)
+            .eq('manufacturer', item.manufacturer)
+            .eq('brand', item.brand)
+            .eq('size', item.size)
+            .maybeSingle();
+          if (dup) return dup as DbInventoryItem;
+        }
+        console.error('[inventoryService] Insert failed:', error);
+        return null;
+      }
+      return data as DbInventoryItem;
+    } catch (networkError) {
+      console.error('[inventoryService] Network error on addItem:', networkError);
       return null;
     }
-    return data as DbInventoryItem;
   },
 
   /** 재고 항목 수정 */

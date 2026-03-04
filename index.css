@@ -308,6 +308,10 @@ textarea:focus-visible {
   background: #94a3b8;
 }
 
+/* ─── scrollbar-hide 유틸리티 ───────────────────────────────────────── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* ─── ExcelTable: 환자 정보 blur ────────────────────────────────────── */
 .patient-info-blur {
   filter: blur(5px);

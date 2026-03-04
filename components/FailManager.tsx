@@ -9,6 +9,8 @@ import { surgeryService } from '../services/surgeryService';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
 import FailReturnModal from './fail/FailReturnModal';
+import { Z } from '../utils/zIndex';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 // ============================================================
 // TYPES
@@ -39,6 +41,13 @@ interface MonthlyFailDatum {
   total: number;
   byManufacturer: Record<string, number>;
 }
+
+// ============================================================
+// CHART CONSTANTS (outside component to avoid re-creation)
+// ============================================================
+const CHART_MAX_VISIBLE = 12;
+const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 } as const;
+const CHART_AREA_H = 280;
 
 // ============================================================
 // COMPONENT
@@ -145,6 +154,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const [isAllReturnConfirmOpen, setIsAllReturnConfirmOpen] = useState(false);
   const [isAllReturnSubmitting, setIsAllReturnSubmitting] = useState(false);
 
+  // L-09: ESC키로 일괄 반품 모달 닫기
+  useEscapeKey(() => { if (!isAllReturnSubmitting) setIsAllReturnConfirmOpen(false); }, isAllReturnConfirmOpen);
+
   useEffect(() => {
     if (initialShowBulkModal) {
       setIsBulkModalOpen(true);
@@ -198,6 +210,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     ? totalReturnPending
     : (returnPendingByMfr[activeM] || 0);
   const actualPendingFails = Math.max(0, currentRemainingFails - returnPendingCount);
+  // 전체 미처리 잔여 (반품 대기 중인 건 제외)
+  const globalPendingFails = Math.max(0, pendingFailList.length - totalReturnPending);
 
   const mPendingList = activeM === 'all'
     ? pendingFailList
@@ -302,8 +316,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const topFailSizes = useMemo(() => {
     const counts: Record<string, { brand: string; size: string; count: number }> = {};
     filteredHistoryFailList.forEach(f => {
-      const b = String(f['브랜드'] || 'Unknown');
-      const s = String(f['규격(SIZE)'] || 'Unknown');
+      const b = String(f['브랜드'] || '기타');
+      const s = String(f['규격(SIZE)'] || '기타');
       const key = `${b}|${s}`;
       if (!counts[key]) counts[key] = { brand: b, size: s, count: 0 };
       counts[key].count++;
@@ -316,7 +330,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // ============================================================
   const animTotal = useCountUp(filteredHistoryFailList.length);
   const animProcessed = useCountUp(filteredHistoryFailList.filter(f => f['구분'] === '교환완료').length);
-  const animPending = useCountUp(Math.max(0, pendingFailList.length - totalReturnPending));
+  const animPending = useCountUp(globalPendingFails);
   const animFailRate = useCountUp(Math.round(failRate * 10));
   const animMonthlyAvg = useCountUp(Math.round(monthlyAvgFail * 10));
 
@@ -325,8 +339,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     if (!activeM || !isModalOpen) return [];
     const failCounts: Record<string, { brand: string, size: string, count: number }> = {};
     mPendingList.forEach(f => {
-      const b = String(f['브랜드'] || 'Unknown');
-      const s = String(f['규격(SIZE)'] || 'Unknown');
+      const b = String(f['브랜드'] || '기타');
+      const s = String(f['규격(SIZE)'] || '기타');
       const key = `${simpleNormalize(b)}|${getSizeMatchKey(s, activeM)}`;
       if (!failCounts[key]) failCounts[key] = { brand: b, size: s, count: 0 };
       failCounts[key].count++;
@@ -539,7 +553,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   // RENDER
   // ============================================================
   // 월별 차트: 스와이프 오프셋으로 보이는 월 범위 슬라이스
-  const CHART_MAX_VISIBLE = 12;
   // 차트 크기는 전체 기간 기준으로 고정
   const chartDataLength = allMonthlyFailData.length;
   const maxOffset = Math.max(0, chartDataLength - CHART_MAX_VISIBLE);
@@ -548,9 +561,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     ? allMonthlyFailData.slice(clampedOffset, clampedOffset + CHART_MAX_VISIBLE)
     : allMonthlyFailData;
 
-  // 월별 차트 상수 (grouped bar용)
-  const CHART_PAD = { l: 36, r: 8, t: 8, b: 24 };
-  const CHART_AREA_H = 280;
   // 막대 높이는 필터된 값 기준
   const maxBarVal = Math.max(
     ...monthlyFailData.flatMap(d => manufacturers.map(m => d.byManufacturer[m] ?? 0)),
@@ -563,7 +573,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
   const activeOrders = activeM === 'all' ? failOrders : failOrders.filter(o => o.manufacturer === activeM);
 
   return (
-    <div className="space-y-6" style={{ animationDuration: '0s' }}>
+    <div className="space-y-6">
 
       {/* ========================================= */}
       {/* STICKY HEADER + KPI + FILTER              */}
@@ -594,7 +604,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="h-10 w-px bg-slate-100" />
               <div>
                 <h4 className="text-sm font-semibold text-slate-800">총 식립 대비</h4>
-                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{totalPlacements}<span className="text-xs font-semibold text-slate-400 ml-1">cases</span></p>
+                <p className="text-base font-bold text-slate-800 tracking-tight mt-1">{totalPlacements}<span className="text-xs font-semibold text-slate-400 ml-1">건</span></p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -615,14 +625,19 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   </div>
                 </div>
               )}
-              <button
-                onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
-                disabled={isReadOnly}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                반품 처리
-              </button>
+              {(() => {
+                const allDisabled = isReadOnly || (activeM === 'all' ? globalPendingFails <= 0 : currentRemainingFails <= 0);
+                return (
+                  <button
+                    onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+                    disabled={allDisabled}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${allDisabled ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                    {activeM === 'all' ? '전체 일괄 반품' : '반품 신청'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -639,30 +654,17 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           </div>
         )}
 
-        {/* B. KPI Metrics Strip */}
-        <FailKpiStrip
-          animTotal={animTotal}
-          animProcessed={animProcessed}
-          animPending={animPending}
-          animFailRate={animFailRate}
-          animMonthlyAvg={animMonthlyAvg}
-          failRate={failRate}
-          monthlyFailDataLength={monthlyFailData.length}
-          totalReturnPending={totalReturnPending}
-          failSparkline={failSparkline}
-          exchangeSparkline={exchangeSparkline}
-        />
-
-        {/* C. Manufacturer Filter Strip (Pill style) */}
+        {/* B. Manufacturer Filter Strip (Pill style) */}
         <div className="hidden md:block bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
-          <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
+          <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setActiveM('all')}
+              aria-pressed={activeM === 'all'}
               className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
             >
               전체
-              {Math.max(0, pendingFailList.length - totalReturnPending) > 0 && (
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === 'all' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{Math.max(0, pendingFailList.length - totalReturnPending)}</span>
+              {globalPendingFails > 0 && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === 'all' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{globalPendingFails}</span>
               )}
             </button>
             {manufacturers.map(m => {
@@ -671,6 +673,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 <button
                   key={m}
                   onClick={() => setActiveM(m)}
+                  aria-pressed={activeM === m}
                   className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                 >
                   {m}
@@ -685,15 +688,39 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
 
         <div className="md:hidden bg-white rounded-2xl border border-slate-100 p-4 shadow-sm space-y-3">
           <h3 className="text-sm font-black text-slate-800">모바일 교환 관리</h3>
-          <div className="grid grid-cols-2 gap-2">
+          {/* M-02: 분석 기간 표시 */}
+          {allMonths.length > 0 && (
+            <div className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5">
+              <span className="text-[10px] font-bold text-slate-400">분석 기간</span>
+              <span className="text-[10px] font-bold text-slate-600">
+                {allMonths[periodStartIdx] || allMonths[0]} ~ {allMonths[periodEndIdx] || allMonths[allMonths.length - 1]}
+              </span>
+            </div>
+          )}
+          {/* M-09: KPI 5개 모두 표시 */}
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-slate-400">미처리</p>
-              <p className={`text-base font-black tabular-nums ${Math.max(0, pendingFailList.length - totalReturnPending) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{Math.max(0, pendingFailList.length - totalReturnPending)}</p>
-              {totalReturnPending > 0 && <p className="text-[9px] font-bold text-amber-500">반품대기 {totalReturnPending}</p>}
+              <p className="text-[10px] font-bold text-slate-400">총 교환</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">{filteredHistoryFailList.length}</p>
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-              <p className="text-[10px] font-bold text-slate-400">교환완료</p>
-              <p className="text-base font-black text-emerald-600 tabular-nums">{historyFailList.filter(f => f['구분'] === '교환완료').length}</p>
+              <p className="text-[10px] font-bold text-slate-400">반품완료</p>
+              <p className="text-base font-black text-emerald-600 tabular-nums">{filteredHistoryFailList.filter(f => f['구분'] === '교환완료').length}</p>
+            </div>
+            <div className={`rounded-xl border border-slate-100 px-3 py-2.5 ${globalPendingFails > 0 ? 'bg-rose-50/60' : 'bg-slate-50/80'}`}>
+              <p className="text-[10px] font-bold text-slate-400">미처리</p>
+              <p className={`text-base font-black tabular-nums ${globalPendingFails > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{globalPendingFails}</p>
+              {totalReturnPending > 0 && <p className="text-[9px] font-bold text-amber-500">반품대기 {totalReturnPending}</p>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">교환율</p>
+              <p className={`text-base font-black tabular-nums ${failRate > 20 ? 'text-rose-600' : failRate > 10 ? 'text-amber-500' : 'text-slate-800'}`}>{(animFailRate / 10).toFixed(1)}<span className="text-[10px] text-slate-400">%</span></p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400">월 평균</p>
+              <p className="text-base font-black text-slate-800 tabular-nums">{(animMonthlyAvg / 10).toFixed(1)}<span className="text-[10px] text-slate-400">건</span></p>
             </div>
           </div>
 
@@ -714,16 +741,18 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             </select>
           </div>
 
-          <button
-            onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
-            disabled={isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)}
-            className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-indigo-600 text-white active:scale-[0.98]'
-              }`}
-          >
-            반품 처리
-          </button>
+          {(() => {
+            const mobileDisabled = isReadOnly || (activeM === 'all' ? globalPendingFails <= 0 : currentRemainingFails <= 0);
+            return (
+              <button
+                onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+                disabled={mobileDisabled}
+                className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${mobileDisabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white active:scale-[0.98]'}`}
+              >
+                {activeM === 'all' ? '전체 일괄 반품' : '반품 신청'}
+              </button>
+            );
+          })()}
           {hospitalId && (
             <div>
               <div className="relative">
@@ -756,6 +785,20 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           )}
         </div>
       </div>{/* end sticky wrapper */}
+
+      {/* KPI Metrics Strip */}
+      <FailKpiStrip
+        animTotal={animTotal}
+        animProcessed={animProcessed}
+        animPending={animPending}
+        animFailRate={animFailRate}
+        animMonthlyAvg={animMonthlyAvg}
+        failRate={failRate}
+        monthlyFailDataLength={monthlyFailData.length}
+        totalReturnPending={totalReturnPending}
+        failSparkline={failSparkline}
+        exchangeSparkline={exchangeSparkline}
+      />
 
       {activeM ? (
         <div className="space-y-6">
@@ -818,19 +861,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             {/* LEFT: 선택된 제조사 현황 카드 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM === 'all' ? '전체' : activeM} 교환 현황</h3>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
-                    disabled={isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0)}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${isReadOnly || (activeM !== 'all' && currentRemainingFails <= 0) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200'}`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                    반품 처리
-                  </button>
-                </div>
+                <h3 className="text-sm font-black text-slate-800 tracking-tight">{activeM === 'all' ? '전체' : activeM} 교환 현황</h3>
               </div>
               {/* 3-column stats */}
               <div className="grid grid-cols-3 gap-4">
@@ -838,8 +869,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">총 발생</p>
                   <p className="text-2xl font-black text-slate-800 tabular-nums">{currentStats.total}</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-4 text-center">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">교환 완료</p>
+                <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">교환 완료</p>
                   <p className="text-2xl font-black text-emerald-600 tabular-nums">{currentStats.processed}</p>
                 </div>
                 <div className={`rounded-xl p-4 text-center ${actualPendingFails > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
@@ -873,12 +904,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="flex items-center gap-4 mt-4">
                 {/* Donut */}
                 <svg viewBox="0 0 120 120" className="w-28 h-28 shrink-0">
-                  {donutPaths.map((seg, i) => (
-                    <path key={i} d={seg.path} fill={seg.color} stroke="white" strokeWidth="2" className="transition-opacity hover:opacity-80" />
+                  {donutPaths.map((seg) => (
+                    <path key={seg.name} d={seg.path} fill={seg.color} stroke="white" strokeWidth="2" className="transition-opacity hover:opacity-80" />
                   ))}
                   <circle cx="60" cy="60" r="30" fill="white" />
-                  <text x="60" y="57" textAnchor="middle" fontSize="16" fontWeight="800" fill="#1e293b">{historyFailList.length}</text>
-                  <text x="60" y="72" textAnchor="middle" fontSize="7" fontWeight="600" fill="#94a3b8" letterSpacing="0.1em">TOTAL EXCHANGE</text>
+                  <text x="60" y="57" textAnchor="middle" fontSize="16" fontWeight="800" fill="#1e293b">{filteredHistoryFailList.length}</text>
+                  <text x="60" y="72" textAnchor="middle" fontSize="7" fontWeight="600" fill="#94a3b8" letterSpacing="0.1em">총 교환</text>
                 </svg>
                 {/* Legend */}
                 <div className="flex-1 space-y-2">
@@ -1220,7 +1251,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                     <div className="flex justify-between items-start">
                       <p className="text-xs font-black text-slate-800">{order.date} 주문</p>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter ${order.status === 'ordered' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                        {order.status === 'ordered' ? 'Ordered' : 'Completed'}
+                        {order.status === 'ordered' ? '발주중' : '입고완료'}
                       </span>
                     </div>
                     <div className="space-y-1">
@@ -1235,7 +1266,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       <span className="text-[10px] font-bold text-slate-500">담당: {order.manager}</span>
                       {!isReadOnly && onDeleteOrder && (
                         <button
-                          onClick={() => void onDeleteOrder(order.id)}
+                          onClick={() => { if (window.confirm('이 주문을 삭제하시겠습니까?')) void onDeleteOrder(order.id); }}
                           className="text-[10px] font-bold text-slate-400 hover:text-rose-500 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors"
                         >
                           삭제
@@ -1249,7 +1280,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               <div className="py-12 text-center">
                 <svg className="w-12 h-12 text-slate-100 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                 <p className="text-sm text-slate-500 font-medium">아직 교환 주문 이력이 없습니다.</p>
-                <p className="text-[11px] text-slate-300 mt-1">반품/교환 주문 버튼으로 첫 주문을 등록하세요.</p>
+                <p className="text-[11px] text-slate-300 mt-1">'반품 신청' 버튼으로 첫 반품을 등록하세요.</p>
               </div>
             )}
           </div>
@@ -1266,17 +1297,21 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* ========================================= */}
       {isAllReturnConfirmOpen && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          style={{ zIndex: Z.MODAL }}
           onClick={() => !isAllReturnSubmitting && setIsAllReturnConfirmOpen(false)}
         >
           <div
             className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5"
             onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="all-return-modal-title"
           >
             {/* Header */}
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-base font-black text-slate-800">일괄 반품 처리</h2>
+                <h2 id="all-return-modal-title" className="text-base font-black text-slate-800">일괄 반품 처리</h2>
                 <p className="text-xs text-slate-500 mt-0.5">미처리 잔여 항목 전체를 제조사별로 반품 주문 등록합니다.</p>
               </div>
               <button
@@ -1297,7 +1332,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품 처리 대상</p>
               {manufacturers.map(mfr => {
-                const cnt = pendingByManufacturerMap[mfr] || 0;
+                const cnt = Math.max(0, (pendingByManufacturerMap[mfr] || 0) - (returnPendingByMfr[mfr] || 0));
                 if (cnt === 0) return null;
                 return (
                   <div key={mfr} className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl">
@@ -1308,7 +1343,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               })}
               <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
                 <span className="text-sm font-black text-indigo-700">합계</span>
-                <span className="text-sm font-black text-indigo-700 tabular-nums">{pendingFailList.length}건</span>
+                <span className="text-sm font-black text-indigo-700 tabular-nums">{globalPendingFails}건</span>
               </div>
             </div>
 
@@ -1326,7 +1361,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 disabled={isAllReturnSubmitting || pendingFailList.length === 0}
                 className="flex-1 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-2xl transition-all active:scale-[0.98]"
               >
-                {isAllReturnSubmitting ? '처리 중...' : '반품 처리 완료'}
+                {isAllReturnSubmitting ? '처리 중...' : '반품 신청하기'}
               </button>
             </div>
           </div>
@@ -1364,13 +1399,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         />
       )}
 
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
       {toast && (
         <div
           style={isMobileViewport ? { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' } : undefined}

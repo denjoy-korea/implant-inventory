@@ -5,6 +5,7 @@ import { auditService, AuditEntry, AuditHistoryItem } from '../services/auditSer
 import { operationLogService } from '../services/operationLogService';
 import { useToast } from '../hooks/useToast';
 import { isExchangePrefix } from '../services/appUtils';
+import AuditReportDashboard from './audit/AuditReportDashboard';
 
 interface InventoryAuditProps {
   inventory: InventoryItem[];
@@ -38,10 +39,14 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
   const summaryCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
 
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+
   const loadHistory = useCallback(async () => {
     if (!hospitalId) return;
+    setIsHistoryLoading(true);
     const data = await auditService.getAuditHistory(hospitalId);
     setAuditHistory(data);
+    setIsHistoryLoading(false);
   }, [hospitalId]);
 
   useEffect(() => {
@@ -132,49 +137,46 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
       });
   }, [visibleInventory, activeBrand, activeManufacturer, searchQuery]);
 
-  // KPI: 현재 선택된 브랜드 기준 (탭 연동)
+  // KPI: 완료(confirmedItems) 기준 — 불일치 항목은 완료 버튼 클릭 후에만 카운팅
   const { totalItems, totalAudited, totalMatched, totalMismatched, totalMismatchedQty, progressPct } = useMemo(() => {
-    const filteredIds = new Set(filteredInventory.map(i => i.id));
     const items = filteredInventory.length;
-    const audited = Object.entries(auditResults).filter(([id]) => filteredIds.has(id));
-    const matched = audited.filter(([, r]) => r.matched).length;
-    const mismatchedEntries = audited.filter(([, r]) => !r.matched);
-    const mismatchedQty = mismatchedEntries.reduce((sum, [id, r]) => {
-      const item = filteredInventory.find(i => i.id === id);
-      return sum + Math.abs((r.actualCount ?? 0) - (item?.currentStock ?? 0));
+    const confirmed = filteredInventory.filter(i => confirmedItemsSet.has(i.id));
+    const matched = confirmed.filter(i => auditResults[i.id]?.matched).length;
+    const mismatchedEntries = confirmed.filter(i => auditResults[i.id] && !auditResults[i.id].matched);
+    const mismatchedQty = mismatchedEntries.reduce((sum, i) => {
+      const r = auditResults[i.id];
+      return sum + Math.abs((r.actualCount ?? 0) - (i.currentStock ?? 0));
     }, 0);
     return {
       totalItems: items,
-      totalAudited: audited.length,
+      totalAudited: confirmed.length,
       totalMatched: matched,
       totalMismatched: mismatchedEntries.length,
       totalMismatchedQty: mismatchedQty,
-      progressPct: items > 0 ? Math.round((audited.length / items) * 100) : 0,
+      progressPct: items > 0 ? Math.round((confirmed.length / items) * 100) : 0,
     };
-  }, [filteredInventory, auditResults]);
+  }, [filteredInventory, auditResults, confirmedItemsSet]);
 
-  // 불일치 item 상세 (배너용) — 현재 브랜드 기준
+  // 불일치 item 상세 (배너용) — 완료된 항목만
   const mismatchItems = useMemo(() => {
-    const filteredIds = new Set(filteredInventory.map(i => i.id));
-    return Object.entries(auditResults)
-      .filter(([id, r]) => filteredIds.has(id) && !r.matched)
-      .map(([id, r]) => ({ id, result: r, item: inventory.find(i => i.id === id) }))
-      .filter(x => x.item != null) as { id: string; result: { matched: boolean; actualCount?: number; reason?: string }; item: InventoryItem }[];
-  }, [auditResults, filteredInventory, inventory]);
+    return filteredInventory
+      .filter(i => confirmedItemsSet.has(i.id) && auditResults[i.id] && !auditResults[i.id].matched)
+      .map(i => ({ id: i.id, result: auditResults[i.id], item: i }));
+  }, [auditResults, filteredInventory, confirmedItemsSet]);
 
-  // 브랜드별 실사 통계 (탭 dot 색 계산용)
+  // 브랜드별 실사 통계 (탭 dot 색 계산용) — 완료 기준
   const brandStats = useMemo(() => {
     const stats: Record<string, { total: number; audited: number; mismatch: number }> = {};
     visibleInventory.forEach(item => {
       if (!stats[item.brand]) stats[item.brand] = { total: 0, audited: 0, mismatch: 0 };
       stats[item.brand].total++;
-      if (auditResults[item.id] !== undefined) {
+      if (confirmedItemsSet.has(item.id)) {
         stats[item.brand].audited++;
-        if (!auditResults[item.id].matched) stats[item.brand].mismatch++;
+        if (auditResults[item.id] && !auditResults[item.id].matched) stats[item.brand].mismatch++;
       }
     });
     return stats;
-  }, [visibleInventory, auditResults]);
+  }, [visibleInventory, auditResults, confirmedItemsSet]);
 
   const auditedCount = Object.keys(auditResults).length;
   const pendingAuditItems = useMemo(
@@ -182,12 +184,17 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     [filteredInventory, confirmedItemsSet]
   );
 
-  // 브랜드 진행률 100% 시 자동으로 다음 브랜드로 이동 (모든 브랜드 완료 시 전체 탭)
+  // 브랜드 내 모든 항목 완료(confirmedItems) 시 자동으로 다음 브랜드로 이동
+  // 불일치 항목은 '완료' 버튼 클릭 후 confirmedItems에 추가되므로, 단순 체크만으로는 이동하지 않음
   useEffect(() => {
-    if (!isAuditActive || progressPct < 100 || activeBrand === null) return;
+    if (!isAuditActive || activeBrand === null) return;
+    const brandItems = visibleInventory.filter(i => i.brand === activeBrand);
+    if (brandItems.length === 0) return;
+    const allConfirmed = brandItems.every(i => confirmedItemsSet.has(i.id));
+    if (!allConfirmed) return;
     const allBrandsDone = brandsList.every(b => {
-      const s = brandStats[b];
-      return s && s.total > 0 && s.audited === s.total;
+      const bItems = visibleInventory.filter(i => i.brand === b);
+      return bItems.length === 0 || bItems.every(i => confirmedItemsSet.has(i.id));
     });
     if (allBrandsDone) {
       const timer = setTimeout(() => setActiveBrand(null), 600);
@@ -198,7 +205,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     if (!nextBrand) return;
     const timer = setTimeout(() => setActiveBrand(nextBrand), 600);
     return () => clearTimeout(timer);
-  }, [progressPct, activeBrand, brandsList, isAuditActive, brandStats]);
+  }, [confirmedItemsSet, activeBrand, brandsList, isAuditActive, visibleInventory]);
 
   const handleAuditComplete = useCallback(() => setShowAuditSummary(true), []);
   const handleAuditClose = useCallback(() => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); }, []);
@@ -309,6 +316,11 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     if (s.audited === s.total) return 'bg-emerald-500';
     return 'bg-indigo-400';
   };
+
+  // PC: 리포트 대시보드, 모바일: 기존 실사 입력 UI
+  if (!isMobileViewport) {
+    return <AuditReportDashboard auditHistory={auditHistory} isLoading={isHistoryLoading} />;
+  }
 
   return (
     <>
@@ -1025,10 +1037,10 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
         {/* 실사 이력 모달 */}
         {showHistory && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-300" onClick={() => onCloseHistory?.()}>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => onCloseHistory?.()}>
             <div
               ref={historyModalRef}
-              className="bg-white/95 backdrop-blur-xl w-full max-w-4xl rounded-[32px] shadow-2xl border border-white/20 overflow-hidden max-h-[85vh] flex flex-col flex-shrink-0 animate-in zoom-in-95 duration-300"
+              className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -1036,126 +1048,129 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
               aria-describedby="audit-history-desc"
             >
               {/* 헤더 */}
-              <div className="p-7 bg-slate-900/95 text-white flex justify-between items-center flex-shrink-0 border-b border-white/10 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -z-0 translate-x-1/3 -translate-y-1/3"></div>
-                <div className="relative z-10">
-                  <h3 id="audit-history-title" className="text-xl font-black flex items-center gap-2">
-                    <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    실사 이력 조회
-                  </h3>
-                  <p id="audit-history-desc" className="text-slate-400 text-[13px] font-semibold mt-1 tabular-nums">{groupedHistory.length}회의 실사 이력</p>
+              <div className="px-7 pt-6 pb-5 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
+                <div>
+                  <h3 id="audit-history-title" className="text-xl font-bold text-slate-900">실사 이력 조회</h3>
+                  <p id="audit-history-desc" className="text-sm text-slate-400 mt-0.5 tabular-nums">{groupedHistory.length}회의 실사 이력</p>
                 </div>
-                <button ref={historyCloseButtonRef} onClick={onCloseHistory} aria-label="닫기" className="p-2.5 bg-white/5 hover:bg-white/20 rounded-full transition-all relative z-10">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                <button
+                  ref={historyCloseButtonRef}
+                  onClick={onCloseHistory}
+                  aria-label="닫기"
+                  className="p-2 border-2 border-slate-200 hover:border-slate-400 rounded-full transition-colors text-slate-400 hover:text-slate-700"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
 
-              {/* 목록 */}
-              <div className="flex-1 overflow-y-auto modal-scroll">
+              {/* 테이블 */}
+              <div className="flex-1 overflow-y-auto">
                 {groupedHistory.length > 0 ? (
-                  <div className="divide-y divide-slate-100">
-                    {/* 컬럼 헤더 */}
-                    <div className="grid grid-cols-[1fr_56px_56px_56px_88px_56px] sm:grid-cols-[1fr_64px_64px_64px_100px_64px] gap-1 sm:gap-2 px-3 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                      <span className="text-[11px] font-bold text-slate-400">실사일</span>
-                      <span className="text-[11px] font-bold text-slate-400 text-center">시스템</span>
-                      <span className="text-[11px] font-bold text-slate-400 text-center">실제</span>
-                      <span className="text-[11px] font-bold text-slate-400 text-center">오차</span>
-                      <span className="text-[11px] font-bold text-slate-400 text-center">담당자</span>
-                      <span className="text-[11px] font-bold text-slate-400 text-center">상세</span>
-                    </div>
-
-                    {groupedHistory.map(([key, group]) => {
-                      const isExpanded = expandedAuditKeys.has(key);
-                      const mismatchOnly = group.items.filter(h => h.difference !== 0);
-                      const isAllMatch = mismatchOnly.length === 0;
-                      const totalDiff = group.items.reduce((s, h) => s + h.difference, 0);
-                      // 시간 표시 (KST = UTC+9)
-                      const localTime = new Date(group.createdAt);
-                      const timeStr = localTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-                      const dateStr = localTime.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                      return (
-                        <div key={key}>
-                          {/* 요약 행 */}
-                          <div className="grid grid-cols-[1fr_56px_56px_56px_88px_56px] sm:grid-cols-[1fr_64px_64px_64px_100px_64px] gap-1 sm:gap-2 px-3 sm:px-5 py-3.5 items-center hover:bg-slate-50/60 transition-colors">
-                            <div>
-                              <span className="text-xs font-bold text-slate-700">{dateStr}</span>
-                              <span className="text-[10px] text-slate-400 ml-1.5">{timeStr}</span>
-                            </div>
-                            {isAllMatch ? (
-                              <>
-                                <span className="col-span-2 text-center">
-                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">전 품목 일치</span>
-                                </span>
-                                <span className="text-center">
-                                  <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 text-slate-500">0</span>
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-xs font-bold text-slate-600 text-center tabular-nums">{mismatchOnly.reduce((s, h) => s + h.systemStock, 0)}</span>
-                                <span className="text-xs font-bold text-slate-800 text-center tabular-nums">{mismatchOnly.reduce((s, h) => s + h.actualStock, 0)}</span>
-                                <span className="text-center">
-                                  <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${totalDiff < 0 ? 'bg-rose-100 text-rose-600' : totalDiff > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                                    {totalDiff > 0 ? '+' : ''}{totalDiff}
-                                  </span>
-                                </span>
-                              </>
-                            )}
-                            <span className="text-[11px] font-medium text-slate-500 text-center truncate">{group.performedBy || '-'}</span>
-                            <div className="flex justify-center">
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
+                      <tr>
+                        <th className="px-7 py-3 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wide">실사일</th>
+                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">시스템</th>
+                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">실제</th>
+                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">오차</th>
+                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">담당자</th>
+                        <th className="px-7 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">상세</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {groupedHistory.map(([key, group]) => {
+                        const isExpanded = expandedAuditKeys.has(key);
+                        const mismatchOnly = group.items.filter(h => h.difference !== 0);
+                        const isAllMatch = mismatchOnly.length === 0;
+                        const totalDiff = group.items.reduce((s, h) => s + h.difference, 0);
+                        const localTime = new Date(group.createdAt);
+                        const timeStr = localTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                        const dateStr = localTime.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                        return (
+                          <React.Fragment key={key}>
+                            <tr className="hover:bg-slate-50 transition-colors">
+                              <td className="px-7 py-4">
+                                <span className="font-semibold text-slate-800">{dateStr}</span>
+                                <span className="text-xs text-slate-400 ml-2">{timeStr}</span>
+                              </td>
                               {isAllMatch ? (
-                                <span className="text-[10px] text-slate-300 font-bold">-</span>
+                                <>
+                                  <td colSpan={2} className="px-4 py-4 text-center">
+                                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">전 품목 일치</span>
+                                  </td>
+                                  <td className="px-4 py-4 text-center">
+                                    <span className="text-sm font-bold text-slate-300">0</span>
+                                  </td>
+                                </>
                               ) : (
-                                <button
-                                  onClick={() => toggleExpand(key)}
-                                  className="px-2 py-1 text-[10px] font-bold text-indigo-500 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors whitespace-nowrap"
-                                >
-                                  {isExpanded ? '접기' : '보기'}
-                                </button>
+                                <>
+                                  <td className="px-4 py-4 text-center font-semibold text-slate-600 tabular-nums">{mismatchOnly.reduce((s, h) => s + h.systemStock, 0)}</td>
+                                  <td className="px-4 py-4 text-center font-bold text-slate-900 tabular-nums">{mismatchOnly.reduce((s, h) => s + h.actualStock, 0)}</td>
+                                  <td className="px-4 py-4 text-center">
+                                    <span className={`text-sm font-bold tabular-nums ${totalDiff < 0 ? 'text-rose-500' : totalDiff > 0 ? 'text-blue-500' : 'text-slate-400'}`}>
+                                      {totalDiff > 0 ? '+' : ''}{totalDiff}
+                                    </span>
+                                  </td>
+                                </>
                               )}
-                            </div>
-                          </div>
+                              <td className="px-4 py-4 text-center text-sm text-slate-500">{group.performedBy || '-'}</td>
+                              <td className="px-7 py-4 text-center">
+                                {isAllMatch ? (
+                                  <span className="text-slate-300 text-sm">-</span>
+                                ) : (
+                                  <button
+                                    onClick={() => toggleExpand(key)}
+                                    className="text-sm font-semibold text-indigo-500 hover:text-indigo-700 transition-colors"
+                                  >
+                                    {isExpanded ? '접기' : '보기'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
 
-                          {/* 상세 행 (불일치 항목만, 토글) */}
-                          {isExpanded && !isAllMatch && (
-                            <div className="bg-slate-50/80 border-t border-slate-100 px-5 pb-3">
-                              <table className="w-full text-left border-collapse mt-2">
-                                <thead>
-                                  <tr className="border-b border-slate-200">
-                                    <th className="py-2 text-[10px] font-bold text-slate-400">브랜드</th>
-                                    <th className="py-2 text-[10px] font-bold text-slate-400">규격</th>
-                                    <th className="py-2 text-[10px] font-bold text-slate-400 text-center">시스템</th>
-                                    <th className="py-2 text-[10px] font-bold text-slate-400 text-center">실제</th>
-                                    <th className="py-2 text-[10px] font-bold text-slate-400 text-center">오차</th>
-                                    <th className="py-2 text-[10px] font-bold text-slate-400">사유</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {mismatchOnly.map(h => (
-                                    <tr key={h.id}>
-                                      <td className="py-2 pr-3 text-xs font-bold text-slate-700">{h.brand}</td>
-                                      <td className="py-2 pr-3 text-xs text-slate-500">{h.size}</td>
-                                      <td className="py-2 text-xs font-bold text-slate-600 text-center tabular-nums">{h.systemStock}</td>
-                                      <td className="py-2 text-xs font-bold text-slate-800 text-center tabular-nums">{h.actualStock}</td>
-                                      <td className="py-2 text-center">
-                                        <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${h.difference < 0 ? 'bg-rose-100 text-rose-600' : h.difference > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                                          {h.difference > 0 ? '+' : ''}{h.difference}
-                                        </span>
-                                      </td>
-                                      <td className="py-2 text-[11px] text-slate-500">{h.reason || '-'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                            {/* 상세 확장 행 */}
+                            {isExpanded && !isAllMatch && (
+                              <tr>
+                                <td colSpan={6} className="px-7 pb-4 pt-0 bg-slate-50/60">
+                                  <table className="w-full text-left border-collapse">
+                                    <thead>
+                                      <tr className="border-b border-slate-200">
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">브랜드</th>
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">규격</th>
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">시스템</th>
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">실제</th>
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">오차</th>
+                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">사유</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {mismatchOnly.map(h => (
+                                        <tr key={h.id}>
+                                          <td className="py-2.5 pr-4 text-sm font-semibold text-slate-700">{h.brand}</td>
+                                          <td className="py-2.5 pr-4 text-sm text-slate-500">{h.size}</td>
+                                          <td className="py-2.5 text-sm text-slate-500 text-center tabular-nums">{h.systemStock}</td>
+                                          <td className="py-2.5 text-sm font-bold text-slate-900 text-center tabular-nums">{h.actualStock}</td>
+                                          <td className="py-2.5 text-center">
+                                            <span className={`text-sm font-bold tabular-nums ${h.difference < 0 ? 'text-rose-500' : h.difference > 0 ? 'text-blue-500' : 'text-slate-400'}`}>
+                                              {h.difference > 0 ? '+' : ''}{h.difference}
+                                            </span>
+                                          </td>
+                                          <td className="py-2.5 text-sm text-slate-400">{h.reason || '-'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 ) : (
                   <div className="py-20 text-center">
-                    <p className="text-sm text-slate-400 italic">실사 이력이 없습니다.</p>
+                    <p className="text-sm text-slate-400">실사 이력이 없습니다.</p>
                   </div>
                 )}
               </div>

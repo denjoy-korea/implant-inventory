@@ -189,6 +189,7 @@ export function dbToOrder(db: DbOrder & { order_items: DbOrderItem[] }): Order {
     manager: db.manager,
     status: db.status as OrderStatus,
     receivedDate: db.received_date || undefined,
+    confirmedBy: db.confirmed_by || undefined,
     memo: db.memo || undefined,
     cancelledReason: db.cancelled_reason || undefined,
   };
@@ -286,6 +287,7 @@ export function orderToDb(
       manager: order.manager,
       status: order.status,
       received_date: order.receivedDate || null,
+      confirmed_by: order.confirmedBy || null,
       memo: order.memo || null,
       cancelled_reason: order.cancelledReason || null,
     },
@@ -318,6 +320,7 @@ export function dbToReturnRequest(
     requestedDate: db.requested_date,
     completedDate: db.completed_date,
     manager: db.manager,
+    confirmedBy: db.confirmed_by || undefined,
     memo: db.memo,
     createdAt: db.created_at,
     updatedAt: db.updated_at,

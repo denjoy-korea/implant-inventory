@@ -1,5 +1,6 @@
 import React, { lazy, useEffect, useRef } from 'react';
 import FeatureGate from '../FeatureGate';
+import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import {
   DashboardTab,
   ExcelRow,
@@ -65,6 +66,8 @@ interface DashboardOperationalTabsProps {
   onFailBulkModalOpened?: () => void;
   onFailAuditDone?: () => void;
   orderHistoryOnly?: boolean;
+  stockCalcSettings?: StockCalcSettings;
+  onStockCalcSettingsChange?: (settings: StockCalcSettings) => Promise<void>;
 }
 
 const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
@@ -102,6 +105,8 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onFailBulkModalOpened,
   onFailAuditDone,
   orderHistoryOnly,
+  stockCalcSettings,
+  onStockCalcSettingsChange,
 }) => {
   const prevTabRef = useRef<DashboardTab>(dashboardTab);
 
@@ -127,6 +132,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         <InventoryAudit
           inventory={inventory}
           hospitalId={user?.hospitalId || ''}
+          userName={user?.name}
           onApplied={() => {
             if (user) {
               void onLoadHospitalData(user);
@@ -146,6 +152,9 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           onGoInventoryMaster={() => onTabChange('inventory_master')}
           hospitalWorkDays={hospitalWorkDays}
           planState={planState}
+          hospitalId={user?.hospitalId}
+          isReadOnly={isReadOnly}
+          currentUserName={user?.name || '관리자'}
         />
       )}
       {dashboardTab === 'fail_management' && (
@@ -201,6 +210,8 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           hospitalWorkDays={hospitalWorkDays}
           onWorkDaysChange={onWorkDaysChange}
           permissions={user?.permissions}
+          stockCalcSettings={stockCalcSettings}
+          onStockCalcSettingsChange={onStockCalcSettingsChange}
         />
       )}
       {dashboardTab === 'audit_log' && user?.hospitalId && (

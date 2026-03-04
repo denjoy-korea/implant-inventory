@@ -648,8 +648,18 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         <div className="bg-gradient-to-br from-amber-50 to-amber-100/40 border border-amber-200/80 rounded-2xl p-4 shadow-[0_8px_24px_-4px_rgba(245,158,11,0.12)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-black text-amber-800 tracking-tight">
+              <h3 className="text-sm font-black text-amber-800 tracking-tight flex items-center gap-1.5">
                 수술기록 미등록/비정형 품목 {unregisteredFromSurgery.length}종 감지
+                <span className="relative group/unregistered-why inline-flex items-center">
+                  <svg className="w-3.5 h-3.5 text-amber-600 cursor-help flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 text-white text-[11px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/unregistered-why:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
+                    <p className="font-bold text-amber-300 mb-1">감지 유형</p>
+                    <p><span className="font-semibold text-white">① 미등록</span> — 수술기록지에 나온 제조사·브랜드·규격이 재고 마스터 목록에 없는 경우</p>
+                    <p className="mt-1"><span className="font-semibold text-white">② 비정형(수기 입력)</span> — 덴트웹에서 픽스쳐를 드롭다운 목록이 아닌 직접 타이핑으로 입력한 경우. 규격 형식이 표준과 달라 자동 매칭이 되지 않습니다.</p>
+                  </div>
+                </span>
               </h3>
               <p className="text-xs text-amber-700 mt-1">
                 재고 마스터 미등록 또는 목록 외 수기 입력으로 감지된 품목입니다.

@@ -70,11 +70,14 @@ export const returnService = {
   async updateStatus(
     returnId: string,
     status: ReturnStatus,
-    expectedCurrentStatus?: ReturnStatus
+    expectedCurrentStatus?: ReturnStatus,
+    confirmedBy?: string
   ): Promise<ReturnMutationResult> {
+    const payload: Record<string, string | null> = { status };
+    if (status === 'completed' && confirmedBy) payload.confirmed_by = confirmedBy;
     let query = supabase
       .from('return_requests')
-      .update({ status })
+      .update(payload)
       .eq('id', returnId);
 
     if (expectedCurrentStatus) {

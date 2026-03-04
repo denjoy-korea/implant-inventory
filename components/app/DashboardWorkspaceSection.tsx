@@ -1,5 +1,6 @@
 import React, { lazy } from 'react';
 import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
+import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
 import PlanLimitToast, { LimitType } from '../PlanLimitToast';
@@ -109,6 +110,8 @@ export interface DashboardWorkspaceSectionProps {
   onResumeOnboarding?: () => void;
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   orderHistoryOnly?: boolean;
+  stockCalcSettings?: StockCalcSettings;
+  onStockCalcSettingsChange?: (settings: StockCalcSettings) => Promise<void>;
 }
 
 const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
@@ -150,6 +153,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onboardingStep,
   onResumeOnboarding,
   orderHistoryOnly,
+  stockCalcSettings,
+  onStockCalcSettingsChange,
 }) => {
   const buildQuickOrder = (item: InventoryItem): Order => ({
     id: `order_${Date.now()}`,
@@ -341,6 +346,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onFailBulkModalOpened={onFailBulkModalOpened}
         onFailAuditDone={onFailAuditDone}
         orderHistoryOnly={orderHistoryOnly}
+        stockCalcSettings={stockCalcSettings}
+        onStockCalcSettingsChange={onStockCalcSettingsChange}
       />
     </div>
   );

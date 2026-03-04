@@ -10,6 +10,7 @@ export type OrderMutationResult =
 interface UpdateOrderStatusOptions {
   expectedCurrentStatus?: OrderStatus;
   receivedDate?: string;
+  confirmedBy?: string;
 }
 
 interface DeleteOrderOptions {
@@ -135,6 +136,9 @@ export const orderService = {
       received_date: status === 'received'
         ? (options?.receivedDate || new Date().toISOString().split('T')[0])
         : null,
+      ...(status === 'received' && options?.confirmedBy
+        ? { confirmed_by: options.confirmedBy }
+        : {}),
     };
 
     let query = supabase

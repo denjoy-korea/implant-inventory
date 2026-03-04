@@ -12,6 +12,7 @@ import { OrderHistoryPanel } from './order/OrderHistoryPanel';
 import ReturnRequestModal from './order/ReturnRequestModal';
 import ReturnManager from './ReturnManager';
 import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
+import BrandOrderModal from './order/BrandOrderModal';
 
 interface OrderManagerProps {
   orders: Order[];
@@ -50,6 +51,7 @@ export interface GroupedOrder {
   totalItems: number; // Distinct item count
   totalQuantity: number; // Sum of all item quantities
   managers: string[];
+  confirmers: string[];  // 신청자와 다른 확인자만
   statuses: OrderStatus[];
   overallStatus: OrderStatus | 'mixed';
 }
@@ -62,6 +64,7 @@ interface GroupedReturnRequest {
   totalItems: number;
   totalQty: number;
   managers: string[];
+  confirmers: string[];  // 신청자와 다른 확인자만
   overallStatus: ReturnStatus | 'mixed';
 }
 
@@ -81,14 +84,13 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onCreateReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
-  onDeleteReturn,
+  onDeleteReturn: _onDeleteReturn,
   returnRequests,
   showAlertToast,
   isReadOnly,
   historyOnly,
 }) => {
   const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
-  const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterManufacturer, setFilterManufacturer] = useState<string>('all');
@@ -118,6 +120,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   // ── 발주 권장 품목 UI state ──
   const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
+  const [brandOrderModalMfr, setBrandOrderModalMfr] = useState<string | null>(null);
 
   // ── 반품 권장 모달 state ──
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
@@ -126,8 +129,12 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
   const [isBulkReturning, setIsBulkReturning] = useState(false);
 
+  // ── 반품 신청 상세 보기 state ──
+  const [returnDetailGroup, setReturnDetailGroup] = useState<GroupedReturnRequest | null>(null);
+
   // ── 교환 권장 품목 반품 처리 모달 state ──
-  const [exchangeReturnTarget, setExchangeReturnTarget] = useState<{ manufacturer: string; count: number } | null>(null);
+  const [exchangeReturnTarget, setExchangeReturnTarget] = useState<{ manufacturer: string; count: number; groups: { brand: string; size: string; maxQty: number }[] } | null>(null);
+  const [exchangeItemQuantities, setExchangeItemQuantities] = useState<Record<string, number>>({});
   const [isExchangeReturnSubmitting, setIsExchangeReturnSubmitting] = useState(false);
 
   // ── 반품 신청 액션 핸들러 ──
@@ -161,20 +168,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     }
   };
 
-  const handleGroupReturnDelete = async (ids: string[]) => {
-    if (!confirm('반품 신청을 삭제하시겠습니까?')) return;
-    const first = ids[0];
-    if (first) setReturnActionLoadingId(first);
-    try {
-      for (const id of ids) await onDeleteReturn(id);
-      showAlertToast('반품 신청이 삭제되었습니다.', 'success');
-    } catch {
-      showAlertToast('삭제에 실패했습니다.', 'error');
-    } finally {
-      setReturnActionLoadingId(null);
-    }
-  };
-
   const simpleNormalize = (str: string) => String(str || "").trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
   const displayMfr = (name: string) => isIbsImplantManufacturer(name) ? 'IBS Implant' : name;
   const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
@@ -182,15 +175,22 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
+      if (order.status !== 'ordered') return false; // 진행중만 표시 (완료/취소는 히스토리에서)
       const typeMatch = filterType === 'all'
         || (filterType === 'fail_and_return' ? (order.type === 'fail_exchange' || order.type === 'return') : order.type === filterType);
-      const statusMatch = filterStatus === 'all' || order.status === filterStatus;
       const dateFromMatch = !filterDateFrom || order.date >= filterDateFrom;
       const dateToMatch = !filterDateTo || order.date <= filterDateTo;
       const mfrMatch = filterManufacturer === 'all' || order.manufacturer === filterManufacturer;
-      return typeMatch && statusMatch && dateFromMatch && dateToMatch && mfrMatch;
+      return typeMatch && dateFromMatch && dateToMatch && mfrMatch;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [orders, filterType, filterStatus, filterDateFrom, filterDateTo, filterManufacturer]);
+  }, [orders, filterType, filterDateFrom, filterDateTo, filterManufacturer]);
+
+  // 담당자/확인자 표시: 확인자가 동일하면 이름 1개, 다르면 "신청자 (확인자)"
+  const formatManagerCell = (managers: string[], confirmers: string[]) => {
+    const base = managers.join(', ');
+    if (confirmers.length === 0) return base;
+    return `${base} (${confirmers.join(', ')})`;
+  };
 
   const groupedOrders = useMemo(() => {
     const groups: Record<string, GroupedOrder> = {};
@@ -206,6 +206,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           totalItems: 0,
           totalQuantity: 0,
           managers: [],
+          confirmers: [],
           statuses: [],
           overallStatus: 'ordered' as OrderStatus | 'mixed'
         };
@@ -215,6 +216,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       group.totalItems += order.items.length;
       group.totalQuantity += order.items.reduce((sum, i) => sum + i.quantity, 0);
       if (!group.managers.includes(order.manager)) group.managers.push(order.manager);
+      if (order.confirmedBy && order.confirmedBy !== order.manager && !group.confirmers.includes(order.confirmedBy)) {
+        group.confirmers.push(order.confirmedBy);
+      }
       if (!group.statuses.includes(order.status)) group.statuses.push(order.status);
     });
 
@@ -237,7 +241,11 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
   const groupedReturnRequests = useMemo<GroupedReturnRequest[]>(() => {
     const map = new Map<string, GroupedReturnRequest>();
-    returnRequests.forEach(r => {
+    // 진행중만 표시 (대기중·수거중) — 완료/거절은 히스토리에서 조회
+    const sourceRequests = returnRequests.filter(r =>
+      r.status === 'requested' || r.status === 'picked_up'
+    );
+    sourceRequests.forEach(r => {
       const key = `${r.requestedDate}|${simpleNormalize(r.manufacturer)}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -248,6 +256,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           totalItems: 0,
           totalQty: 0,
           managers: [],
+          confirmers: [],
           overallStatus: r.status,
         });
       }
@@ -256,6 +265,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       g.totalItems += r.items.length;
       g.totalQty += r.items.reduce((s, i) => s + i.quantity, 0);
       if (!g.managers.includes(r.manager)) g.managers.push(r.manager);
+      if (r.confirmedBy && r.confirmedBy !== r.manager && !g.confirmers.includes(r.confirmedBy)) {
+        g.confirmers.push(r.confirmedBy);
+      }
     });
     for (const g of map.values()) {
       const statuses = new Set(g.requests.map(r => r.status));
@@ -398,17 +410,24 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
       byMfr[mfr] = (byMfr[mfr] || 0) + 1;
     });
+    // 제조사별 교환 반품 신청 수량 집계 (requested + picked_up만 차감 — FailManager와 동일 기준)
+    const pendingByMfr: Record<string, number> = {};
+    returnRequests
+      .filter(r => r.reason === 'exchange' && (r.status === 'requested' || r.status === 'picked_up'))
+      .forEach(r => {
+        const qty = r.items.reduce((s: number, it) => s + it.quantity, 0);
+        pendingByMfr[r.manufacturer] = (pendingByMfr[r.manufacturer] || 0) + qty;
+      });
     const list = Object.entries(byMfr)
-      .map(([manufacturer, count]) => ({
-        manufacturer,
-        count,
-        returnPending: 0,
-        actualCount: count,
-      }))
-      .sort((a, b) => b.count - a.count);
+      .map(([manufacturer, count]) => {
+        const returnPending = pendingByMfr[manufacturer] || 0;
+        const actualCount = Math.max(0, count - returnPending);
+        return { manufacturer, count, returnPending, actualCount };
+      })
+      .sort((a, b) => b.actualCount - a.actualCount);
     const totalActual = list.reduce((s, x) => s + x.actualCount, 0);
     return { list, total: pending.length, totalActual };
-  }, [surgeryMaster]);
+  }, [surgeryMaster, returnRequests]);
 
   const stats = useMemo(() => {
     const totalOrders = orders.filter(o =>
@@ -508,6 +527,22 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   }, [lowStockItems]);
 
 
+  // 발주됨(잔여 부족분 없음) 제조사별 그룹 - 발주 후 카드 안내용
+  const orderedLowStockGroups = useMemo(() => {
+    const groups: Record<string, number> = {};
+    inventory
+      .filter(item => simpleNormalize(item.manufacturer) !== simpleNormalize('보험임플란트'))
+      .forEach(item => {
+        const rawDeficit = Math.max(0, item.recommendedStock - item.currentStock);
+        if (rawDeficit <= 0) return;
+        const pendingQty = pendingQtyByItemKey.get(buildOrderItemKey(item.manufacturer, item.brand, item.size)) ?? 0;
+        if (Math.max(0, rawDeficit - pendingQty) > 0) return; // 아직 부족 → lowStockItems에 있음
+        const mfr = displayMfr(item.manufacturer);
+        groups[mfr] = (groups[mfr] || 0) + 1;
+      });
+    return Object.entries(groups).sort(([, a], [, b]) => b - a);
+  }, [inventory, pendingQtyByItemKey]);
+
   // Auto-expand first manufacturer on initial load
   React.useEffect(() => {
     if (expandedMfrs.size === 0 && groupedLowStock.length > 0) {
@@ -595,12 +630,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     { key: 'fail_exchange', label: '교환' },
     { key: 'return', label: '반품' },
   ];
-  const STATUS_FILTERS: { key: 'all' | OrderStatus; label: string }[] = [
-    { key: 'all', label: '모든 상태' },
-    { key: 'ordered', label: '입고대기' },
-    { key: 'received', label: '입고완료' },
-    { key: 'cancelled', label: '취소됨' },
-  ];
 
   const manufacturerOptions = useMemo(() => {
     const set = new Set(orders.map(o => o.manufacturer));
@@ -632,7 +661,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className={`text-xl font-black tabular-nums mt-1 ${animLowStock > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animLowStock}</p>
             </div>
             <div
-              onClick={() => { setFilterType('replenishment'); setFilterStatus('ordered'); }}
+              onClick={() => { setFilterType('replenishment'); }}
               role="button"
               tabIndex={0}
               className={`rounded-xl border px-3 py-3 transition-colors active:scale-[0.98] cursor-pointer ${animPendingRep > 0 ? 'border-rose-100 bg-rose-50/60 hover:bg-rose-100' : 'border-slate-100 bg-slate-50/80 hover:bg-slate-100'}`}
@@ -641,7 +670,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className={`text-xl font-black tabular-nums mt-1 ${animPendingRep > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{animPendingRep}</p>
             </div>
             <div
-              onClick={() => { setFilterType('fail_and_return'); setFilterStatus('ordered'); }}
+              onClick={() => { setFilterType('fail_and_return'); }}
               role="button"
               tabIndex={0}
               className={`rounded-xl border px-3 py-3 transition-colors active:scale-[0.98] cursor-pointer ${animExcRet > 0 ? 'border-amber-200 bg-amber-50 hover:bg-amber-100' : 'border-amber-100 bg-amber-50/80 hover:bg-amber-100'}`}
@@ -650,7 +679,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               <p className={`text-xl font-black tabular-nums mt-1 ${animExcRet > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{animExcRet}</p>
             </div>
             <div
-              onClick={() => { setFilterType('replenishment'); setFilterStatus('received'); }}
+              onClick={() => { setShowHistoryPanel(true); }}
               role="button"
               tabIndex={0}
               className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 cursor-pointer hover:bg-emerald-100 active:scale-[0.98] transition-colors"
@@ -801,22 +830,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
-                  {/* 상태 필터 */}
-                  <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                    {STATUS_FILTERS.map(({ key, label }) => {
-                      const isActive = filterStatus === key;
-                      const activeStyle = key === 'ordered' ? 'bg-rose-50 text-rose-600' : key === 'received' ? 'bg-emerald-50 text-emerald-600' : key === 'cancelled' ? 'bg-slate-100 text-slate-500' : 'bg-indigo-50 text-indigo-600';
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setFilterStatus(key)}
-                          className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all ${isActive ? activeStyle : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
                   {/* 날짜 범위 필터 */}
                   <div className="flex items-center gap-1.5">
                     <input
@@ -907,7 +920,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
               {/* 2. 진행 중인 발주 */}
               <div
-                onClick={() => { setFilterType('replenishment'); setFilterStatus('ordered'); }}
+                onClick={() => { setFilterType('replenishment'); }}
                 role="button"
                 tabIndex={0}
                 className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50 cursor-pointer active:bg-slate-100/50 outline-none group/pending relative overflow-hidden"
@@ -935,7 +948,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
               {/* 3. 교환/반품 대기 */}
               <div
-                onClick={() => { setFilterType('fail_and_return'); setFilterStatus('ordered'); }}
+                onClick={() => { setFilterType('fail_and_return'); }}
                 role="button"
                 tabIndex={0}
                 className="flex-1 p-5 lg:p-6 transition-all duration-300 hover:bg-amber-50/40 cursor-pointer active:bg-amber-100/50 outline-none group/excret relative overflow-hidden"
@@ -963,7 +976,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
               {/* 4. 종합 상태 요약 */}
               <div
-                onClick={() => { setFilterType('all'); setFilterStatus('all'); }}
+                onClick={() => { setFilterType('all'); }}
                 role="button"
                 tabIndex={0}
                 className="flex-[1.2] p-5 lg:p-6 transition-colors hover:bg-slate-50/50 cursor-pointer active:bg-slate-100/50 outline-none group/summary relative overflow-hidden"
@@ -1014,23 +1027,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </button>
               ))}
             </div>
-            {/* Status + manufacturer row */}
+            {/* Manufacturer row */}
             <div className="flex gap-1.5 items-center">
-              <div className="flex gap-1 flex-1">
-                {STATUS_FILTERS.map(({ key, label }) => {
-                  const isActive = filterStatus === key;
-                  const activeColor = key === 'ordered' ? 'border-rose-300 bg-rose-50 text-rose-600' : key === 'received' ? 'border-emerald-300 bg-emerald-50 text-emerald-600' : key === 'cancelled' ? 'border-slate-300 bg-slate-100 text-slate-500' : 'border-indigo-300 bg-indigo-50 text-indigo-600';
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setFilterStatus(key)}
-                      className={`flex-1 py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-[0.97] whitespace-nowrap ${isActive ? activeColor : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
               {manufacturerOptions.length > 1 && (
                 <select
                   value={filterManufacturer}
@@ -1050,7 +1048,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
 
         {/* ═══════════════════════════════════════ */}
         {/* 발주 권장 품목 (제조사별 카드) */}
-        {groupedLowStock.length > 0 && (
+        {(groupedLowStock.length > 0 || orderedLowStockGroups.length > 0) && (
           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
               <div className="flex items-center gap-2.5">
@@ -1075,16 +1073,34 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   {groupedLowStock.map(([mfr, entries]) => {
                     const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
                     return (
-                      <div key={mfr} className="flex-none flex flex-col gap-0.5 bg-rose-50 border border-rose-100 rounded-2xl px-3.5 py-2.5 min-w-[90px]">
+                      <button
+                        key={mfr}
+                        onClick={() => { if (!isReadOnly) setBrandOrderModalMfr(mfr); }}
+                        disabled={isReadOnly}
+                        className="flex-none flex flex-col gap-0.5 bg-rose-50 border border-rose-100 rounded-2xl px-3.5 py-2.5 min-w-[90px] text-left active:scale-[0.97] transition-transform"
+                      >
                         <span className="text-[11px] font-black text-slate-700 whitespace-nowrap truncate max-w-[100px]">{displayMfr(mfr)}</span>
                         <div className="flex items-baseline gap-1 mt-0.5">
                           <span className="text-xl font-black text-rose-600 tabular-nums leading-none">{entries.length}</span>
                           <span className="text-[10px] font-bold text-slate-400">종</span>
                         </div>
                         <span className="text-[10px] font-bold text-rose-400">{totalDeficit}개 부족</span>
-                      </div>
+                      </button>
                     );
                   })}
+                  {orderedLowStockGroups.map(([mfr, count]) => (
+                    <div
+                      key={`ordered-${mfr}`}
+                      className="flex-none flex flex-col gap-0.5 bg-emerald-50 border border-emerald-100 rounded-2xl px-3.5 py-2.5 min-w-[90px] text-left opacity-75"
+                    >
+                      <span className="text-[11px] font-black text-slate-600 whitespace-nowrap truncate max-w-[100px]">{mfr}</span>
+                      <div className="flex items-baseline gap-1 mt-0.5">
+                        <span className="text-xl font-black text-emerald-600 tabular-nums leading-none">{count}</span>
+                        <span className="text-[10px] font-bold text-slate-400">종</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-500">발주 진행중</span>
+                    </div>
+                  ))}
                 </div>
               </div>
               {/* 데스크톱 레이아웃 */}
@@ -1103,19 +1119,43 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 {groupedLowStock.map(([mfr, entries]) => {
                   const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
                   return (
-                    <div key={mfr} className="group relative rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40 p-4 transition-all hover:shadow-md">
+                    <button
+                      key={mfr}
+                      onClick={() => { if (!isReadOnly) setBrandOrderModalMfr(mfr); }}
+                      disabled={isReadOnly}
+                      className="group relative rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/80 to-pink-50/40 p-4 transition-all hover:shadow-md hover:border-rose-400 hover:bg-rose-50 active:scale-[0.98] cursor-pointer text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       <div className="flex items-center gap-2 mb-2">
                         <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                        <span className="text-xs font-black text-slate-700 truncate">{displayMfr(mfr)}</span>
+                        <span className="text-xs font-black text-slate-700 truncate group-hover:text-rose-700 transition-colors">{displayMfr(mfr)}</span>
                       </div>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-black text-rose-600 tabular-nums">{entries.length}</span>
                         <span className="text-xs font-bold text-slate-400">종</span>
                       </div>
                       <p className="text-[10px] font-bold text-rose-400 mt-1">{totalDeficit}개 부족</p>
-                    </div>
+                      <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[9px] font-bold text-rose-500 bg-white border border-rose-200 px-2 py-0.5 rounded-full">발주 신청 →</span>
+                      </div>
+                    </button>
                   );
                 })}
+                {orderedLowStockGroups.map(([mfr, count]) => (
+                  <div
+                    key={`ordered-${mfr}`}
+                    className="relative rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-teal-50/40 p-4 text-left opacity-75"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <span className="text-xs font-black text-slate-700 truncate">{mfr}</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-emerald-600 tabular-nums">{count}</span>
+                      <span className="text-xs font-bold text-slate-400">종</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-emerald-500 mt-1">발주 진행중</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1149,7 +1189,29 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
                     <button
                       key={manufacturer}
-                      onClick={() => { if (!isReadOnly && actualCount > 0) setExchangeReturnTarget({ manufacturer, count: actualCount }); }}
+                      onClick={() => {
+                        if (!isReadOnly && actualCount > 0) {
+                          const rows = (surgeryMaster['수술기록지'] || []).filter(row => {
+                            if (row['구분'] !== '수술중교환') return false;
+                            const raw = String(row['제조사'] || '기타');
+                            const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
+                            return mfr === manufacturer;
+                          });
+                          const groupMap: Record<string, { brand: string; size: string; maxQty: number }> = {};
+                          rows.forEach(row => {
+                            const brand = String(row['브랜드'] || manufacturer);
+                            const size = String(row['규격(SIZE)'] || row['규격'] || '기타');
+                            const key = `${brand}|${size}`;
+                            if (!groupMap[key]) groupMap[key] = { brand, size, maxQty: 0 };
+                            groupMap[key].maxQty++;
+                          });
+                          const groups = Object.values(groupMap).sort((a, b) => a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size));
+                          const initQtys: Record<string, number> = {};
+                          groups.forEach(g => { initQtys[`${g.brand}|${g.size}`] = g.maxQty; });
+                          setExchangeReturnTarget({ manufacturer, count: actualCount, groups });
+                          setExchangeItemQuantities(initQtys);
+                        }
+                      }}
                       disabled={isReadOnly || actualCount === 0}
                       className={`flex-none flex flex-col gap-0.5 rounded-2xl px-3.5 py-2.5 min-w-[90px] text-left ${
                         returnPending > 0 && actualCount === 0
@@ -1188,7 +1250,28 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
                   <button
                     key={manufacturer}
-                    onClick={() => { if (isReadOnly || actualCount === 0) return; setExchangeReturnTarget({ manufacturer, count: actualCount }); }}
+                    onClick={() => {
+                      if (isReadOnly || actualCount === 0) return;
+                      const rows = (surgeryMaster['수술기록지'] || []).filter(row => {
+                        if (row['구분'] !== '수술중교환') return false;
+                        const raw = String(row['제조사'] || '기타');
+                        const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
+                        return mfr === manufacturer;
+                      });
+                      const groupMap: Record<string, { brand: string; size: string; maxQty: number }> = {};
+                      rows.forEach(row => {
+                        const brand = String(row['브랜드'] || manufacturer);
+                        const size = String(row['규격(SIZE)'] || row['규격'] || '기타');
+                        const key = `${brand}|${size}`;
+                        if (!groupMap[key]) groupMap[key] = { brand, size, maxQty: 0 };
+                        groupMap[key].maxQty++;
+                      });
+                      const groups = Object.values(groupMap).sort((a, b) => a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size));
+                      const initQtys: Record<string, number> = {};
+                      groups.forEach(g => { initQtys[`${g.brand}|${g.size}`] = g.maxQty; });
+                      setExchangeReturnTarget({ manufacturer, count: actualCount, groups });
+                      setExchangeItemQuantities(initQtys);
+                    }}
                     disabled={isReadOnly || actualCount === 0}
                     className={`group relative rounded-2xl border-2 p-4 transition-all text-left w-full ${
                       returnPending > 0 && actualCount === 0
@@ -1472,6 +1555,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {showHistoryPanel && (
           <OrderHistoryPanel
             orders={orders}
+            returnRequests={returnRequests}
             isReadOnly={isReadOnly}
             onClose={() => setShowHistoryPanel(false)}
             onReceiptConfirm={(order) => {
@@ -1498,7 +1582,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               </h3>
             </div>
             <div className="flex items-center gap-2">
-              {!isReadOnly && (
+              {/* 수동 반품 신청 버튼 - 추후 활성화 가능 */}
+              {false && !isReadOnly && !historyOnly && (
                 <button
                   onClick={() => setShowReturnModal(true)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
@@ -1508,11 +1593,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 </button>
               )}
               <button
-                onClick={() => setShowHistoryPanel(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all border ${showHistoryPanel
-                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-                  }`}
+                onClick={() => setShowHistoryPanel(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -1543,7 +1625,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                         <p className="text-xs font-semibold text-slate-500">{g.date}</p>
                         <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(g.manufacturer)}</p>
                       </div>
-                      <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
+                      <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700 w-[56px] text-center">반품신청</span>
                     </div>
                     <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
                       <div className="flex items-center justify-between">
@@ -1574,7 +1656,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                             <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'rejected', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
                           )}
                           {g.requests.every(r => r.status === 'completed' || r.status === 'rejected') && (
-                            <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">삭제</button>
+                            <button onClick={() => setReturnDetailGroup(g)} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-600 active:scale-95">상세보기</button>
                           )}
                         </div>
                       )}
@@ -1603,7 +1685,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(group.manufacturer)}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
-                      {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '교환'}
+                      {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '수술중교환'}
                     </span>
                   </div>
 
@@ -1631,7 +1713,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {group.managers.join(', ')}</span>
+                    <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {formatManagerCell(group.managers, group.confirmers)}</span>
                     <div className="flex items-center gap-1.5">
                       {group.overallStatus === 'cancelled' ? (
                         <>
@@ -1698,7 +1780,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">제조사</th>
                   <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">품목 내역</th>
                   <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">수량</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">담당자</th>
+                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">담당자/확인자</th>
                   <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">상태</th>
                   <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-right">관리</th>
                 </tr>
@@ -1723,7 +1805,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                       <tr key={`return-${g.id}`} className="group transition-all duration-300 border-l-[3px] border-l-teal-400 bg-teal-50/25 hover:bg-teal-50/50">
                         <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{g.date}</span></td>
                         <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[60px] bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
                         </td>
                         <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(g.manufacturer)}</span></td>
                         <td className="px-2 lg:px-4 py-2.5">
@@ -1737,7 +1819,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                           )}
                         </td>
                         <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{g.totalQty}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{g.managers.join(', ')}</span></td>
+                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{formatManagerCell(g.managers, g.confirmers)}</span></td>
                         <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
                           <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{statusLabel}</span>
                         </td>
@@ -1756,9 +1838,9 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                               {g.overallStatus === 'requested' && (
                                 <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'rejected', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
                               )}
-                              {/* 삭제: 전체가 완료/거절일 때 */}
+                              {/* 상세보기: 전체가 완료/거절일 때 */}
                               {g.requests.every(req => req.status === 'completed' || req.status === 'rejected') && (
-                                <button disabled={isActing} onClick={() => handleGroupReturnDelete(g.requests.map(r => r.id))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">삭제</button>
+                                <button onClick={() => setReturnDetailGroup(g)} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">상세보기</button>
                               )}
                             </div>
                           )}
@@ -1776,8 +1858,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] ${rowBgClass}`}>
                       <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{group.date}</span></td>
                       <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
-                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[44px] ${group.type === 'replenishment' ? 'bg-indigo-50 border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-amber-50 border border-amber-100 text-amber-700' : 'bg-rose-50 border border-rose-100 text-rose-700'}`}>
-                          {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '교환'}
+                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[60px] ${group.type === 'replenishment' ? 'bg-indigo-50 border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-amber-50 border border-amber-100 text-amber-700' : 'bg-rose-50 border border-rose-100 text-rose-700'}`}>
+                          {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '수술중교환'}
                         </span>
                       </td>
                       <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
@@ -1799,7 +1881,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                         })()}
                       </td>
                       <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{group.totalQuantity}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
-                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{group.managers.join(', ')}</span></td>
+                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{formatManagerCell(group.managers, group.confirmers)}</span></td>
                       <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
                         {group.overallStatus === 'cancelled' ? (
                           <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-slate-100 text-slate-400 inline-block">취소됨</span>
@@ -1873,6 +1955,74 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
+        {/* 반품 신청 상세 보기 모달 */}
+        {returnDetailGroup && (() => {
+          const g = returnDetailGroup;
+          const allItems = g.requests.flatMap(r => r.items);
+          const reason = g.requests[0]?.reason;
+          const memo = g.requests[0]?.memo;
+          return (
+            <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0" onClick={() => setReturnDetailGroup(null)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
+                      <h3 className="text-base font-black text-slate-900">{displayMfr(g.manufacturer)}</h3>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">{g.date} · {reason ? RETURN_REASON_LABELS[reason] : ''}</p>
+                  </div>
+                  <button onClick={() => setReturnDetailGroup(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+                  <div className="flex items-center gap-3 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500 w-16 shrink-0">담당자/확인자</span>
+                    <span className="font-bold">{formatManagerCell(g.managers, g.confirmers)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500 w-16 shrink-0">상태</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                      g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                    }`}>{g.overallStatus === 'mixed' ? '처리중' : RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus]}</span>
+                  </div>
+                  {memo && (
+                    <div className="flex items-start gap-3 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-500 w-16 shrink-0">메모</span>
+                      <span>{memo}</span>
+                    </div>
+                  )}
+                  <div className="mt-2 rounded-xl border border-slate-100 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-100">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">브랜드</th>
+                          <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">규격</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-500">수량</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {allItems.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-semibold text-slate-700">{item.brand}</td>
+                            <td className="px-3 py-2 text-slate-500">{(!item.size || item.size === '기타') ? '-' : item.size}</td>
+                            <td className="px-3 py-2 text-right font-black text-slate-800 tabular-nums">{item.quantity}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">총 <span className="font-black text-slate-700">{g.totalQty}개</span> · {allItems.length}종</span>
+                  <button onClick={() => setReturnDetailGroup(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-300 transition-colors">닫기</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* 취소 모달 */}
         {cancelModalOrder && (
           <OrderCancelModal
@@ -1926,6 +2076,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               onUpdateOrderStatus={onUpdateOrderStatus}
               onDeleteOrder={onDeleteOrder}
               isLoading={isReceiptConfirming}
+            />
+          );
+        })()}
+
+        {/* 브랜드별 발주 신청 모달 */}
+        {brandOrderModalMfr !== null && (() => {
+          const brandEntries = groupedLowStock.find(([m]) => m === brandOrderModalMfr)?.[1] ?? [];
+          return (
+            <BrandOrderModal
+              mfr={brandOrderModalMfr}
+              entries={brandEntries}
+              onOrder={onQuickOrder}
+              onClose={() => setBrandOrderModalMfr(null)}
+              isReadOnly={isReadOnly}
+              showAlertToast={showAlertToast}
             />
           );
         })()}
@@ -2000,77 +2165,102 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         )}
 
         {/* 교환 권장 품목 반품 처리 모달 */}
-        {exchangeReturnTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !isExchangeReturnSubmitting && setExchangeReturnTarget(null)} />
-            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-              {/* Header */}
-              <div className="px-6 pt-6 pb-4 border-b border-slate-100">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900">반품 처리</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">{exchangeReturnTarget.manufacturer} / 반품 가능 잔량: <span className="font-black text-slate-700">{exchangeReturnTarget.count}건</span></p>
-                  </div>
-                  <button
-                    onClick={() => setExchangeReturnTarget(null)}
-                    disabled={isExchangeReturnSubmitting}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Body */}
-              <div className="px-6 py-5 space-y-4">
-                {/* 날짜 + 담당자 */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">반품신청일자</p>
-                    <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700">
-                      {new Date().toLocaleDateString('ko-KR')}
+        {exchangeReturnTarget && (() => {
+          const { manufacturer, count, groups } = exchangeReturnTarget;
+          const totalQty = groups.reduce((s, g) => s + (exchangeItemQuantities[`${g.brand}|${g.size}`] ?? g.maxQty), 0);
+          const adjustQty = (key: string, delta: number, maxQty: number) => {
+            setExchangeItemQuantities(prev => {
+              const cur = prev[key] ?? maxQty;
+              return { ...prev, [key]: Math.min(maxQty, Math.max(0, cur + delta)) };
+            });
+          };
+          return (
+            <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 pb-[68px] sm:pb-0" onClick={() => !isExchangeReturnSubmitting && setExchangeReturnTarget(null)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100 shrink-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-violet-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        <h2 className="text-base font-black text-slate-900">{displayMfr(manufacturer)} 교환 반품 처리</h2>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5 ml-6">{count}건 · 수량을 조정 후 반품 처리하세요</p>
                     </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">반품 담당자</p>
-                    <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700">
-                      {currentUserName}
-                    </div>
+                    <button onClick={() => setExchangeReturnTarget(null)} disabled={isExchangeReturnSubmitting} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                   </div>
                 </div>
 
-                {/* 전자장부 안내 */}
-                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5">
-                  <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <div className="text-xs text-amber-800 leading-relaxed">
-                    <p className="font-black mb-0.5">반품 처리 후 전자장부 확인 필요</p>
-                    <p>재고 차감은 이미 처리되었습니다. 반품으로 인한 <span className="font-black">주문금액 변동</span>은 전자장부에서 직접 확인하세요.</p>
-                  </div>
+                {/* Table */}
+                <div className="flex-1 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">브랜드</th>
+                        <th className="px-2 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">규격</th>
+                        <th className="px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">최대</th>
+                        <th className="px-2 py-2.5 text-center text-[11px] font-bold text-violet-500 whitespace-nowrap">수량</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {groups.map(g => {
+                        const key = `${g.brand}|${g.size}`;
+                        const qty = exchangeItemQuantities[key] ?? g.maxQty;
+                        return (
+                          <tr key={key} className={`transition-colors ${qty === 0 ? 'opacity-40' : 'hover:bg-slate-50/60'}`}>
+                            <td className="px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">{g.brand}</td>
+                            <td className="px-2 py-3 text-slate-500 whitespace-nowrap">{(!g.size || g.size === '기타') ? '-' : g.size}</td>
+                            <td className="px-2 py-3 text-right text-slate-400 tabular-nums whitespace-nowrap">{g.maxQty}</td>
+                            <td className="px-2 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => adjustQty(key, -1, g.maxQty)}
+                                  disabled={qty <= 0}
+                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
+                                >
+                                  <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" /></svg>
+                                </button>
+                                <span className="w-6 text-center font-black text-slate-800 tabular-nums text-sm">{qty}</span>
+                                <button
+                                  onClick={() => adjustQty(key, +1, g.maxQty)}
+                                  disabled={qty >= g.maxQty}
+                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
+                                >
+                                  <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
 
-              {/* Footer */}
-              <div className="px-6 pb-6 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <p className="text-sm font-bold text-slate-600">총 반품 건수: <span className="text-rose-500 font-black">{exchangeReturnTarget.count}건</span></p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setExchangeReturnTarget(null)}
-                    disabled={isExchangeReturnSubmitting}
-                    className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-                  >
-                    취소
-                  </button>
+                {/* Footer */}
+                <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4 shrink-0">
+                  <p className="text-xs text-slate-500">
+                    {totalQty > 0
+                      ? <><span className="font-black text-violet-600">{totalQty}개</span> 반품 처리</>
+                      : '수량을 1 이상으로 설정하세요'
+                    }
+                  </p>
                   <button
                     onClick={async () => {
-                      if (!onCreateReturn) return;
+                      if (!onCreateReturn || totalQty === 0) return;
                       setIsExchangeReturnSubmitting(true);
                       try {
+                        const items = groups
+                          .map(g => ({ brand: g.brand, size: g.size, quantity: exchangeItemQuantities[`${g.brand}|${g.size}`] ?? g.maxQty }))
+                          .filter(it => it.quantity > 0);
                         await onCreateReturn({
-                          manufacturer: exchangeReturnTarget.manufacturer,
+                          manufacturer,
                           reason: 'exchange',
                           manager: currentUserName,
-                          memo: `교환 반품 ${exchangeReturnTarget.count}건`,
-                          items: [{ brand: exchangeReturnTarget.manufacturer, size: '기타', quantity: exchangeReturnTarget.count }],
+                          memo: `교환 반품 ${totalQty}개`,
+                          items,
                         });
                         setExchangeReturnTarget(null);
                         showAlertToast('반품 처리 완료. 전자장부에서 주문금액 변동을 확인하세요.', 'success');
@@ -2080,16 +2270,17 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                         setIsExchangeReturnSubmitting(false);
                       }
                     }}
-                    disabled={isExchangeReturnSubmitting}
-                    className="px-5 py-2 text-sm font-black text-white bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors active:scale-[0.98] disabled:opacity-60"
+                    disabled={isExchangeReturnSubmitting || totalQty === 0}
+                    className="h-10 px-5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm flex items-center gap-2"
                   >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     {isExchangeReturnSubmitting ? '처리 중...' : '반품 처리 완료'}
                   </button>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
     </div>

@@ -2,8 +2,21 @@ import { supabase } from './supabaseClient';
 
 const SETTINGS_KEY = 'hospital_ui_settings';
 
+export interface StockCalcSettings {
+  safetyMultiplier: number; // 급증일 안전재고 배수 (기본 2)
+  trendCeiling: number;     // 추세 반영 상한 (기본 1.25)
+  trendFloor: number;       // 추세 반영 하한 (기본 0.8)
+}
+
+export const DEFAULT_STOCK_CALC_SETTINGS: StockCalcSettings = {
+  safetyMultiplier: 2,
+  trendCeiling: 1.25,
+  trendFloor: 0.8,
+};
+
 export interface HospitalUiSettings {
   monthFactor?: number;
+  stockCalcSettings?: StockCalcSettings;
 }
 
 /**

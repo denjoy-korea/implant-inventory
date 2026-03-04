@@ -1,7 +1,7 @@
 import { ExcelRow, InventoryItem, SurgeryUnregisteredItem, SurgeryUnregisteredSample } from '../types';
 import { fixIbsImplant } from './mappers';
 import { normalizeSurgery } from './normalizationService';
-import { getSizeMatchKey } from './sizeNormalizer';
+import { getSizeMatchKey, toCanonicalSize } from './sizeNormalizer';
 import { isExchangePrefix } from './appUtils';
 
 export type BrandSizeFormatEntry = {
@@ -34,8 +34,9 @@ export function buildBrandSizeFormatIndex(inventoryItems: InventoryItem[]): Bran
       const manufacturerKey = normalizeSurgery(fixed.manufacturer);
       const brandKey = normalizeSurgery(fixed.brand);
       const sizeKey = getSizeMatchKey(item.size, fixed.manufacturer);
-      const sizeText = normalizeSizeTextStrict(item.size);
-      if (!manufacturerKey || !brandKey || !sizeKey || !sizeText) return;
+      // canonical form으로 저장: 포맷이 달라도 같은 규격이면 일치 (예: "D:5.0 L:11 Cuff:3" ↔ "C3 Φ5.0 X 11")
+      const canonicalSizeText = toCanonicalSize(item.size, fixed.manufacturer).trim();
+      if (!manufacturerKey || !brandKey || !sizeKey || !canonicalSizeText) return;
 
       const bsKey = `${brandKey}|${sizeKey}`;
       const list = index.get(bsKey) || [];
@@ -44,7 +45,7 @@ export function buildBrandSizeFormatIndex(inventoryItems: InventoryItem[]): Bran
         entry = { manufacturerKey, allowedSizeTexts: new Set<string>() };
         list.push(entry);
       }
-      entry.allowedSizeTexts.add(sizeText);
+      entry.allowedSizeTexts.add(canonicalSizeText);
       index.set(bsKey, list);
     });
 
@@ -74,12 +75,13 @@ export function isListBasedSurgeryInput(
   const rowManufacturer = normalizeSurgery(manufacturer);
   const rowBrand = normalizeSurgery(brand);
   const rowSizeKey = getSizeMatchKey(size, manufacturer);
-  const rowSizeText = normalizeSizeTextStrict(size);
+  // canonical form으로 비교: "D:5.0 L:11 Cuff:3" → "C3 Φ5.0 X 11" 등 포맷 변환 후 비교
+  const rowCanonical = toCanonicalSize(size, manufacturer).trim();
   const bsKey = `${rowBrand}|${rowSizeKey}`;
   const candidates = formatIndex.get(bsKey) || [];
   return candidates.some(candidate =>
     isManufacturerAliasMatch(rowManufacturer, candidate.manufacturerKey) &&
-    candidate.allowedSizeTexts.has(rowSizeText)
+    candidate.allowedSizeTexts.has(rowCanonical)
   );
 }
 

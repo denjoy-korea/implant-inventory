@@ -81,6 +81,7 @@ export interface Order {
   manager: string;
   status: OrderStatus;
   receivedDate?: string;
+  confirmedBy?: string;
   memo?: string;
   cancelledReason?: string;
 }
@@ -634,6 +635,7 @@ export interface DbOrder {
   manager: string;
   status: OrderStatus;
   received_date: string | null;
+  confirmed_by: string | null;
   memo: string | null;
   cancelled_reason: string | null;
   created_at: string;
@@ -693,6 +695,7 @@ export interface ReturnRequest {
   requestedDate: string;
   completedDate?: string | null;
   manager: string;
+  confirmedBy?: string | null;
   memo?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -709,6 +712,7 @@ export interface DbReturnRequest {
   requested_date: string;
   completed_date: string | null;
   manager: string;
+  confirmed_by: string | null;
   memo: string | null;
   created_at: string;
   updated_at: string;
@@ -759,6 +763,52 @@ export interface DbResetRequest {
   scheduled_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
+  created_at: string;
+}
+
+// ============================================
+// FAIL 자동 감지 (재식립) 타입
+// ============================================
+
+/** FailCandidate를 구성하는 단일 수술기록 정보 */
+export interface FailCandidateRecord {
+  id: string;
+  date: string | null;
+  manufacturer: string;
+  brand: string;
+  size: string;
+  tooth_number: string;
+  patient_info: string | null;
+}
+
+/** 재식립으로 감지된 FAIL 후보 */
+export interface FailCandidate {
+  originalRecord: FailCandidateRecord;   // 원래 식립 기록
+  reimplantRecord: FailCandidateRecord;  // 재식립 기록 (더 최신)
+  matchedTooth: string;                  // 겹친 치아번호
+  patientInfoHash: string;
+  patientMasked?: string;                // 복호화+마스킹 된 환자명 (표시용)
+}
+
+/** Supabase detected_fails 테이블 Row */
+export interface DetectedFail {
+  id: string;
+  hospital_id: string;
+  original_record_id: string;
+  reimplant_record_id: string;
+  patient_info_hash: string;
+  tooth_number: string;
+  original_date: string | null;
+  reimplant_date: string | null;
+  original_manufacturer: string | null;
+  original_brand: string | null;
+  original_size: string | null;
+  reimplant_manufacturer: string | null;
+  reimplant_brand: string | null;
+  reimplant_size: string | null;
+  status: 'pending' | 'confirmed' | 'dismissed';
+  confirmed_by: string | null;
+  confirmed_at: string | null;
   created_at: string;
 }
 

@@ -98,7 +98,13 @@ function parsePhiFormat(raw: string): ParsedSize | null {
   if (!m) return null;
   const diameter = parseFloat(m[1]);
   const length = parseFloat(m[2]);
-  const cuff = normalizeCuffToken(m[3] ? m[3] : null);
+  // m[3]: 세 번째 × 구분 요소 (예: "Φ5.0 × 11 × 3")
+  let cuff = normalizeCuffToken(m[3] ? m[3] : null);
+  // 후미 "C{n}" 커프 처리: 맨 뒤에 위치한 경우 (예: "Φ5.0 × 11 C3", "Φ5.0 × 11-C3")
+  if (!cuff) {
+    const cuffTrail = raw.match(/[-,\s×xX*]+C\s*(\d+\.?\d*)\s*$/i);
+    if (cuffTrail) cuff = normalizeCuffToken(cuffTrail[1]);
+  }
   return {
     diameter,
     length,
@@ -189,13 +195,16 @@ function parseBareNumericFormat(raw: string): ParsedSize | null {
   const diameter = parseFloat(m[1]);
   const length = parseFloat(m[2]);
   if (diameter > 0 && diameter < 10 && length > 0 && length < 30) {
+    // 후미 "C{n}" 커프 처리 (예: "5.0 × 11 C3")
+    const cuffTrail = raw.match(/[-,\s×xX*]+C\s*(\d+\.?\d*)\s*$/i);
+    const cuff = cuffTrail ? normalizeCuffToken(cuffTrail[1]) : null;
     return {
       diameter,
       length,
-      cuff: null,
+      cuff,
       suffix: null,
       raw,
-      matchKey: `d${fmtNum(diameter)}_l${fmtNum(length)}`
+      matchKey: buildMatchKey(diameter, length, cuff)
     };
   }
   return null;

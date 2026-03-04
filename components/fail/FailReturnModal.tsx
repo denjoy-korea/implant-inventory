@@ -1,4 +1,5 @@
 import React from 'react';
+import { Z } from '../../utils/zIndex';
 
 interface RecommendedItem {
   brand: string;
@@ -36,7 +37,8 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
   onSubmit,
 }) => (
   <div
-    className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+    className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+    style={{ zIndex: Z.MODAL }}
     onClick={onClose}
   >
     <div
@@ -89,7 +91,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
                   className="flex-shrink-0 bg-rose-50 border border-rose-100 p-3.5 sm:p-4 rounded-2xl min-w-[150px]"
                 >
                   <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-tighter">PENDING {item.remainingToOrder}건</span>
+                    <span className="text-[10px] font-bold text-rose-400 tracking-tighter">미처리 {item.remainingToOrder}건</span>
                   </div>
                   <p className="text-xs font-black text-slate-800 truncate">{item.brand}</p>
                   <p className="text-[11px] font-bold text-slate-500">{item.size === '기타' ? '규격정보없음' : item.size}</p>
@@ -152,7 +154,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
             disabled={isOrderSubmitting || currentRemainingFails === 0}
             className={`flex-1 sm:flex-none min-h-11 px-8 py-3 bg-slate-900 text-white text-sm font-black rounded-2xl active:scale-95 transition-all ${isOrderSubmitting || currentRemainingFails === 0 ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-700'}`}
           >
-            {isOrderSubmitting ? '처리 중...' : '반품 처리 완료'}
+            {isOrderSubmitting ? '처리 중...' : '반품 신청하기'}
           </button>
         </div>
       </div>
