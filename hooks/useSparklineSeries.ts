@@ -3,7 +3,7 @@ import { InventoryItem, ExcelData } from '../types';
 import { fixIbsImplant } from '../services/mappers';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { normalizeSurgery } from '../services/normalizationService';
-import { toMonthKey } from '../components/inventory/inventoryDashboardConfig';
+import { toMonthKey } from '../services/dateUtils';
 
 /**
  * 품목별 월별 사용량 sparkline 시리즈를 계산하는 커스텀 훅.
