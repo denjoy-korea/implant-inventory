@@ -15,3 +15,9 @@
 | release-gate-fix | 100% | 2026-03-05 | [release-gate-fix/](./release-gate-fix/) |
 | performance-bundle-phase1 | 100% | 2026-03-05 | [performance-bundle-phase1/](./performance-bundle-phase1/) |
 | code-quality-refactor | 100% | 2026-03-05 | [code-quality-refactor/](./code-quality-refactor/) |
+| member-management | 100% | 2026-03-05 | [member-management/](./member-management/) |
+| mobile-optimization | 100% | 2026-03-05 | [mobile-optimization/](./mobile-optimization/) |
+| waitlist-admin | 97% | 2026-03-05 | [waitlist-admin/](./waitlist-admin/) |
+| product-strategy | 93% | 2026-03-05 | [product-strategy/](./product-strategy/) |
+| withdrawal-process | 100% | 2026-03-05 | [withdrawal-process/](./withdrawal-process/) |
+| feature-showcase | 97% | 2026-03-05 | [feature-showcase/](./feature-showcase/) |
