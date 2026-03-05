@@ -1,5 +1,6 @@
 import React from 'react';
 import { TRIAL_OFFER_LABEL } from '../../utils/trialPolicy';
+import { PLAN_LIMITS } from '../../types/plan';
 
 
 export interface Plan {
@@ -34,7 +35,7 @@ export const plans: Plan[] = [
   },
   {
     name: 'Basic',
-    description: '개인 사용자를 위한 합리적 플랜',
+    description: '혼자 쓰는 병원의 필수 도구',
     monthlyPrice: 29000,
     yearlyPrice: 23000,
     highlight: false,
@@ -43,16 +44,19 @@ export const plans: Plan[] = [
     tag: '개인용',
     features: [
       '재고 품목 최대 200개',
-      '수술 기록 6개월 보관',
+      '수술 기록 12개월 보관',
       '수술기록 상시 업로드',
-      '기본 재고 현황 대시보드',
+      '기초재고 무제한 편집',
       '브랜드별 소모량 분석',
+      'FAIL(교환) 관리',
+      '발주 생성 및 수령 처리',
+      '재고실사',
       '1명 사용자',
     ],
   },
   {
     name: 'Plus',
-    description: '성장하는 치과를 위한 추천 플랜',
+    description: '팀이 쓰는 병원의 운영 인텔리전스',
     monthlyPrice: 69000,
     yearlyPrice: 55000,
     highlight: true,
@@ -61,12 +65,13 @@ export const plans: Plan[] = [
     tag: '치과의원',
     features: [
       '재고 품목 최대 500개',
-      '수술 기록 12개월 보관',
+      '수술 기록 24개월 보관',
       '수술기록 상시 업로드',
       '고급 분석 대시보드',
       '자동 재고 알림',
-      '브랜드별 소모량 분석',
-      '최대 5명 사용자',
+      '재고실사 이력 분석',
+      '발주 최적화 추천',
+      `최대 ${PLAN_LIMITS['plus'].maxUsers}명 사용자`,
       '이메일 지원',
     ],
   },
@@ -96,8 +101,8 @@ export const comparisonCategories = [
   {
     name: '기본 기능',
     features: [
-      { label: '재고 품목 수', values: ['50개', '200개', '500개', '무제한'] },
-      { label: '수술 기록 보관', values: ['3개월', '6개월', '12개월', '24개월'] },
+      { label: '재고 품목 수', values: (['free', 'basic', 'plus', 'business'] as const).map(p => PLAN_LIMITS[p].maxItems === Infinity ? '무제한' : `${PLAN_LIMITS[p].maxItems}개`) },
+      { label: '수술 기록 보관', values: (['free', 'basic', 'plus', 'business'] as const).map(p => `${PLAN_LIMITS[p].retentionMonths}개월`) },
       { label: '수술기록 업로드', desc: '수술기록 엑셀 업로드 빈도 제한', values: ['월 1회', '상시', '상시', '상시'] },
       { label: '엑셀 업로드/다운로드', values: [true, true, true, true] },
       { label: '대시보드', values: ['기본', '기본', '고급', '고급'] },
@@ -107,6 +112,11 @@ export const comparisonCategories = [
     name: '재고 관리',
     features: [
       { label: '실시간 재고 현황', values: [true, true, true, true] },
+      { label: 'FAIL(교환) 관리', desc: '교환 발생 이력, 원인 분석, 자동 발주 연동', values: [false, true, true, true] },
+      { label: '발주 생성 및 수령 처리', values: [false, true, true, true] },
+      { label: '재고실사', values: [false, true, true, true] },
+      { label: '재고실사 이력 분석', values: [false, false, true, true] },
+      { label: '발주 최적화 추천', values: [false, false, true, true] },
       { label: '자동 재고 알림', values: [false, false, true, true] },
       { label: '거래처 관리', desc: '자동 발주를 위한 거래처 정보 및 연락처 관리', values: [false, false, false, true] },
       { label: '원클릭 발주 시스템', values: [false, false, false, true] },
@@ -124,7 +134,7 @@ export const comparisonCategories = [
   {
     name: '협업',
     features: [
-      { label: '사용자 수', values: ['1명', '3명', '5명', '무제한'] },
+      { label: '사용자 수', values: (['free', 'basic', 'plus', 'business'] as const).map(p => PLAN_LIMITS[p].maxUsers === Infinity ? '무제한' : `${PLAN_LIMITS[p].maxUsers}명`) },
       { label: '역할별 권한 관리', desc: '원장/매니저/스탭 등 역할에 따라 메뉴 접근 및 데이터 수정 권한을 구분', values: [false, false, true, true] },
     ],
   },
@@ -184,7 +194,7 @@ export const faqs = [
   },
   {
     q: '사용자 추가나 변경은 어떻게 하나요?',
-    a: 'Plus 플랜은 최대 5명, Business 플랜은 무제한으로 사용자를 추가할 수 있습니다. 관리자 계정에서 사용자 초대 및 권한 설정이 가능하며, 언제든 변경하실 수 있습니다.',
+    a: `Plus 플랜은 최대 ${PLAN_LIMITS['plus'].maxUsers}명, Business 플랜은 무제한으로 사용자를 추가할 수 있습니다. 관리자 계정에서 사용자 초대 및 권한 설정이 가능하며, 언제든 변경하실 수 있습니다.`,
   },
 ];
 

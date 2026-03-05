@@ -138,6 +138,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             inventory={inventory}
             hospitalId={user?.hospitalId || ''}
             userName={user?.name}
+            plan={effectivePlan}
             onApplied={() => {
               if (user) {
                 void onLoadHospitalData(user);

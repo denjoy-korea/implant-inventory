@@ -44,7 +44,19 @@ async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
     const tasks: Promise<void>[] = [];
 
     if (isPlain(profile.name)) {
-      tasks.push(encryptPatientInfo(profile.name).then((enc) => { updates.name = enc; }));
+      tasks.push(
+        Promise.all([encryptPatientInfo(profile.name), profile.name_hash ? Promise.resolve(null) : hashPatientInfo(profile.name)])
+          .then(([enc, hash]) => { updates.name = enc; if (hash) updates.name_hash = hash; }),
+      );
+    } else if (profile.name && !profile.name_hash && profile.name !== '[탈퇴]' && profile.name !== '[강제탈퇴]') {
+      // 이미 암호화됐지만 name_hash 누락 — 복호화 후 해시만 보정
+      tasks.push(
+        decryptPatientInfo(profile.name).then(async (plain) => {
+          if (plain && !plain.startsWith('ENCv2:') && !plain.startsWith('ENC:')) {
+            updates.name_hash = await hashPatientInfo(plain);
+          }
+        }),
+      );
     }
     if (isPlain(profile.email)) {
       tasks.push(
@@ -179,6 +191,7 @@ export const authService = {
       const pendingSetup: Record<string, string> = {
         role: signupRole,
         name,
+        email,
         phone: phone || '',
       };
       if (signupRole === 'master' && hospitalName) {
@@ -224,6 +237,21 @@ export const authService = {
       }
     }
     if (signupSource) profileUpdates.signup_source = signupSource;
+
+    // 체험 핑거프린트용 해시 (email + name): phone 과 함께 병렬 계산
+    let trialEmailHash: string | undefined;
+    let trialNameHash: string | undefined;
+    try {
+      [trialEmailHash, trialNameHash] = await Promise.all([
+        hashPatientInfo(email),
+        hashPatientInfo(name),
+      ]);
+      if (trialEmailHash) profileUpdates.email_hash = trialEmailHash;
+      if (trialNameHash) profileUpdates.name_hash = trialNameHash;
+    } catch (e) {
+      console.warn('[authService] signUp: trial hash computation failed:', e);
+    }
+
     if (Object.keys(profileUpdates).length > 0) {
       await supabase.from('profiles').update(profileUpdates).eq('id', userId);
     }
@@ -259,7 +287,11 @@ export const authService = {
 
       // 3-1. 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 hospital.id 직접 사용)
       if (trialPlan && trialPlan !== 'free') {
-        await this._startTrialForHospital(hospital.id, trialPlan);
+        await this._startTrialForHospital(hospital.id, trialPlan, {
+          emailHash: trialEmailHash,
+          phoneHash: profileUpdates.phone_hash as string | undefined,
+          nameHash: trialNameHash,
+        });
       }
 
       // 4. 사업자등록증 업로드 (선택)
@@ -315,7 +347,11 @@ export const authService = {
 
       // 유료 플랜 선택 시 트라이얼 즉시 시작 (profile 의존 없이 workspace.id 직접 사용)
       if (trialPlan && trialPlan !== 'free') {
-        await this._startTrialForHospital(workspace.id, trialPlan);
+        await this._startTrialForHospital(workspace.id, trialPlan, {
+          emailHash: trialEmailHash,
+          phoneHash: profileUpdates.phone_hash as string | undefined,
+          nameHash: trialNameHash,
+        });
       }
     }
 
@@ -599,11 +635,17 @@ export const authService = {
   },
 
   /** 가입 시 트라이얼 시작 (hospital.id를 직접 받아 profile 의존 없이 실행) */
-  async _startTrialForHospital(hospitalId: string, plan: PlanType): Promise<void> {
-    // RPC 시도 (p_plan 파라미터 지원)
+  async _startTrialForHospital(
+    hospitalId: string,
+    plan: PlanType,
+    hashes?: { emailHash?: string | null; phoneHash?: string | null; nameHash?: string | null },
+  ): Promise<void> {
     const { error } = await supabase.rpc('start_hospital_trial', {
       p_hospital_id: hospitalId,
       p_plan: plan,
+      p_email_hash: hashes?.emailHash ?? null,
+      p_phone_hash: hashes?.phoneHash ?? null,
+      p_name_hash:  hashes?.nameHash  ?? null,
     });
     if (!error) return;
 
@@ -638,21 +680,29 @@ export const authService = {
     localStorage.removeItem('_pending_hospital_setup');
     localStorage.removeItem('_pending_trial_plan'); // 이중 트라이얼 방지
 
-    const { role, hospitalName, name, phone, trialPlan } = pendingSetup;
+    const { role, hospitalName, name, email: cfmEmail, phone, trialPlan } = pendingSetup;
 
-    // 전화번호 암호화 후 profile 업데이트
+    // 전화번호 암호화 + 핑거프린트 해시 계산
     const profileUpdates: Record<string, string | null> = {};
-    if (phone) {
-      try {
-        const [encPhone, phoneHash] = await Promise.all([
-          encryptPatientInfo(phone),
-          hashPatientInfo(phone),
-        ]);
-        profileUpdates.phone = encPhone;
-        profileUpdates.phone_hash = phoneHash;
-      } catch (e) {
-        console.warn('[authService] createHospitalForEmailConfirmed: phone encryption failed:', e);
+    let cfmEmailHash: string | undefined;
+    let cfmPhoneHash: string | undefined;
+    let cfmNameHash: string | undefined;
+    try {
+      const [phoneResult, emailHash, nameHash] = await Promise.all([
+        phone
+          ? Promise.all([encryptPatientInfo(phone), hashPatientInfo(phone)])
+          : Promise.resolve(null),
+        cfmEmail ? hashPatientInfo(cfmEmail) : Promise.resolve(''),
+        name     ? hashPatientInfo(name)     : Promise.resolve(''),
+      ]);
+      if (phoneResult) {
+        profileUpdates.phone = phoneResult[0];
+        profileUpdates.phone_hash = cfmPhoneHash = phoneResult[1];
       }
+      if (emailHash) { cfmEmailHash = emailHash; profileUpdates.email_hash = emailHash; }
+      if (nameHash)  { cfmNameHash  = nameHash;  profileUpdates.name_hash  = nameHash; }
+    } catch (e) {
+      console.warn('[authService] createHospitalForEmailConfirmed: encryption/hash failed:', e);
     }
     if (Object.keys(profileUpdates).length > 0) {
       await supabase.from('profiles').update(profileUpdates).eq('id', userId);
@@ -676,7 +726,11 @@ export const authService = {
         await supabase.rpc('setup_profile_hospital', { p_hospital_id: hospital.id });
 
         if (trialPlan && trialPlan !== 'free') {
-          await this._startTrialForHospital(hospital.id, trialPlan as PlanType);
+          await this._startTrialForHospital(hospital.id, trialPlan as PlanType, {
+            emailHash: cfmEmailHash,
+            phoneHash: cfmPhoneHash,
+            nameHash: cfmNameHash,
+          });
         }
         return hospital.id;
       }
@@ -696,7 +750,11 @@ export const authService = {
         await supabase.rpc('setup_profile_hospital', { p_hospital_id: workspace.id, p_new_role: 'master' });
 
         if (trialPlan && trialPlan !== 'free') {
-          await this._startTrialForHospital(workspace.id, trialPlan as PlanType);
+          await this._startTrialForHospital(workspace.id, trialPlan as PlanType, {
+            emailHash: cfmEmailHash,
+            phoneHash: cfmPhoneHash,
+            nameHash: cfmNameHash,
+          });
         }
         return workspace.id;
       }

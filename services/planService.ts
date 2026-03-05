@@ -130,9 +130,32 @@ export const planService = {
 
   /** 무료 체험 시작 (1회만 가능) */
   async startTrial(hospitalId: string, trialPlan: PlanType = 'plus'): Promise<boolean> {
+    // 현재 사용자의 해시를 프로필에서 조회해 핑거프린트 중복 체크에 활용
+    let emailHash: string | null = null;
+    let phoneHash: string | null = null;
+    let nameHash: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('email_hash, phone_hash, name_hash')
+          .eq('id', user.id)
+          .single();
+        emailHash = prof?.email_hash ?? null;
+        phoneHash = prof?.phone_hash ?? null;
+        nameHash  = prof?.name_hash  ?? null;
+      }
+    } catch {
+      // 해시 조회 실패 시 null 로 진행 (체크 스킵)
+    }
+
     const { data, error } = await supabase.rpc('start_hospital_trial', {
       p_hospital_id: hospitalId,
-      p_plan: trialPlan,
+      p_plan:        trialPlan,
+      p_email_hash:  emailHash,
+      p_phone_hash:  phoneHash,
+      p_name_hash:   nameHash,
     });
 
     if (!error) {

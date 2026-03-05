@@ -130,8 +130,11 @@ test('maintenance service is wired for dev operations', () => {
 });
 
 test('free plan max item limit is 50', () => {
+  // PLAN_LIMITS may be in types/plan.ts (re-exported from types.ts after refactoring)
   const typesTs = read('types.ts');
-  assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*50[\s\S]*?\}/m);
+  const planTs = read('types/plan.ts');
+  const combined = typesTs + planTs;
+  assert.match(combined, /free:\s*\{[\s\S]*?maxItems:\s*50[\s\S]*?\}/m);
 });
 
 test('crypto utils request auth token for encryption and decryption', () => {
@@ -145,11 +148,15 @@ test('gemini api key is not injected into client bundle via vite define', () => 
   assert.doesNotMatch(cfg, /process\.env\.API_KEY/);
 });
 
-test('payment request uses edge proxy instead of client webhook url', () => {
-  const src = read('services/makePaymentService.ts');
+test('payment uses server-side confirmation via edge function (TossPayments)', () => {
+  // makePaymentService.ts was replaced by tossPaymentService.ts (TossPayments API integration)
+  const src = read('services/tossPaymentService.ts');
+  // Client webhook URL must not be exposed
   assert.doesNotMatch(src, /VITE_MAKE_WEBHOOK_URL/);
-  assert.match(src, /PAYMENT_PROXY_FUNCTION = 'payment-request-proxy'/);
-  assert.match(src, /functions\.invoke\(PAYMENT_PROXY_FUNCTION/);
+  // Payment confirmation must go through a server-side edge function
+  assert.match(src, /functions\.invoke/);
+  // Edge function name for server-side confirmation
+  assert.match(src, /toss-payment-confirm/);
 });
 
 test('payment proxy validates auth scope before forwarding webhook', () => {
@@ -193,4 +200,45 @@ test('notice board uses Supabase-backed notices instead of localStorage cache', 
   assert.match(sql, /CREATE POLICY \"public_notices_select_all\"/);
   assert.match(sql, /CREATE POLICY \"public_notices_insert_admin\"/);
   assert.match(sql, /GRANT SELECT ON public_notices TO anon, authenticated;/);
+});
+
+test('toss-payment-confirm edge function price table is in sync with PLAN_PRICING', () => {
+  // Edge Function has its own copy of prices (Deno cannot import from client TS).
+  // This test ensures both tables are kept in sync to prevent "Amount mismatch" payment failures.
+  const edgeFn = read('supabase/functions/toss-payment-confirm/index.ts');
+  const clientTypes = read('types/plan.ts');
+
+  // Extract edge function prices via regex
+  const extractEdgePrice = (plan, cycle) => {
+    const re = new RegExp(`${plan}:\\s*\\{[^}]*${cycle}:\\s*(\\d+)`);
+    const m = edgeFn.match(re);
+    return m ? parseInt(m[1], 10) : null;
+  };
+  // Extract client prices via regex
+  const extractClientPrice = (plan, cycle) => {
+    const re = new RegExp(`${plan}:\\s*\\{[^}]*${cycle}Price:\\s*(\\d+)`);
+    const m = clientTypes.match(re);
+    return m ? parseInt(m[1], 10) : null;
+  };
+
+  for (const plan of ['basic', 'plus', 'business']) {
+    const edgeMonthly = extractEdgePrice(plan, 'monthly');
+    const edgeYearly = extractEdgePrice(plan, 'yearly');
+    const clientMonthly = extractClientPrice(plan, 'monthly');
+    const clientYearly = extractClientPrice(plan, 'yearly');
+
+    assert.notEqual(edgeMonthly, null, `Edge Function missing monthly price for ${plan}`);
+    assert.notEqual(clientMonthly, null, `types/plan.ts missing monthly price for ${plan}`);
+    assert.equal(edgeMonthly, clientMonthly, `Monthly price mismatch for ${plan}: edge=${edgeMonthly} client=${clientMonthly}`);
+    assert.equal(edgeYearly, clientYearly, `Yearly price mismatch for ${plan}: edge=${edgeYearly} client=${clientYearly}`);
+  }
+});
+
+test('toss-payment-confirm edge function verifies caller owns the billing record', () => {
+  const fn = read('supabase/functions/toss-payment-confirm/index.ts');
+  // Must extract and verify the JWT
+  assert.match(fn, /auth\.getUser\(\)/);
+  // Must check the caller's hospital matches the billing record
+  assert.match(fn, /profile\.hospital_id/);
+  assert.match(fn, /Access denied/);
 });

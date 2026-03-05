@@ -3,13 +3,13 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
-    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const corsHeaders = getCorsHeaders(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     // service role 클라이언트: RLS 우회하여 invitation 처리
@@ -66,16 +66,28 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 현재 활성 멤버 수 확인 (최대 5명)
+    // 병원 플랜 조회 후 최대 사용자 수 적용
+    const { data: hospital } = await supabase
+      .from("hospitals")
+      .select("plan")
+      .eq("id", invitation.hospital_id)
+      .single();
+
+    const PLAN_MAX_USERS: Record<string, number> = {
+      free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
+    };
+    const maxUsers = PLAN_MAX_USERS[hospital?.plan ?? 'free'] ?? 1;
+
+    // 현재 활성 멤버 수 확인
     const { count: memberCount } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("hospital_id", invitation.hospital_id)
       .eq("status", "active");
 
-    if ((memberCount ?? 0) >= 5) {
+    if (maxUsers !== Infinity && (memberCount ?? 0) >= maxUsers) {
       return new Response(
-        JSON.stringify({ error: "병원의 최대 구성원 수(5명)에 도달했습니다." }),
+        JSON.stringify({ error: `병원의 최대 구성원 수(${maxUsers}명)에 도달했습니다.` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

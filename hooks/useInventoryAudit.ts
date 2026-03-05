@@ -39,8 +39,6 @@ export function useInventoryAudit({
   const [expandedAuditKeys, setExpandedAuditKeys] = useState<Set<string>>(new Set());
   const { toast, showToast } = useToast();
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
-  const historyModalRef = useRef<HTMLDivElement>(null);
-  const historyCloseButtonRef = useRef<HTMLButtonElement>(null);
   const summaryModalRef = useRef<HTMLDivElement>(null);
   const summaryCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -216,26 +214,22 @@ export function useInventoryAudit({
   const handleAuditClose = useCallback(() => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); }, []);
 
   useEffect(() => {
-    if (showHistory) historyCloseButtonRef.current?.focus();
-  }, [showHistory]);
-
-  useEffect(() => {
     if (showAuditSummary) summaryCloseButtonRef.current?.focus();
   }, [showAuditSummary]);
 
+  // AuditSummary 모달 포커스 트랩 + ESC (AuditHistoryModal은 ModalShell이 자체 처리)
   useEffect(() => {
-    if (!showHistory && !showAuditSummary) return;
+    if (!showAuditSummary) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (showAuditSummary) handleAuditClose();
-        else onCloseHistory?.();
+        handleAuditClose();
         return;
       }
 
       if (e.key !== 'Tab') return;
-      const container = showAuditSummary ? summaryModalRef.current : historyModalRef.current;
+      const container = summaryModalRef.current;
       if (!container) return;
 
       const focusable = Array.from(
@@ -261,7 +255,7 @@ export function useInventoryAudit({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleAuditClose, onCloseHistory, showAuditSummary, showHistory]);
+  }, [handleAuditClose, showAuditSummary]);
 
   const handleApply = async () => {
     setIsApplying(true);
@@ -351,8 +345,6 @@ export function useInventoryAudit({
     handleAuditClose,
     handleApply,
     getBrandDotColor,
-    historyModalRef,
-    historyCloseButtonRef,
     summaryModalRef,
     summaryCloseButtonRef,
   };

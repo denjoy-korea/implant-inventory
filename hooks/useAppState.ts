@@ -100,7 +100,7 @@ export function useAppState(onNotify?: NotifyFn) {
       // 수술기록 초기 로드 범위:
       // - DB에는 최대 24개월치 보관 (자동삭제 스케줄로 관리)
       // - 프론트엔드 로드는 플랜별 retentionMonths 기준으로 제한
-      //   (Free=3, Basic=6, Plus=12, Business=24, Ultimate=999)
+      //   (Free=3, Basic=12, Plus=24, Business=24, Ultimate=999)
       // - planState 조회 전이므로 일단 planService.checkPlanExpiry를 통해 플랜 확인
       //   → 실용적 방법: 플랜을 먼저 확인한 후 fromDate 결정
       const planStateForDate = await planService.checkPlanExpiry(user.hospitalId);

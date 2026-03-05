@@ -98,6 +98,40 @@ test('waitlist step counts are session-based and ignore rows without session_id'
   assert.equal(steps.pricing_waitlist_modal_open.dropOffPct, 50);
 });
 
+test('direct-entry sessions do not inflate step CVR above 100%', () => {
+  const rows = [
+    // s1: landing → pricing → auth_start (전 단계 순차 통과)
+    row({ session_id: 's1', event_type: 'landing_view' }),
+    row({ session_id: 's1', event_type: 'pricing_view' }),
+    row({ session_id: 's1', event_type: 'auth_start' }),
+    // s2: landing → pricing (auth_start 미진행)
+    row({ session_id: 's2', event_type: 'landing_view' }),
+    row({ session_id: 's2', event_type: 'pricing_view' }),
+    // s3: pricing 직접 진입 (landing 없음)
+    row({ session_id: 's3', event_type: 'pricing_view' }),
+    row({ session_id: 's3', event_type: 'auth_start' }),
+  ];
+
+  const snapshot = computeTrafficKpiSnapshot(rows);
+  const funnel = Object.fromEntries(snapshot.eventFunnel.map(s => [s.key, s]));
+
+  // landing_view: {s1, s2} = 2
+  assert.equal(funnel.landing_view.count, 2);
+  assert.equal(funnel.landing_view.stepCvr, null);
+
+  // pricing_view: {s1,s2,s3}=3 but eligible={s1,s2}=2, progressed={s1,s2}=2
+  assert.equal(funnel.pricing_view.count, 3);
+  assert.equal(funnel.pricing_view.eligibleCount, 2);
+  assert.equal(funnel.pricing_view.progressedCount, 2);
+  assert.equal(funnel.pricing_view.stepCvr, 100); // NOT 150%
+
+  // auth_start: {s1,s3}=2, eligible=pricing_view 세션 {s1,s2,s3}=3, progressed={s1,s3}=2
+  assert.equal(funnel.auth_start.count, 2);
+  assert.equal(funnel.auth_start.eligibleCount, 3);
+  assert.equal(funnel.auth_start.progressedCount, 2);
+  assert.equal(funnel.auth_start.stepCvr, 67); // Math.round(2/3*100)
+});
+
 test('payment completion and mobile drop-off metrics are computed from session data', () => {
   const rows = [
     row({ session_id: 'm1', event_type: 'landing_view', event_data: { is_mobile: true } }),

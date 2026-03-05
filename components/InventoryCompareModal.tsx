@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import ModalShell from './shared/ModalShell';
 
 export interface CompareItem {
   manufacturer: string;
@@ -22,23 +23,8 @@ const InventoryCompareModal: React.FC<InventoryCompareModalProps> = ({
 }) => {
   const [tab, setTab] = useState<'new' | 'dup'>(newItems.length > 0 ? 'new' : 'dup');
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell isOpen={true} onClose={onCancel} title="재고 마스터 비교 결과" titleId="compare-modal-title" maxWidth="max-w-xl" className="flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center gap-3 mb-4">
@@ -48,7 +34,7 @@ const InventoryCompareModal: React.FC<InventoryCompareModalProps> = ({
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-800">재고 마스터 비교 결과</h3>
+              <h3 id="compare-modal-title" className="text-lg font-bold text-slate-800">재고 마스터 비교 결과</h3>
               <p className="text-xs text-slate-400 mt-0.5">기존 재고 마스터와 비교하여 중복 여부를 확인합니다.</p>
             </div>
           </div>
@@ -170,8 +156,7 @@ const InventoryCompareModal: React.FC<InventoryCompareModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

@@ -1,14 +1,16 @@
 import React from 'react';
-import { InventoryItem } from '../types';
+import { InventoryItem, PlanType } from '../types';
 import AuditReportDashboard from './audit/AuditReportDashboard';
 import AuditHistoryModal from './audit/AuditHistoryModal';
 import { useInventoryAudit } from '../hooks/useInventoryAudit';
+import { planService } from '../services/planService';
 
 
 interface InventoryAuditProps {
   inventory: InventoryItem[];
   hospitalId: string;
   userName?: string;
+  plan?: PlanType;
   onApplied: () => void;
   onAuditSessionComplete?: () => void;
   showHistory?: boolean;
@@ -17,7 +19,7 @@ interface InventoryAuditProps {
 
 const MISMATCH_REASONS = ['기록 누락', '수술기록 오입력', '분실', '입고 수량 오류', '기타'] as const;
 
-const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory }) => {
+const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, plan, onApplied, onAuditSessionComplete, showHistory, onCloseHistory }) => {
   const {
     activeBrand, setActiveBrand,
     searchQuery, setSearchQuery,
@@ -47,15 +49,28 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     handleAuditClose,
     handleApply,
     getBrandDotColor,
-    historyModalRef,
-    historyCloseButtonRef,
     summaryModalRef,
     summaryCloseButtonRef,
     auditHistory,
   } = useInventoryAudit({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory });
 
-  // PC: 리포트 대시보드, 모바일: 기존 실사 입력 UI
+  // PC: 리포트 대시보드 (audit_history 권한 필요), 모바일: 기존 실사 입력 UI
   if (!isMobileViewport) {
+    if (!planService.canAccess(plan ?? 'free', 'audit_history')) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center p-8">
+          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center">
+            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-base font-bold text-slate-800">실사 이력 분석은 Plus 플랜부터</p>
+            <p className="text-sm text-slate-500 mt-1">누적 실사 데이터와 재고 이력을 분석하려면 플랜을 업그레이드하세요.</p>
+          </div>
+        </div>
+      );
+    }
     return <AuditReportDashboard auditHistory={auditHistory} isLoading={isHistoryLoading} />;
   }
 
@@ -774,8 +789,6 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
         <AuditHistoryModal
           show={!!showHistory}
-          modalRef={historyModalRef}
-          closeButtonRef={historyCloseButtonRef}
           groupedHistory={groupedHistory}
           expandedAuditKeys={expandedAuditKeys}
           onClose={() => onCloseHistory?.()}

@@ -24,6 +24,16 @@ function getUniqueSessionCount(rows, predicate) {
   ).size;
 }
 
+function buildSessionSet(rows, eventType, pageFallback) {
+  const byEvent = new Set(
+    rows.filter(r => r.event_type === eventType && r.session_id).map(r => r.session_id)
+  );
+  if (byEvent.size > 0 || !pageFallback) return byEvent;
+  return new Set(
+    rows.filter(r => r.page === pageFallback && r.session_id).map(r => r.session_id)
+  );
+}
+
 function avgMinutes(values) {
   if (values.length === 0) return 0;
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -48,15 +58,6 @@ export function computeTrafficKpiSnapshot(rows) {
   const uniqueSessionCountByEvent = (eventType) =>
     getUniqueSessionCount(safeRows, (row) => row.event_type === eventType);
 
-  const uniqueSessionCountByPage = (page) =>
-    getUniqueSessionCount(safeRows, (row) => row.page === page);
-
-  const landingViewSessions = uniqueSessionCountByEvent('landing_view') || uniqueSessionCountByPage('landing');
-  const pricingViewSessions = uniqueSessionCountByEvent('pricing_view') || uniqueSessionCountByPage('pricing');
-  const authStartSessions = uniqueSessionCountByEvent('auth_start');
-  const authCompleteSessions = uniqueSessionCountByEvent('auth_complete');
-  const analyzeStartSessions = uniqueSessionCountByEvent('analyze_start');
-  const analyzeCompleteSessions = uniqueSessionCountByEvent('analyze_complete');
   const contactSubmitSessions = uniqueSessionCountByEvent('contact_submit');
   const waitlistSubmitSessions = uniqueSessionCountByEvent('waitlist_submit');
   const paymentModalOpenSessions = uniqueSessionCountByEvent('pricing_payment_modal_open');
@@ -89,20 +90,40 @@ export function computeTrafficKpiSnapshot(rows) {
     ? Math.max(0, 100 - toPct(mobileEngagedSessions, mobileLandingSessions))
     : 0;
 
-  const eventFunnel = [
-    { key: 'landing_view', label: 'Landing View', count: landingViewSessions },
-    { key: 'pricing_view', label: 'Pricing View', count: pricingViewSessions },
-    { key: 'auth_start', label: 'Auth Start', count: authStartSessions },
-    { key: 'auth_complete', label: 'Auth Complete', count: authCompleteSessions },
-    { key: 'analyze_start', label: 'Analyze Start', count: analyzeStartSessions },
-    { key: 'analyze_complete', label: 'Analyze Complete', count: analyzeCompleteSessions },
-    { key: 'contact_or_waitlist', label: 'Contact / Waitlist Submit', count: conversionSessions },
+  const stageSets = [
+    buildSessionSet(safeRows, 'landing_view', 'landing'),
+    buildSessionSet(safeRows, 'pricing_view', 'pricing'),
+    buildSessionSet(safeRows, 'auth_start'),
+    buildSessionSet(safeRows, 'auth_complete'),
+    buildSessionSet(safeRows, 'analyze_start'),
+    buildSessionSet(safeRows, 'analyze_complete'),
+    new Set(
+      safeRows
+        .filter(r => (r.event_type === 'contact_submit' || r.event_type === 'waitlist_submit') && r.session_id)
+        .map(r => r.session_id)
+    ),
   ];
 
-  const eventFunnelWithCvr = eventFunnel.map((stage, index) => {
-    if (index === 0) return { ...stage, stepCvr: null };
-    const prevCount = eventFunnel[index - 1].count;
-    return { ...stage, stepCvr: toPct(stage.count, prevCount) };
+  const eventFunnelStages = [
+    { key: 'landing_view',        label: 'Landing View' },
+    { key: 'pricing_view',        label: 'Pricing View' },
+    { key: 'auth_start',          label: 'Auth Start' },
+    { key: 'auth_complete',       label: 'Auth Complete' },
+    { key: 'analyze_start',       label: 'Analyze Start' },
+    { key: 'analyze_complete',    label: 'Analyze Complete' },
+    { key: 'contact_or_waitlist', label: 'Contact / Waitlist Submit' },
+  ];
+
+  const eventFunnelWithCvr = eventFunnelStages.map((stage, index) => {
+    const sessionSet = stageSets[index];
+    const count = sessionSet.size;
+    if (index === 0) {
+      return { ...stage, count, eligibleCount: count, progressedCount: count, stepCvr: null };
+    }
+    const eligibleSet = stageSets[index - 1];
+    const progressedCount = [...sessionSet].filter(sid => eligibleSet.has(sid)).length;
+    const stepCvr = toPct(progressedCount, eligibleSet.size);
+    return { ...stage, count, eligibleCount: eligibleSet.size, progressedCount, stepCvr };
   });
 
   const eventRows = [...safeRows].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));

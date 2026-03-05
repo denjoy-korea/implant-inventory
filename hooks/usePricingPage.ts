@@ -26,6 +26,10 @@ export function usePricingPage({
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
   const [contactName, setContactName] = useState(userName || '');
   const [contactPhone, setContactPhone] = useState(userPhone || '');
+
+  // Props가 비동기로 도착할 때(로그인 완료 후) 폼 초기값 동기화
+  useEffect(() => { if (userName) setContactName(prev => prev || userName); }, [userName]);
+  useEffect(() => { if (userPhone) setContactPhone(prev => prev || userPhone); }, [userPhone]);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer'>('card');
   const [receiptType, setReceiptType] = useState<'cash_receipt' | 'tax_invoice'>('cash_receipt');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,7 +97,8 @@ export function usePricingPage({
     }
   }, [waitlistPlan]);
 
-  // 결제 모달 오픈 계측
+  // 결제 모달 오픈 계측 — selectedPlan 변경 시에만 발화
+  // (isYearly를 deps에 포함하면 월/연 토글마다 중복 발화하므로 제외)
   useEffect(() => {
     if (!selectedPlan || selectedPlan === 'free') return;
     pageViewService.trackEvent(
@@ -101,7 +106,8 @@ export function usePricingPage({
       { plan: selectedPlan, billing_cycle: isYearly ? 'yearly' : 'monthly' },
       'pricing',
     );
-  }, [isYearly, selectedPlan]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlan]);
 
   const handleWaitlistSubmit = async () => {
     if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim()) return;

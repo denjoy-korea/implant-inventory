@@ -66,7 +66,7 @@ export const pageViewService = {
       .update(payload)
       .eq('session_id', sid)
       .is('user_id', null)
-      .then(undefined, () => {});
+      .then(undefined, (err) => { console.error('[pageViewService] markConverted failed', err); });
   },
 
   /**

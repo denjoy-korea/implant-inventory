@@ -130,6 +130,7 @@ const App: React.FC = () => {
 
   // 후기 팝업 state
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
+  const [profileInitialTab, setProfileInitialTab] = useState<'info' | 'plan' | 'security' | 'reviews' | undefined>(undefined);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
   const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
@@ -2467,6 +2468,7 @@ const App: React.FC = () => {
         <AppUserOverlayStack
           user={state.user}
           showProfile={state.showProfile}
+          initialProfileTab={profileInitialTab}
           planState={state.planState}
           hospitalName={state.hospitalName}
           inventory={state.inventory}
@@ -2476,7 +2478,10 @@ const App: React.FC = () => {
           showOnboardingToast={showOnboardingToast}
           onboardingProgress={onboardingProgress}
           toastCompletedLabel={toastCompletedLabel}
-          onCloseProfile={() => setState(prev => ({ ...prev, showProfile: false }))}
+          onCloseProfile={() => {
+            setState(prev => ({ ...prev, showProfile: false }));
+            setProfileInitialTab(undefined);
+          }}
           onDeleteAccount={handleDeleteAccount}
           onChangePlan={(plan, billing) => {
             setState(prev => ({ ...prev, showProfile: false }));

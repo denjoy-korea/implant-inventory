@@ -39,11 +39,17 @@ async function loadTossSdk(): Promise<void> {
   if (window.TossPayments) return;
   if (sdkLoadPromise) return sdkLoadPromise;
 
-  sdkLoadPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${TOSS_SDK_URL}"]`);
+  const promise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${TOSS_SDK_URL}"]`) as HTMLScriptElement | null;
     if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('TossPayments SDK 로드 실패')));
+      // Script tag already in DOM: load event may have already fired.
+      // Check once on next tick to handle the case where TossPayments global
+      // is set asynchronously after the script tag was inserted.
+      if (window.TossPayments) { resolve(); return; }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('TossPayments SDK 로드 실패')), { once: true });
+      // Fallback: if load already fired before our listener, resolve via setTimeout
+      setTimeout(() => { if (window.TossPayments) resolve(); }, 0);
       return;
     }
     const script = document.createElement('script');
@@ -52,7 +58,11 @@ async function loadTossSdk(): Promise<void> {
     script.onerror = () => reject(new Error('TossPayments SDK 로드 실패'));
     document.head.appendChild(script);
   });
-  return sdkLoadPromise;
+
+  sdkLoadPromise = promise;
+  // Reset cache on failure so retries can re-attempt SDK load
+  promise.catch(() => { sdkLoadPromise = null; });
+  return promise;
 }
 
 export interface TossPaymentRequest {

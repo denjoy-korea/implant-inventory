@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import React, { useRef } from 'react';
+import ModalShell from './shared/ModalShell';
 
 interface ConfirmModalProps {
   title: string;
@@ -49,22 +49,18 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onCancel,
 }) => {
   const c = COLORS[confirmColor];
-
-  useEscapeKey(onCancel);
+  const cancelRef = useRef<HTMLElement>(null);
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onCancel}
+    <ModalShell
+      isOpen={true}
+      onClose={onCancel}
+      title={title}
+      titleId="confirm-modal-title"
+      describedBy="confirm-modal-message"
+      role="alertdialog"
+      initialFocusRef={cancelRef}
     >
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-modal-title"
-        aria-describedby="confirm-modal-message"
-        className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Body */}
         <div className="px-6 pt-7 pb-5 text-center">
           {/* Icon */}
@@ -98,6 +94,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         {/* Footer */}
         <div className="px-6 pb-6 flex gap-3">
           <button
+            ref={cancelRef as React.RefObject<HTMLButtonElement>}
             type="button"
             onClick={onCancel}
             className="flex-1 py-3 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all active:scale-[0.98]"
@@ -112,8 +109,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             {confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
     // 요청자가 해당 병원의 master_admin인지 확인
     const { data: hospital, error: hospError } = await supabase
       .from("hospitals")
-      .select("id, name, master_admin_id")
+      .select("id, name, master_admin_id, plan")
       .eq("id", hospitalId)
       .single();
 
@@ -71,16 +71,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 현재 활성 멤버 수 확인 (최대 5명)
+    // 플랜별 최대 사용자 수 (PLAN_LIMITS와 동기화)
+    const PLAN_MAX_USERS: Record<string, number> = {
+      free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
+    };
+    const maxUsers = PLAN_MAX_USERS[hospital.plan ?? 'free'] ?? 1;
+
+    // 현재 활성 멤버 수 확인
     const { count: memberCount } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("hospital_id", hospitalId)
       .eq("status", "active");
 
-    if ((memberCount ?? 0) >= 5) {
+    if (maxUsers !== Infinity && (memberCount ?? 0) >= maxUsers) {
       return new Response(
-        JSON.stringify({ error: "최대 5명까지 구성원을 등록할 수 있습니다." }),
+        JSON.stringify({ error: `현재 플랜(${hospital.plan})에서는 최대 ${maxUsers}명까지 구성원을 등록할 수 있습니다.` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

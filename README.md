@@ -28,12 +28,18 @@ npm run dev
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_PATIENT_DATA_KEY` (클라이언트 번들 노출 특성 주의)
+- `VITE_TOSS_CLIENT_KEY` (TossPayments 공개 키 — VITE_ 접두어 허용)
 
 선택값:
 - `GEMINI_API_KEY`
 
-결제 웹훅 URL(`MAKE_WEBHOOK_URL`) 등 민감값은 **클라이언트 env가 아니라 Supabase Edge Function secret**으로 관리합니다.
+**보안 정책**: 암호화 키는 클라이언트(`VITE_`) 금지, Supabase Edge Function secret만 사용.
+
+민감 시크릿(환자 데이터 암호화 키, 결제 시크릿 등)은 **클라이언트 env가 아닌 Supabase Edge Function secret**으로 관리합니다:
+```bash
+supabase secrets set PATIENT_DATA_KEY=$(openssl rand -base64 32)
+supabase secrets set TOSS_SECRET_KEY=your-toss-secret-key
+```
 
 ## Quality Gates
 ```bash

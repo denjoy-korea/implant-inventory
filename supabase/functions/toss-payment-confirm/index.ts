@@ -53,12 +53,27 @@ Deno.serve(async (req: Request) => {
   const tossSecretKey = Deno.env.get("TOSS_SECRET_KEY");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
   if (!tossSecretKey) {
     return jsonResponse({ error: "TOSS_SECRET_KEY is not configured" }, 500);
   }
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey || !anonKey) {
     return jsonResponse({ error: "Supabase env is not configured" }, 500);
+  }
+
+  // 발신자 인증: JWT → 사용자 식별
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+  const authClient = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: authError } = await authClient.auth.getUser();
+  if (authError || !user) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   let body: unknown;
@@ -99,6 +114,17 @@ Deno.serve(async (req: Request) => {
   if (billingError || !billing) {
     return jsonResponse({ error: "Billing record not found" }, 404);
   }
+
+  // 발신자 소유권 검증: 요청자가 이 billing record를 소유한 병원의 구성원인지 확인
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("hospital_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile || profile.hospital_id !== (billing as { hospital_id: string }).hospital_id) {
+    return jsonResponse({ error: "Access denied" }, 403);
+  }
+
   if ((billing as { payment_status: string }).payment_status !== "pending") {
     const status = (billing as { payment_status: string }).payment_status;
     // 이미 완료된 경우: 멱등성 허용 (중복 redirect 처리)

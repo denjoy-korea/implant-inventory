@@ -18,6 +18,7 @@ export type PlanFeature =
   | 'fail_management'
   | 'order_execution'
   | 'inventory_audit'
+  | 'audit_history'    // 재고실사 이력 + 분석 (Plus+)
   | 'return_management'
   | 'auto_stock_alert'
   | 'monthly_report'
@@ -102,23 +103,24 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   },
   basic: {
     maxItems: 200,
-    maxUsers: 3,
-    maxBaseStockEdits: 5,
-    retentionMonths: 6,
+    maxUsers: 1,
+    maxBaseStockEdits: Infinity,
+    retentionMonths: 12,
     features: [
       'dashboard_basic', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
+      'inventory_audit',
     ],
   },
   plus: {
     maxItems: 500,
     maxUsers: 5,
-    maxBaseStockEdits: 10,
-    retentionMonths: 12,
+    maxBaseStockEdits: Infinity,
+    retentionMonths: 24,
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
-      'inventory_audit', 'return_management',
+      'inventory_audit', 'audit_history', 'return_management',
       'auto_stock_alert', 'monthly_report', 'role_management',
       'email_support', 'integrations',
     ],
@@ -131,10 +133,10 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
-      'inventory_audit', 'return_management',
+      'inventory_audit', 'audit_history', 'return_management',
       'auto_stock_alert', 'monthly_report', 'yearly_report',
       'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
-      'email_support', 'priority_support', 'integrations',
+      'audit_log', 'email_support', 'priority_support', 'integrations',
     ],
   },
   ultimate: {
@@ -145,7 +147,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
-      'inventory_audit', 'return_management',
+      'inventory_audit', 'audit_history', 'return_management',
       'auto_stock_alert', 'monthly_report', 'yearly_report',
       'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
       'audit_log', 'email_support', 'priority_support', 'integrations',

@@ -12,6 +12,7 @@ const ReviewPopup = lazy(() => import('../ReviewPopup'));
 interface AppUserOverlayStackProps {
   user: User | null;
   showProfile: boolean;
+  initialProfileTab?: 'info' | 'plan' | 'security' | 'reviews';
   planState: HospitalPlanState | null;
   hospitalName: string;
   inventory: InventoryItem[];
@@ -39,6 +40,7 @@ interface AppUserOverlayStackProps {
 const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
   user,
   showProfile,
+  initialProfileTab,
   planState,
   hospitalName,
   inventory,
@@ -74,6 +76,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
               onClose={onCloseProfile}
               onDeleteAccount={onDeleteAccount}
               onChangePlan={onChangePlan}
+              initialTab={initialProfileTab}
             />
           </Suspense>
         </ErrorBoundary>

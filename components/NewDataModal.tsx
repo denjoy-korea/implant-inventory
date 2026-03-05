@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { ExcelRow } from '../types';
 import { useToast } from '../hooks/useToast';
+import ModalShell from './shared/ModalShell';
 
 interface NewDataModalProps {
   onClose: () => void;
@@ -57,12 +58,11 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={onClose} title="신규 자료 입력" titleId="new-data-title" maxWidth="max-w-4xl" className="flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
-            <h3 className="text-lg font-bold text-slate-800">신규 자료 입력</h3>
+            <h3 id="new-data-title" className="text-lg font-bold text-slate-800">신규 자료 입력</h3>
             <p className="text-xs text-slate-500 mt-0.5">새로운 데이터를 수동으로 추가합니다.</p>
           </div>
           <button 
@@ -169,8 +169,7 @@ const NewDataModal: React.FC<NewDataModalProps> = ({ onClose, onSave }) => {
             데이터 저장
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
     {toast && (
       <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
         {toast.message}

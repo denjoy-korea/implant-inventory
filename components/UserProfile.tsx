@@ -225,15 +225,16 @@ interface UserProfileProps {
     onClose: () => void;
     onDeleteAccount?: () => void;
     onChangePlan?: (plan: PlanType, billing: BillingCycle) => void;
+    initialTab?: 'info' | 'plan' | 'security' | 'reviews';
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName, onClose, onDeleteAccount, onChangePlan }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName, onClose, onDeleteAccount, onChangePlan, initialTab }) => {
     const isStaff = user.role === 'staff';
     const isSystemAdmin = user.role === 'admin';
     const isUltimatePlan = isSystemAdmin || planState?.plan === 'ultimate';
     const linkSuccessProvider = localStorage.getItem('_link_success_provider');
     const [activeTab, setActiveTab] = useState<'info' | 'plan' | 'security' | 'reviews'>(
-        linkSuccessProvider ? 'security' : 'info'
+        initialTab ?? (linkSuccessProvider ? 'security' : 'info')
     );
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(user.name);
@@ -676,8 +677,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
 
                     {activeTab === 'plan' && showPlanPicker && (() => {
                         const PLAN_PICKER_ITEMS: { plan: PlanType; label: string; monthlyPrice: number; yearlyPrice: number; tag?: string; features: string[] }[] = [
-                            { plan: 'basic', label: 'Basic', monthlyPrice: 29000, yearlyPrice: 23000, features: ['최대 50품목', '1인 사용', '기본 대시보드', '엑셀 업로드'] },
-                            { plan: 'plus', label: 'Plus', monthlyPrice: 69000, yearlyPrice: 55000, features: ['최대 200품목', '3인 사용', '브랜드 분석', '발주 자동화'] },
+                            { plan: 'basic', label: 'Basic', monthlyPrice: 29000, yearlyPrice: 23000, features: ['최대 200품목', '1인 사용', 'FAIL 교환 관리', '발주 생성·수령'] },
+                            { plan: 'plus', label: 'Plus', monthlyPrice: 69000, yearlyPrice: 55000, features: ['최대 500품목', '5인 사용', '브랜드 분석', '발주 최적화'] },
                             { plan: 'business', label: 'Business', monthlyPrice: 129000, yearlyPrice: 103000, tag: '추천', features: ['무제한 품목', '무제한 인원', 'AI 예측 발주', '우선 지원'] },
                             { plan: 'ultimate', label: 'Ultimate', monthlyPrice: 0, yearlyPrice: 0, tag: '별도 문의', features: ['Business 전체', '감사 로그', '장기 보관', '전담 담당자'] },
                         ];

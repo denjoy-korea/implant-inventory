@@ -203,10 +203,13 @@ function renderMarkdownReport({ days, rows, snapshot, snapshotLabel, sinceIso, u
   lines.push('');
   lines.push('## 이벤트 퍼널');
   lines.push('');
-  lines.push('| Stage | Sessions | Step CVR |');
-  lines.push('|---|---:|---:|');
+  lines.push('| Stage | Sessions | Eligible | Step CVR |');
+  lines.push('|---|---:|---:|---:|');
   snapshot.eventFunnel.forEach((stage) => {
-    lines.push(`| ${stage.label} | ${stage.count} | ${stage.stepCvr === null ? '-' : `${stage.stepCvr}%`} |`);
+    const eligible = stage.eligibleCount !== undefined && stage.stepCvr !== null
+      ? String(stage.eligibleCount)
+      : '-';
+    lines.push(`| ${stage.label} | ${stage.count} | ${eligible} | ${stage.stepCvr === null ? '-' : `${stage.stepCvr}%`} |`);
   });
   lines.push('');
   lines.push(`- Contact Submit 세션: ${snapshot.contactSubmitSessions}`);

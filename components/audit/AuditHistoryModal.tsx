@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuditHistoryItem } from '../../services/auditService';
+import ModalShell from '../shared/ModalShell';
 
 interface GroupedHistoryEntry {
   date: string;
@@ -10,8 +11,6 @@ interface GroupedHistoryEntry {
 
 interface AuditHistoryModalProps {
   show: boolean;
-  modalRef: React.RefObject<HTMLDivElement | null>;
-  closeButtonRef: React.RefObject<HTMLButtonElement | null>;
   groupedHistory: [string, GroupedHistoryEntry][];
   expandedAuditKeys: Set<string>;
   onClose: () => void;
@@ -20,26 +19,21 @@ interface AuditHistoryModalProps {
 
 const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
   show,
-  modalRef,
-  closeButtonRef,
   groupedHistory,
   expandedAuditKeys,
   onClose,
   onToggleExpand,
 }) => {
-  if (!show) return null;
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        ref={modalRef}
-        className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="audit-history-title"
-        aria-describedby="audit-history-desc"
-      >
+    <ModalShell
+      isOpen={show}
+      onClose={onClose}
+      title="실사 이력 조회"
+      titleId="audit-history-title"
+      describedBy="audit-history-desc"
+      maxWidth="max-w-3xl"
+      className="max-h-[88vh] flex flex-col"
+    >
         {/* 헤더 */}
         <div className="px-7 pt-6 pb-5 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
           <div>
@@ -47,7 +41,6 @@ const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
             <p id="audit-history-desc" className="text-sm text-slate-400 mt-0.5 tabular-nums">{groupedHistory.length}회의 실사 이력</p>
           </div>
           <button
-            ref={closeButtonRef}
             onClick={onClose}
             aria-label="닫기"
             className="p-2 border-2 border-slate-200 hover:border-slate-400 rounded-full transition-colors text-slate-400 hover:text-slate-700"
@@ -167,8 +160,7 @@ const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

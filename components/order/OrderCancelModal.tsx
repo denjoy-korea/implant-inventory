@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Order } from '../../types';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import ModalShell from '../shared/ModalShell';
 
 interface OrderCancelModalProps {
   orders: Order[];
@@ -36,20 +36,19 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
 }) => {
   const [reason, setReason] = useState('');
 
-  useEscapeKey(() => { if (!isLoading) onClose(); });
-
   const firstOrder = orders[0];
   const allItems = orders.flatMap(o => o.items);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onClick={() => !isLoading && onClose()}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="order-cancel-modal-title"
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell
+      isOpen={true}
+      onClose={() => !isLoading && onClose()}
+      title="발주 취소"
+      titleId="order-cancel-modal-title"
+      role="alertdialog"
+      closeable={!isLoading}
+      className="p-6 max-h-[90vh] flex flex-col"
+    >
         {/* 헤더 */}
         <div className="shrink-0 mb-4">
           {isLoading ? (
@@ -150,8 +149,7 @@ const OrderCancelModal: React.FC<OrderCancelModalProps> = ({
             )}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

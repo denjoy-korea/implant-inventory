@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalShell from './shared/ModalShell';
 
 // ============================================================
 // TYPES
@@ -173,20 +174,11 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
   // RENDER: Overlay + Modal
   // ============================================================
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      onClick={handleClose}
-    >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto overflow-hidden flex flex-col"
-        style={{ maxHeight: '90vh' }}
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell isOpen={isOpen} onClose={handleClose} title="교환 재고 일괄 관리" titleId="fail-bulk-setup-title" className="flex flex-col max-h-[90vh]">
         {/* ── Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
           <div>
-            <h2 className="text-sm font-bold text-slate-800">교환 재고 일괄 관리</h2>
+            <h2 id="fail-bulk-setup-title" className="text-sm font-bold text-slate-800">교환 재고 일괄 관리</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">브랜드별 교환 픽스처 재고를 시스템에 반영합니다</p>
           </div>
           <button
@@ -575,8 +567,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

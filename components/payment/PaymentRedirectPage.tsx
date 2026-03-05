@@ -20,7 +20,11 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
     if (!isSuccessPath) {
       // /payment/fail — TossPayments가 code, message, orderId를 전달
       const raw = params.get('message') || '결제가 취소되었습니다.';
-      setMessage(decodeURIComponent(raw));
+      try {
+        setMessage(decodeURIComponent(raw));
+      } catch {
+        setMessage(raw);
+      }
       setPageState('fail');
       return;
     }
