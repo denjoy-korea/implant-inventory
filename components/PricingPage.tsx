@@ -487,7 +487,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                     )}
                     {price !== null && price > 0 && (
                       <p className={`text-xs mt-0.5 ${plan.highlight ? 'text-indigo-300' : 'text-slate-400'}`}>
-                        VAT 별도
+                        부가세 별도 (결제 시 10% 합산)
                       </p>
                     )}
                   </div>

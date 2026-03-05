@@ -166,7 +166,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     },
     pricing: {
       title: '요금제 | DenJOY',
-      description: 'Free부터 Enterprise까지, 병원 규모에 맞는 요금제. 무료 플랜으로 바로 시작하세요.',
+      description: 'Free부터 Business까지, 병원 규모에 맞는 요금제. 무료 플랜으로 바로 시작하세요.',
     },
     reviews: {
       title: '고객후기 | DenJOY',

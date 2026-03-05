@@ -136,7 +136,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   <div className="absolute top-full right-0 mt-2 w-72 bg-slate-800 text-white text-[10px] leading-relaxed rounded-lg px-3 py-2.5 shadow-xl opacity-0 group-hover/exchange-cleanup:opacity-100 transition-opacity duration-75 pointer-events-none z-50">
                     <p className="font-bold mb-1">교환 재고 일괄 정리</p>
                     <p>1회만 적용할 수 있는 기능입니다.</p>
-                    <p className="mt-1 text-slate-300">임플란트 재고관리 Pro 도입 시점에 수술 중 교환한 품목의 실제 보유량을 조사하여 입력하면 됩니다.</p>
+                    <p className="mt-1 text-slate-300">임플란트 재고관리 도입 시점에 수술 중 교환한 품목의 실제 보유량을 조사하여 입력하면 됩니다.</p>
                   </div>
                 </div>
               )}
@@ -293,7 +293,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 leading-relaxed">
                   <p className="font-bold text-slate-700 mb-0.5">교환 재고 일괄 정리</p>
                   <p>1회만 적용할 수 있는 기능입니다.</p>
-                  <p className="mt-1 text-slate-400">임플란트 재고관리 Pro 도입 시점에 수술 중 교환한 품목의 실제 보유량을 조사하여 입력하면 됩니다.</p>
+                  <p className="mt-1 text-slate-400">임플란트 재고관리 도입 시점에 수술 중 교환한 품목의 실제 보유량을 조사하여 입력하면 됩니다.</p>
                 </div>
               )}
             </div>
