@@ -3,7 +3,7 @@
 > **Risk Score**: -8% ~ -12% (Critical)
 > **Date**: 2026-03-06
 > **Team**: 3-agent parallel analysis (inventory, policy conflict, timestamp collision)
-> **Status**: ANALYSIS COMPLETE
+> **Status**: RESOLVED (all missing migrations applied to production)
 
 ---
 
@@ -73,6 +73,22 @@ ORDER BY version;
 ```
 
 If only one migration per timestamp was applied, **manually apply the missing one**.
+
+### Production Fix Applied (2026-03-06)
+
+3개 누락 마이그레이션 수동 적용 완료:
+
+```
+[BEFORE]
+  trial_fingerprints  → NOT EXISTS
+  is_test_payment     → NOT EXISTS
+  _plan_max_items('free') → 80 (WRONG)
+
+[AFTER]
+  trial_fingerprints  → EXISTS ✅
+  is_test_payment     → EXISTS ✅
+  _plan_max_items('free') → 50 ✅
+```
 
 ---
 
