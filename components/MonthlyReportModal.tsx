@@ -70,7 +70,7 @@ const MonthlyReportModal: React.FC<MonthlyReportModalProps> = ({ rows, onClose }
 
   if (availableMonths.length === 0) {
     return (
-      <ModalShell isOpen={true} onClose={onClose} title="월간 리포트" maxWidth="max-w-xs" className="p-8 text-center">
+      <ModalShell isOpen={true} onClose={onClose} title="월간 리포트" titleId="monthly-report-title" maxWidth="max-w-xs" className="p-8 text-center">
         <p className="text-sm font-bold text-slate-500">수술기록 데이터가 없어 리포트를 생성할 수 없습니다.</p>
         <button onClick={onClose} className="mt-4 px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">닫기</button>
       </ModalShell>

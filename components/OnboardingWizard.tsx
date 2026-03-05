@@ -93,7 +93,8 @@ export default function OnboardingWizard({
   };
 
   return (
-    <ModalShell isOpen={true} onClose={() => {}} title="DenJOY 초기 설정" zIndex={300} closeable={false} backdropClassName="flex items-center justify-center p-4 backdrop-blur-sm" maxWidth="max-w-2xl" className="flex flex-col h-[600px]">
+    <ModalShell isOpen={true} onClose={() => {}} title="DenJOY 초기 설정" titleId="onboarding-wizard-title" zIndex={300} closeable={false} backdropClassName="flex items-center justify-center p-4 backdrop-blur-sm" maxWidth="max-w-2xl" className="flex flex-col h-[600px]">
+        <h2 id="onboarding-wizard-title" className="sr-only">DenJOY 초기 설정</h2>
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
           {step === 1 ? (
