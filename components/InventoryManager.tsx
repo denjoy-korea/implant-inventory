@@ -13,6 +13,7 @@ import UnregisteredDetailModal from './inventory/UnregisteredDetailModal';
 import InventoryDetailSection from './inventory/InventoryDetailSection';
 import InventoryDashboardCards from './inventory/InventoryDashboardCards';
 import InventoryUsageChart from './inventory/InventoryUsageChart';
+import InventoryManufacturerFilterStrip from './inventory/InventoryManufacturerFilterStrip';
 interface InventoryManagerProps {
   inventory: InventoryItem[];
   onUpdateStock: (id: string, initialStock: number, nextCurrentStock?: number) => void | Promise<void>;
@@ -251,39 +252,13 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         )}
 
         {/* C. Manufacturer Filter Strip */}
-        <div className="hidden md:block bg-white rounded-2xl px-5 py-3 border border-slate-100 shadow-sm">
-          <div className="flex gap-1.5 bg-indigo-50/40 p-1 rounded-xl border border-slate-200">
-            <button
-              onClick={() => setSelectedManufacturer(null)}
-              className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${selectedManufacturer === null ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 hover:bg-white active:scale-95'}`}
-            >
-              전체
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${selectedManufacturer === null ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                {visibleInventory.length}
-              </span>
-            </button>
-            <div className="w-px bg-slate-200 my-1 mx-0.5" />
-            <div className="flex-1 overflow-x-auto hide-scrollbar flex gap-1.5">
-              {manufacturersList.map(m => {
-                const count = visibleInventory.filter(i => i.manufacturer === m).length;
-                const hasShortage = visibleInventory.some(i => i.manufacturer === m && i.currentStock < Math.ceil(i.recommendedStock * monthFactor));
-                const isSelected = selectedManufacturer === m;
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setSelectedManufacturer(m)}
-                    className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all flex-shrink-0 ${isSelected ? 'bg-white text-indigo-700 shadow-sm border border-indigo-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white border border-transparent active:scale-95'}`}
-                  >
-                    {m}
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-indigo-50 text-indigo-600' : hasShortage ? 'bg-rose-50 text-rose-500' : 'bg-slate-100 text-slate-400'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <InventoryManufacturerFilterStrip
+          selectedManufacturer={selectedManufacturer}
+          onSelectManufacturer={setSelectedManufacturer}
+          visibleInventory={visibleInventory}
+          manufacturersList={manufacturersList}
+          monthFactor={monthFactor}
+        />
       </div>{/* end sticky wrapper */}
 
       {unregisteredFromSurgery.length > 0 && (

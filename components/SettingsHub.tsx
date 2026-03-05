@@ -11,14 +11,9 @@ import { WorkDaySelector } from './WorkDaySelector';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 import VendorManagementModal from './settings/VendorManagementModal';
+import DataResetRequestModal from './settings/DataResetRequestModal';
+import DentwebAutomationModal from './settings/DentwebAutomationModal';
 const IntegrationManager = lazy(() => import('./IntegrationManager'));
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '기록 없음';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '기록 없음';
-  return d.toLocaleString('ko-KR', { hour12: false });
-}
 
 interface SettingsHubProps {
   onNavigate: (tab: DashboardTab) => void;
@@ -339,14 +334,6 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     } catch {
       showToast('클립보드 복사에 실패했습니다.', 'error');
     }
-  };
-
-  const STATUS_LABELS: Record<string, string> = {
-    idle: '대기',
-    running: '실행 중',
-    success: '성공',
-    no_data: '데이터 없음',
-    failed: '실패',
   };
 
   const cards: SettingsCard[] = [
@@ -768,62 +755,14 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         </>
       )}
 
-      {/* 초기화 요청 모달 */}
-      {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowResetModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">데이터 초기화 요청</h3>
-                <p className="text-xs text-slate-500">관리자 승인 후 초기화가 진행됩니다.</p>
-              </div>
-            </div>
-
-            <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 mb-4">
-              <p className="text-xs text-rose-800 font-semibold mb-2">다음 데이터가 모두 삭제됩니다:</p>
-              <ul className="text-xs text-rose-700 space-y-1">
-                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-rose-400" />재고 마스터 (전체 품목)</li>
-                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-rose-400" />수술 기록 데이터</li>
-                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-rose-400" />주문 내역</li>
-                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-rose-400" />작업 로그</li>
-              </ul>
-              <p className="text-[11px] text-rose-600 mt-2 font-bold">* 회원 정보 및 플랜 설정은 유지됩니다.</p>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-xs font-bold text-slate-700 mb-1.5 block">초기화 사유</label>
-              <textarea
-                value={resetReason}
-                onChange={e => setResetReason(e.target.value)}
-                placeholder="초기화를 요청하는 이유를 입력해주세요..."
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-300"
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowResetModal(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleResetRequest}
-                disabled={isSubmitting || !resetReason.trim()}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? '요청 중...' : '초기화 요청'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DataResetRequestModal
+        open={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        resetReason={resetReason}
+        setResetReason={setResetReason}
+        isSubmitting={isSubmitting}
+        onSubmit={handleResetRequest}
+      />
     </div>
 
     {/* 권장재고 산출 설정 모달 */}
@@ -860,169 +799,30 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       />
     )}
 
-    {/* 덴트웹 자동화 모달 */}
-    {showAutomationModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { setShowAutomationModal(false); setNewAgentToken(null); }}>
-        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3a6.75 6.75 0 100 13.5h4.5A5.25 5.25 0 1014.25 6h-.25A6.73 6.73 0 009.75 3z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold text-slate-900">덴트웹 자동화</h3>
-            </div>
-            <button onClick={() => { setShowAutomationModal(false); setNewAgentToken(null); }} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {automationLoading ? (
-            <p className="text-sm text-slate-400 py-8 text-center">설정 불러오는 중...</p>
-          ) : (
-            <div className="space-y-4">
-              {/* 자동 실행 토글 */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <label className="text-sm font-bold text-slate-700">자동 실행</label>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={automationEnabled}
-                  onClick={() => setAutomationEnabled(v => !v)}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${automationEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                >
-                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${automationEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              {/* 실행 간격 */}
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">실행 간격 (분)</label>
-                <input
-                  type="number"
-                  min={5}
-                  max={1440}
-                  step={5}
-                  value={automationInterval}
-                  onChange={e => setAutomationInterval(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">5~1440분 범위에서 설정할 수 있습니다.</p>
-              </div>
-
-              {/* 버튼 영역 */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => void handleSaveAutomation()}
-                  disabled={automationSaving || !automationChanged || !automationIntervalValid}
-                  className="px-3 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                >
-                  {automationSaving ? '저장 중...' : '설정 저장'}
-                </button>
-                <button
-                  onClick={() => void handleRequestAutomationRun()}
-                  disabled={automationRunning}
-                  className="px-3 py-2.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
-                >
-                  {automationRunning ? '요청 중...' : '지금 실행 요청'}
-                </button>
-              </div>
-
-              {/* 상태 정보 */}
-              {automationState && (
-                <div className="rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 space-y-1.5">
-                  <p className="text-[11px] text-slate-500">최근 실행: <span className="font-semibold text-slate-700">{formatDateTime(automationState.lastRunAt)}</span></p>
-                  <p className="text-[11px] text-slate-500">
-                    상태:
-                    <span className={`ml-1 font-semibold ${
-                      automationState.lastStatus === 'success' ? 'text-emerald-600'
-                        : automationState.lastStatus === 'running' ? 'text-blue-600'
-                        : automationState.lastStatus === 'no_data' ? 'text-slate-600'
-                        : automationState.lastStatus === 'failed' ? 'text-rose-600'
-                        : 'text-slate-500'
-                    }`}>
-                      {STATUS_LABELS[automationState.lastStatus] ?? automationState.lastStatus}
-                    </span>
-                  </p>
-                  {automationState.lastMessage && (
-                    <p className="text-[11px] text-slate-500 truncate">메시지: {automationState.lastMessage}</p>
-                  )}
-                  {automationState.manualRunRequested && (
-                    <p className="text-[11px] text-amber-600 font-semibold">수동 실행 요청 대기 중</p>
-                  )}
-                  <p className="text-[11px] text-slate-500">
-                    에이전트 연결: <span className={`font-semibold ${automationState.hasAgentToken ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {automationState.hasAgentToken ? `연결됨 (${automationState.agentTokenMasked})` : '미연결'}
-                    </span>
-                  </p>
-                </div>
-              )}
-
-              {/* 구분선 */}
-              <div className="flex items-center gap-3 pt-1">
-                <div className="h-px flex-1 bg-slate-200" />
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">에이전트 설치</span>
-                <div className="h-px flex-1 bg-slate-200" />
-              </div>
-
-              {/* 에이전트 다운로드 + 토큰 */}
-              <div className="space-y-3">
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  병원 PC에서 에이전트를 다운로드하여 실행하면, 토큰 입력 후 자동으로 덴트웹과 연동됩니다.
-                </p>
-                <a
-                  href="https://github.com/denjoy-dental/dentweb-agent/releases/latest/download/dentweb-agent.exe"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  에이전트 다운로드 (Windows)
-                </a>
-
-                {automationState?.hasAgentToken && (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-slate-500">프로그램 실행 시 아래 토큰을 붙여넣으세요:</p>
-                    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                      <code className="flex-1 text-xs text-slate-800 font-mono truncate">{automationState.agentTokenMasked}</code>
-                      {newAgentToken ? (
-                        <button
-                          onClick={() => void handleCopyToken(newAgentToken)}
-                          className="flex-shrink-0 px-2.5 py-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-                        >
-                          {tokenCopied ? '복사됨' : '토큰 복사'}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => void handleGenerateToken()}
-                          disabled={generatingToken}
-                          className="flex-shrink-0 px-2.5 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors disabled:opacity-40"
-                        >
-                          {generatingToken ? '재발급 중...' : '토큰 보기 (재발급)'}
-                        </button>
-                      )}
-                    </div>
-                    {newAgentToken && (
-                      <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                        <code className="flex-1 text-xs text-emerald-900 font-mono break-all select-all">{newAgentToken}</code>
-                      </div>
-                    )}
-                    {!newAgentToken && (
-                      <p className="text-[10px] text-slate-400">토큰 분실 시 재발급하세요. 기존 토큰은 즉시 무효화됩니다.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
+    <DentwebAutomationModal
+      open={showAutomationModal}
+      onClose={() => {
+        setShowAutomationModal(false);
+        setNewAgentToken(null);
+      }}
+      automationLoading={automationLoading}
+      automationState={automationState}
+      automationEnabled={automationEnabled}
+      onToggleAutomationEnabled={() => setAutomationEnabled((prev) => !prev)}
+      automationInterval={automationInterval}
+      onAutomationIntervalChange={setAutomationInterval}
+      automationSaving={automationSaving}
+      automationChanged={automationChanged}
+      automationIntervalValid={automationIntervalValid}
+      onSaveAutomation={handleSaveAutomation}
+      automationRunning={automationRunning}
+      onRequestAutomationRun={handleRequestAutomationRun}
+      generatingToken={generatingToken}
+      onGenerateToken={handleGenerateToken}
+      newAgentToken={newAgentToken}
+      tokenCopied={tokenCopied}
+      onCopyToken={handleCopyToken}
+    />
 
     {/* 외부 연동 모달 */}
     {showIntegrationModal && hospitalId && (

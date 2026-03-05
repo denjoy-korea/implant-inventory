@@ -159,7 +159,7 @@ test('[UI] 탈퇴 경고 문구: 개인정보 즉시 파기 안내', () => {
 
 test('[UI] 법적 고지: PII 즉시 파기 안내', () => {
   const src = read('components/UserProfile.tsx');
-  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  const modal = safeRead('components/profile/WithdrawModal.tsx') || safeRead('components/profile/WithdrawFlowModal.tsx');
   assert.ok(
     /이름·연락처·환자정보는 탈퇴 즉시 파기됩니다/.test(src) ||
     /이름·연락처·환자정보는 탈퇴 즉시 파기됩니다/.test(modal),
@@ -169,7 +169,7 @@ test('[UI] 법적 고지: PII 즉시 파기 안내', () => {
 
 test('[UI] 법적 고지: 결제기록 5년 보관 안내', () => {
   const src = read('components/UserProfile.tsx');
-  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  const modal = safeRead('components/profile/WithdrawModal.tsx') || safeRead('components/profile/WithdrawFlowModal.tsx');
   assert.ok(
     /결제 기록은 전자상거래법에 따라 5년간 보관됩니다/.test(src) ||
     /결제 기록은 전자상거래법에 따라 5년간 보관됩니다/.test(modal),
@@ -179,7 +179,7 @@ test('[UI] 법적 고지: 결제기록 5년 보관 안내', () => {
 
 test('[UI] 법적 고지: 데이터 복구 불가 안내', () => {
   const src = read('components/UserProfile.tsx');
-  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  const modal = safeRead('components/profile/WithdrawModal.tsx') || safeRead('components/profile/WithdrawFlowModal.tsx');
   assert.ok(
     /탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다/.test(src) ||
     /탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다/.test(modal),
