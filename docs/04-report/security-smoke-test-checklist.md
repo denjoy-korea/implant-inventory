@@ -234,29 +234,29 @@ Use this format for every run:
 
 Staging run:
 
-- Date (YYYY-MM-DD): pending
+- Date (YYYY-MM-DD): 2026-03-12 (scheduled)
   - Environment: staging
-  - Runner: pending
-  - Migrations: pending
-  - `023` verification: pending
-  - `025` verification: pending
-  - SQL smoke: pending
-  - UI XSS smoke: pending
-  - `026` report: pending
-  - Notes: pending
+  - Runner: 맹준호 (planned)
+  - Migrations: no new migration planned (runbook verification only)
+  - `023` verification: scheduled
+  - `025` verification: scheduled
+  - SQL smoke: scheduled
+  - UI XSS smoke: scheduled
+  - `026` report: scheduled
+  - Notes: aligned with weekly WS5-05 cycle
 
 Production run:
 
-- Date (YYYY-MM-DD): pending
+- Date (YYYY-MM-DD): 2026-03-12 (scheduled)
   - Environment: production
-  - Runner: pending
-  - Migrations: pending
-  - `023` verification: pending
-  - `025` verification: pending
-  - SQL smoke: pending
-  - UI XSS smoke: pending
-  - `026` report: pending
-  - Notes: pending
+  - Runner: 맹준호 (planned)
+  - Migrations: no new migration planned (runbook verification only)
+  - `023` verification: scheduled
+  - `025` verification: scheduled
+  - SQL smoke: scheduled
+  - UI XSS smoke: scheduled
+  - `026` report: scheduled
+  - Notes: aligned with weekly WS5-05 cycle
 
 Ad-hoc latest run:
 

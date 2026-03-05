@@ -39,6 +39,7 @@
 ## 06-investor-pack
 - 투자자 패키지 인덱스: `docs/05-dataroom/06-investor-pack/2026-03-04_investor-pack-index_v1.md` ✅ (v1.5, 2026-03-05)
 - 비식별 작업 체크리스트: `docs/05-dataroom/06-investor-pack/redacted/redaction-prep-checklist-2026-03-05.md` ✅
+- 비식별 승인 로그 반영: `docs/05-dataroom/06-investor-pack/redacted/redaction-prep-checklist-2026-03-05.md` ✅ (2026-03-05)
 - I-02 레드액트 공유본: `docs/05-dataroom/06-investor-pack/redacted/2026-03-05_investor-pack-redacted-summary_v1.md` ✅
 - Legal/Finance 검토 로그: `docs/05-dataroom/06-investor-pack/redacted/2026-03-05_legal-finance-review-round_v1.md` ✅
 - I-01 원본 ZIP: `docs/05-dataroom/06-investor-pack/original/DenJOY-DataRoom-v1-2026-03-05.zip` ✅

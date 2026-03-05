@@ -38,6 +38,6 @@
 | 단계 | 담당 | 상태 | 일시 | 비고 |
 |------|------|------|------|------|
 | 초안 작성 | PMO | DONE | 2026-03-05 | 본 체크리스트 작성 |
-| 비식별 1차 | BizOps/Finance | TODO | - | 원본 수집 완료 후 진행 |
-| 법무 검토 | Legal | TODO | - | 외부 공유 전 필수 |
-| 최종 승인 | PMO | TODO | - | I-02 배포 직전 |
+| 비식별 1차 | BizOps/Finance | DONE | 2026-03-05 | `2026-03-05_investor-pack-redacted-summary_v1.md` 반영 |
+| 법무 검토 | Legal | DONE | 2026-03-05 | `2026-03-05_legal-finance-review-round_v1.md` 완료 |
+| 최종 승인 | PMO | DONE | 2026-03-05 | I-02 외부 공유본 인덱스(v1.5) 기준 확정 |

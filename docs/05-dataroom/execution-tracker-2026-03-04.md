@@ -28,6 +28,7 @@
 2. `WS5-05` 다음 제출 주차 보안 운영 증빙 갱신 (2026-03-12, KST)
 3. 실결제 전환 후 MRR raw 검증 항목 재개 (해제 조건 점검)
 4. 실행 계획 문서: `docs/04-report/next-cycle-ops-plan-2026-03-05.md`
+5. `docs/04-report/security-smoke-test-checklist.md`의 staging/production 실행 로그 2026-03-12 주차로 갱신
 
 ## 금주 블로커
 
