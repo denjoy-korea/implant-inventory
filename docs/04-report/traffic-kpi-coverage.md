@@ -1,16 +1,15 @@
 # Traffic Snapshot Coverage
 
-- 생성시각(KST): 2026-03-05T23:14:42.978+09:00
-- 대상 디렉터리: `/Users/mac/Downloads/Projects/implant-inventory/docs/04-report/traffic-kpi-daily`
-- 기준일(KST): 2026-03-05
+- 생성시각(KST): 2026-03-06T00:58:36.052+09:00
+- 대상 디렉터리: `/home/runner/work/implant-inventory/implant-inventory/docs/04-report/traffic-kpi-daily`
+- 기준일(KST): 2026-03-06
 - 검사 구간: 최근 28일
-- 요구 생성일 수: 8일
-- 실제 생성일 수: 9일
-- 커버리지: 32%
+- 요구 생성일 수: 9일
+- 실제 생성일 수: 10일
+- 커버리지: 36%
 
 ## Missing Dates
 
-- 2026-02-06
 - 2026-02-07
 - 2026-02-08
 - 2026-02-09
@@ -32,7 +31,6 @@
 
 ## Expected Dates
 
-- 2026-02-06 (missing)
 - 2026-02-07 (missing)
 - 2026-02-08 (missing)
 - 2026-02-09 (missing)
@@ -60,3 +58,4 @@
 - 2026-03-03 (ok)
 - 2026-03-04 (ok)
 - 2026-03-05 (ok)
+- 2026-03-06 (ok)
