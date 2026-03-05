@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, laz
 import { useAppState } from './hooks/useAppState';
 /* ── Static imports (always needed) ── */
 import Sidebar from './components/Sidebar';
-import NewDataModal from './components/NewDataModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import BillingProgramGate from './components/BillingProgramGate';
 import MobileDashboardNav from './components/dashboard/MobileDashboardNav';
@@ -20,21 +19,16 @@ const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboar
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 const DirectPaymentModal = lazy(() => import('./components/DirectPaymentModal'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, User, DashboardTab, InventoryItem, ExcelSheet, Hospital, PlanType, BillingCycle, PLAN_LIMITS, BillingProgram, canAccessTab, FailCandidate } from './types';
+import { ExcelData, DashboardTab, InventoryItem, PlanType, BillingCycle, PLAN_LIMITS, BillingProgram, canAccessTab, FailCandidate } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
-import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
 import { authService } from './services/authService';
-import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
 import { hospitalService } from './services/hospitalService';
 import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from './services/hospitalSettingsService';
 import { planService } from './services/planService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
-import { fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
-import { operationLogService } from './services/operationLogService';
 import { onboardingService } from './services/onboardingService';
-import { normalizeSurgery } from './services/normalizationService';
 import { isExchangePrefix } from './services/appUtils';
 import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -50,14 +44,11 @@ import { useFileUpload } from './hooks/useFileUpload';
 import { useSurgeryUnregistered } from './hooks/useSurgeryUnregistered';
 import { useOrderHandlers } from './hooks/useOrderHandlers';
 import { useInventorySync } from './hooks/useInventorySync';
+import { useSurgeryManualFix } from './hooks/useSurgeryManualFix';
+import { useBaseStockBatch } from './hooks/useBaseStockBatch';
+import { useInviteFlow } from './hooks/useInviteFlow';
 import { FileUploadLoadingOverlay } from './components/FileUploadLoadingOverlay';
 import { getDashboardTabTitle } from './components/dashboard/dashboardTabTitle';
-import {
-  buildBrandSizeFormatIndex,
-  hasRegisteredBrandSize,
-  isListBasedSurgeryInput,
-  isManufacturerAliasMatch,
-} from './services/surgeryUnregisteredUtils';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -136,69 +127,7 @@ const App: React.FC = () => {
   const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
   const [autoOpenFailBulkModal, setAutoOpenFailBulkModal] = useState(false);
 
-  // 초대 토큰 상태
-  const [inviteInfo, setInviteInfo] = React.useState<{
-    token: string; email: string; name: string; hospitalName: string;
-  } | null>(null);
-  const [processingInvite, setProcessingInvite] = useState(false);
-
-  // URL ?invite=TOKEN 감지 → verify-invite Edge Function으로 검증 후 초대 수락 뷰로 전환
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('invite');
-    if (!token) return;
-
-    // URL에서 토큰 파라미터 즉시 제거 (보안 + 중복 실행 방지)
-    const url = new URL(window.location.href);
-    url.searchParams.delete('invite');
-    window.history.replaceState(null, '', url.toString());
-
-    // 이미 로그인된 사용자: 토큰 검증 후 accept-invite 자동 호출
-    if (state.user) {
-      setProcessingInvite(true);
-      supabase.functions.invoke('verify-invite', { body: { token } })
-        .then(async ({ data, error }) => {
-          if (error || !data || data.error) {
-            showAlertToast('유효하지 않거나 만료된 초대입니다.', 'error');
-            setProcessingInvite(false);
-            return;
-          }
-          // 이미 해당 병원에 소속된 경우 스킵
-          if (state.user!.hospitalId) {
-            showAlertToast('이미 병원에 소속되어 있습니다.', 'info');
-            setProcessingInvite(false);
-            return;
-          }
-          const { data: { session } } = await supabase.auth.getSession();
-          const { data: acceptData, error: acceptError } = await supabase.functions.invoke('accept-invite', {
-            body: { token, userId: state.user!.id },
-            headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
-          });
-          if (acceptError || acceptData?.error) {
-            showAlertToast(acceptData?.error || '초대 수락에 실패했습니다.', 'error');
-            setProcessingInvite(false);
-            return;
-          }
-          showAlertToast(`${data.hospitalName}에 합류되었습니다!`, 'success');
-          // 세션 새로고침하여 병원 데이터 로드
-          window.location.reload();
-        })
-        .catch(() => setProcessingInvite(false));
-      return;
-    }
-
-    // 비로그인 사용자: 초대 수락 폼으로 전환
-    supabase.functions.invoke('verify-invite', { body: { token } })
-      .then(({ data, error }) => {
-        if (error || !data || data.error) {
-          setState(prev => ({ ...prev, currentView: 'login' }));
-          return;
-        }
-        setInviteInfo({ token, email: data.email, name: data.name, hospitalName: data.hospitalName });
-        setState(prev => ({ ...prev, currentView: 'invite' }));
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { inviteInfo, processingInvite } = useInviteFlow(state.user, setState, showAlertToast);
 
   const isSystemAdmin = state.user?.role === 'admin';
   // role='master' 또는 본인이 해당 병원의 master_admin_id인 경우(staff 워크스페이스 포함)
@@ -360,234 +289,19 @@ const App: React.FC = () => {
 
   useHashRouting(state, effectiveAccessRole, setState);
 
+  const { resolveManualSurgeryInput } = useSurgeryManualFix(
+    state.surgeryMaster,
+    state.inventory,
+    state.user?.hospitalId,
+    setState,
+  );
 
-
-
-  const resolveManualSurgeryInput = useCallback(async (params: {
-    recordIds: string[];
-    targetManufacturer: string;
-    targetBrand: string;
-    targetSize: string;
-    verifyOnly?: boolean;
-  }): Promise<{
-    checked: number;
-    found: number;
-    applicable: number;
-    alreadyFixed: number;
-    updated: number;
-    failed: number;
-    notFound: number;
-    appliedManufacturer: string;
-    appliedBrand: string;
-    appliedSize: string;
-  }> => {
-    const sheetName = '수술기록지';
-    const rows = state.surgeryMaster[sheetName] || [];
-    const idSet = Array.from(new Set((params.recordIds || []).filter(Boolean)));
-
-    const fixedTarget = fixIbsImplant(
-      String(params.targetManufacturer || '').trim(),
-      String(params.targetBrand || '').trim()
-    );
-    const canonicalTargetSize = toCanonicalSize(String(params.targetSize || '').trim(), fixedTarget.manufacturer);
-    const targetSizeKey = getSizeMatchKey(canonicalTargetSize, fixedTarget.manufacturer);
-    const targetBrandKey = normalizeSurgery(fixedTarget.brand);
-    const targetManufacturerKey = normalizeSurgery(fixedTarget.manufacturer);
-
-    // 동일 제조사-브랜드-규격 키를 가진 기존 재고 규격 표기를 우선 사용 (목록 기반 표기 통일)
-    const preferredInventoryItem = state.inventory.find(item => {
-      if (isExchangePrefix(item.manufacturer)) return false;
-      if (item.manufacturer === '보험청구' || item.brand === '보험임플란트') return false;
-      const itemFixed = fixIbsImplant(item.manufacturer, item.brand);
-      return (
-        normalizeSurgery(itemFixed.brand) === targetBrandKey &&
-        isManufacturerAliasMatch(normalizeSurgery(itemFixed.manufacturer), targetManufacturerKey) &&
-        getSizeMatchKey(item.size, itemFixed.manufacturer) === targetSizeKey
-      );
-    });
-    const appliedSize = preferredInventoryItem?.size || canonicalTargetSize;
-
-    const formatIndex = buildBrandSizeFormatIndex(state.inventory);
-
-    let found = 0;
-    let alreadyFixed = 0;
-    let notFound = 0;
-    const applicableIds: string[] = [];
-
-    for (const id of idSet) {
-      const row = rows.find(r => String(r._id || '') === id);
-      if (!row) {
-        notFound += 1;
-        continue;
-      }
-      found += 1;
-
-      const rowManufacturer = String(row['제조사'] || '').trim();
-      const rowBrand = String(row['브랜드'] || '').trim();
-      const rowSize = String(row['규격(SIZE)'] || '').trim();
-      const rowHasRegisteredCombo = hasRegisteredBrandSize(formatIndex, rowManufacturer, rowBrand, rowSize);
-      const rowIsListBased = isListBasedSurgeryInput(formatIndex, rowManufacturer, rowBrand, rowSize);
-
-      if (rowIsListBased || !rowHasRegisteredCombo) {
-        alreadyFixed += 1;
-        continue;
-      }
-      applicableIds.push(id);
-    }
-
-    if (params.verifyOnly) {
-      return {
-        checked: idSet.length,
-        found,
-        applicable: applicableIds.length,
-        alreadyFixed,
-        updated: 0,
-        failed: 0,
-        notFound,
-        appliedManufacturer: fixedTarget.manufacturer,
-        appliedBrand: fixedTarget.brand,
-        appliedSize,
-      };
-    }
-
-    if (applicableIds.length === 0) {
-      return {
-        checked: idSet.length,
-        found,
-        applicable: 0,
-        alreadyFixed,
-        updated: 0,
-        failed: 0,
-        notFound,
-        appliedManufacturer: fixedTarget.manufacturer,
-        appliedBrand: fixedTarget.brand,
-        appliedSize,
-      };
-    }
-
-    const successIds: string[] = [];
-    let failed = 0;
-
-    if (state.user?.hospitalId) {
-      const updateResults = await Promise.all(
-        applicableIds.map(async (id) => {
-          const updated = await surgeryService.updateRecord(id, {
-            manufacturer: fixedTarget.manufacturer,
-            brand: fixedTarget.brand,
-            size: appliedSize,
-          });
-          return { id, ok: !!updated };
-        })
-      );
-
-      updateResults.forEach(result => {
-        if (result.ok) {
-          successIds.push(result.id);
-        } else {
-          failed += 1;
-        }
-      });
-    } else {
-      successIds.push(...applicableIds);
-    }
-
-    if (successIds.length > 0) {
-      const successIdSet = new Set(successIds);
-      setState(prev => {
-        const prevRows = prev.surgeryMaster[sheetName] || [];
-        const nextRows = prevRows.map(row => {
-          const rowId = String(row._id || '');
-          if (!successIdSet.has(rowId)) return row;
-          return {
-            ...row,
-            '제조사': fixedTarget.manufacturer,
-            '브랜드': fixedTarget.brand,
-            '규격(SIZE)': appliedSize,
-          };
-        });
-        return {
-          ...prev,
-          surgeryMaster: {
-            ...prev.surgeryMaster,
-            [sheetName]: nextRows,
-          },
-        };
-      });
-    }
-
-    return {
-      checked: idSet.length,
-      found,
-      applicable: applicableIds.length,
-      alreadyFixed,
-      updated: successIds.length,
-      failed,
-      notFound,
-      appliedManufacturer: fixedTarget.manufacturer,
-      appliedBrand: fixedTarget.brand,
-      appliedSize,
-    };
-  }, [state.inventory, state.surgeryMaster, state.user?.hospitalId]);
-
-  const applyBaseStockBatch = useCallback(async (changes: Array<{ id: string; initialStock: number; nextCurrentStock: number }>) => {
-    if (changes.length === 0) return;
-
-    const prevInventory = state.inventory;
-    const changeMap = new Map(changes.map(change => [change.id, change]));
-
-    setState(prev => ({
-      ...prev,
-      inventory: prev.inventory.map(item => {
-        const change = changeMap.get(item.id);
-        if (!change) return item;
-        return {
-          ...item,
-          initialStock: change.initialStock,
-          currentStock: change.nextCurrentStock,
-        };
-      }),
-    }));
-
-    try {
-      // 단일 RPC 호출로 일괄 업데이트 (개별 PATCH × N → rate limit/CORS 오류 해소)
-      const ok = await inventoryService.batchUpdateInitialStock(
-        changes.map(c => ({ id: c.id, initialStock: c.initialStock }))
-      );
-      if (!ok) {
-        throw new Error('batch_update_failed');
-      }
-
-      operationLogService.logOperation(
-        'base_stock_edit',
-        `기초재고 일괄 수정 (${changes.length}개)`,
-        { count: changes.length }
-      );
-
-      // 실사 이력에 기초재고 편집 기록 추가 (stock_adjustment는 건드리지 않음)
-      const hospitalId = state.user?.hospitalId;
-      if (hospitalId) {
-        const auditRows = changes.map(change => ({
-          hospital_id: hospitalId,
-          inventory_id: change.id,
-          system_stock: change.nextCurrentStock,
-          actual_stock: change.nextCurrentStock,
-          difference: 0,
-          reason: '기초재고 편집',
-        }));
-        const { error: auditError } = await supabase
-          .from('inventory_audits')
-          .insert(auditRows);
-        if (auditError) {
-          console.warn('[App] 기초재고 실사 이력 저장 실패 (무시):', auditError);
-        }
-      }
-    } catch (error) {
-      console.error('[App] 기초재고 일괄 저장 실패, 롤백:', error);
-      setState(prev => ({ ...prev, inventory: prevInventory }));
-      showAlertToast('기초재고 일괄 저장에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      throw error;
-    }
-  }, [setState, showAlertToast, state.inventory, state.user?.hospitalId]);
+  const { applyBaseStockBatch } = useBaseStockBatch(
+    state.inventory,
+    state.user?.hospitalId,
+    setState,
+    showAlertToast,
+  );
 
 
 
@@ -686,7 +400,7 @@ const App: React.FC = () => {
     handleRestoreToSavedPoint,
     handleSaveSettings,
     handleExpandFailClaim,
-    markDirtyAfterSave,
+    handleUpdateCell,
   } = useFixtureEditControls({
     fixtureData: state.fixtureData,
     setState,
@@ -718,25 +432,6 @@ const App: React.FC = () => {
     state.user?.hospitalId,
   ]);
 
-  const handleUpdateCell = useCallback((index: number, column: string, value: boolean | string | number, type: 'fixture' | 'surgery', sheetName?: string) => {
-    if (type === 'fixture' && column === '사용안함') {
-      markDirtyAfterSave();
-    }
-    setState(prev => {
-      if (type === 'surgery' && sheetName) {
-        const newMasterRows = [...(prev.surgeryMaster[sheetName] || [])];
-        newMasterRows[index] = { ...newMasterRows[index], [column]: value };
-        return { ...prev, surgeryMaster: { ...prev.surgeryMaster, [sheetName]: newMasterRows } };
-      }
-      const currentData = prev.fixtureData;
-      if (!currentData) return prev;
-      const activeSheet = currentData.sheets[currentData.activeSheetName];
-      const newRows = [...activeSheet.rows];
-      newRows[index] = { ...newRows[index], [column]: value };
-      const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
-      return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
-    });
-  }, [markDirtyAfterSave]);
 
   // 확인 모달 상태
   const [confirmModal, setConfirmModal] = useState<{
