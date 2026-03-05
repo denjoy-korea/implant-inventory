@@ -330,6 +330,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
               onClick={() => { window.location.hash = '#/dashboard/orders'; }}
               role="button"
               tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.hash = '#/dashboard/orders'; } }}
               className="flex-1 p-5 lg:p-6 transition-all duration-300 hover:bg-indigo-50/40 cursor-pointer active:bg-indigo-100/50 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 group/shortage relative overflow-hidden"
             >
               <div className="absolute top-5 right-5 opacity-0 translate-x-2 group-hover/shortage:opacity-100 group-hover/shortage:translate-x-0 transition-all duration-300 pointer-events-none">

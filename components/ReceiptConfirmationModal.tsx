@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
 import { InventoryItem, OrderItem, type OrderStatus } from '../types';
 import { parseSize } from '../services/sizeNormalizer';
+import ModalShell from './shared/ModalShell';
 
 export interface ReceiptUpdate {
     orderId: string;
@@ -282,17 +283,7 @@ export function ReceiptConfirmationModal({
         });
 
         return (
-            <div
-                className={`fixed inset-x-0 top-0 bottom-20 sm:inset-0 z-[300] flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`}
-                onClick={() => !isLoading && onClose()}
-            >
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="wrong-delivery-title"
-                    className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
-                    onClick={(e) => e.stopPropagation()}
-                >
+            <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title="규격 오배송 처리" titleId="wrong-delivery-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 pb-20 sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
                     {/* Header */}
                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50 shrink-0">
                         <div>
@@ -517,24 +508,13 @@ export function ReceiptConfirmationModal({
                             )}
                         </button>
                     </div>
-                </div>
-            </div>
+            </ModalShell>
         );
     }
 
     // ─── 주문별 입고 확인 단계 UI ─────────────────────────────────────────────
     return (
-        <div
-            className={`fixed inset-x-0 top-0 bottom-20 sm:inset-0 z-[300] flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 backdrop-blur-sm transition-all duration-200 ${visible ? 'bg-slate-900/40' : 'bg-slate-900/0'}`}
-            onClick={() => !isLoading && onClose()}
-        >
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="receipt-confirm-title"
-                className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
-                onClick={(e) => e.stopPropagation()}
-            >
+        <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title={modalTitle} titleId="receipt-confirm-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 pb-20 sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                     <div>
@@ -841,7 +821,6 @@ export function ReceiptConfirmationModal({
                         )}
                     </div>
                 </div>
-            </div>
-        </div>
+            </ModalShell>
     );
 }

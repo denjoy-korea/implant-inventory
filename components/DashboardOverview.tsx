@@ -276,7 +276,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               role="button"
               tabIndex={0}
               onClick={() => item.onClick ? item.onClick() : onNavigate(item.tab)}
-              onKeyDown={(e) => e.key === 'Enter' && (item.onClick ? item.onClick() : onNavigate(item.tab))}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), item.onClick ? item.onClick() : onNavigate(item.tab))}
               className={isOnboarding
                 ? 'lg:col-span-2 w-full text-left rounded-xl border-2 border-indigo-400 bg-gradient-to-r from-indigo-50 via-white to-violet-50 hover:border-indigo-500 hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/15 active:translate-y-0 active:scale-[0.99] transition-all duration-200 px-4 py-3 cursor-pointer relative overflow-hidden group'
                 : 'w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98] transition-all duration-150 px-3 py-2.5 cursor-pointer'

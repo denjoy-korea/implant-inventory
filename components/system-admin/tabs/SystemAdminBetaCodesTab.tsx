@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { betaInviteService, BetaInviteCodeRow } from '../../../services/betaInviteService';
 import { useToast } from '../../../hooks/useToast';
 import { getBetaSignupPolicy } from '../../../utils/betaSignupPolicy';
+import ConfirmModal from '../../ConfirmModal';
 
 function formatDateTime(value: string | null): string {
   if (!value) return '-';
@@ -19,6 +20,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<BetaInviteCodeRow | null>(null);
   const [distributedTo, setDistributedTo] = useState('');
   const [distributedContact, setDistributedContact] = useState('');
   const [note, setNote] = useState('');
@@ -161,9 +163,13 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   };
 
   const handleDeleteCode = async (row: BetaInviteCodeRow) => {
-    const confirmed = window.confirm(`코드 ${row.code} 를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.`);
-    if (!confirmed) return;
+    setConfirmDeleteRow(row);
+  };
 
+  const handleDeleteCodeConfirmed = async () => {
+    const row = confirmDeleteRow;
+    if (!row) return;
+    setConfirmDeleteRow(null);
     setDeletingId(row.id);
     try {
       await betaInviteService.deleteCode(row.id);
@@ -421,6 +427,14 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[260] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
           {toast.message}
         </div>
+      )}
+      {confirmDeleteRow && (
+        <ConfirmModal
+          title="코드 삭제"
+          message={`코드 "${confirmDeleteRow.code}"를 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.`}
+          onConfirm={handleDeleteCodeConfirmed}
+          onCancel={() => setConfirmDeleteRow(null)}
+        />
       )}
     </div>
   );

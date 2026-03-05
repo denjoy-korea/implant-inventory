@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { ExcelRow, InventoryItem, Order as FailOrder, ReturnRequest, ReturnReason } from '../types';
 import FailBulkSetupModal from './FailBulkSetupModal';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
@@ -8,6 +8,7 @@ import FailReturnModal from './fail/FailReturnModal';
 import { Z } from '../utils/zIndex';
 import { DONUT_COLORS } from './surgery-dashboard/shared';
 import { useFailManager, CHART_PAD, CHART_AREA_H } from '../hooks/useFailManager';
+import ConfirmModal from './ConfirmModal';
 
 // ============================================================
 // TYPES
@@ -82,6 +83,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     hospitalId, onBulkSetupComplete,
     initialShowBulkModal, onInitialModalOpened,
   });
+
+  const [confirmDeleteOrderId, setConfirmDeleteOrderId] = useState<string | null>(null);
 
   const simpleNormalize = (str: string) => String(str || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
 
@@ -779,7 +782,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                       <span className="text-[10px] font-bold text-slate-500">담당: {order.manager}</span>
                       {!isReadOnly && onDeleteOrder && (
                         <button
-                          onClick={() => { if (window.confirm('이 주문을 삭제하시겠습니까?')) void onDeleteOrder(order.id); }}
+                          onClick={() => setConfirmDeleteOrderId(order.id)}
                           className="text-[10px] font-bold text-slate-400 hover:text-rose-500 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors"
                         >
                           삭제
@@ -917,6 +920,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         >
           {toast.message}
         </div>
+      )}
+      {confirmDeleteOrderId && onDeleteOrder && (
+        <ConfirmModal
+          title="주문 삭제"
+          message="이 주문을 삭제하시겠습니까?"
+          confirmLabel="삭제"
+          confirmColor="rose"
+          onConfirm={() => { void onDeleteOrder(confirmDeleteOrderId); setConfirmDeleteOrderId(null); }}
+          onCancel={() => setConfirmDeleteOrderId(null)}
+        />
       )}
     </div>
   );

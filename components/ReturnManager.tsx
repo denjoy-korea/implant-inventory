@@ -9,6 +9,7 @@ import {
   InventoryItem,
 } from '../types';
 import ReturnRequestModal from './order/ReturnRequestModal';
+import ConfirmModal from './ConfirmModal';
 
 interface ReturnManagerProps {
   returnRequests: ReturnRequest[];
@@ -74,6 +75,7 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const manufacturers = useMemo(
     () => Array.from(new Set(returnRequests.map(r => r.manufacturer))).sort(),
@@ -142,8 +144,14 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
     }
   };
 
-  const handleDelete = async (returnId: string) => {
-    if (!confirm('반품 신청을 삭제하시겠습니까?')) return;
+  const handleDelete = (returnId: string) => {
+    setPendingDeleteId(returnId);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const returnId = pendingDeleteId;
+    setPendingDeleteId(null);
     setActionLoadingId(returnId);
     try {
       await onDeleteReturn(returnId);
@@ -381,6 +389,16 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
           onConfirm={handleCreate}
           onClose={() => setShowModal(false)}
           isLoading={isCreating}
+        />
+      )}
+      {pendingDeleteId && (
+        <ConfirmModal
+          title="반품 신청 삭제"
+          message="반품 신청을 삭제하시겠습니까?"
+          confirmLabel="삭제"
+          confirmColor="rose"
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
         />
       )}
     </div>

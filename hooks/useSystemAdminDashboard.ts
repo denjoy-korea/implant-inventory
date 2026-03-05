@@ -281,15 +281,22 @@ export function useSystemAdminDashboard() {
         }
     };
 
-    const handleDeleteLead = async (id: string) => {
-        if (!window.confirm('이 리드를 삭제하시겠습니까?')) return;
-        setLeadDeletingId(id);
-        const result = await operationLogService.deleteAnalysisLead(id);
-        setLeadDeletingId(null);
-        if (result.success) {
-            setAnalysisLeads(prev => prev.filter(l => l.id !== id));
-            setAnalysisLeadsTotal(prev => prev - 1);
-        }
+    const handleDeleteLead = (id: string) => {
+        setConfirmModal({
+            title: '리드 삭제',
+            message: '이 리드를 삭제하시겠습니까?',
+            confirmColor: 'rose',
+            confirmLabel: '삭제',
+            onConfirm: async () => {
+                setLeadDeletingId(id);
+                const result = await operationLogService.deleteAnalysisLead(id);
+                setLeadDeletingId(null);
+                if (result.success) {
+                    setAnalysisLeads(prev => prev.filter(l => l.id !== id));
+                    setAnalysisLeadsTotal(prev => prev - 1);
+                }
+            },
+        });
     };
 
     const handleTabChange = (tab: AdminTab) => {
@@ -552,15 +559,22 @@ export function useSystemAdminDashboard() {
         loadAnalysisLeads(nextPage);
     };
 
-    const handleResetTrafficData = async () => {
-        if (!window.confirm('page_views 테이블 데이터를 전부 삭제합니다. 계속할까요?')) return;
-        try {
-            await pageViewService.deleteAll();
-            setTrafficData([]);
-            showToast('트래픽 데이터가 초기화되었습니다.', 'success');
-        } catch {
-            showToast('초기화에 실패했습니다.', 'error');
-        }
+    const handleResetTrafficData = () => {
+        setConfirmModal({
+            title: '트래픽 데이터 초기화',
+            message: 'page_views 테이블 데이터를 전부 삭제합니다. 계속할까요?',
+            confirmColor: 'rose',
+            confirmLabel: '초기화',
+            onConfirm: async () => {
+                try {
+                    await pageViewService.deleteAll();
+                    setTrafficData([]);
+                    showToast('트래픽 데이터가 초기화되었습니다.', 'success');
+                } catch {
+                    showToast('초기화에 실패했습니다.', 'error');
+                }
+            },
+        });
     };
 
     const handleSavePlanCapacity = async (plan: string) => {

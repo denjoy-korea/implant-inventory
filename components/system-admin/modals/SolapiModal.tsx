@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ModalShell from '../../shared/ModalShell';
+import ConfirmModal from '../../ConfirmModal';
 import { supabase } from '../../../services/supabaseClient';
 import { encryptPatientInfo, decryptPatientInfo } from '../../../services/cryptoUtils';
 
@@ -22,6 +23,7 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
   const [saveState,    setSaveState]    = useState<SaveState>('idle');
   const [errorMsg,     setErrorMsg]     = useState('');
   const [isConnected,  setIsConnected]  = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -70,8 +72,12 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm('솔라피 연동을 해제하시겠습니까?')) return;
+  const handleDelete = () => {
+    setConfirmDelete(true);
+  };
+
+  const executeDelete = async () => {
+    setConfirmDelete(false);
     setSaveState('saving');
     try {
       await supabase.from('system_integrations').delete().eq('key', 'solapi_credentials');
@@ -86,6 +92,7 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
 
 
   return (
+    <>
     <ModalShell isOpen={true} onClose={onClose} title="솔라피 API 관리" titleId="solapi-modal-title" maxWidth="max-w-md" className="flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
@@ -236,6 +243,17 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
     </ModalShell>
+    {confirmDelete && (
+      <ConfirmModal
+        title="솔라피 연동 해제"
+        message="솔라피 연동을 해제하시겠습니까?"
+        confirmLabel="해제"
+        confirmColor="rose"
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    )}
+    </>
   );
 }
 

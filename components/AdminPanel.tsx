@@ -4,6 +4,7 @@ import { supabase } from '../services/supabaseClient';
 import { DbBillingHistory, DbProfile, UserRole } from '../types';
 import { decryptProfile } from '../services/mappers';
 import ConfirmModal from './ConfirmModal';
+import { useToast } from '../hooks/useToast';
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   admin: { label: '운영자', color: 'bg-rose-50 text-rose-600' },
@@ -56,6 +57,8 @@ const AdminPanel: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRoleChange, setPendingRoleChange] = useState<PendingRoleChange | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<{ profileId: string; email: string } | null>(null);
+  const { showToast } = useToast();
 
   // --- 결제 탭 ---
   const [billingRows, setBillingRows] = useState<DbBillingHistory[]>([]);
@@ -107,7 +110,7 @@ const AdminPanel: React.FC = () => {
       await supabase.from('profiles').update({ role: newRole }).eq('id', profileId);
       loadData();
     } catch {
-      alert('역할 변경에 실패했습니다. 다시 시도해 주세요.');
+      showToast('역할 변경에 실패했습니다. 다시 시도해 주세요.', 'error');
     }
   };
 
@@ -116,9 +119,14 @@ const AdminPanel: React.FC = () => {
     loadData();
   };
 
-  const deleteUser = async (profileId: string, email: string) => {
-    if (!confirm(`${email} 사용자를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-    await supabase.from('profiles').delete().eq('id', profileId);
+  const deleteUser = (profileId: string, email: string) => {
+    setPendingDeleteUser({ profileId, email });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!pendingDeleteUser) return;
+    await supabase.from('profiles').delete().eq('id', pendingDeleteUser.profileId);
+    setPendingDeleteUser(null);
     loadData();
   };
 
@@ -435,6 +443,17 @@ const AdminPanel: React.FC = () => {
             setPendingRoleChange(null);
           }}
           onCancel={() => setPendingRoleChange(null)}
+        />
+      )}
+      {pendingDeleteUser && (
+        <ConfirmModal
+          title="사용자 삭제 확인"
+          message={`${pendingDeleteUser.email} 사용자를 정말 삭제하시겠습니까?`}
+          tip="이 작업은 되돌릴 수 없습니다."
+          confirmLabel="삭제"
+          confirmColor="rose"
+          onConfirm={confirmDeleteUser}
+          onCancel={() => setPendingDeleteUser(null)}
         />
       )}
     </div>
