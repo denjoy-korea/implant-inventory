@@ -1,0 +1,28 @@
+#!/bin/bash
+# Pre-commit hook: detect duplicate migration timestamps in supabase/migrations/
+# Prevents the silent-skip bug where Supabase CLI only applies one migration per timestamp.
+
+MIGRATIONS_DIR="supabase/migrations"
+
+if [ ! -d "$MIGRATIONS_DIR" ]; then
+  exit 0
+fi
+
+# Extract timestamps from staged + existing migration files
+timestamps=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sed 's|.*/||' | cut -d_ -f1 | sort)
+dupes=$(echo "$timestamps" | uniq -d)
+
+if [ -n "$dupes" ]; then
+  echo ""
+  echo "ERROR: Duplicate migration timestamps detected in $MIGRATIONS_DIR/"
+  echo ""
+  for ts in $dupes; do
+    echo "  Timestamp $ts:"
+    ls "$MIGRATIONS_DIR"/${ts}_*.sql 2>/dev/null | sed 's|.*/|    |'
+  done
+  echo ""
+  echo "Supabase CLI applies only ONE migration per timestamp (UNIQUE constraint)."
+  echo "Rename one file to a different timestamp before committing."
+  echo ""
+  exit 1
+fi
