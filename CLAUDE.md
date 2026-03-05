@@ -24,6 +24,19 @@
 - 화면 하단 요소에는 위 방향(`bottom-full mb-2`) 사용
 - 자세한 구현 패턴: `.claude/commands/tooltip.md`
 
+## SQL Migration 규칙
+
+### Source of Truth
+- **정식 경로**: `supabase/migrations/` (타임스탬프식 `YYYYMMDDHHMMSS_description.sql`)
+- `supabase/*.sql` (루트 000-048): 레거시, 동결 상태 — 수정 금지
+- `supabase/_archive/`: 대체된 파일 보관소 — 실행 대상 아님
+- 상세: `supabase/README.md`
+
+### 타임스탬프 중복 금지
+- 신규 마이그레이션 생성 시 기존 파일과 타임스탬프 충돌 여부 반드시 확인
+- `ls supabase/migrations/` 로 기존 타임스탬프 확인 후 생성
+- 같은 타임스탬프 2개 이상 존재 시 Supabase CLI가 하나만 적용 (CRITICAL)
+
 ## Edge Function 배포 규칙
 
 ### `verify_jwt = false` 함수 배포 규칙
