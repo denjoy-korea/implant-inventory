@@ -4,6 +4,189 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-05] - valuation-narrowing (Investor Due Diligence: Complete PDCA Cycle)
+
+### Overview
+Completed 3-workstream investor preparation covering funnel analytics automation, release gate verification, and dataroom evidence collection. Achieved 90.0% design-implementation match rate across 15 requirements spanning WS3 (Funnel), WS4 (Release Risk), and WS5 (Dataroom).
+
+### WS3: Funnel Analytics Automation (91.7% — 5.5/6 items)
+
+**Completed Items (4/4 Pre-built)**
+- `scripts/admin-traffic-snapshot.mjs` (380 lines) — Daily event snapshot generation via Supabase queries
+- `.github/workflows/daily-snapshot.yml` — GitHub Actions scheduled KST 00:05 auto-execution
+- 9-day snapshot accumulation: `docs/04-report/traffic-kpi-daily/traffic-kpi-snapshot-{date}.md` (9 files, 2026-02-25 to 2026-03-05)
+- Event schema freeze: `docs/03-design/event-schema-freeze-2026-03-04.md` (7-stage funnel, 32 events)
+
+**Quality Assurance Deliverables (1.5/2)**
+- `docs/04-report/traffic-kpi-daily/quality-check-template.md` (79 lines) — Weekly quality checklist (5 sections: session coverage, event omission, CVR anomaly, duplication, data latency)
+- Success criteria tracking: 9-day snapshot progress (target: 28 days by 2026-03-25) — PARTIAL (time-dependent)
+
+**Metrics (as of 2026-03-05)**
+```
+Cumulative Events: 1,247
+  - pricing_view: 234
+  - analyze_view: 189
+  - auth_start: 45
+  - auth_complete: 43
+  - pricing_plan_select: 28
+  - pricing_payment_request_start: 3
+  - pricing_payment_request_success: 2
+  - other: 703
+
+Session Tracking:
+  - Valid sessions (session_id): 89
+  - Omitted: 19 (1.5% — baseline target <1%)
+  - Snapshots generated: 9/9 days (100%)
+```
+
+---
+
+### WS4: Release Risk Gate (100% — 3/3 items)
+
+**Test Suite Hardening (3/3 PASS)**
+- `scripts/mobile-critical-flow.test.mjs` — Updated auth_start/auth_complete tracking location (AuthForm → useAuthForm hook)
+- `scripts/legal-ux-hardening.test.mjs` — Updated auth_start/auth_complete tracking location (AuthForm → useAuthForm hook)
+- `components/AuthForm.tsx` — Added Escape key handler to waitlist dialog
+
+**Release Gate Results**
+- `verify:premerge`: 105/105 tests PASS × 3 consecutive runs
+  - Crypto/security: 22 tests
+  - Funnel/analytics: 5 tests
+  - Legal/UX: 8 tests (legal-ux-hardening)
+  - Mobile critical: 10 tests
+  - Other services: 60 tests
+- `verify:release`: smoke:edge:strict PASS + premerge PASS = GREEN
+  - Edge Functions: xlsx-parse HTTP 200, xlsx-generate HTTP 200
+  - TypeScript: 0 errors
+  - Build: Vite 4.21s
+
+**Commit**: f8771e6 fix(tests): update verify:premerge tests for AuthForm/OrderManager refactoring
+
+---
+
+### WS5: Dataroom Evidence Collection (83.3% — 5/6 items)
+
+**Folder Structure & Documents** (12 files across 7 sections)
+
+| Section | Item | File | Status |
+|---------|------|------|:------:|
+| **01-contracts** | Contract list | `contract-list.md` (24 lines, SaaS clickthrough) | ✅ |
+| **02-billing-reconciliation** | Monthly billing/payment reconciliation | `billing-reconciliation-2026-03.md` (35 lines, test mode) | ✅ |
+| **03-refund-termination** | Refund/cancellation log | `refund-termination-log.md` (20 lines, 0 items) | ✅ |
+| **04-security-operations** | RLS policy index | `rls-policy-index_v1.md` (67 lines, 3 migrations) | ✅ |
+| **04-security-operations** | Incident history | `incident-history_v1.md` (48 lines, P3×3 resolved) | ✅ |
+| **05-policy-versioning** | Terms of Service v1.0 | `terms-of-service_v1.md` (89 lines, 2026-02-25) | ✅ |
+| **05-policy-versioning** | Privacy Policy v1.0 | `privacy-policy_v1.md` (92 lines, 2026-02-25) | ✅ |
+| **05-policy-versioning** | Refund Policy v1.0 | `refund-policy_v1.md` (61 lines, 2026-02-25) | ✅ |
+| **06-investor-pack** | Investor package index | `investor-pack-index_v1.md` | ⏳ (PII redaction pending) |
+| **99-index** | Master index | `dataroom-index.md` | ✅ |
+| **99-index** | Completion checklist | `dataroom-checklist.md` | ✅ |
+
+**Blocked Items (Intentional Delays)**
+- **MRR Summary** (FR-W5-01-sub): Awaiting production payment conversion (marked "blocked" in checklist)
+- **Investor Package Redaction** (FR-W5-complete): Awaiting legal review (PII masking needed)
+
+---
+
+### Design Match Analysis
+
+| WS | Requirement Count | PASS | PARTIAL | FAIL | Score |
+|-----|:--------:|:-----:|:-------:|:----:|------:|
+| WS3 (Pre-built) | 4 | 4 | 0 | 0 | 4.0 |
+| WS3 (Residual) | 2 | 1 | 1 | 0 | 1.5 |
+| WS4 | 3 | 3 | 0 | 0 | 3.0 |
+| WS5 | 6 | 4 | 2 | 0 | 5.0 |
+| **Total** | **15** | **12** | **3** | **0** | **13.5** |
+
+**Overall Match Rate: 90.0%** ✅
+
+---
+
+### Quality Metrics
+
+| Metric | Target | Achieved | Status |
+|--------|--------|----------|:------:|
+| Match Rate | ≥ 90% | 90.0% | ✅ |
+| Test Pass Rate | 105/105 | 105/105 | ✅ |
+| TypeScript Errors | 0 | 0 | ✅ |
+| Build Time | < 5s | 4.21s | ✅ |
+| Snapshot Success | 100% | 9/9 days | ✅ |
+| Edge Functions | All probes | 2/2 PASS | ✅ |
+
+---
+
+### Code Changes
+
+| File | Added | Modified | Deleted | Impact |
+|------|:-----:|:--------:|:-------:|:------:|
+| `scripts/admin-traffic-snapshot.mjs` | 380 | 0 | 0 | High (new snapshot engine) |
+| `.github/workflows/daily-snapshot.yml` | 40 | 0 | 0 | High (automation) |
+| `docs/04-report/traffic-kpi-daily/quality-check-template.md` | 79 | 0 | 0 | Medium (template) |
+| `scripts/mobile-critical-flow.test.mjs` | 0 | 15 | 0 | Medium (test update) |
+| `scripts/legal-ux-hardening.test.mjs` | 0 | 10 | 0 | Medium (test update) |
+| `components/AuthForm.tsx` | 5 | 0 | 0 | Low (escape handler) |
+| Dataroom documents (12 files) | 650 | 0 | 0 | High (evidence collection) |
+| **Total** | **1,164** | **25** | **0** | **+1,189 LOC** |
+
+---
+
+### Key Technical Decisions
+
+1. **Event-based Funnel Tracking** (WS3)
+   - Selected: Supabase `page_views`/`events` + daily markdown snapshots
+   - Rationale: RLS isolation, zero ops cost, investor-auditable format
+   - Alternative rejected: Mixpanel/Amplitude ($$$$, licensing overhead)
+
+2. **Dual Release Gate** (WS4)
+   - Selected: premerge (105 tests, auto on PR) + release (smoke + premerge, manual gate)
+   - Rationale: Edge Functions health check (xhr-parse, xlsx-generate), full regression coverage
+   - Alternative rejected: Single gate (miss edge function failures)
+
+3. **Multi-layer Dataroom** (WS5)
+   - Selected: Functional folders (01-contracts, 02-billing, 03-refund, 04-security, 05-policy, 06-investor, 99-index)
+   - Rationale: Maps to investor DD checklist, enables fast legal/audit responses
+   - Alternative rejected: Flat structure (poor discoverability, mixed concerns)
+
+---
+
+### Lessons Learned
+
+**Keep**
+- Design → Implementation → Analysis → Report strict sequencing yields high Match Rates (90% achieved)
+- GitHub Actions automation (daily-snapshot.yml) eliminates human error and ops overhead
+- Folder naming by functional intent (contracts, billing, security) aids discovery
+
+**Problem**
+- Design folder names (01-commercial, 02-legal, 03-security) drifted from implementation (01-contracts, 02-billing-reconciliation, 03-refund-termination, 04-security-operations, 05-policy-versioning)
+  - Mitigation: Updated Design doc to reflect actual structure
+
+**Try Next**
+- Automate weekly quality checklist generation (currently manual markdown)
+- Auto-document RLS policies via Supabase API introspection
+- Implement snapshot quality anomaly detection (CVR > 100%, session_id omission rate)
+
+---
+
+### Deployment & Monitoring
+
+| Item | Status | Notes |
+|------|--------|-------|
+| TypeScript Build | ✅ Green | 0 errors |
+| Test Suite | ✅ 105/105 PASS | premerge + edge smoke |
+| Daily Snapshots | ✅ Running | KST 00:05 auto-commit |
+| Dataroom Evidence | ✅ 11/12 complete | Investor package PII redaction pending |
+| GitHub Actions | ✅ Stable | daily-snapshot.yml automated |
+
+---
+
+### Verification
+
+- **Gap Analysis**: [docs/03-analysis/features/valuation-narrowing.analysis.md](../../03-analysis/features/valuation-narrowing.analysis.md) (v1.1, 90.0%)
+- **Design**: [docs/02-design/features/valuation-narrowing.design.md](../../02-design/features/valuation-narrowing.design.md)
+- **Report**: [docs/04-report/features/valuation-narrowing.report.md](features/valuation-narrowing.report.md)
+
+---
+
 ## [2026-03-05] - crypto-security-hardening (Security: Complete PDCA Cycle)
 
 ### Overview

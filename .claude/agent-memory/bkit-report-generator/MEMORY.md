@@ -60,6 +60,17 @@ Used for `/pdca report {feature}` after Check phase (Match Rate ≥90%).
 7. **Changelog v1.0.0** — Added/Changed/Fixed always match actual code changes
 8. **Success Criteria checklist** — Design Match Rate ≥90%, TypeScript clean, tests pass, zero regressions
 
+## valuation-narrowing Report Pattern (2026-03-05)
+
+**Scope**: 3 Workstreams (WS3 Funnel / WS4 Release / WS5 Dataroom) with 15 requirements
+- Match Rate: 90.0% (13.5/15: 12 PASS, 3 PARTIAL, 0 FAIL)
+- WS3: 91.7% (5.5/6) — Pre-built snapshot + analytics + quality template
+- WS4: 100% (3/3) — Test suite updates + verify:premerge 3× Green + verify:release Green
+- WS5: 83.3% (5/6) — Dataroom structure complete except MRR (blocked) + PII redaction (legal pending)
+
+**Key pattern**: Multi-workstream feature requires Requirements Completion Matrix split by phase/workstream
+**Dataroom note**: Design said folders 01-commercial/02-legal/03-security, but implementation uses specific functional names (01-contracts, 02-billing-reconciliation, etc.) — documented as intentional in Analysis
+
 ## Files to Reference
 - Report template: `/Users/mac/.claude/plugins/cache/bkit-marketplace/bkit/1.5.8/templates/report.template.md`
 - Plan: `docs/01-plan/features/{feature}.plan.md`

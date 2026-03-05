@@ -143,9 +143,9 @@ PARTIAL = 0.5 credit, FAIL = 0 credit.
 
 ### Immediate (Match Rate 향상)
 
-1. **FR-W3-01**: `docs/04-report/traffic-kpi-daily/quality-check-template.md` 생성
-   - 주간 체크 항목: 이벤트 누락률, 중복 이벤트율, 세션 분해 실패율
-   - 예상 작업량: 10분
+_없음 -- Match Rate 90.0% 도달로 즉시 조치 항목 해소._
+
+~~1. **FR-W3-01**: `docs/04-report/traffic-kpi-daily/quality-check-template.md` 생성~~ **v1.1 완료**
 
 ### Short-term (지속 운영)
 
@@ -163,7 +163,7 @@ PARTIAL = 0.5 credit, FAIL = 0 credit.
 
 | # | Gap | Recommendation |
 |---|-----|----------------|
-| 1 | FR-W3-01 품질 점검표 누락 | **구현 추가** -- 템플릿 파일 생성 |
+| 1 | ~~FR-W3-01 품질 점검표 누락~~ | **v1.1 해소** -- 파일 생성 완료 |
 | 2 | FR-W3-02 28일 미달 | **의도적 차이로 기록** -- 시간 경과로 자연 해소 |
 | 3 | FR-W5-01-sub MRR 문서 | **의도적 차이로 기록** -- 실결제 전환 전 blocked |
 | 4 | FR-W5-complete 비식별 미완 | **의도적 차이로 기록** -- 법무 검토 대기 |
@@ -175,4 +175,5 @@ PARTIAL = 0.5 credit, FAIL = 0 credit.
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
-| 1.0 | 2026-03-05 | Initial gap analysis | gap-detector |
+| 1.0 | 2026-03-05 | Initial gap analysis (83.3%) | gap-detector |
+| 1.1 | 2026-03-05 | FR-W3-01 resolved: quality-check-template.md created. 83.3% -> 90.0% | gap-detector |
