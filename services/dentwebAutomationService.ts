@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 
-export type DentwebRunStatus = 'idle' | 'success' | 'no_data' | 'failed';
+export type DentwebRunStatus = 'idle' | 'running' | 'success' | 'no_data' | 'failed';
 
 export interface DentwebAutomationState {
   hospitalId: string;
@@ -11,6 +11,10 @@ export interface DentwebAutomationState {
   lastRunAt: string | null;
   lastStatus: DentwebRunStatus;
   lastMessage: string | null;
+  claimedAt: string | null;
+  hasAgentToken: boolean;
+  agentTokenMasked: string | null;
+  staleTimeoutMinutes: number;
   updatedAt: string;
 }
 
@@ -18,8 +22,7 @@ type Action =
   | 'get_state'
   | 'save_settings'
   | 'request_run'
-  | 'claim_run'
-  | 'report_run';
+  | 'generate_token';
 
 interface InvokeResponse {
   ok: boolean;
@@ -34,8 +37,13 @@ interface InvokeResponse {
     last_run_at: string | null;
     last_status: DentwebRunStatus;
     last_message: string | null;
+    claimed_at: string | null;
+    has_agent_token: boolean;
+    agent_token_masked: string | null;
+    stale_timeout_minutes: number;
     updated_at: string;
   };
+  agent_token?: string;
 }
 
 function toState(raw: NonNullable<InvokeResponse['state']>): DentwebAutomationState {
@@ -48,6 +56,10 @@ function toState(raw: NonNullable<InvokeResponse['state']>): DentwebAutomationSt
     lastRunAt: raw.last_run_at,
     lastStatus: raw.last_status,
     lastMessage: raw.last_message,
+    claimedAt: raw.claimed_at,
+    hasAgentToken: raw.has_agent_token,
+    agentTokenMasked: raw.agent_token_masked,
+    staleTimeoutMinutes: raw.stale_timeout_minutes,
     updatedAt: raw.updated_at,
   };
 }
@@ -86,5 +98,11 @@ export const dentwebAutomationService = {
     const res = await invoke('request_run');
     if (!res.ok || !res.state) return { ok: false, error: res.error, message: res.message };
     return { ok: true, state: toState(res.state) };
+  },
+
+  async generateToken(): Promise<{ ok: boolean; agentToken?: string; state?: DentwebAutomationState; error?: string; message?: string }> {
+    const res = await invoke('generate_token');
+    if (!res.ok || !res.state) return { ok: false, error: res.error, message: res.message };
+    return { ok: true, agentToken: res.agent_token, state: toState(res.state) };
   },
 };

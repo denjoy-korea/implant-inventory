@@ -1,15 +1,19 @@
 /**
  * dentweb-upload
  *
- * Dentweb 자동화 클라이언트가 전송한 수술기록 엑셀을 수신하여
+ * Dentweb 자동화 에이전트 또는 사용자가 전송한 수술기록 엑셀을 수신하여
  * surgery_records 테이블에 적재한다.
+ *
+ * Auth (2가지 경로):
+ *   1. 에이전트 토큰 (UUID): dentweb_automation_settings.agent_token → hospital_id 조회
+ *   2. Supabase JWT: profiles → hospital_id 조회 (앱 UI 수동 업로드)
  *
  * Request:
  * - Method: POST
  * - Content-Type: multipart/form-data
- * - Authorization: Bearer <DENTWEB_UPLOAD_TOKEN>
+ * - Authorization: Bearer <agent_token | JWT>
  * - Fields:
- *   - hospital_id (UUID, required)
+ *   - hospital_id (UUID, optional — 서버가 토큰으로 결정, 불일치 시 403)
  *   - file (xlsx/xls, required)
  *
  * Response:
@@ -31,7 +35,6 @@ const ALLOWED_PLANS = new Set(["plus", "business", "ultimate"]);
 let cachedAesKeyPromise: Promise<CryptoKey> | null = null;
 
 type JsonObject = Record<string, unknown>;
-type TokenMap = Record<string, string>;
 
 type DbInsertRow = {
   hospital_id: string;
@@ -68,46 +71,28 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function timingSafeEquals(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aa = enc.encode(a);
-  const bb = enc.encode(b);
-  if (aa.length !== bb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < aa.length; i += 1) {
-    diff |= aa[i] ^ bb[i];
-  }
-  return diff === 0;
-}
-
-function parseTokenMap(raw: string): TokenMap {
-  const value = raw.trim();
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-
-    const result: TokenMap = {};
-    for (const [token, hospitalId] of Object.entries(parsed as Record<string, unknown>)) {
-      const t = String(token || "").trim();
-      const h = String(hospitalId || "").trim();
-      if (t && isUuid(h)) result[t] = h;
-    }
-    return result;
-  } catch {
-    return {};
-  }
-}
-
-function resolveHospitalIdByToken(receivedToken: string, tokenMap: TokenMap): string | null {
-  for (const [token, hospitalId] of Object.entries(tokenMap)) {
-    if (timingSafeEquals(receivedToken, token)) return hospitalId;
-  }
-  return null;
+function isAgentToken(token: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
 }
 
 function isLikelyJwt(token: string): boolean {
   return token.split(".").length === 3;
+}
+
+async function resolveHospitalIdFromAgentToken(
+  adminClient: ReturnType<typeof createClient>,
+  token: string,
+): Promise<string | null> {
+  if (!isAgentToken(token)) return null;
+
+  const { data, error } = await adminClient
+    .from("dentweb_automation_settings")
+    .select("hospital_id")
+    .eq("agent_token", token)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return String(data.hospital_id);
 }
 
 function parseJwtPayload(token: string): JsonObject | null {
@@ -518,8 +503,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: false, error: "Method not allowed" }, 405, corsHeaders);
   }
 
-  const expectedToken = (Deno.env.get("DENTWEB_UPLOAD_TOKEN") || "").trim();
-  const tokenMap = parseTokenMap(Deno.env.get("DENTWEB_UPLOAD_TOKEN_MAP") || "");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -536,16 +519,19 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // ── 인증: 에이전트 토큰 → JWT 순서로 시도 ──
   const receivedToken = getBearerToken(req);
-  const mappedHospitalId = receivedToken
-    ? resolveHospitalIdByToken(receivedToken, tokenMap)
-    : null;
-  const isSingleTokenAuthorized = !!(receivedToken && expectedToken && timingSafeEquals(receivedToken, expectedToken));
-  const jwtHospitalId = receivedToken
-    ? await resolveHospitalIdFromJwt(supabaseUrl, supabaseAnonKey, adminClient, receivedToken)
-    : null;
-  const isAuthorized = !!mappedHospitalId || isSingleTokenAuthorized || !!jwtHospitalId;
-  if (!isAuthorized) {
+  let hospitalId: string | null = null;
+
+  if (receivedToken && isAgentToken(receivedToken)) {
+    hospitalId = await resolveHospitalIdFromAgentToken(adminClient, receivedToken);
+  }
+
+  if (!hospitalId && receivedToken && isLikelyJwt(receivedToken)) {
+    hospitalId = await resolveHospitalIdFromJwt(supabaseUrl, supabaseAnonKey, adminClient, receivedToken);
+  }
+
+  if (!hospitalId) {
     return jsonResponse({ success: false, error: "Unauthorized" }, 401, corsHeaders);
   }
 
@@ -556,24 +542,14 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: false, error: "Invalid multipart/form-data" }, 400, corsHeaders);
   }
 
+  // hospital_id는 서버가 결정 — form-data 값은 일치 검증만
   const requestedHospitalId = str(formData.get("hospital_id"));
-  const hospitalId = mappedHospitalId || jwtHospitalId || requestedHospitalId;
-  if (mappedHospitalId && requestedHospitalId && requestedHospitalId !== mappedHospitalId) {
+  if (requestedHospitalId && requestedHospitalId !== hospitalId) {
     return jsonResponse(
-      { success: false, error: "hospital_id mismatch for token" },
+      { success: false, error: "hospital_id mismatch" },
       403,
       corsHeaders,
     );
-  }
-  if (jwtHospitalId && requestedHospitalId && requestedHospitalId !== jwtHospitalId) {
-    return jsonResponse(
-      { success: false, error: "hospital_id mismatch for jwt user" },
-      403,
-      corsHeaders,
-    );
-  }
-  if (!hospitalId || !isUuid(hospitalId)) {
-    return jsonResponse({ success: false, error: "hospital_id (UUID) is required" }, 422, corsHeaders);
   }
 
   let uploadFile = formData.get("file");
