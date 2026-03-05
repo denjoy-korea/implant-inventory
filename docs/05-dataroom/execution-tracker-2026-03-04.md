@@ -18,7 +18,16 @@
 | WS5-03 | Data Room | 청구-수금-환불 대사표 작성 | denjoy | 맹준호 | 2026-03-12 | IN_PROGRESS | `02-billing-reconciliation/billing-reconciliation-template.csv` |
 | WS5-04 | Data Room | 법무 패키지(약관/개인정보/환불정책) | 외부 법무자문 | denjoy | 2026-03-14 | BLOCKED | `05-policy-versioning/` |
 | WS5-05 | Data Room | 보안 운영 증빙 첨부 | 맹준호 | denjoy | 2026-03-16 | IN_PROGRESS | `04-security-operations/` |
-| WS5-06 | Data Room | 투자자 제출본 원본/요약본 제작 | denjoy | 맹준호 | 2026-03-20 | TODO | `06-investor-pack/` |
+| WS5-06 | Data Room | 투자자 제출본 원본/요약본 제작 | denjoy | 맹준호 | 2026-03-20 | DONE | `06-investor-pack/`, `06-investor-pack/redacted/2026-03-05_investor-pack-redacted-summary_v1.md`, `06-investor-pack/redacted/2026-03-05_legal-finance-review-round_v1.md` |
+
+## 오늘 기준 실행 순서 (2026-03-05 업데이트)
+
+1. `WS5-03` 수금 대사 원천 데이터 취합 시작 (블로커 해소 우선)
+2. `WS5-04` 외부 법무자문 선임 확정 (현재 BLOCKED 해소)
+3. `WS5-05` 보안 운영 증빙 최신화 (이번 주 제출용)
+4. `WS3-01` 이벤트 스키마 동결 마무리
+5. `WS3-02` 스냅샷 자동화 마감 준비
+6. `WS3-03` 주간 session_id 누락률 점검 실행
 
 ## 금주 블로커
 

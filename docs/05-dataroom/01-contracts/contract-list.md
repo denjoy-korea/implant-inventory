@@ -38,10 +38,11 @@ DenJOY는 웹 기반 SaaS로, **클릭-스루 방식(Click-Through Agreement)** 
 
 ---
 
-## 기업 계약 (Enterprise — 해당 없음)
+## 맞춤 서면 계약 (해당 없음)
 
 2026-03-05 기준 별도 서면 계약 고객 없음.
 향후 기업 고객 도입 시 이 문서에 개별 행으로 추가.
+현재 구독 요금제 표기는 Free / Basic / Plus / Business (내부 운영용 Ultimate 별도) 기준으로 관리한다.
 
 ---
 
