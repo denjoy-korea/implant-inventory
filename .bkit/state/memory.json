@@ -9,10 +9,10 @@
   "currentPhase": null,
   "matchRate": null,
   "lastArchived": {
-    "feature": "codebase-optimization",
+    "feature": "valuation-narrowing",
     "phase": "archived",
-    "matchRate": 100,
-    "archivedAt": "2026-03-05T12:30:00.000Z",
-    "archivedTo": "docs/archive/2026-03/codebase-optimization/"
+    "matchRate": 90,
+    "archivedAt": "2026-03-05T12:35:00.000Z",
+    "archivedTo": "docs/archive/2026-03/valuation-narrowing/"
   }
 }
