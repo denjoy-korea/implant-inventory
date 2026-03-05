@@ -12,3 +12,6 @@
 | performance-bundle | 90% | 2026-03-05 | [performance-bundle/](./performance-bundle/) |
 | hospital-integrations | 100% | 2026-03-05 | [hospital-integrations/](./hospital-integrations/) |
 | crypto-security-hardening | 99.8% | 2026-03-05 | [crypto-security-hardening/](./crypto-security-hardening/) |
+| release-gate-fix | 100% | 2026-03-05 | [release-gate-fix/](./release-gate-fix/) |
+| performance-bundle-phase1 | 100% | 2026-03-05 | [performance-bundle-phase1/](./performance-bundle-phase1/) |
+| code-quality-refactor | 100% | 2026-03-05 | [code-quality-refactor/](./code-quality-refactor/) |
