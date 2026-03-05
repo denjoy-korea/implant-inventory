@@ -1,17 +1,17 @@
 
-import React, { useMemo, useState } from 'react';
-import { Order, OrderStatus, OrderType, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_STATUS_LABELS, RETURN_REASON_LABELS } from '../types';
-import { isIbsImplantManufacturer } from '../services/sizeNormalizer';
-import { useCountUp } from './surgery-dashboard/shared';
+import React from 'react';
+import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_REASON_LABELS, RETURN_STATUS_LABELS } from '../types';
 import OrderCancelModal from './order/OrderCancelModal';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
 import OptimizeModal from './inventory/OptimizeModal';
 import { OrderHistoryPanel } from './order/OrderHistoryPanel';
 import ReturnRequestModal from './order/ReturnRequestModal';
-import ReturnCandidateModal, { ReturnCategory } from './order/ReturnCandidateModal';
+import ReturnCandidateModal from './order/ReturnCandidateModal';
 import BrandOrderModal from './order/BrandOrderModal';
-import { useOrderManagerData, simpleNormalize, displayMfr, buildOrderItemKey, formatManagerCell } from '../hooks/useOrderManagerData';
+import { displayMfr, formatManagerCell, buildOrderItemKey } from '../hooks/useOrderManagerData';
+import { useOrderManager } from '../hooks/useOrderManager';
+export type { GroupedOrder, GroupedReturnRequest, UnifiedRow } from '../hooks/useOrderManager';
 
 interface OrderManagerProps {
   orders: Order[];
@@ -36,33 +36,6 @@ interface OrderManagerProps {
   onUpgradePlan?: () => void;
 }
 
-export interface GroupedOrder {
-  id: string; // "YYYY-MM-DD|Manufacturer|OrderType"
-  date: string;
-  manufacturer: string;
-  type: Order['type'];
-  orders: Order[];
-  totalItems: number; // Distinct item count
-  totalQuantity: number; // Sum of all item quantities
-  managers: string[];
-  confirmers: string[];  // 신청자와 다른 확인자만
-  statuses: OrderStatus[];
-  overallStatus: OrderStatus | 'mixed';
-}
-
-interface GroupedReturnRequest {
-  id: string;            // "requestedDate|manufacturer"
-  date: string;
-  manufacturer: string;
-  requests: ReturnRequest[];
-  totalItems: number;
-  totalQty: number;
-  managers: string[];
-  confirmers: string[];  // 신청자와 다른 확인자만
-  overallStatus: ReturnStatus | 'mixed';
-}
-
-type UnifiedRow = { kind: 'order'; data: GroupedOrder } | { kind: 'return'; data: GroupedReturnRequest };
 
 const OrderManager: React.FC<OrderManagerProps> = ({
   orders,
@@ -86,86 +59,33 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   plan,
   onUpgradePlan,
 }) => {
-  const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
-  const [filterManufacturer, setFilterManufacturer] = useState<string>('all');
-
-  // ── 취소 모달 state ──
-  const [cancelModalOrder, setCancelModalOrder] = useState<Order[] | null>(null);
-  const [isCancelLoading, setIsCancelLoading] = useState(false);
-
-  // ── 일괄 주문 모달 state (데스크톱) ──
-  const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
-
-  // ── 모바일 인라인 발주 목록 state ──
-  const [unselectedLowStockKeys, setUnselectedLowStockKeys] = useState<Set<string>>(new Set());
-  const [isMobileBulkOrdering, setIsMobileBulkOrdering] = useState(false);
-
-  // ── 상세 입고 확인 모달 state ──
-  const [selectedGroupModal, setSelectedGroupModal] = useState<GroupedOrder | null>(null);
-  const [isReceiptConfirming, setIsReceiptConfirming] = useState(false);
-
-  // ── 주문 히스토리 패널 state ──
-  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
-
-  // ── 반품 신청 모달 state ──
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [isCreatingReturn, setIsCreatingReturn] = useState(false);
-  const [returnActionLoadingId, setReturnActionLoadingId] = useState<string | null>(null);
-
-  // ── 발주 권장 품목 UI state ──
-  const [expandedMfrs, setExpandedMfrs] = useState<Set<string>>(new Set());
-  const [brandOrderModalMfr, setBrandOrderModalMfr] = useState<string | null>(null);
-
-  // ── 반품 권장 모달 state ──
-  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
-  const [showReturnCandidateModal, setShowReturnCandidateModal] = useState(false);
-  const [returnCandidateCategory, setReturnCandidateCategory] = useState<ReturnCategory>('overstock');
-  const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
-  const [isBulkReturning, setIsBulkReturning] = useState(false);
-
-  // ── 반품 신청 상세 보기 state ──
-  const [returnDetailGroup, setReturnDetailGroup] = useState<GroupedReturnRequest | null>(null);
-
-  // ── 교환 권장 품목 반품 처리 모달 state ──
-  const [exchangeReturnTarget, setExchangeReturnTarget] = useState<{ manufacturer: string; count: number; groups: { brand: string; size: string; maxQty: number }[] } | null>(null);
-  const [exchangeItemQuantities, setExchangeItemQuantities] = useState<Record<string, number>>({});
-  const [isExchangeReturnSubmitting, setIsExchangeReturnSubmitting] = useState(false);
-
-  // ── 반품 신청 액션 핸들러 ──
-  const handleReturnCreate = async (params: CreateReturnParams) => {
-    setIsCreatingReturn(true);
-    try {
-      await onCreateReturn(params);
-      setShowReturnModal(false);
-      showAlertToast('반품 신청이 등록되었습니다.', 'success');
-    } catch {
-      showAlertToast('반품 신청에 실패했습니다.', 'error');
-    } finally {
-      setIsCreatingReturn(false);
-    }
-  };
-
-  const handleReturnUpdateStatus = async (returnId: string, newStatus: ReturnStatus, currentStatus: ReturnStatus) => {
-    setReturnActionLoadingId(returnId);
-    try {
-      if (newStatus === 'completed') {
-        const result = await onCompleteReturn(returnId);
-        if (result.ok) showAlertToast('반품 완료 처리되었습니다.', 'success');
-        else showAlertToast(result.reason === 'conflict' ? '상태가 변경되어 반영할 수 없습니다.' : '처리 중 오류가 발생했습니다.', 'error');
-      } else {
-        const result = await onUpdateReturnStatus(returnId, newStatus, currentStatus);
-        if (result.ok) showAlertToast(`상태가 "${RETURN_STATUS_LABELS[newStatus]}"(으)로 변경되었습니다.`, 'success');
-        else showAlertToast(result.reason === 'conflict' ? '상태가 변경되어 반영할 수 없습니다.' : '처리 중 오류가 발생했습니다.', 'error');
-      }
-    } finally {
-      setReturnActionLoadingId(null);
-    }
-  };
-
   const {
-    pendingQtyByItemKey,
+    filterType, setFilterType,
+    filterDateFrom, setFilterDateFrom,
+    filterDateTo, setFilterDateTo,
+    filterManufacturer, setFilterManufacturer,
+    cancelModalOrder, setCancelModalOrder,
+    isCancelLoading, setIsCancelLoading,
+    showBulkOrderModal, setShowBulkOrderModal,
+    unselectedLowStockKeys, setUnselectedLowStockKeys,
+    isMobileBulkOrdering,
+    selectedGroupModal, setSelectedGroupModal,
+    isReceiptConfirming, setIsReceiptConfirming,
+    showHistoryPanel, setShowHistoryPanel,
+    showReturnModal, setShowReturnModal,
+    isCreatingReturn,
+    returnActionLoadingId,
+    brandOrderModalMfr, setBrandOrderModalMfr,
+    showOptimizeModal, setShowOptimizeModal,
+    showReturnCandidateModal, setShowReturnCandidateModal,
+    returnCandidateCategory, setReturnCandidateCategory,
+    showBulkReturnConfirm, setShowBulkReturnConfirm,
+    isBulkReturning,
+    returnDetailGroup, setReturnDetailGroup,
+    exchangeReturnTarget, setExchangeReturnTarget,
+    exchangeItemQuantities,
+    isExchangeReturnSubmitting,
+    exchangeTotalQty,
     lowStockItems,
     returnCandidates,
     bulkReturnItems,
@@ -178,200 +98,34 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     groupedLowStock,
     orderedLowStockGroups,
     manufacturerOptions,
-  } = useOrderManagerData({ orders, inventory, surgeryMaster, returnRequests });
-
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      if (order.status !== 'ordered') return false; // 진행중만 표시 (완료/취소는 히스토리에서)
-      const typeMatch = filterType === 'all'
-        || (filterType === 'fail_and_return' ? (order.type === 'fail_exchange' || order.type === 'return') : order.type === filterType);
-      const dateFromMatch = !filterDateFrom || order.date >= filterDateFrom;
-      const dateToMatch = !filterDateTo || order.date <= filterDateTo;
-      const mfrMatch = filterManufacturer === 'all' || order.manufacturer === filterManufacturer;
-      return typeMatch && dateFromMatch && dateToMatch && mfrMatch;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [orders, filterType, filterDateFrom, filterDateTo, filterManufacturer]);
-
-  const groupedOrders = useMemo(() => {
-    const groups: Record<string, GroupedOrder> = {};
-    filteredOrders.forEach(order => {
-      const key = `${order.date}|${simpleNormalize(order.manufacturer)}|${order.type}`;
-      if (!groups[key]) {
-        groups[key] = {
-          id: key,
-          date: order.date,
-          manufacturer: order.manufacturer,
-          type: order.type,
-          orders: [],
-          totalItems: 0,
-          totalQuantity: 0,
-          managers: [],
-          confirmers: [],
-          statuses: [],
-          overallStatus: 'ordered' as OrderStatus | 'mixed'
-        };
-      }
-      const group = groups[key];
-      group.orders.push(order);
-      group.totalItems += order.items.length;
-      group.totalQuantity += order.items.reduce((sum, i) => sum + i.quantity, 0);
-      if (!group.managers.includes(order.manager)) group.managers.push(order.manager);
-      if (order.confirmedBy && order.confirmedBy !== order.manager && !group.confirmers.includes(order.confirmedBy)) {
-        group.confirmers.push(order.confirmedBy);
-      }
-      if (!group.statuses.includes(order.status)) group.statuses.push(order.status);
-    });
-
-    return Object.values(groups).map(g => {
-      let overallStatus: GroupedOrder['overallStatus'] = 'mixed';
-      if (g.statuses.length === 1) {
-        overallStatus = g.statuses[0];
-      } else if (!g.statuses.includes('ordered') && !g.statuses.includes('received')) {
-        overallStatus = 'cancelled';
-      } else if (!g.statuses.includes('ordered')) {
-        overallStatus = 'received';
-      } else if (g.statuses.includes('ordered') && g.statuses.includes('received')) {
-        overallStatus = 'mixed';
-      } else {
-        overallStatus = 'ordered';
-      }
-      return { ...g, overallStatus };
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filteredOrders]);
-
-  const groupedReturnRequests = useMemo<GroupedReturnRequest[]>(() => {
-    const map = new Map<string, GroupedReturnRequest>();
-    // 진행중만 표시 (대기중·수거중) — 완료/거절은 히스토리에서 조회
-    const sourceRequests = returnRequests.filter(r =>
-      r.status === 'requested' || r.status === 'picked_up'
-    );
-    sourceRequests.forEach(r => {
-      const key = `${r.requestedDate}|${simpleNormalize(r.manufacturer)}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          id: key,
-          date: r.requestedDate,
-          manufacturer: r.manufacturer,
-          requests: [],
-          totalItems: 0,
-          totalQty: 0,
-          managers: [],
-          confirmers: [],
-          overallStatus: r.status,
-        });
-      }
-      const g = map.get(key)!;
-      g.requests.push(r);
-      g.totalItems += r.items.length;
-      g.totalQty += r.items.reduce((s, i) => s + i.quantity, 0);
-      if (!g.managers.includes(r.manager)) g.managers.push(r.manager);
-      if (r.confirmedBy && r.confirmedBy !== r.manager && !g.confirmers.includes(r.confirmedBy)) {
-        g.confirmers.push(r.confirmedBy);
-      }
-    });
-    for (const g of map.values()) {
-      const statuses = new Set(g.requests.map(r => r.status));
-      g.overallStatus = statuses.size === 1 ? g.requests[0].status : 'mixed';
-    }
-    return Array.from(map.values());
-  }, [returnRequests]);
-
-  const unifiedRows = useMemo<UnifiedRow[]>(() => {
-    const rows: UnifiedRow[] = [
-      ...groupedOrders.map(g => ({ kind: 'order' as const, data: g })),
-      ...groupedReturnRequests.map(g => ({ kind: 'return' as const, data: g })),
-    ];
-    return rows.sort((a, b) => b.data.date.localeCompare(a.data.date));
-  }, [groupedOrders, groupedReturnRequests]);
-
-  const stats = useMemo(() => {
-    const totalOrders = orders.filter(o =>
-      filterType === 'all'
-      || (filterType === 'fail_and_return' ? (o.type === 'fail_exchange' || o.type === 'return') : o.type === filterType)
-    );
-    const pendingOrders = totalOrders.filter(o => o.status === 'ordered');
-    const receivedOrders = totalOrders.filter(o => o.status === 'received');
-    const sumQty = (list: Order[]) => list.reduce((acc, o) => acc + o.items.reduce((s, i) => s + i.quantity, 0), 0);
-    const lowStockDeficit = lowStockItems.reduce((acc, entry) => acc + entry.remainingDeficit, 0);
-    return {
-      totalCount: totalOrders.length,
-      totalQty: sumQty(totalOrders),
-      pendingCount: pendingOrders.length,
-      pendingQty: sumQty(pendingOrders),
-      receivedCount: receivedOrders.length,
-      receivedQty: sumQty(receivedOrders),
-      lowStockCount: lowStockItems.length,
-      lowStockQty: lowStockDeficit,
-    };
-  }, [orders, lowStockItems, filterType]);
-
-  const typeCounts: Record<'all' | 'replenishment' | 'fail_exchange' | 'return', number> = useMemo(() => ({
-    all: orders.length,
-    replenishment: orders.filter(o => o.type === 'replenishment').length,
-    fail_exchange: orders.filter(o => o.type === 'fail_exchange').length,
-    return: orders.filter(o => o.type === 'return').length,
-  }), [orders]);
-
-  // Auto-expand first manufacturer on initial load
-  React.useEffect(() => {
-    if (expandedMfrs.size === 0 && groupedLowStock.length > 0) {
-      setExpandedMfrs(new Set([groupedLowStock[0][0]]));
-    }
-  }, [groupedLowStock.length]);
-
-  // ── 일괄반품 실행 ──
-  const handleBulkReturn = async () => {
-    setIsBulkReturning(true);
-    const byMfr: Record<string, typeof bulkReturnItems[0][]> = {};
-    for (const item of bulkReturnItems) {
-      const mfr = item.manufacturer || '기타';
-      if (!byMfr[mfr]) byMfr[mfr] = [];
-      byMfr[mfr].push(item);
-    }
-    try {
-      await Promise.all(
-        Object.entries(byMfr).map(([mfr, items]) => {
-          const totalQty = items.reduce((s, i) => s + i.returnQty, 0);
-          return onCreateReturn({
-            manufacturer: mfr,
-            reason: 'excess_stock',
-            manager: currentUserName || '일괄반품',
-            memo: `일괄 반품 (${items.length}개 품목, 총 ${totalQty}개)`,
-            items: items.map(i => ({ brand: i.brand, size: i.size, quantity: i.returnQty })),
-          });
-        })
-      );
-      showAlertToast(`일괄 반품 등록 완료: ${bulkReturnItems.length}개 품목`, 'success');
-    } catch {
-      showAlertToast('일괄 반품 등록 중 오류가 발생했습니다.', 'error');
-    } finally {
-      setIsBulkReturning(false);
-      setShowBulkReturnConfirm(false);
-    }
-  };
-
-  // ── 모바일 인라인 발주 실행 ──
-  const handleMobileBulkOrder = async () => {
-    const selected = lowStockItems.filter(e =>
-      !unselectedLowStockKeys.has(buildOrderItemKey(e.item.manufacturer, e.item.brand, e.item.size))
-    );
-    if (selected.length === 0) return;
-    setIsMobileBulkOrdering(true);
-    try {
-      await Promise.all(selected.map(entry => onQuickOrder(entry.item)));
-      showAlertToast(`${selected.length}품목 발주 완료`, 'success');
-      setUnselectedLowStockKeys(new Set());
-    } catch {
-      showAlertToast('일부 발주 처리에 실패했습니다.', 'error');
-    } finally {
-      setIsMobileBulkOrdering(false);
-    }
-  };
-
-  const animPendingRep = useCountUp(kpiData.pendingRepCount);
-  const animExcRet = useCountUp(kpiData.pendingExcRetCount);
-  const animLowStock = useCountUp(kpiData.lowStockCount);
-  const animTotal = useCountUp(stats.totalCount);
+    groupedOrders,
+    unifiedRows,
+    stats,
+    typeCounts,
+    animPendingRep,
+    animExcRet,
+    animLowStock,
+    animTotal,
+    handleReturnCreate,
+    handleReturnUpdateStatus,
+    handleBulkReturn,
+    handleMobileBulkOrder,
+    handleExchangeCandidateClick,
+    adjustExchangeQty,
+    handleExchangeReturnSubmit,
+  } = useOrderManager({
+    orders,
+    inventory,
+    surgeryMaster,
+    currentUserName,
+    isReadOnly,
+    returnRequests,
+    showAlertToast,
+    onCreateReturn,
+    onCompleteReturn,
+    onUpdateReturnStatus,
+    onQuickOrder,
+  });
 
   const TYPE_TABS: { key: 'all' | 'replenishment' | 'fail_exchange' | 'return'; label: string }[] = [
     { key: 'all', label: '전체' },
@@ -408,6 +162,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               onClick={() => { setFilterType('replenishment'); }}
               role="button"
               tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterType('replenishment'); } }}
               className={`rounded-xl border px-3 py-3 transition-colors active:scale-[0.98] cursor-pointer ${animPendingRep > 0 ? 'border-rose-100 bg-rose-50/60 hover:bg-rose-100' : 'border-slate-100 bg-slate-50/80 hover:bg-slate-100'}`}
             >
               <p className="text-[10px] font-bold text-slate-500">진행 중 발주</p>
@@ -417,6 +172,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               onClick={() => { setFilterType('fail_and_return'); }}
               role="button"
               tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterType('fail_and_return'); } }}
               className={`rounded-xl border px-3 py-3 transition-colors active:scale-[0.98] cursor-pointer ${animExcRet > 0 ? 'border-amber-200 bg-amber-50 hover:bg-amber-100' : 'border-amber-100 bg-amber-50/80 hover:bg-amber-100'}`}
             >
               <p className="text-[10px] font-bold text-amber-600">교환/반품 대기</p>
@@ -426,6 +182,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               onClick={() => { setShowHistoryPanel(true); }}
               role="button"
               tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowHistoryPanel(true); } }}
               className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 cursor-pointer hover:bg-emerald-100 active:scale-[0.98] transition-colors"
             >
               <p className="text-[10px] font-bold text-emerald-600">입고 완료</p>
@@ -624,7 +381,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (isReadOnly) {
-                    alert("읽기 전용 모드입니다.");
+                    showAlertToast("읽기 전용 모드입니다.", 'info');
                     return;
                   }
                   if (lowStockItems.length === 0) {
@@ -635,6 +392,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 }}
                 role="button"
                 tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (isReadOnly) { showAlertToast("읽기 전용 모드입니다.", 'info'); return; } if (lowStockItems.length === 0) { window.location.hash = '#/dashboard/inventory'; return; } setShowBulkOrderModal(true); } }}
                 className={`flex-1 p-5 lg:p-6 transition-all duration-300 ${lowStockItems.length > 0 ? 'hover:bg-rose-50/40 cursor-pointer active:bg-rose-100/50 group/lowstock' : 'bg-white cursor-default'} outline-none relative overflow-hidden`}
               >
                 {lowStockItems.length > 0 && (
@@ -665,6 +423,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               {/* 2. 진행 중인 발주 */}
               <div
                 onClick={() => { setFilterType('replenishment'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterType('replenishment'); } }}
                 role="button"
                 tabIndex={0}
                 className="flex-1 p-5 lg:p-6 transition-colors hover:bg-slate-50/50 cursor-pointer active:bg-slate-100/50 outline-none group/pending relative overflow-hidden"
@@ -693,6 +452,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               {/* 3. 교환/반품 대기 */}
               <div
                 onClick={() => { setFilterType('fail_and_return'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterType('fail_and_return'); } }}
                 role="button"
                 tabIndex={0}
                 className="flex-1 p-5 lg:p-6 transition-all duration-300 hover:bg-amber-50/40 cursor-pointer active:bg-amber-100/50 outline-none group/excret relative overflow-hidden"
@@ -721,6 +481,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               {/* 4. 종합 상태 요약 */}
               <div
                 onClick={() => { setFilterType('all'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterType('all'); } }}
                 role="button"
                 tabIndex={0}
                 className="flex-[1.2] p-5 lg:p-6 transition-colors hover:bg-slate-50/50 cursor-pointer active:bg-slate-100/50 outline-none group/summary relative overflow-hidden"
@@ -933,29 +694,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
                     <button
                       key={manufacturer}
-                      onClick={() => {
-                        if (!isReadOnly && actualCount > 0) {
-                          const rows = (surgeryMaster['수술기록지'] || []).filter(row => {
-                            if (row['구분'] !== '수술중교환') return false;
-                            const raw = String(row['제조사'] || '기타');
-                            const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
-                            return mfr === manufacturer;
-                          });
-                          const groupMap: Record<string, { brand: string; size: string; maxQty: number }> = {};
-                          rows.forEach(row => {
-                            const brand = String(row['브랜드'] || manufacturer);
-                            const size = String(row['규격(SIZE)'] || row['규격'] || '기타');
-                            const key = `${brand}|${size}`;
-                            if (!groupMap[key]) groupMap[key] = { brand, size, maxQty: 0 };
-                            groupMap[key].maxQty++;
-                          });
-                          const groups = Object.values(groupMap).sort((a, b) => a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size));
-                          const initQtys: Record<string, number> = {};
-                          groups.forEach(g => { initQtys[`${g.brand}|${g.size}`] = g.maxQty; });
-                          setExchangeReturnTarget({ manufacturer, count: actualCount, groups });
-                          setExchangeItemQuantities(initQtys);
-                        }
-                      }}
+                      onClick={() => handleExchangeCandidateClick(manufacturer, actualCount)}
                       disabled={isReadOnly || actualCount === 0}
                       className={`flex-none flex flex-col gap-0.5 rounded-2xl px-3.5 py-2.5 min-w-[90px] text-left ${
                         returnPending > 0 && actualCount === 0
@@ -994,28 +733,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                 {exchangeCandidates.list.map(({ manufacturer, actualCount, returnPending }) => (
                   <button
                     key={manufacturer}
-                    onClick={() => {
-                      if (isReadOnly || actualCount === 0) return;
-                      const rows = (surgeryMaster['수술기록지'] || []).filter(row => {
-                        if (row['구분'] !== '수술중교환') return false;
-                        const raw = String(row['제조사'] || '기타');
-                        const mfr = isIbsImplantManufacturer(raw) ? 'IBS Implant' : raw;
-                        return mfr === manufacturer;
-                      });
-                      const groupMap: Record<string, { brand: string; size: string; maxQty: number }> = {};
-                      rows.forEach(row => {
-                        const brand = String(row['브랜드'] || manufacturer);
-                        const size = String(row['규격(SIZE)'] || row['규격'] || '기타');
-                        const key = `${brand}|${size}`;
-                        if (!groupMap[key]) groupMap[key] = { brand, size, maxQty: 0 };
-                        groupMap[key].maxQty++;
-                      });
-                      const groups = Object.values(groupMap).sort((a, b) => a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size));
-                      const initQtys: Record<string, number> = {};
-                      groups.forEach(g => { initQtys[`${g.brand}|${g.size}`] = g.maxQty; });
-                      setExchangeReturnTarget({ manufacturer, count: actualCount, groups });
-                      setExchangeItemQuantities(initQtys);
-                    }}
+                    onClick={() => handleExchangeCandidateClick(manufacturer, actualCount)}
                     disabled={isReadOnly || actualCount === 0}
                     className={`group relative rounded-2xl border-2 p-4 transition-all text-left w-full ${
                       returnPending > 0 && actualCount === 0
@@ -1913,13 +1631,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         {/* 교환 권장 품목 반품 처리 모달 */}
         {exchangeReturnTarget && (() => {
           const { manufacturer, count, groups } = exchangeReturnTarget;
-          const totalQty = groups.reduce((s, g) => s + (exchangeItemQuantities[`${g.brand}|${g.size}`] ?? g.maxQty), 0);
-          const adjustQty = (key: string, delta: number, maxQty: number) => {
-            setExchangeItemQuantities(prev => {
-              const cur = prev[key] ?? maxQty;
-              return { ...prev, [key]: Math.min(maxQty, Math.max(0, cur + delta)) };
-            });
-          };
+          const totalQty = exchangeTotalQty;
           return (
             <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 pb-[68px] sm:pb-0" onClick={() => !isExchangeReturnSubmitting && setExchangeReturnTarget(null)}>
               <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
@@ -1962,7 +1674,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                             <td className="px-2 py-3">
                               <div className="flex items-center justify-center gap-2">
                                 <button
-                                  onClick={() => adjustQty(key, -1, g.maxQty)}
+                                  onClick={() => adjustExchangeQty(key, -1, g.maxQty)}
                                   disabled={qty <= 0}
                                   className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
                                 >
@@ -1970,7 +1682,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                                 </button>
                                 <span className="w-6 text-center font-black text-slate-800 tabular-nums text-sm">{qty}</span>
                                 <button
-                                  onClick={() => adjustQty(key, +1, g.maxQty)}
+                                  onClick={() => adjustExchangeQty(key, +1, g.maxQty)}
                                   disabled={qty >= g.maxQty}
                                   className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
                                 >
@@ -1994,28 +1706,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                     }
                   </p>
                   <button
-                    onClick={async () => {
-                      if (!onCreateReturn || totalQty === 0) return;
-                      setIsExchangeReturnSubmitting(true);
-                      try {
-                        const items = groups
-                          .map(g => ({ brand: g.brand, size: g.size, quantity: exchangeItemQuantities[`${g.brand}|${g.size}`] ?? g.maxQty }))
-                          .filter(it => it.quantity > 0);
-                        await onCreateReturn({
-                          manufacturer,
-                          reason: 'exchange',
-                          manager: currentUserName,
-                          memo: `교환 반품 ${totalQty}개`,
-                          items,
-                        });
-                        setExchangeReturnTarget(null);
-                        showAlertToast('반품 처리 완료. 전자장부에서 주문금액 변동을 확인하세요.', 'success');
-                      } catch {
-                        showAlertToast('반품 처리에 실패했습니다.', 'error');
-                      } finally {
-                        setIsExchangeReturnSubmitting(false);
-                      }
-                    }}
+                    onClick={handleExchangeReturnSubmit}
                     disabled={isExchangeReturnSubmitting || totalQty === 0}
                     className="h-10 px-5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm flex items-center gap-2"
                   >
