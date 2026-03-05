@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "teamName": "",
+  "feature": "implant-inventory",
+  "pdcaPhase": "do",
+  "orchestrationPattern": "leader",
+  "ctoAgent": "opus",
+  "startedAt": "2026-03-05T11:46:08.781Z",
+  "lastUpdated": "2026-03-05T11:49:17.271Z",
+  "teammates": [
+    {
+      "name": "a33a27074972c6385",
+      "role": "bkit:report-generator",
+      "model": "sonnet",
+      "status": "completed",
+      "currentTask": null,
+      "taskId": null,
+      "startedAt": "2026-03-05T11:46:08.783Z",
+      "lastActivityAt": "2026-03-05T11:49:17.269Z"
+    }
+  ],
+  "progress": {
+    "totalTasks": 0,
+    "completedTasks": 0,
+    "inProgressTasks": 0,
+    "failedTasks": 0,
+    "pendingTasks": 0
+  },
+  "recentMessages": [],
+  "sessionId": "73b3b312-a357-4fa2-bffa-bdc4b3646047"
+}

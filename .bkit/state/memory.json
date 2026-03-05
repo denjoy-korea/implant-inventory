@@ -1,7 +1,7 @@
 {
-  "sessionCount": 293,
+  "sessionCount": 295,
   "lastSession": {
-    "startedAt": "2026-03-05T11:31:30.544Z",
+    "startedAt": "2026-03-05T11:42:27.570Z",
     "platform": "claude",
     "level": "Dynamic"
   },
@@ -9,10 +9,10 @@
   "currentPhase": null,
   "matchRate": null,
   "lastArchived": {
-    "feature": "modal-accessibility",
+    "feature": "crypto-security-hardening",
     "phase": "archived",
-    "matchRate": 100,
+    "matchRate": 99.8,
     "archivedAt": "2026-03-05T00:00:00.000Z",
-    "archivedTo": "docs/archive/2026-03/modal-accessibility/"
+    "archivedTo": "docs/archive/2026-03/crypto-security-hardening/"
   }
 }

@@ -29,6 +29,8 @@
 | stock-calc-settings | 2026-03-04 | 100% | 37 items checked. 0 FAIL, 0 PARTIAL. Full match: StockCalcSettings interface+defaults, App.tsx ref+useEffect+parameterized sync, 4-file prop chain, SettingsHub preset buttons+steppers+validation+save. 3 positive additions (descriptions, UI bound guards, changed-state tracking). |
 | pricing-strategy-redesign | 2026-03-05 | 83.3% | v7 skeptical: 42 items (v6 37 + v7 5). 35 PASS, 3 PARTIAL, 4 FAIL. NEW: G-01 return_management FeatureGate not applied anywhere (ReturnManager not in DashboardOperationalTabs), G-02 audit_history canAccess never called (Basic users can access Plus-only history), G-03 comparison table Basic column labeled "팀용" but maxUsers=1, G-04 "반품 관리" row missing from comparison, G-05 Plan doc Business retention "무제한" vs impl 24mo. Prior: E-05 Sidebar tooltip, E-06 audit_log business. |
 | funnel-cvr-fix | 2026-03-05 | 100% | 8 items, 8 PASS. Design doc Section 2-B corrected (auth_start: eligibleCount=3, progressedCount=2, stepCvr=67). Zero gaps remain. |
+| modal-accessibility (R-12~R-15) | 2026-03-05 | 100% | 16 items, 16 PASS. R-12: window.alert 0 remaining (toast replaced). R-13: window.confirm 0 remaining (ConfirmModal in 6 files + SystemAdminDashboard render). R-14: 9 role="button" all have onKeyDown. R-15: outline:2px solid, no outline:none, no ring. |
+| crypto-security-hardening | 2026-03-05 | 73.5%->99.8% | v2: 9 PASS, 0 PARTIAL, 0 FAIL, 2 ACCEPTED DEVIATION. Fixed: H-2 legacy TTL, H-3 startup log, H-5 DB conditional update. C-2/C-3 remain accepted deviations. |
 
 ### Key File Paths
 - Types: `/types.ts` (root level), `/types/plan.ts` (plan types extracted)
@@ -44,3 +46,5 @@
 - Plan Service: `/services/planService.ts`
 - Dashboard Tabs: `/components/dashboard/DashboardOperationalTabs.tsx`
 - Sidebar: `/components/Sidebar.tsx` (TAB_FEATURE_MAP line 28)
+- Crypto: `/supabase/functions/crypto-service/index.ts`, `/services/cryptoUtils.ts`, `/services/authService.ts`
+- User Types: `/types/user.ts` (DbProfile._decryptFailed line 110)
