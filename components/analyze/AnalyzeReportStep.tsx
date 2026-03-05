@@ -1,16 +1,12 @@
 import React from 'react';
 import type { AnalysisReport } from '../../types';
-import { buildQuickInsights } from './analyzeHelpers';
+import { buildQuickInsights } from './analyzeReportUtils';
 import PublicInfoFooter from '../shared/PublicInfoFooter';
-import AnalyzeReportOverviewSection from './report/AnalyzeReportOverviewSection';
-import AnalyzeReportDiagnosticsSection from './report/AnalyzeReportDiagnosticsSection';
-import AnalyzeReportMatchingSection from './report/AnalyzeReportMatchingSection';
-import AnalyzeReportUsageSection from './report/AnalyzeReportUsageSection';
-import AnalyzeReportRecommendationsSection from './report/AnalyzeReportRecommendationsSection';
+import AnalyzeReportMainSections from './report/AnalyzeReportMainSections';
 import AnalyzeReportLeadSection from './report/AnalyzeReportLeadSection';
 import AnalyzeReportNextActionSection from './report/AnalyzeReportNextActionSection';
 
-interface AnalyzeReportStepProps {
+export interface AnalyzeReportStepProps {
   reportRef: React.RefObject<HTMLDivElement | null>;
   report: AnalysisReport;
   sizeFormatDetailItems: string[] | null;
@@ -61,15 +57,11 @@ const AnalyzeReportStep: React.FC<AnalyzeReportStepProps> = ({
 
   return (
     <div ref={reportRef} className="min-h-screen bg-slate-50">
-      <AnalyzeReportOverviewSection report={report} />
-      <AnalyzeReportDiagnosticsSection
-        diagnostics={report.diagnostics}
+      <AnalyzeReportMainSections
+        report={report}
         sizeFormatDetailItems={sizeFormatDetailItems}
         setSizeFormatDetailItems={setSizeFormatDetailItems}
       />
-      <AnalyzeReportMatchingSection unmatchedItems={report.unmatchedItems} />
-      <AnalyzeReportUsageSection usagePatterns={report.usagePatterns} />
-      <AnalyzeReportRecommendationsSection recommendations={report.recommendations} />
       <AnalyzeReportLeadSection
         quickInsights={quickInsights}
         emailSent={emailSent}

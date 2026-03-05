@@ -1,7 +1,7 @@
 import React from 'react';
 import type { AnalysisReport } from '../../../../types';
 import { ScoreGauge } from '../../AnalyzeCharts';
-import { getGrade, gradeColorMap } from '../../analyzeHelpers';
+import { getGrade, gradeColorMap } from '../../analyzeGradeConfig';
 import AnalyzeOverviewSummaryStatsGrid from './AnalyzeOverviewSummaryStatsGrid';
 
 interface AnalyzeOverviewScoreSectionProps {

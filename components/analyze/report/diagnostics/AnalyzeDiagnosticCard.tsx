@@ -1,6 +1,6 @@
 import React from 'react';
 import type { AnalysisReport } from '../../../../types';
-import { statusColorMap } from '../../analyzeHelpers';
+import { statusColorMap } from '../../analyzeGradeConfig';
 
 interface AnalyzeDiagnosticCardProps {
   diagnostic: AnalysisReport['diagnostics'][number];

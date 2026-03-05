@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnalysisReport } from '../../types';
-import { formatPhoneNumber } from './analyzeHelpers';
+import { useAnalyzeLeadFormState } from './useAnalyzeLeadFormState';
 
 export type AnalyzeStep = 'upload' | 'processing' | 'report';
 
@@ -14,15 +14,7 @@ export function useAnalyzeStateMachine({ reportRef }: UseAnalyzeStateMachinePara
   const [progress, setProgress] = useState(0);
   const [processingMsg, setProcessingMsg] = useState('');
   const [error, setError] = useState('');
-
-  const [emailSent, setEmailSent] = useState(false);
-  const [leadEmail, setLeadEmail] = useState('');
-  const [wantDetailedAnalysis, setWantDetailedAnalysis] = useState(false);
-  const [leadHospital, setLeadHospital] = useState('');
-  const [leadRegion, setLeadRegion] = useState('');
-  const [leadContact, setLeadContact] = useState('');
-  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
-  const [leadSubmitError, setLeadSubmitError] = useState('');
+  const leadFormState = useAnalyzeLeadFormState();
 
   useEffect(() => {
     if (step === 'report' && reportRef.current) {
@@ -59,59 +51,19 @@ export function useAnalyzeStateMachine({ reportRef }: UseAnalyzeStateMachinePara
     setStep('upload');
   }, []);
 
-  const updateLeadEmail = useCallback((value: string) => {
-    setLeadEmail(value);
-    setLeadSubmitError('');
-  }, []);
-
-  const updateWantDetailedAnalysis = useCallback((value: boolean) => {
-    setWantDetailedAnalysis(value);
-    setLeadSubmitError('');
-  }, []);
-
-  const updateLeadHospital = useCallback((value: string) => {
-    setLeadHospital(value);
-    setLeadSubmitError('');
-  }, []);
-
-  const updateLeadRegion = useCallback((value: string) => {
-    setLeadRegion(value);
-    setLeadSubmitError('');
-  }, []);
-
-  const updateLeadContact = useCallback((value: string) => {
-    setLeadContact(formatPhoneNumber(value));
-    setLeadSubmitError('');
-  }, []);
-
   return {
     step,
     report,
     progress,
     processingMsg,
     error,
-    emailSent,
-    leadEmail,
-    wantDetailedAnalysis,
-    leadHospital,
-    leadRegion,
-    leadContact,
-    isSubmittingLead,
-    leadSubmitError,
     setProgress,
     setProcessingMsg,
-    setIsSubmittingLead,
-    setLeadSubmitError,
-    setEmailSent,
     clearAnalyzeError,
     setAnalyzeError,
     startAnalyzeProcessing,
     completeAnalyzeProcessing,
     failAnalyzeProcessing,
-    updateLeadEmail,
-    updateWantDetailedAnalysis,
-    updateLeadHospital,
-    updateLeadRegion,
-    updateLeadContact,
+    ...leadFormState,
   };
 }

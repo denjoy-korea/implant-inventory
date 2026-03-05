@@ -8,7 +8,7 @@ import AnalyzeUploadAlertsSection from './upload/AnalyzeUploadAlertsSection';
 import AnalyzeUploadActionSection from './upload/AnalyzeUploadActionSection';
 import type { UploadRequirement } from './upload/uploadTypes';
 
-interface AnalyzeUploadStepProps {
+export interface AnalyzeUploadStepProps {
   fixtureFile: File | null;
   setFixtureFile: React.Dispatch<React.SetStateAction<File | null>>;
   surgeryFiles: File[];

@@ -2,6 +2,7 @@ import React from 'react';
 import AnalyzeReportLeadFormCard from './lead/AnalyzeReportLeadFormCard';
 import AnalyzeReportLeadInsightsCard from './lead/AnalyzeReportLeadInsightsCard';
 import AnalyzeReportLeadSuccessCard from './lead/AnalyzeReportLeadSuccessCard';
+import { useAnalyzeLeadSubmitState } from './lead/useAnalyzeLeadSubmitState';
 import type { LeadSuccessCta } from './lead/leadTypes';
 
 interface AnalyzeReportLeadSectionProps {
@@ -43,17 +44,14 @@ const AnalyzeReportLeadSection: React.FC<AnalyzeReportLeadSectionProps> = ({
   handleGoToConsultation,
   onSignup,
 }) => {
-  const missingDetailedFields = [
-    !leadHospital ? '병원명' : '',
-    !leadRegion ? '지역' : '',
-    !leadContact ? '연락처' : '',
-  ].filter(Boolean);
-  const leadSubmitDisabled = isSubmittingLead || !leadEmail || (wantDetailedAnalysis && missingDetailedFields.length > 0);
-  const leadSubmitBlockReason = !leadEmail
-    ? '이메일을 입력하면 결과를 저장할 수 있습니다.'
-    : wantDetailedAnalysis && missingDetailedFields.length > 0
-      ? `${missingDetailedFields.join(', ')}을(를) 입력하면 요청할 수 있어요`
-      : '';
+  const { leadSubmitDisabled, leadSubmitBlockReason } = useAnalyzeLeadSubmitState({
+    leadEmail,
+    wantDetailedAnalysis,
+    leadHospital,
+    leadRegion,
+    leadContact,
+    isSubmittingLead,
+  });
 
   const leadSuccessCta: LeadSuccessCta = wantDetailedAnalysis
     ? {
