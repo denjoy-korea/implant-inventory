@@ -27,8 +27,7 @@ function ParsingScreen() {
     <div className="flex-1 flex flex-col items-center justify-center gap-4">
       <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
       <p
-        className="text-sm text-slate-500 transition-all duration-300"
-        style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(4px)' }}
+        className={`text-sm text-slate-500 transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
       >
         {PARSING_STEPS[stepIndex]}
       </p>

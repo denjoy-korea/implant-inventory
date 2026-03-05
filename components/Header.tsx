@@ -48,13 +48,7 @@ const Header: React.FC<HeaderProps> = ({
               <div className="flex flex-col items-start gap-0.5">
                 <span className="text-[10px] text-slate-400 font-medium leading-none">Powered by</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xl font-bold tracking-tight" style={{
-                    background: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #6366f1 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    color: 'transparent'
-                  }}>DenJOY</span>
+                  <span className="text-xl font-bold tracking-tight bg-[linear-gradient(135deg,#7c3aed_0%,#8b5cf6_50%,#6366f1_100%)] bg-clip-text text-transparent">DenJOY</span>
                 </div>
               </div>
             </button>

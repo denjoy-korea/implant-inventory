@@ -93,7 +93,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         </div>
 
         {/* KPI 카드 */}
-        <div className="hidden md:block bg-white/90 backdrop-blur-md border border-white/60 rounded-[28px] overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+        <div className="hidden md:block bg-white/90 backdrop-blur-md border border-white/60 rounded-[28px] overflow-hidden relative [box-shadow:0_4px_12px_-4px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.6)]">
           {/* 장식용 백그라운드 효과 */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100/50">
@@ -351,7 +351,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         )}
 
         {/* 테이블 */}
-        <div className="hidden md:block bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 overflow-hidden relative" style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6)' }}>
+        <div className="hidden md:block bg-white/90 backdrop-blur-md rounded-[28px] border border-white/60 overflow-hidden relative [box-shadow:0_4px_12px_-4px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.6)]">
           <div className="hide-scrollbar overflow-y-auto overflow-x-auto max-h-[calc(100vh-260px)] sm:max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-340px)]">
             <table className="w-full text-left border-collapse table-fixed">
               <colgroup>

@@ -58,8 +58,7 @@ export default function FailureRateChart({ stats, mounted }: Props) {
             <div className="relative flex-1 flex items-center justify-center min-h-[300px]">
                 <svg
                     viewBox={`0 0 ${W} ${H}`}
-                    className={CHART_FOCUS_CLASS}
-                    style={{ overflow: 'visible', width: '100%', height: 'auto' }}
+                    className={`${CHART_FOCUS_CLASS} overflow-visible w-full h-auto`}
                     role="img"
                     aria-label="골질별 실패율 막대 차트. 좌우 방향키로 등급 이동 가능"
                     tabIndex={0}

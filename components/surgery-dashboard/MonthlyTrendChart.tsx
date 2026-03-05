@@ -56,9 +56,9 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
           ))}
         </div>
       </div>
-      <div className="chart-dot-grid rounded-lg" style={{ overflowX: 'auto', overflowY: 'visible' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} className={CHART_FOCUS_CLASS}
-          style={{ minWidth: Math.max(500, groupCount * 65), overflow: 'visible', touchAction: 'manipulation' }}
+      <div className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
+        <svg viewBox={`0 0 ${W} ${H}`} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
+          style={{ minWidth: Math.max(500, groupCount * 65) }}
           role="img" aria-label="월별 식립, 청구, 수술중교환 건수 추이 바 차트"
           tabIndex={0} onKeyDown={handleKeyDown}
           onPointerLeave={() => setHoveredBarGroup(null)}
@@ -87,7 +87,7 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
             const isDimmed = hasSelection && !isSelected && !isHovered;
 
             return (
-              <g key={d.month} className="transition-opacity duration-300" style={{ opacity: isDimmed ? 0.3 : 1 }}>
+              <g key={d.month} className={`transition-opacity duration-300 ${isDimmed ? 'opacity-30' : 'opacity-100'}`}>
                 <rect x={pad.l + i * groupW} y={pad.t} width={groupW} height={plotH + pad.b}
                   fill="transparent" className={`cursor-pointer transition-colors ${isHovered || isSelected ? 'opacity-100' : 'opacity-0'}`}
                   onPointerEnter={() => setHoveredBarGroup(i)}
@@ -134,7 +134,7 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
             const tx = Math.min(Math.max(tooltipW / 2, groupX), W - tooltipW / 2);
             const ty = pad.t + 2;
             return (
-              <g style={{ pointerEvents: 'none' }}>
+              <g className="pointer-events-none">
                 <rect x={tx - tooltipW / 2} y={ty} width={tooltipW} height={tooltipH} rx={8} fill="#1e293b" opacity={0.95} filter="url(#bar-tooltip-shadow)" />
                 <text x={tx} y={ty + 16} textAnchor="middle" fill="#94a3b8" fontSize={9} fontWeight={500}>{d.month}</text>
                 {BAR_SERIES.map((s, si) => (

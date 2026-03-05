@@ -172,7 +172,7 @@ export default function OnboardingCompleteModal({ onClose, hospitalName, userNam
 
   return (
     <>
-    <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 601 }} />
+    <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-[601]" />
     <ModalShell isOpen={true} onClose={onClose} title="초기 설정 완료" titleId="onboarding-complete-title" zIndex={600} backdropClassName="flex items-center justify-center backdrop-blur-sm" maxWidth="max-w-sm" className="mx-4 text-center px-8 py-10">
         {/* 아이콘 */}
         <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">

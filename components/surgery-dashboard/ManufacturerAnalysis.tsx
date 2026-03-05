@@ -43,11 +43,10 @@ export default function ManufacturerAnalysis({ manufacturerDonut, manufacturerFa
         {/* Donut + Legend */}
         <div className="flex items-center gap-5">
           <div className="relative w-28 h-28 flex-shrink-0">
-            <svg viewBox="0 0 100 100" className={`w-full h-full transform -rotate-90 ${CHART_FOCUS_CLASS}`}
+            <svg viewBox="0 0 100 100" className={`w-full h-full transform -rotate-90 touch-manipulation ${CHART_FOCUS_CLASS}`}
               role="img" aria-label={`제조사별 식립 분포: ${manufacturerDonut.map(d => `${d.name} ${Math.round(d.percent * 100)}%`).join(', ')}`}
               tabIndex={0} onKeyDown={handleKeyDown}
-              onBlur={() => setHoveredDonut(null)}
-              style={{ touchAction: 'manipulation' }}>
+              onBlur={() => setHoveredDonut(null)}>
               {manufacturerDonut.map((d, i) => {
                 const isHov = hoveredDonut === i;
                 const tx = isHov ? Math.cos(d.midAngle) * 3 : 0;

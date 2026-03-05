@@ -130,8 +130,7 @@ export default function ClinicalHeatmap({ matrix, mounted }: Props) {
             <div className="relative flex-1 flex items-center justify-center min-h-[300px]">
                 <svg
                     viewBox={`0 0 ${W} ${H}`}
-                    className={CHART_FOCUS_CLASS}
-                    style={{ overflow: 'visible', width: '100%', height: 'auto' }}
+                    className={`${CHART_FOCUS_CLASS} overflow-visible w-full h-auto`}
                     role="img"
                     aria-label="골질과 초기고정 구간별 실패율 히트맵. 방향키로 셀을 이동해 값 확인 가능"
                     tabIndex={0}

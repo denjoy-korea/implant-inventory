@@ -695,7 +695,7 @@ const App: React.FC = () => {
                 }}
               />
 
-              <main className="flex-1" style={{ overflowX: 'clip' }}>
+              <main className="flex-1 overflow-x-clip">
                 <ErrorBoundary>
                   <Suspense fallback={suspenseFallback}>
                     {/* 초대 처리 중에는 병원 찾기 대신 로딩 표시 */}

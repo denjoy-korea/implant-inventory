@@ -5,7 +5,6 @@ import FailBulkSetupModal from './FailBulkSetupModal';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
 import FailReturnModal from './fail/FailReturnModal';
-import { Z } from '../utils/zIndex';
 import { DONUT_COLORS } from './surgery-dashboard/shared';
 import { useFailManager, CHART_PAD, CHART_AREA_H } from '../hooks/useFailManager';
 import ConfirmModal from './ConfirmModal';
@@ -813,8 +812,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {/* ========================================= */}
       {isAllReturnConfirmOpen && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-          style={{ zIndex: Z.MODAL }}
+          className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 z-[200]"
           onClick={() => !isAllReturnSubmitting && setIsAllReturnConfirmOpen(false)}
         >
           <div

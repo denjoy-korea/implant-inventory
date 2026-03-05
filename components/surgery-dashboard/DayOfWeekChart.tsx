@@ -36,8 +36,8 @@ export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted, on
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-800">요일별 식립 패턴</h3>
       </div>
-      <svg viewBox={`0 0 ${svgW} ${svgH}`} className={`flex-1 ${CHART_FOCUS_CLASS}`}
-        preserveAspectRatio="xMidYMid meet" style={{ touchAction: 'manipulation' }}
+      <svg viewBox={`0 0 ${svgW} ${svgH}`} className={`flex-1 touch-manipulation ${CHART_FOCUS_CLASS}`}
+        preserveAspectRatio="xMidYMid meet"
         role="img" aria-label="요일별 식립 건수 컬럼 차트"
         tabIndex={0} onKeyDown={handleKeyDown}
         onBlur={() => setHoveredIdx(null)}>

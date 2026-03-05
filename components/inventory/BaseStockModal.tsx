@@ -238,7 +238,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
         {/* ── 필터 ── */}
         <div className="px-4 sm:px-6 py-2.5 border-b border-slate-100 bg-white shrink-0 space-y-2">
           {/* 제조사 필터 - 가로 스크롤 */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
             <span className="text-[10px] font-bold text-slate-400 shrink-0 mr-0.5">제조사</span>
             <button
               onClick={() => setManufacturerFilter(null)}
@@ -270,7 +270,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           </div>
 
           {/* 브랜드 필터 */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
             <span className="text-[10px] font-bold text-slate-400 shrink-0 mr-0.5">브랜드</span>
             <button
               onClick={() => setBrandFilter(null)}

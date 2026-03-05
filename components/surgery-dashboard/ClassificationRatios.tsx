@@ -33,11 +33,10 @@ function RingGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, de
   return (
     <div className="flex items-center gap-5">
       <div className="relative w-24 h-24 flex-shrink-0">
-        <svg viewBox="0 0 100 100" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-full"
+        <svg viewBox="0 0 100 100" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-full touch-manipulation"
           role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% 비율 링 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
           tabIndex={0} onKeyDown={handleKeyDown}
-          onBlur={() => setHovered(null)}
-          style={{ touchAction: 'manipulation' }}>
+          onBlur={() => setHovered(null)}>
           <circle cx="50" cy="50" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8" />
           <circle cx="50" cy="50" r={r} fill="none" stroke={colorA}
             strokeWidth={hovered === 'a' ? 11 : 8} strokeLinecap="round"
@@ -117,11 +116,10 @@ function SemiGauge({ labelA, labelB, countA, countB, colorA, colorB, mounted, de
   return (
     <div className="flex items-center gap-5">
       <div className="relative w-24 h-16 flex-shrink-0">
-        <svg viewBox="0 0 100 60" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 rounded-lg"
+        <svg viewBox="0 0 100 60" className="w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 rounded-lg touch-manipulation overflow-visible"
           role="img" aria-label={`${labelA} ${pctA}% 대 ${labelB} ${pctB}% 교환 비율 반원 게이지. ${labelA} ${countA}건, ${labelB} ${countB}건`}
           tabIndex={0} onKeyDown={handleKeyDown}
-          onBlur={() => setHovered(null)}
-          style={{ touchAction: 'manipulation', overflow: 'visible' }}>
+          onBlur={() => setHovered(null)}>
           {/* Background arc (half-circle) */}
           <path
             d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}

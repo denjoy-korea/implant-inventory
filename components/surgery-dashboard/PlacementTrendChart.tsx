@@ -94,9 +94,9 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
           ))}
         </div>
       </div>
-      <div className="chart-dot-grid rounded-lg" style={{ overflowX: 'auto', overflowY: 'visible' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} className={CHART_FOCUS_CLASS}
-          style={{ minWidth: Math.max(400, count * 55), overflow: 'visible', touchAction: 'manipulation' }}
+      <div className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
+        <svg viewBox={`0 0 ${W} ${H}`} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
+          style={{ minWidth: Math.max(400, count * 55) }}
           role="img" aria-label={`월별 ${activeOption.label} 건수 추세 라인 차트`}
           tabIndex={0} onKeyDown={handleKeyDown}
           onPointerLeave={() => setHoveredIdx(null)}
@@ -136,7 +136,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
           {/* Area fill */}
           {linePoints.length >= 2 && (
             <path d={smoothArea(linePoints, pad.t + plotH)} fill="url(#trendAreaGrad)"
-              opacity={mounted ? 1 : 0} style={{ transition: 'opacity 0.8s ease' }} />
+              opacity={mounted ? 1 : 0} className="[transition:opacity_0.8s_ease]" />
           )}
           {/* Main line */}
           {linePoints.length >= 2 && (() => {
@@ -145,7 +145,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
               <path d={pathD} fill="none" stroke={color} strokeWidth={3} filter="url(#trendLineShadow)"
                 strokeLinecap="round" strokeLinejoin="round"
                 strokeDasharray={2000} strokeDashoffset={mounted ? 0 : 2000}
-                style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1)' }} />
+                className="[transition:stroke-dashoffset_1.5s_cubic-bezier(0.16,1,0.3,1)]" />
             );
           })()}
           {/* Trendline */}
@@ -158,7 +158,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
             const ty2 = pad.t + plotH - (Math.max(0, y2Val) / niceMax) * plotH;
             const label = trendline.slope >= 0 ? `↗ +${trendline.slope.toFixed(1)}/월` : `↘ ${trendline.slope.toFixed(1)}/월`;
             return (
-              <g opacity={mounted ? 0.6 : 0} style={{ transition: 'opacity 1s ease 1s' }}>
+              <g opacity={mounted ? 0.6 : 0} className="[transition:opacity_1s_ease_1s]">
                 <line x1={firstX} y1={ty1} x2={lastX} y2={ty2} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="8 4" />
                 <text x={lastX + 6} y={ty2 + 3} fill="#94a3b8" fontSize={8} fontWeight={500}>{label}</text>
               </g>
@@ -194,7 +194,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
             const isDimmed = hasSelection && !isSelected && !isHovered;
 
             return (
-              <g key={i} className="transition-opacity duration-300" style={{ opacity: isDimmed ? 0.3 : 1 }}>
+              <g key={i} className={`transition-opacity duration-300 ${isDimmed ? 'opacity-30' : 'opacity-100'}`}>
                 <circle cx={p.x} cy={p.y} r={isHovered || isSelected ? 8 : 0} fill={color} opacity={isHovered || isSelected ? 0.1 : 0}
                   className="transition-[r,opacity] duration-200" />
                 <circle cx={p.x} cy={p.y} r={isHovered || isSelected ? 6 : 4} fill="white" stroke={color} strokeWidth={isSelected ? 3 : 2.5}
@@ -223,7 +223,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
             const above = p.y - 36 >= 0;
             const ty = above ? p.y - 36 : p.y + 12;
             return (
-              <g style={{ pointerEvents: 'none' }}>
+              <g className="pointer-events-none">
                 <rect x={tx - tooltipW / 2} y={ty} width={tooltipW} height={tooltipH} rx={4} fill="#1e293b" opacity={0.95} filter="url(#trendTooltipShadow)" />
                 <text x={tx} y={ty + 16} textAnchor="middle" fill="white" fontSize={10} fontWeight={600}>{p.month}: {p.value}건</text>
               </g>

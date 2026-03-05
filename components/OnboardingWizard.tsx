@@ -129,13 +129,7 @@ export default function OnboardingWizard({
 
         {/* Step Content */}
         <div
-          className="overflow-y-auto flex-1 transition-all duration-150"
-          style={{
-            opacity: animating ? 0 : 1,
-            transform: animating
-              ? `translateX(${directionRef.current === 'forward' ? '12px' : '-12px'})`
-              : 'translateX(0)',
-          }}
+          className={`overflow-y-auto flex-1 transition-all duration-150 ${animating ? 'opacity-0' : 'opacity-100'} ${animating ? (directionRef.current === 'forward' ? 'translate-x-3' : '-translate-x-3') : 'translate-x-0'}`}
         >
           {step === 1 && <Step1Welcome hospitalName={hospitalName} onNext={handleNext} onSkip={onSkip} />}
           {step === 2 && <Step2DenwebFixtureDownload onNext={handleNext} />}

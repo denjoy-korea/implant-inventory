@@ -471,8 +471,7 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                                   type="text"
                                   value={String(val ?? '')}
                                   onChange={(e) => onUpdateCell(originalIndex, col, e.target.value)}
-                                  style={{ minWidth: isLongText ? '280px' : isToothNo ? '80px' : '60px' }}
-                                  className={`w-full px-2 py-1 text-xs border-transparent hover:border-slate-200 focus:border-indigo-400 rounded outline-none bg-transparent whitespace-nowrap overflow-hidden text-ellipsis transition-all group-hover/row:font-bold ${isLongText ? 'font-medium' : ''} ${isPatientInfo ? 'patient-info-blur' : ''}`}
+                                  className={`w-full px-2 py-1 text-xs border-transparent hover:border-slate-200 focus:border-indigo-400 rounded outline-none bg-transparent whitespace-nowrap overflow-hidden text-ellipsis transition-all group-hover/row:font-bold ${isLongText ? 'font-medium min-w-[280px]' : isToothNo ? 'min-w-[80px]' : 'min-w-[60px]'} ${isPatientInfo ? 'patient-info-blur' : ''}`}
                                   readOnly={hideStatusFilters}
                                   title={isPatientInfo ? '환자 정보 보호' : String(val ?? '')}
                                 />

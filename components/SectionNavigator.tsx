@@ -70,11 +70,7 @@ const SectionNavigator: React.FC<SectionNavigatorProps> = ({ sections }) => {
         {/* Animated active indicator background */}
         <div
           ref={indicatorRef}
-          className="absolute left-1.5 right-1.5 bg-indigo-600 rounded-xl transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform shadow-[0_4px_12px_rgba(79,70,229,0.2)]"
-          style={{
-            height: '40px', // Default fallback
-            top: 0
-          }}
+          className="absolute top-0 h-10 left-1.5 right-1.5 bg-indigo-600 rounded-xl transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform shadow-[0_4px_12px_rgba(79,70,229,0.2)]"
         />
 
         {sections.map(({ id, label }) => {

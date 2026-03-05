@@ -412,8 +412,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <button
                   key={card.key}
                   onClick={() => onNavigate(card.tab)}
-                  style={{ borderLeftColor: card.severity === 'critical' ? '#e11d48' : '#f59e0b' }}
-                  className="w-full text-left bg-white border border-slate-100 border-l-4 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 shadow-sm active:scale-[0.98] transition-all"
+                  className={`w-full text-left bg-white border border-slate-100 border-l-4 ${card.severity === 'critical' ? 'border-l-rose-600' : 'border-l-amber-500'} rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 shadow-sm active:scale-[0.98] transition-all`}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-slate-700">{card.title}</p>
