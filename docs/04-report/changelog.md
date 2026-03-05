@@ -4,6 +4,51 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-05] - funnel-cvr-fix (Analytics: Funnel Step CVR Bug Fix)
+
+### Fixed
+- **Funnel Step CVR > 100% bug**: Replaced naive ratio formula `stage[N].count / stage[N-1].count` with eligible sessions intersection algorithm
+  - Issue: Direct URL entry (bookmarks, ads, URL sharing) caused step CVR to exceed 100%
+  - Example: pricing_view showed 150% when s3 entered pricing without landing event
+- **Root cause**: Count aggregation counted sessions independently per stage without tracking progression path
+- **Solution**: Set-based `stageSets` with intersection filtering to ensure only sessions that completed prior stage are counted in denominator
+
+### Changed
+- `scripts/funnel-kpi-utils.mjs`:
+  - Added `buildSessionSet()` helper for stage-specific session Set construction
+  - Refactored `eventFunnelWithCvr` computation to use eligible sessions intersection
+  - Added `eligibleCount` and `progressedCount` fields to all funnel items
+- `components/system-admin/tabs/SystemAdminTrafficTab.tsx`:
+  - Frontend CVR calculation synced with backend eligible sessions algorithm
+  - Updated "Pricing→Auth Start" summary card to use eligible-based formula
+- `scripts/admin-traffic-snapshot.mjs`: Added Eligible column to funnel report table
+- `docs/03-design/event-schema-freeze-2026-03-04.md`: Added Section 4.2 "v2 (eligible sessions 기반)" with new formula and rationale
+
+### Added
+- `scripts/funnel-kpi-regression.test.mjs`: New test "direct-entry sessions do not inflate step CVR above 100%"
+  - Validates eligible sessions intersection logic with 3 sessions (full funnel, partial, direct entry)
+  - Confirms pricing_view stepCvr = 100% (not 150%) and auth_start stepCvr = 67% (correct eligible denominator)
+
+### Quality Metrics
+- **Design Match Rate**: 100% (8/8 requirements matched)
+- **Test Pass Rate**: 5/5 tests green
+- **Mathematical Guarantee**: stepCvr ∈ [0, 100] for all stages
+- **Frontend/Backend Consistency**: Identical algorithms in both implementations
+
+### Verification
+- Gap Analysis complete: `docs/03-analysis/features/funnel-cvr-fix.analysis.md`
+- All 5 regression tests pass: `npm run test:funnel`
+- TypeScript verification clean
+- Build passing
+
+### Related Documents
+- Plan: `docs/01-plan/features/funnel-cvr-fix.plan.md`
+- Design: `docs/02-design/features/funnel-cvr-fix.design.md`
+- Analysis: `docs/03-analysis/features/funnel-cvr-fix.analysis.md`
+- Report: `docs/04-report/features/funnel-cvr-fix.report.md`
+
+---
+
 ## [2026-02-25] - notion-integration (System Admin Integrations)
 
 ### Added

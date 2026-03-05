@@ -33,7 +33,15 @@ export default defineConfig(() => {
         output: {
           manualChunks: (id) => {
             if (id.includes('node_modules')) {
-              if (id.includes('react')) return 'react-vendor';
+              if (
+                id.includes('/react/') ||
+                id.includes('/react-dom/') ||
+                id.includes('/react-is/') ||
+                id.includes('/scheduler/') ||
+                id.includes('/use-sync-external-store/') ||
+                id.includes('/react-helmet-async/') ||
+                id.includes('/qrcode.react/')
+              ) return 'react-vendor';
               if (id.includes('@supabase')) return 'supabase-vendor';
               if (id.includes('lucide')) return 'lucide-icons';
               if (id.includes('framer-motion')) return 'framer-motion';

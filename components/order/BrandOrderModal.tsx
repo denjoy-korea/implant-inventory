@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InventoryItem } from '../../types';
 import { isIbsImplantManufacturer } from '../../services/sizeNormalizer';
+import ModalShell from '../shared/ModalShell';
 
 export interface BrandOrderEntry {
   item: InventoryItem;
@@ -78,14 +79,15 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 pb-[68px] sm:pb-0"
-      onClick={onClose}
+    <ModalShell
+      isOpen={true}
+      onClose={onClose}
+      title={`${displayMfr} 발주 신청`}
+      titleId="brand-order-modal-title"
+      backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0"
+      className="rounded-t-2xl sm:rounded-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]"
+      maxWidth="w-full sm:max-w-2xl"
     >
-      <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl shadow-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]"
-        onClick={e => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100">
           <div className="flex items-start justify-between">
@@ -94,7 +96,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                 <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
-                <h3 className="text-lg font-bold text-slate-900">{displayMfr} 발주 신청</h3>
+                <h3 id="brand-order-modal-title" className="text-lg font-bold text-slate-900">{displayMfr} 발주 신청</h3>
               </div>
               <p className="text-xs text-slate-400 mt-0.5 ml-6">{entries.length}종 · 총 {totalDeficit}개 부족</p>
             </div>
@@ -215,8 +217,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
             선택 발주
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

@@ -4,7 +4,7 @@ import {
   RETURN_REASON_LABELS,
   InventoryItem,
 } from '../../types';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import ModalShell from '../shared/ModalShell';
 
 interface ReturnItem {
   brand: string;
@@ -37,7 +37,6 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   const [reason, setReason] = useState<ReturnReason>('excess_stock');
   const [manager, setManager] = useState(currentUserName);
   const [memo, setMemo] = useState('');
-  useEscapeKey(() => { if (!isLoading) onClose(); });
 
   const [items, setItems] = useState<ReturnItem[]>([
     { brand: '', size: '', quantity: 1 },
@@ -93,14 +92,16 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center sm:justify-center" onClick={() => !isLoading && onClose()}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="return-request-modal-title"
-        className="bg-white w-full rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl sm:rounded-2xl sm:max-h-[85vh] sm:mx-auto sm:my-8 sm:max-w-lg sm:w-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell
+      isOpen={true}
+      onClose={() => !isLoading && onClose()}
+      title="반품 신청"
+      titleId="return-request-modal-title"
+      closeable={!isLoading}
+      backdropClassName="flex items-end sm:items-center sm:justify-center"
+      className="rounded-t-2xl sm:rounded-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col sm:max-w-lg sm:mx-auto sm:my-8"
+      maxWidth="w-full"
+    >
         {/* Drag handle (mobile only) */}
         <div className="sm:hidden flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-slate-300" />
@@ -268,8 +269,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
             {isLoading ? '처리 중...' : '반품 신청'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

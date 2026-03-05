@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ModalShell from '../../shared/ModalShell';
 import { supabase } from '../../../services/supabaseClient';
 import { encryptPatientInfo, decryptPatientInfo } from '../../../services/cryptoUtils';
 
@@ -100,12 +101,7 @@ function SlackModal({ onClose }: { onClose: () => void }) {
   const canAdd = newName.trim() && newUrl.trim().startsWith('https://');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell isOpen={true} onClose={onClose} title="Slack 웹훅 관리" titleId="slack-modal-title" maxWidth="max-w-lg" className="flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-[#4A154B] flex items-center justify-center shrink-0">
@@ -274,8 +270,7 @@ function SlackModal({ onClose }: { onClose: () => void }) {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabaseClient';
 import { encryptPatientInfo, decryptPatientInfo } from '../../../services/cryptoUtils';
+import ModalShell from '../../shared/ModalShell';
 
 // ── 타입 정의 ─────────────────────────────────────────────────────────────
 interface NotionDatabaseEntry {
@@ -224,12 +225,7 @@ function NotionModal({ onClose }: { onClose: () => void }) {
   const notionPath = 'M6.55 6.3c3.18 2.57 4.37 2.37 10.34 1.98l56.2-3.38c1.19 0 .2-.99-.39-1.18L63.08.56C61.5.17 59.72 0 57.95 0L10.71 3.78C8.34 3.98 6 5.16 6.55 6.3zm3.58 13.09V73.8c0 3.18.79 4.77 3.78 5.16l62.77 3.58c2.97.39 3.97-.79 3.97-3.38V25.76c0-2.57-.99-3.97-3.18-3.77L13.92 19.01c-2.18.2-3.78 1.39-3.78 4.38zm59.97 3.17c.39 1.79 0 3.58-1.79 3.78l-2.97.59v43.64c-2.57 1.39-5.16 2.18-7.14 2.18-3.38 0-4.17-1-6.75-4.17L34.67 36.51v42.45l8.53 1.79s0 3.58-4.97 3.58L24.33 85.5c-.39-1-.2-3.38 1.39-3.77l3.58-.99V31.94l-4.97-.39c-.39-1.79.59-4.37 3.38-4.57l13.49-.99L56.76 51.8V11.13l-7.14-.79c-.39-2.18 1-3.77 3.38-3.97l13.49-.99.2.39c0 0-.99.79-1.39 2.97l.79 4.57z';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell isOpen={true} onClose={onClose} title="Notion 연동 설정" titleId="notion-modal-title" className="flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
           {view === 'form' ? (
@@ -247,7 +243,7 @@ function NotionModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-slate-800">
+            <h2 id="notion-modal-title" className="text-sm font-bold text-slate-800">
               {view === 'list' ? 'Notion 연동' : (editingEntry ? `${editingEntry.title} 설정` : '새 데이터베이스 연결')}
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -527,8 +523,7 @@ function NotionModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

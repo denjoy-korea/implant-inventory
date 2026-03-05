@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ModalShell from '../../shared/ModalShell';
 import { supabase } from '../../../services/supabaseClient';
 import { encryptPatientInfo, decryptPatientInfo } from '../../../services/cryptoUtils';
 

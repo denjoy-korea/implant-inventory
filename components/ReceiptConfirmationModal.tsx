@@ -287,6 +287,9 @@ export function ReceiptConfirmationModal({
                 onClick={() => !isLoading && onClose()}
             >
                 <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="wrong-delivery-title"
                     className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -294,7 +297,7 @@ export function ReceiptConfirmationModal({
                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50 shrink-0">
                         <div>
                             <div className="flex items-center gap-2.5">
-                                <h3 className="text-xl font-black text-slate-800 tracking-tight">규격 오배송 처리</h3>
+                                <h3 id="wrong-delivery-title" className="text-xl font-black text-slate-800 tracking-tight">규격 오배송 처리</h3>
                                 <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200 tabular-nums">
                                     {wrongDeliveryItemList.length}건
                                 </span>
@@ -526,6 +529,9 @@ export function ReceiptConfirmationModal({
             onClick={() => !isLoading && onClose()}
         >
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="receipt-confirm-title"
                 className={`bg-white sm:rounded-3xl rounded-3xl shadow-2xl w-full sm:max-w-4xl overflow-hidden flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -533,7 +539,7 @@ export function ReceiptConfirmationModal({
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                     <div>
                         <div className="flex items-center gap-2.5">
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
+                            <h3 id="receipt-confirm-title" className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
                             {hasMultipleOrders && (
                                 <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 tabular-nums">
                                     {safeIdx + 1} / {activeOrders.length}

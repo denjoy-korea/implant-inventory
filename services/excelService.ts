@@ -1,8 +1,8 @@
-import * as XLSX from 'xlsx';
 import { ExcelData, ExcelRow } from '../types';
 import { supabase } from './supabaseClient';
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
+  const XLSX = await import('xlsx');
   const arrayBuffer = await file.arrayBuffer();
   const data = new Uint8Array(arrayBuffer);
   const workbook = XLSX.read(data, { type: 'array' });

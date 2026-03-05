@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { InventoryItem } from '../../types';
 import { planService } from '../../services/planService';
+import ModalShell from '../shared/ModalShell';
 
 interface BaseStockModalProps {
   visibleInventory: InventoryItem[];
@@ -155,9 +156,17 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
   }, [baseStockInputs, visibleInventory]);
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200" onClick={() => !isSaving && onClose()}>
-      {/* 모바일: 풀스크린 / 데스크톱: 중앙 모달 */}
-      <div className="bg-white w-full max-w-6xl h-[100dvh] sm:h-[84vh] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <ModalShell
+      isOpen={true}
+      onClose={() => !isSaving && onClose()}
+      title="기초재고 실사 입력"
+      titleId="base-stock-modal-title"
+      closeable={!isSaving}
+      backdropClassName="flex items-end sm:items-center justify-center sm:p-4"
+      className="rounded-t-3xl sm:rounded-2xl flex flex-col h-[100dvh] sm:h-[84vh]"
+      maxWidth="w-full max-w-6xl"
+      zIndex={220}
+    >
 
         {/* ── 헤더 ── */}
         <div className="px-5 sm:px-6 pt-4 pb-3 sm:py-4 border-b border-slate-100 bg-slate-50 shrink-0">
@@ -165,7 +174,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           <div className="sm:hidden w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h3 className="text-base sm:text-lg font-black text-slate-900">기초재고 실사 입력</h3>
+              <h3 id="base-stock-modal-title" className="text-base sm:text-lg font-black text-slate-900">기초재고 실사 입력</h3>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                 실제 보유 수량을 입력하면 기초재고가 자동 계산됩니다.
               </p>
@@ -506,8 +515,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

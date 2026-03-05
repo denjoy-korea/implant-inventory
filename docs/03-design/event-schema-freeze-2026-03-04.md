@@ -133,11 +133,21 @@
 - `session_id IS NOT NULL` 인 행만 집계
 - 누락률 목표: **1% 미만**
 
-### 4.2 단계별 전환율(CVR) 계산
+### 4.2 단계별 전환율(CVR) 계산 — v2 (eligible sessions 기반)
+
+eligible(stage[0]) = 전체 고유 세션 집합
+eligible(stage[N]) = stage[N-1] 이벤트를 발생시킨 세션 집합
+
 ```
-CVR(n→n+1) = COUNT(DISTINCT session_id where event=stage_n+1)
-             / COUNT(DISTINCT session_id where event=stage_n) × 100
+step_cvr(stage[N]) = |stage[N].sessions ∩ eligible(stage[N])|
+                     ──────────────────────────────────────────  × 100
+                              |eligible(stage[N])|
 ```
+
+변경 이유: 직접 URL 진입 등 이전 단계를 거치지 않은 세션이 존재할 경우
+단순 비율(stage_n+1 / stage_n) 산식은 CVR > 100%를 발생시킴.
+eligible intersection 방식으로 항상 0~100% 보장.
+적용일: 2026-03-05, 파일: `funnel-kpi-utils.mjs` + `SystemAdminTrafficTab.tsx`
 
 ### 4.3 모바일 이탈률
 ```

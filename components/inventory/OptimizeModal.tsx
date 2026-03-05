@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { InventoryItem, CreateReturnParams } from '../../types';
 import { snoozeService } from '../../services/snoozeService';
+import ModalShell from '../shared/ModalShell';
 
 interface DeadStockItem extends InventoryItem {
   neverUsed: boolean;
@@ -180,7 +181,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   if (isBulkReturning) {
     const remaining = bulkReturnTotal - bulkReturnProgress;
     return (
-      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div role="alertdialog" aria-modal="true" aria-label="반품 처리 중" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
         <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-10 flex flex-col items-center gap-6">
           <div className="relative flex items-center justify-center">
             <svg className="w-16 h-16 animate-spin text-amber-200" viewBox="0 0 24 24" fill="none">
@@ -213,7 +214,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   if (isDeletingOptimize) {
     const remaining = deleteTotalCount - deleteProgress;
     return (
-      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div role="alertdialog" aria-modal="true" aria-label="삭제 처리 중" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
         <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-10 flex flex-col items-center gap-6">
           {/* 스피너 */}
           <div className="relative flex items-center justify-center">
@@ -254,13 +255,12 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   }
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-80px)] md:max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={onClose} title="품목 최적화" titleId="optimize-modal-title" maxWidth="max-w-2xl" className="flex flex-col max-h-[calc(100dvh-80px)] md:max-h-[85vh]">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">품목 최적화</h3>
+              <h3 id="optimize-modal-title" className="text-lg font-bold text-slate-900">품목 최적화</h3>
               <p className="text-xs text-slate-500 mt-0.5">장기 미사용 품목을 정리하여 재고 마스터를 슬림하게 유지하세요.</p>
             </div>
             <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
@@ -684,8 +684,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

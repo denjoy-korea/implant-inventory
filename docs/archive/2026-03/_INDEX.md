@@ -4,3 +4,4 @@
 |---------|:----------:|-------------|------|
 | order-return-management | 92.6% | 2026-03-01 | [order-return-management/](./order-return-management/) |
 | mobile-ux | 96.2% | 2026-03-01 | [mobile-ux/](./mobile-ux/) |
+| pricing-strategy-redesign | 100% | 2026-03-05 | [pricing-strategy-redesign/](./pricing-strategy-redesign/) |

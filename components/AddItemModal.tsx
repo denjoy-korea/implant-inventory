@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { InventoryItem } from '../types';
 import { toCanonicalSize } from '../services/sizeNormalizer';
 import { fixIbsImplant } from '../services/mappers';
+import ModalShell from './shared/ModalShell';
 import { isExchangePrefix } from '../services/appUtils';
 import {
   getDentwWebManufacturers,
@@ -370,13 +371,12 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ inventory, onAdd, onClose }
   const canSubmit = !!manufacturer && !!brand && !!size;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-[480px] rounded-xl shadow-2xl overflow-hidden flex flex-col">
+    <ModalShell isOpen={true} onClose={onClose} title="품목 수동 추가" titleId="add-item-modal-title" maxWidth="max-w-[480px]" className="flex flex-col">
 
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
           <div>
-            <h3 className="text-base font-bold text-slate-900">품목 수동 추가</h3>
+            <h3 id="add-item-modal-title" className="text-base font-bold text-slate-900">품목 수동 추가</h3>
             <p className="text-xs text-slate-400 mt-0.5">덴트웹 기본값 기준으로 등록합니다</p>
           </div>
           <button
@@ -542,8 +542,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ inventory, onAdd, onClose }
             추가 완료
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 
