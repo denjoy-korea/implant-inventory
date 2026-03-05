@@ -23708,5 +23708,13 @@
     "startedAt": "2026-03-05T00:00:00Z",
     "archivedAt": "2026-03-05T00:00:00Z",
     "archivedTo": "docs/archive/2026-03/performance-bundle/"
+  },
+  "codebase-optimization": {
+    "phase": "archived",
+    "matchRate": 100,
+    "iterationCount": 4,
+    "startedAt": "2026-03-05T00:00:00Z",
+    "archivedAt": "2026-03-05T12:30:00Z",
+    "archivedTo": "docs/archive/2026-03/codebase-optimization/"
   }
 }

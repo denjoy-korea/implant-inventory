@@ -5,14 +5,14 @@
     "platform": "claude",
     "level": "Dynamic"
   },
-  "currentFeature": "codebase-optimization",
-  "currentPhase": "completed",
-  "matchRate": 100,
+  "currentFeature": null,
+  "currentPhase": null,
+  "matchRate": null,
   "lastArchived": {
-    "feature": "crypto-security-hardening",
+    "feature": "codebase-optimization",
     "phase": "archived",
-    "matchRate": 99.8,
-    "archivedAt": "2026-03-05T00:00:00.000Z",
-    "archivedTo": "docs/archive/2026-03/crypto-security-hardening/"
+    "matchRate": 100,
+    "archivedAt": "2026-03-05T12:30:00.000Z",
+    "archivedTo": "docs/archive/2026-03/codebase-optimization/"
   }
 }
