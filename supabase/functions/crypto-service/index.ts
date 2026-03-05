@@ -94,10 +94,16 @@ async function getAesKey(): Promise<CryptoKey> {
 }
 
 // 레거시 SHA-256 직접 키 (ENCv2 초기 버전 하위 호환 복호화 전용)
+// H-2 fix: TTL 적용 (PATIENT_DATA_KEY 교체 시 stale key 방지)
 let cachedLegacyKeyPromise: Promise<CryptoKey> | null = null;
+let legacyKeyCachedAt = 0;
 
 async function getLegacyAesKey(): Promise<CryptoKey> {
-  if (cachedLegacyKeyPromise) return cachedLegacyKeyPromise;
+  if (cachedLegacyKeyPromise && (Date.now() - legacyKeyCachedAt) < PBKDF2_KEY_TTL_MS) {
+    return cachedLegacyKeyPromise;
+  }
+  cachedLegacyKeyPromise = null;
+  legacyKeyCachedAt = Date.now();
   cachedLegacyKeyPromise = (async () => {
     const digest = await crypto.subtle.digest(
       "SHA-256",
@@ -112,16 +118,23 @@ async function getLegacyAesKey(): Promise<CryptoKey> {
     );
   })().catch((e) => {
     cachedLegacyKeyPromise = null;
+    legacyKeyCachedAt = 0;
     throw e;
   });
   return cachedLegacyKeyPromise;
 }
 
 // LEGACY_SALT PBKDF2 키 (VITE_PATIENT_DATA_KEY 미설정 시 기본값으로 암호화된 데이터 복호화용)
+// H-2 fix: TTL 적용
 let cachedLegacySaltKeyPromise: Promise<CryptoKey> | null = null;
+let legacySaltKeyCachedAt = 0;
 
 async function getLegacySaltAesKey(): Promise<CryptoKey> {
-  if (cachedLegacySaltKeyPromise) return cachedLegacySaltKeyPromise;
+  if (cachedLegacySaltKeyPromise && (Date.now() - legacySaltKeyCachedAt) < PBKDF2_KEY_TTL_MS) {
+    return cachedLegacySaltKeyPromise;
+  }
+  cachedLegacySaltKeyPromise = null;
+  legacySaltKeyCachedAt = Date.now();
   cachedLegacySaltKeyPromise = (async () => {
     const keyMaterial = await crypto.subtle.importKey(
       "raw",
@@ -144,6 +157,7 @@ async function getLegacySaltAesKey(): Promise<CryptoKey> {
     );
   })().catch((e) => {
     cachedLegacySaltKeyPromise = null;
+    legacySaltKeyCachedAt = 0;
     throw e;
   });
   return cachedLegacySaltKeyPromise;
@@ -353,6 +367,12 @@ async function verifyAuth(req: Request): Promise<AuthContext | null> {
     console.error("[verifyAuth] fetch 예외:", e);
     return null;
   }
+}
+
+// H-3: 모듈 시작 시 PATIENT_DATA_KEY 존재 여부 진단 로그
+// (getSecret()은 호출 시 throw하지만, 배포 직후 즉시 감지를 위해 시작 시에도 확인)
+if (!Deno.env.get("PATIENT_DATA_KEY")) {
+  console.error("[crypto-service] CRITICAL: PATIENT_DATA_KEY 환경변수가 설정되지 않았습니다. 모든 암호화 호출이 실패합니다.");
 }
 
 // ── 메인 핸들러 ───────────────────────────────────────────────────────────
