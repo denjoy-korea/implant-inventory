@@ -3,6 +3,7 @@ import { InventoryItem, ExcelData, Order, PlanType, PLAN_LIMITS, SurgeryUnregist
 import { planService } from '../services/planService';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { useSparklineSeries } from '../hooks/useSparklineSeries';
+import { useInventoryManagerData } from '../hooks/useInventoryManagerData';
 import { isExchangePrefix, stripExchangePrefix } from '../services/appUtils';
 import { smoothLine, smoothArea } from './surgery-dashboard/shared';
 import AddItemModal from './AddItemModal';
@@ -109,6 +110,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   });
   const isEditExhausted = !isUnlimited && editCount >= maxEdits;
 
+  const {
+    visibleInventory,
+    hiddenCategoryCount,
+    manufacturersList,
+    pendingOrderKeys,
+    deadStockItems,
+    unregisteredUsageTotal,
+    preferredUnregisteredViewMode,
+    sparklineMonths,
+  } = useInventoryManagerData({ inventory, orders, plan, unregisteredFromSurgery });
+
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (initialShowBaseStockEdit && !isEditExhausted) {
@@ -118,24 +130,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /** 수술중교환_ / 보험청구 항목 제외한 실제 표시 대상 */
-  const visibleInventory = useMemo(() => {
-    return inventory.filter(item =>
-      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
-    );
-  }, [inventory]);
-
-  /** 숨겨진 교환/청구 항목 수 */
-  const hiddenCategoryCount = useMemo(() => {
-    return inventory.length - visibleInventory.length;
-  }, [inventory, visibleInventory]);
-
-  const manufacturersList = useMemo(() => {
-    const set = new Set<string>();
-    visibleInventory.forEach(item => { if (item.manufacturer) set.add(item.manufacturer); });
-    return Array.from(set).sort();
-  }, [visibleInventory]);
 
   const filteredInventory = useMemo(() => {
     return visibleInventory
@@ -168,15 +162,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     inventoryDetailRows.reduce((sum, item) => sum + item.currentStock, 0)
   ), [inventoryDetailRows]);
 
-  /** 발주 대기 중(ordered)인 품목 키 집합: "제조사|브랜드|사이즈" */
-  const pendingOrderKeys = useMemo(() => {
-    const keys = new Set<string>();
-    orders
-      .filter(o => o.status === 'ordered' && o.type === 'replenishment')
-      .forEach(o => o.items.forEach(i => keys.add(`${o.manufacturer}|${i.brand}|${i.size}`)));
-    return keys;
-  }, [orders]);
-
   const mobileOrderNeededItems = useMemo(() => (
     filteredInventory
       .map((item) => {
@@ -205,11 +190,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const maxUsage = useMemo(() => {
     return Math.max(...chartData.map(d => d.usageCount), 1);
   }, [chartData]);
-
-  const sparklineMonths = useMemo(() => {
-    const retentionMonths = PLAN_LIMITS[plan]?.retentionMonths ?? 3;
-    return Math.min(Math.max(retentionMonths, 3), 24);
-  }, [plan]);
 
   const sparklineSeriesByItemId = useSparklineSeries(chartData, surgeryData, sparklineMonths);
 
@@ -257,42 +237,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     };
   }, [filteredInventory, monthFactor]);
 
-  // 미사용 / 장기 미사용 품목 분류 (최적화 대상)
-  const deadStockItems = useMemo(() => {
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0]; // YYYY-MM-DD
-
-    return inventory
-      .filter(i => {
-        const manufacturer = String(i.manufacturer || '');
-        const brand = String(i.brand || '');
-        const lowerManufacturer = manufacturer.toLowerCase();
-        const isFailCategory = isExchangePrefix(manufacturer)
-          || lowerManufacturer.includes('수술중fail')
-          || lowerManufacturer.includes('fail_')
-          || lowerManufacturer.includes('수술중 fail');
-        const isInsuranceCategory = manufacturer === '보험청구'
-          || brand === '보험청구'
-          || manufacturer.includes('보험임플란트')
-          || brand.includes('보험임플란트');
-        return !isFailCategory && !isInsuranceCategory;
-      })
-      .map(i => {
-        const neverUsed = i.usageCount === 0;
-        const lastDate = i.lastUsedDate ?? null;
-        const olderThanYear = !neverUsed && lastDate !== null && lastDate < oneYearAgoStr;
-        return { ...i, neverUsed, olderThanYear, lastUsedDate: lastDate };
-      })
-      .filter(i => i.neverUsed || i.olderThanYear)
-      .sort((a, b) => {
-        // 미사용 먼저, 그 다음 오래된 순
-        if (a.neverUsed && !b.neverUsed) return 1;
-        if (!a.neverUsed && b.neverUsed) return -1;
-        return (a.lastUsedDate ?? '') < (b.lastUsedDate ?? '') ? -1 : 1;
-      });
-  }, [inventory]);
-
   // 식립 / 수술중교환 건수 분리
   const surgeryBreakdown = useMemo(() => {
     if (!surgeryData) return { placement: 0, fail: 0 };
@@ -312,16 +256,6 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     });
     return { placement, fail };
   }, [surgeryData, selectedManufacturer]);
-
-  const unregisteredUsageTotal = useMemo(
-    () => unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0),
-    [unregisteredFromSurgery]
-  );
-
-  const preferredUnregisteredViewMode = useMemo<'not_in_inventory' | 'non_list_input'>(
-    () => (unregisteredFromSurgery.some(item => item.reason !== 'non_list_input') ? 'not_in_inventory' : 'non_list_input'),
-    [unregisteredFromSurgery]
-  );
 
   const stickyRef = useRef<HTMLDivElement | null>(null);
   const [stickyHeight, setStickyHeight] = useState(0);
