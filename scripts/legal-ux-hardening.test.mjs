@@ -89,13 +89,22 @@ test('legal modal includes required SaaS subscription clauses', () => {
 
 test('pricing payment modal enforces consent and accessibility requirements', () => {
   const src = read('components/pricing/PricingPaymentModal.tsx');
+  // ModalShell provides role=dialog, aria-modal, Escape/Tab focus-trap
+  // and maps titleId→aria-labelledby, describedBy→aria-describedby
+  const usesModalShell = /ModalShell/.test(src);
 
-  assert.match(src, /role="dialog"/);
-  assert.match(src, /aria-modal="true"/);
-  assert.match(src, /aria-labelledby="pricing-payment-title"/);
-  assert.match(src, /aria-describedby="pricing-payment-desc"/);
-  assert.match(src, /event\.key === 'Escape'/);
-  assert.match(src, /event\.key !== 'Tab'/);
+  assert.ok(usesModalShell || /role="dialog"/.test(src), 'role=dialog or ModalShell required');
+  assert.ok(usesModalShell || /aria-modal="true"/.test(src), 'aria-modal or ModalShell required');
+  assert.ok(
+    /titleId="pricing-payment-title"/.test(src) || /aria-labelledby="pricing-payment-title"/.test(src),
+    'pricing-payment-title labelledby required',
+  );
+  assert.ok(
+    /describedBy="pricing-payment-desc"/.test(src) || /aria-describedby="pricing-payment-desc"/.test(src),
+    'pricing-payment-desc describedby required',
+  );
+  assert.ok(usesModalShell || /event\.key === 'Escape'/.test(src), 'Escape handler or ModalShell required');
+  assert.ok(usesModalShell || /event\.key !== 'Tab'/.test(src), 'Tab trap or ModalShell required');
   assert.match(src, /aria-label="결제 모달 닫기"/);
   assert.match(src, /!agreedToPaymentPolicy/);
   assert.match(src, /requestError &&/);
