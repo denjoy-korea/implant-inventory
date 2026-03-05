@@ -188,7 +188,8 @@ test('core public conversion events stay instrumented', () => {
   const pricingHook = read('hooks/usePricingPage.ts');
   const pricingModule = pricing + pricingHook;
   const contact = read('components/ContactPage.tsx');
-  const auth = read('components/AuthForm.tsx');
+  // auth tracking moved to useAuthForm hook during AuthForm refactoring
+  const authHook = read('hooks/useAuthForm.ts');
 
   assert.ok(/'pricing_plan_select'/.test(pricingModule), "pricing_plan_select must be instrumented");
   assert.ok(/'waitlist_submit'/.test(pricingModule), "waitlist_submit must be instrumented");
@@ -197,8 +198,8 @@ test('core public conversion events stay instrumented', () => {
   assert.ok(/'pricing_payment_request_success'/.test(pricingModule), "pricing_payment_request_success must be instrumented");
   assert.ok(/'pricing_payment_request_error'/.test(pricingModule), "pricing_payment_request_error must be instrumented");
   assert.match(contact, /'contact_submit'/);
-  assert.match(auth, /'auth_start'/);
-  assert.match(auth, /'auth_complete'/);
+  assert.match(authHook, /'auth_start'/);
+  assert.match(authHook, /'auth_complete'/);
 });
 
 test('mobile bottom nav offset is applied to public toasts', () => {

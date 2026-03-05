@@ -56,6 +56,7 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   const audit = read('components/InventoryAudit.tsx');
   const fail = read('components/FailManager.tsx');
   const order = read('components/OrderManager.tsx');
+  const orderTable = read('components/order/OrderTableSection.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
 
   assert.match(app, /onAddOrder:\s*handleAddOrder,/);
@@ -83,9 +84,12 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   assert.match(mobileNav, /aria-label=\{getDashboardTabTitle\(tab\)\}/);
 
   // 삭제 액션은 아이콘 라벨 또는 텍스트 버튼 중 하나로 접근 가능해야 함
+  // (OrderManager 리팩터링으로 삭제 버튼이 OrderTableSection으로 이동됨)
   assert.ok(
     /title="주문 삭제"\s+aria-label="주문 삭제"/.test(order)
-      || />\s*삭제\s*<\/button>/.test(order),
+      || />\s*삭제\s*<\/button>/.test(order)
+      || />\s*삭제\s*<\/button>/.test(orderTable)
+      || /title="주문 삭제"\s+aria-label="주문 삭제"/.test(orderTable),
     'OrderManager should keep an accessible delete action (icon label or visible text)',
   );
 });
@@ -125,10 +129,11 @@ test('analyze page strengthens success confidence with ETA and next action CTA',
 test('funnel instrumentation uses standardized events and page-aware tracking', () => {
   const pageView = read('services/pageViewService.ts');
   const pricing = read('components/PricingPage.tsx');
-  const auth = read('components/AuthForm.tsx');
   const analyze = read('components/AnalyzePage.tsx');
   const contact = read('components/ContactPage.tsx');
   const appState = read('hooks/useAppState.ts');
+  // auth tracking moved to useAuthForm hook during AuthForm refactoring
+  const authHook = read('hooks/useAuthForm.ts');
 
   assert.match(pageView, /event_type: `\$\{page\}_view`/);
   assert.match(pageView, /trackEvent\(event_type: string, event_data\?: EventData, page = 'pricing'\)/);
@@ -136,8 +141,8 @@ test('funnel instrumentation uses standardized events and page-aware tracking', 
   assert.match(appState, /pageViewService\.markConverted\(user\.id, user\.hospitalId \|\| null\)/);
 
   assert.match(pricing, /trackEvent\(\s*'pricing_plan_select'/);
-  assert.match(auth, /trackEvent\('auth_start'/);
-  assert.match(auth, /trackEvent\('auth_complete'/);
+  assert.match(authHook, /trackEvent\('auth_start'/);
+  assert.match(authHook, /trackEvent\('auth_complete'/);
   assert.match(analyze, /trackEvent\(\s*'analyze_start'/);
   assert.match(analyze, /trackEvent\(\s*'analyze_complete'/);
   assert.match(contact, /trackEvent\('contact_submit'/);

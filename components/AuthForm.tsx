@@ -1104,6 +1104,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
             aria-describedby="auth-waitlist-desc"
             className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
             onClick={e => e.stopPropagation()}
+            onKeyDown={event => { if (event.key === 'Escape' && !waitlistSubmitting) setWaitlistPlan(null); }}
           >
             <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
               <div className="flex items-center justify-between">
