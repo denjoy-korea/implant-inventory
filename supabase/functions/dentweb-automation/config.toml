@@ -1,0 +1,2 @@
+[functions.dentweb-automation]
+verify_jwt = true

@@ -6,6 +6,7 @@ import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
 import { hospitalService } from '../services/hospitalService';
 import { integrationService } from '../services/integrationService';
+import { dentwebAutomationService, DentwebAutomationState } from '../services/dentwebAutomationService';
 import { WorkDaySelector } from './WorkDaySelector';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
@@ -21,6 +22,13 @@ function formatPhoneNumber(value: string): string {
   if (digits.length <= 7) return digits.replace(/(\d{3})(\d{0,4})/, '$1-$2').replace(/-$/, '');
   if (digits.length <= 10) return digits.replace(/(\d{3})(\d{3,4})(\d{0,4})/, '$1-$2-$3').replace(/-$/, '');
   return digits.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '기록 없음';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '기록 없음';
+  return d.toLocaleString('ko-KR', { hour12: false });
 }
 
 interface SettingsHubProps {
@@ -87,6 +95,14 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [integrationCount, setIntegrationCount] = useState(0);
 
+  // 덴트웹 자동화 상태
+  const [automationState, setAutomationState] = useState<DentwebAutomationState | null>(null);
+  const [automationEnabled, setAutomationEnabled] = useState(false);
+  const [automationInterval, setAutomationInterval] = useState('60');
+  const [automationLoading, setAutomationLoading] = useState(false);
+  const [automationSaving, setAutomationSaving] = useState(false);
+  const [automationRunning, setAutomationRunning] = useState(false);
+
   // 거래처 관리 상태
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [vendorManufacturers, setVendorManufacturers] = useState<string[]>([]);
@@ -120,6 +136,19 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     void integrationService.getIntegrations(hospitalId).then(list => {
       setIntegrationCount(list.filter(i => i.is_active).length);
     });
+  }, [hospitalId, canAccessIntegrations]);
+
+  useEffect(() => {
+    if (!hospitalId || !canAccessIntegrations) return;
+    setAutomationLoading(true);
+    void dentwebAutomationService.getState()
+      .then(state => {
+        if (!state) return;
+        setAutomationState(state);
+        setAutomationEnabled(state.enabled);
+        setAutomationInterval(String(state.intervalMinutes));
+      })
+      .finally(() => setAutomationLoading(false));
   }, [hospitalId, canAccessIntegrations]);
 
   useEffect(() => {
@@ -252,6 +281,46 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         }
       },
     });
+  };
+
+  const automationIntervalNum = Number(automationInterval);
+  const automationIntervalValid = Number.isFinite(automationIntervalNum)
+    && automationIntervalNum >= 5
+    && automationIntervalNum <= 1440;
+  const automationChanged = automationState
+    ? (automationEnabled !== automationState.enabled || automationIntervalNum !== automationState.intervalMinutes)
+    : false;
+
+  const handleSaveAutomation = async () => {
+    if (!automationIntervalValid) {
+      showToast('실행 간격은 5~1440분 사이로 입력해주세요.', 'error');
+      return;
+    }
+    setAutomationSaving(true);
+    const res = await dentwebAutomationService.saveSettings(automationEnabled, automationIntervalNum);
+    if (!res.ok || !res.state) {
+      showToast('자동화 설정 저장에 실패했습니다.', 'error');
+      setAutomationSaving(false);
+      return;
+    }
+    setAutomationState(res.state);
+    setAutomationEnabled(res.state.enabled);
+    setAutomationInterval(String(res.state.intervalMinutes));
+    showToast('자동화 설정이 저장되었습니다.', 'success');
+    setAutomationSaving(false);
+  };
+
+  const handleRequestAutomationRun = async () => {
+    setAutomationRunning(true);
+    const res = await dentwebAutomationService.requestRun();
+    if (!res.ok || !res.state) {
+      showToast('실행 요청에 실패했습니다.', 'error');
+      setAutomationRunning(false);
+      return;
+    }
+    setAutomationState(res.state);
+    showToast('실행 요청을 등록했습니다. 에이전트가 곧 실행합니다.', 'success');
+    setAutomationRunning(false);
   };
 
   const cards: SettingsCard[] = [
@@ -481,6 +550,105 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
               </svg>
             </div>
           </button>
+        )}
+
+        {/* 덴트웹 자동화 카드 */}
+        {canAccessIntegrations && hospitalId && (
+          <div className="relative p-6 rounded-2xl border bg-white border-slate-200">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-50 text-emerald-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3a6.75 6.75 0 100 13.5h4.5A5.25 5.25 0 1014.25 6h-.25A6.73 6.73 0 009.75 3z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-800">덴트웹 자동화</h3>
+                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                  병원 PC 에이전트와 연동해 간격 자동 실행 또는 즉시 실행 요청을 보냅니다.
+                </p>
+              </div>
+            </div>
+
+            {automationLoading ? (
+              <p className="text-xs text-slate-400">설정 불러오는 중...</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <label className="text-sm font-bold text-slate-700">자동 실행</label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={automationEnabled}
+                    onClick={() => setAutomationEnabled(v => !v)}
+                    className={`relative h-6 w-11 rounded-full transition-colors ${automationEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${automationEnabled ? 'translate-x-5' : 'translate-x-0.5'}`}
+                    />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">실행 간격 (분)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={1440}
+                    step={5}
+                    value={automationInterval}
+                    onChange={e => setAutomationInterval(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">5~1440분 범위에서 설정할 수 있습니다.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => void handleSaveAutomation()}
+                    disabled={automationSaving || !automationChanged || !automationIntervalValid}
+                    className="px-3 py-2 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                  >
+                    {automationSaving ? '저장 중...' : '설정 저장'}
+                  </button>
+                  <button
+                    onClick={() => void handleRequestAutomationRun()}
+                    disabled={automationRunning}
+                    className="px-3 py-2 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
+                  >
+                    {automationRunning ? '요청 중...' : '지금 실행 요청'}
+                  </button>
+                </div>
+
+                {automationState && (
+                  <div className="rounded-xl border border-slate-200 px-3 py-2.5 bg-slate-50">
+                    <p className="text-[11px] text-slate-500">최근 실행: <span className="font-semibold text-slate-700">{formatDateTime(automationState.lastRunAt)}</span></p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      상태:
+                      <span className={`ml-1 font-semibold ${
+                        automationState.lastStatus === 'success'
+                          ? 'text-emerald-600'
+                          : automationState.lastStatus === 'no_data'
+                            ? 'text-slate-600'
+                            : automationState.lastStatus === 'failed'
+                              ? 'text-rose-600'
+                              : 'text-slate-500'
+                      }`}>
+                        {automationState.lastStatus}
+                      </span>
+                    </p>
+                    {automationState.lastMessage && (
+                      <p className="text-[11px] text-slate-500 mt-1 truncate" title={automationState.lastMessage}>
+                        메시지: {automationState.lastMessage}
+                      </p>
+                    )}
+                    {automationState.manualRunRequested && (
+                      <p className="text-[11px] text-amber-600 mt-1 font-semibold">수동 실행 요청 대기 중</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
