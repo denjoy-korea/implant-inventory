@@ -48,7 +48,7 @@ jobs:
           echo "백필 구간: $START ~ $END"
 
           current="$START"
-          while [[ "$current" <= "$END" ]]; do
+          while [[ "$current" < "$END" || "$current" == "$END" ]]; do
             echo "→ $current 스냅샷 생성 중..."
             node scripts/admin-traffic-snapshot.mjs 30 --daily --snapshot-date="$current" || echo "  [warn] $current 실패 (계속)"
             current=$(date -u -d "$current + 1 day" '+%Y-%m-%d' 2>/dev/null || date -u -v+1d -j -f '%Y-%m-%d' "$current" '+%Y-%m-%d')
