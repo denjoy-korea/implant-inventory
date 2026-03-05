@@ -568,13 +568,11 @@ export function useAppLogic({
     handleDeleteAccount, handleOpenDirectPayment, handleFileUpload, showAlertToast, setState,
   ]);
 
-  // ── globalOverlayProps bundle ─────────────────────────────────
-  const globalOverlayProps = useMemo(() => ({
+  // ── globalOverlay partial props (pwaUpdateBar + alertToast added in App.tsx) ──
+  const globalOverlayPartialProps = useMemo(() => ({
     planLimitModal,
     confirmModal,
     inventoryCompare,
-    pwaUpdateBar: undefined as never,  // populated in App.tsx (pwaUpdate ref)
-    alertToast: undefined as never,    // populated in App.tsx
     showMobileDashboardNav,
     showMobilePublicNav,
     onClosePlanLimitModal: closePlanLimitModal,
@@ -599,7 +597,9 @@ export function useAppLogic({
     // Invite
     inviteInfo, processingInvite,
     // File upload
-    uploadingTypeRef,
+    uploadingTypeRef, handleFileUpload,
+    // Audit history
+    setShowAuditHistory,
     // Review / profile
     reviewPopupType, profileInitialTab, setProfileInitialTab,
     // Direct payment
@@ -617,6 +617,6 @@ export function useAppLogic({
     // Prop bundles
     workspaceProps,
     userOverlayProps,
-    globalOverlayProps,
+    globalOverlayPartialProps,
   };
 }
