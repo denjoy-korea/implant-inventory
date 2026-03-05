@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from '../../services/hospitalSettingsService';
 
 interface Props {
@@ -15,14 +16,7 @@ const StockCalcSettingsModal: React.FC<Props> = ({
   onClose, localCalcSettings, setLocalCalcSettings,
   calcSettingsSaved, calcSettingsChanged, isSavingCalcSettings, onSave,
 }) => (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-    onClick={onClose}
-  >
-    <div
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4"
-      onClick={e => e.stopPropagation()}
-    >
+  <ModalShell isOpen={true} onClose={onClose} title="권장재고 산출 설정" titleId="stock-calc-title" maxWidth="max-w-md">
       {/* 헤더 */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
         <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
@@ -31,7 +25,7 @@ const StockCalcSettingsModal: React.FC<Props> = ({
           </svg>
         </div>
         <div className="flex-1">
-          <h3 className="text-base font-bold text-slate-900">권장재고 산출 설정</h3>
+          <h3 id="stock-calc-title" className="text-base font-bold text-slate-900">권장재고 산출 설정</h3>
           <p className="text-xs text-slate-500">변경 즉시 전체 재고 권장량이 재계산됩니다</p>
         </div>
         <button
@@ -188,8 +182,7 @@ const StockCalcSettingsModal: React.FC<Props> = ({
           {isSavingCalcSettings ? '저장 중...' : '저장'}
         </button>
       </div>
-    </div>
-  </div>
+  </ModalShell>
 );
 
 export default StockCalcSettingsModal;

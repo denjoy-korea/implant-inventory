@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ModalShell from '../shared/ModalShell';
 import { FailThresholds } from '../../services/failThresholdService';
 
 interface Props {
@@ -36,8 +37,7 @@ export default function FailThresholdModal({ manufacturers, currentThresholds, o
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={() => !saving && onClose()}>
-      <div className="bg-white w-full max-w-sm rounded-[24px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={onClose} title="교환 기준량 설정" titleId="fail-threshold-title" zIndex={200} closeable={!saving} maxWidth="max-w-sm" className="rounded-[24px]">
         {/* 헤더 */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -49,7 +49,7 @@ export default function FailThresholdModal({ manufacturers, currentThresholds, o
               </svg>
             </div>
             <div>
-              <h3 className="text-base font-black text-slate-900">교환 기준량 설정</h3>
+              <h3 id="fail-threshold-title" className="text-base font-black text-slate-900">교환 기준량 설정</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">제조사별 교환 발주 알림 기준을 설정합니다.</p>
             </div>
           </div>
@@ -102,7 +102,6 @@ export default function FailThresholdModal({ manufacturers, currentThresholds, o
             {saving ? '저장 중...' : '저장'}
           </button>
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 }

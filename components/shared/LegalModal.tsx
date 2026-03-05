@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import ModalShell from './ModalShell';
 import {
   TRIAL_OFFER_LABEL,
   SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT,
@@ -239,7 +240,6 @@ const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> =
 ];
 
 const LegalModal: React.FC<LegalModalProps> = ({ type, onClose }) => {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeSectionId, setActiveSectionId] = React.useState<string>('');
 
@@ -247,51 +247,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ type, onClose }) => {
   const descriptionId = type === 'terms' ? 'legal-terms-desc' : 'legal-privacy-desc';
   const sections = useMemo(() => (type === 'terms' ? TERMS_SECTIONS : PRIVACY_SECTIONS), [type]);
 
-  // Handle focus trapping and Escape key
-  useEffect(() => {
-    const previousFocused = document.activeElement as HTMLElement | null;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const getFocusable = (): HTMLElement[] =>
-      Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      );
-
-    window.setTimeout(() => {
-      getFocusable()[0]?.focus();
-    }, 0);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = getFocusable();
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previousFocused?.focus();
-    };
-  }, [onClose]);
+  // Focus trap and ESC handled by ModalShell
 
   // Set up Intersection Observer for Table of Contents
   useEffect(() => {
@@ -335,19 +291,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ type, onClose }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md overflow-hidden flex items-center justify-center p-4 sm:p-6 md:p-12 animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        className="relative w-full max-w-5xl h-full max-h-[90vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col pt-3"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalShell isOpen={true} onClose={onClose} title={type === 'terms' ? '서비스 이용약관' : '개인정보 처리방침'} titleId={titleId} describedBy={descriptionId} zIndex={300} maxWidth="max-w-5xl" className="h-full max-h-[90vh] rounded-3xl flex flex-col pt-3" backdropClassName="flex items-center justify-center p-4 sm:p-6 md:p-12">
         {/* Header Bar */}
         <div className="shrink-0 px-6 lg:px-10 py-5 flex items-center justify-between border-b border-slate-100 bg-white/80 backdrop-blur z-20">
           <div className="flex items-center gap-4">
@@ -569,8 +513,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ type, onClose }) => {
           </div>
 
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 };
 

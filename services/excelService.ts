@@ -1,45 +1,61 @@
 import { ExcelData, ExcelRow } from '../types';
 import { supabase } from './supabaseClient';
 
+function toCellScalar(v: unknown): string | number | boolean {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'object') {
+    if ('result' in (v as object)) {
+      const r = (v as { result?: unknown }).result;
+      return (typeof r === 'string' || typeof r === 'number' || typeof r === 'boolean') ? r : String(r ?? '');
+    }
+    if ('richText' in (v as object)) {
+      return (v as { richText: { text: string }[] }).richText.map(rt => rt.text).join('');
+    }
+  }
+  return String(v);
+}
+
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
-  const XLSX = await import('xlsx');
-  const arrayBuffer = await file.arrayBuffer();
-  const data = new Uint8Array(arrayBuffer);
-  const workbook = XLSX.read(data, { type: 'array' });
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await file.arrayBuffer());
 
   const sheets: Record<string, { name: string; columns: string[]; rows: ExcelRow[] }> = {};
+  let activeSheetName = '';
 
-  workbook.SheetNames.forEach((sheetName: string) => {
-    const worksheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, { defval: '' });
+  workbook.eachSheet((worksheet) => {
+    const sheetName = worksheet.name;
+    if (!activeSheetName) activeSheetName = sheetName;
 
-    const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
+    const headerRow = worksheet.getRow(1);
     const columns: string[] = [];
-    if (range) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const address = XLSX.utils.encode_col(C) + '1';
-        const cell = worksheet[address];
-        if (cell && cell.v !== undefined && cell.v !== null) {
-          columns.push(String(cell.v));
-        }
+    for (let C = 1; C <= worksheet.columnCount; C++) {
+      const val = headerRow.getCell(C).value;
+      if (val !== null && val !== undefined && val !== '') {
+        columns.push(String(val));
       }
     }
 
-    const cleanedRows = rows.map((row) => {
-      if (row['사용안함'] !== undefined) {
-        const val = row['사용안함'];
-        row['사용안함'] = val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v';
+    const rows: ExcelRow[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const rowData: ExcelRow = {};
+      columns.forEach((colName, idx) => {
+        rowData[colName] = toCellScalar(row.getCell(idx + 1).value);
+      });
+      if (rowData['사용안함'] !== undefined) {
+        const val = rowData['사용안함'];
+        rowData['사용안함'] = val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v';
       }
-      return row;
+      rows.push(rowData);
     });
 
-    sheets[sheetName] = { name: sheetName, columns, rows: cleanedRows };
+    sheets[sheetName] = { name: sheetName, columns, rows };
   });
 
-  return {
-    sheets,
-    activeSheetName: workbook.SheetNames[0],
-  };
+  return { sheets, activeSheetName };
 };
 
 export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {

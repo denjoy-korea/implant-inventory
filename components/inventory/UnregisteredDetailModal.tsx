@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import ModalShell from '../shared/ModalShell';
 import { InventoryItem, SurgeryUnregisteredItem } from '../../types';
 import { fixIbsImplant } from '../../services/mappers';
 import { getSizeMatchKey, toCanonicalSize, parseSize } from '../../services/sizeNormalizer';
@@ -567,8 +568,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
-        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[82vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <ModalShell isOpen={true} onClose={onClose} title="수술기록 미등록 품목 상세" titleId="unregistered-detail-title" zIndex={200} maxWidth="max-w-4xl" className="max-h-[82vh] flex flex-col">
           <div className="px-6 py-5 bg-amber-500 text-white flex items-start justify-between gap-4 shrink-0">
             <div>
               <h3 className="text-lg font-black flex items-center gap-2">
@@ -934,8 +934,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
               닫기
             </button>
           </div>
-        </div>
-      </div>
+      </ModalShell>
 
       {manualFixTarget && (
         <ManualFixModal

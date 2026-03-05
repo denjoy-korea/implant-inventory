@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import ModalShell from '../shared/ModalShell';
 import { PlanType } from '../../types';
 import {
   SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT,
@@ -33,68 +34,13 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
 }) => {
   const [showTerms, setShowTerms] = React.useState(false);
   const [showPrivacy, setShowPrivacy] = React.useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!plan) return;
-    const previousFocused = document.activeElement as HTMLElement | null;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const getFocusable = (): HTMLElement[] =>
-      Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      );
-
-    window.setTimeout(() => {
-      getFocusable()[0]?.focus();
-    }, 0);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (showTerms || showPrivacy) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = getFocusable();
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previousFocused?.focus();
-    };
-  }, [onClose, plan, showPrivacy, showTerms]);
+  // Focus trap and ESC handled by ModalShell
 
   if (!plan) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trial-consent-title"
-        aria-describedby="trial-consent-desc"
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <>
+    <ModalShell isOpen={!!plan} onClose={onClose} title="무료 체험 신청" titleId="trial-consent-title" describedBy="trial-consent-desc" zIndex={200} maxWidth="max-w-md">
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -191,10 +137,10 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-      {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
-      {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
-    </div>
+    </ModalShell>
+    {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
+    {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
+    </>
   );
 };
 

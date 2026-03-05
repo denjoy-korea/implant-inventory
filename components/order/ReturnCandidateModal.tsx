@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
+import ModalShell from '../shared/ModalShell';
 import { InventoryItem, ReturnRequest, ReturnReason } from '../../types';
 
 export type ReturnCategory = 'olderThanYear' | 'neverUsed' | 'overstock';
@@ -227,8 +228,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     if (isBulkReturning) {
         const remaining = bulkTotal - bulkProgress;
         return (
-            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-10 flex flex-col items-center gap-6">
+            <ModalShell isOpen={true} onClose={() => {}} closeable={false} title="반품 처리 중" zIndex={110} maxWidth="max-w-sm" className="p-10 flex flex-col items-center gap-6">
                     <div className="relative flex items-center justify-center">
                         <svg className="w-16 h-16 animate-spin text-indigo-200" viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
@@ -249,20 +249,18 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         <div className="bg-indigo-400 h-full rounded-full transition-all duration-300"
                             style={{ width: `${bulkTotal > 0 ? (bulkProgress / bulkTotal) * 100 : 0}%` }} />
                     </div>
-                </div>
-            </div>
+            </ModalShell>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-3xl shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+        <ModalShell isOpen={true} onClose={onClose} title="권장량 초과 품목" titleId="return-candidate-title" zIndex={110} backdropClassName="flex items-end sm:items-center justify-center sm:p-4" maxWidth="w-full sm:max-w-3xl" className="rounded-t-3xl sm:rounded-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
 
                 {/* Header */}
                 <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
                     <div className="flex items-start justify-between">
                         <div className="min-w-0">
-                            <h3 className="text-xl font-black text-slate-900 whitespace-nowrap">권장량 초과 품목</h3>
+                            <h3 id="return-candidate-title" className="text-xl font-black text-slate-900 whitespace-nowrap">권장량 초과 품목</h3>
                             <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">현재 재고가 권장 수량을 초과하는 품목입니다.</p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0 ml-3">
@@ -548,8 +546,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                     </div>
                 </div>
 
-            </div>
-        </div>
+        </ModalShell>
     );
 };
 

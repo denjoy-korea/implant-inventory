@@ -86,12 +86,7 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell isOpen={true} onClose={onClose} title="솔라피 API 관리" titleId="solapi-modal-title" maxWidth="max-w-md" className="flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-[#0066FF] flex items-center justify-center shrink-0">
@@ -100,7 +95,7 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-slate-800">솔라피 API 관리</h2>
+            <h2 id="solapi-modal-title" className="text-sm font-bold text-slate-800">솔라피 API 관리</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">SMS / 알림톡 발송을 위한 API 자격증명을 저장합니다</p>
           </div>
           {!loading && (
@@ -240,8 +235,7 @@ function SolapiModal({ onClose }: { onClose: () => void }) {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

@@ -47,7 +47,7 @@ export default defineConfig(() => {
               if (id.includes('framer-motion')) return 'framer-motion';
               if (id.includes('recharts')) return 'recharts';
               if (id.includes('date-fns')) return 'date-fns';
-              if (id.includes('xlsx')) return 'xlsx-vendor';
+              if (id.includes('exceljs')) return 'exceljs-vendor';
               return 'vendor';
             }
           },

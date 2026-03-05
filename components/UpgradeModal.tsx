@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlanType, BillingCycle, PlanFeature, PLAN_NAMES, PLAN_PRICING, PLAN_ORDER, PLAN_LIMITS } from '../types';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import ModalShell from './shared/ModalShell';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -47,22 +47,11 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   feature,
   onSelectPlan,
 }) => {
-  useEscapeKey(onClose, isOpen);
-
-  if (!isOpen) return null;
-
   const upgradePlans: PlanType[] = ['basic', 'plus', 'business'];
   const savings = feature ? FEATURE_SAVINGS[feature] : undefined;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="upgrade-modal-title"
-        className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-fade-in-up"
-      >
+    <ModalShell isOpen={isOpen} onClose={onClose} title="업그레이드가 필요합니다" titleId="upgrade-modal-title" zIndex={200} maxWidth="max-w-lg" className="p-6 animate-fade-in-up">
         {/* Header */}
         <div className="text-center mb-5">
           <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -161,8 +150,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
             닫기
           </button>
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 };
 

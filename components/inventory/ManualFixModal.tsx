@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ModalShell from '../shared/ModalShell';
 
 export interface ManualFixCheckResult {
   checked: number;
@@ -159,11 +160,10 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
   const recordIds = getRecordIds();
 
   return (
-    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-slate-900/65 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleClose}>
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[86vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={handleClose} title="규격 오류 일괄 수정" titleId="manual-fix-modal-title" zIndex={230} maxWidth="max-w-3xl" className="rounded-2xl overflow-hidden max-h-[86vh] flex flex-col">
         <div className="px-6 py-4 bg-rose-600 text-white flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-lg font-black">수기 입력 데이터 수정 적용</h3>
+            <h3 id="manual-fix-modal-title" className="text-lg font-black">수기 입력 데이터 수정 적용</h3>
             <p className="text-rose-100 text-xs font-medium mt-1">
               덴트웹 편집 완료 여부를 먼저 확인한 뒤, 필요 시 수술기록 DB에 표준 형식을 적용합니다.
             </p>
@@ -345,8 +345,7 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
             {isApplying ? '적용 중...' : '확인 후 적용'}
           </button>
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 };
 

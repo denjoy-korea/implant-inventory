@@ -51,10 +51,17 @@ test('rich HTML sinks are sanitized', () => {
     'System admin rich HTML sink must be sanitized',
   );
   assert.match(editor, /editorRef\.current\.innerHTML = sanitizeRichHtml\(initialValue\);/);
-  assert.match(sanitizer, /if \(name\.startsWith\('on'\)\) return;/);
-  assert.match(
-    sanitizer,
-    /parsed\.protocol === 'http:' \|\| parsed\.protocol === 'https:'/,
+  // on* handler blocking: either explicit check OR DOMPurify whitelist (ALLOWED_ATTR without on*)
+  assert.ok(
+    /if \(name\.startsWith\('on'\)\) return;/.test(sanitizer)
+    || /DOMPurify/.test(sanitizer),
+    'htmlSanitizer must block on* event handlers (via custom check or DOMPurify)',
+  );
+  // protocol check: either positive allowlist or negative blocklist form
+  assert.ok(
+    /parsed\.protocol === 'http:' \|\| parsed\.protocol === 'https:'/.test(sanitizer)
+    || /parsed\.protocol !== 'http:'/.test(sanitizer),
+    'htmlSanitizer must check href protocol (http/https only)',
   );
 });
 

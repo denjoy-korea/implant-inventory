@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { FailCandidate } from '../../types';
 import { failDetectionService } from '../../services/failDetectionService';
 import { Z } from '../../utils/zIndex';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import ModalShell from '../shared/ModalShell';
 
 interface FailDetectionModalProps {
   candidates: FailCandidate[];
@@ -20,7 +20,6 @@ const FailDetectionModal: React.FC<FailDetectionModalProps> = ({
   const [selected, setSelected] = useState<Set<number>>(() => new Set(candidates.map((_, i) => i)));
   const [saving, setSaving] = useState(false);
 
-  useEscapeKey(onClose, !saving);
 
   const toggle = useCallback((idx: number) => {
     setSelected(prev => {
@@ -57,17 +56,7 @@ const FailDetectionModal: React.FC<FailDetectionModalProps> = ({
   }, [candidates, hospitalId, onClose]);
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-      style={{ zIndex: Z.MODAL }}
-      onClick={saving ? undefined : onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <ModalShell isOpen={true} onClose={onClose} title="FAIL 자동 감지 결과" titleId="fail-detection-title" zIndex={Z.MODAL} closeable={!saving} maxWidth="max-w-lg" className="rounded-3xl overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -77,7 +66,7 @@ const FailDetectionModal: React.FC<FailDetectionModalProps> = ({
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-black text-slate-800">FAIL 자동 감지 결과</h2>
+              <h2 id="fail-detection-title" className="text-sm font-black text-slate-800">FAIL 자동 감지 결과</h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {candidates.length}건의 재식립이 감지되었습니다. 실제 FAIL 여부를 확인해주세요.
               </p>
@@ -171,8 +160,7 @@ const FailDetectionModal: React.FC<FailDetectionModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

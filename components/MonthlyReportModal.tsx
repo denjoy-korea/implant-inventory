@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ExcelRow } from '../types';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import ModalShell from './shared/ModalShell';
 
 interface MonthlyReportModalProps {
   rows: ExcelRow[];
@@ -19,7 +19,6 @@ function formatMonthLabel(monthKey: string): string {
 }
 
 const MonthlyReportModal: React.FC<MonthlyReportModalProps> = ({ rows, onClose }) => {
-  useEscapeKey(onClose);
   const cleanRows = useMemo(
     () => rows.filter(row => !Object.values(row).some(v => String(v).includes('합계'))),
     [rows],
@@ -71,18 +70,15 @@ const MonthlyReportModal: React.FC<MonthlyReportModalProps> = ({ rows, onClose }
 
   if (availableMonths.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center" onClick={e => e.stopPropagation()}>
-          <p className="text-sm font-bold text-slate-500">수술기록 데이터가 없어 리포트를 생성할 수 없습니다.</p>
-          <button onClick={onClose} className="mt-4 px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">닫기</button>
-        </div>
-      </div>
+      <ModalShell isOpen={true} onClose={onClose} title="월간 리포트" maxWidth="max-w-xs" className="p-8 text-center">
+        <p className="text-sm font-bold text-slate-500">수술기록 데이터가 없어 리포트를 생성할 수 없습니다.</p>
+        <button onClick={onClose} className="mt-4 px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">닫기</button>
+      </ModalShell>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:rounded-none print:max-h-none print:fixed print:inset-0" onClick={e => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={onClose} title="월간 리포트" titleId="monthly-report-title" maxWidth="max-w-2xl" className="max-h-[90vh] flex flex-col print:shadow-none print:rounded-none print:max-h-none print:fixed print:inset-0">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 print:hidden">
           <div className="flex items-center gap-3">
@@ -92,7 +88,7 @@ const MonthlyReportModal: React.FC<MonthlyReportModalProps> = ({ rows, onClose }
                   d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <h2 className="text-sm font-black text-slate-800">월간 리포트</h2>
+            <h2 id="monthly-report-title" className="text-sm font-black text-slate-800">월간 리포트</h2>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -188,8 +184,7 @@ const MonthlyReportModal: React.FC<MonthlyReportModalProps> = ({ rows, onClose }
             </>
           )}
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 };
 

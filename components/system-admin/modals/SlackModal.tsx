@@ -110,7 +110,7 @@ function SlackModal({ onClose }: { onClose: () => void }) {
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-slate-800">Slack 웹훅 관리</h2>
+            <h2 id="slack-modal-title" className="text-sm font-bold text-slate-800">Slack 웹훅 관리</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">채널별 웹훅 URL을 등록하고 기능에서 선택해 사용하세요</p>
           </div>
           {!loading && (

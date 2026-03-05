@@ -54,7 +54,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     isMobileViewport,
     chartMonthOffset, setChartMonthOffset,
     chartTouchStartX, chartTouchStartY,
-    orderModalRef, orderModalCloseButtonRef, recommendedScrollRef,
+    recommendedScrollRef,
     recommendedScrollPct, setRecommendedScrollPct,
     // stats
     mStats, currentStats, currentRemainingFails,
@@ -894,8 +894,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           recommendedScrollPct={recommendedScrollPct}
           setRecommendedScrollPct={setRecommendedScrollPct}
           recommendedScrollRef={recommendedScrollRef}
-          orderModalRef={orderModalRef}
-          orderModalCloseButtonRef={orderModalCloseButtonRef}
           onClose={() => setIsModalOpen(false)}
           onSubmit={handleReturnSubmit}
         />

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Z } from '../../utils/zIndex';
+import ModalShell from '../shared/ModalShell';
 
 interface RecommendedItem {
   brand: string;
@@ -16,8 +17,6 @@ interface FailReturnModalProps {
   recommendedScrollPct: number;
   setRecommendedScrollPct: (pct: number) => void;
   recommendedScrollRef: React.RefObject<HTMLDivElement | null>;
-  orderModalRef: React.RefObject<HTMLDivElement | null>;
-  orderModalCloseButtonRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onSubmit: () => void;
 }
@@ -31,32 +30,16 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
   recommendedScrollPct,
   setRecommendedScrollPct,
   recommendedScrollRef,
-  orderModalRef,
-  orderModalCloseButtonRef,
   onClose,
   onSubmit,
 }) => (
-  <div
-    className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-    style={{ zIndex: Z.MODAL }}
-    onClick={onClose}
-  >
-    <div
-      ref={orderModalRef}
-      className="bg-white w-full max-w-lg sm:max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="fail-order-modal-title"
-      aria-describedby="fail-order-modal-desc"
-    >
+  <ModalShell isOpen={true} onClose={onClose} title="반품 처리" titleId="fail-order-modal-title" describedBy="fail-order-modal-desc" zIndex={Z.MODAL} maxWidth="max-w-lg sm:max-w-2xl" className="rounded-2xl sm:rounded-3xl flex flex-col max-h-[90vh]">
       <div className="px-6 py-5 sm:px-8 sm:pt-8 sm:pb-6 flex justify-between items-start gap-3">
         <div>
           <h3 id="fail-order-modal-title" className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">반품 처리</h3>
           <p id="fail-order-modal-desc" className="text-sm text-slate-500 mt-1">{activeM} / 반품 가능 잔량: <span className="font-bold text-slate-700">{currentRemainingFails}건</span></p>
         </div>
         <button
-          ref={orderModalCloseButtonRef}
           onClick={onClose}
           aria-label="반품 처리 모달 닫기"
           className="mt-1 h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
@@ -158,8 +141,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
-  </div>
+  </ModalShell>
 );
 
 export default FailReturnModal;

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import LegalModal from '../shared/LegalModal';
+import ModalShell from '../shared/ModalShell';
 
 interface WaitlistPlan {
   key: string;
@@ -30,70 +31,15 @@ const PricingWaitlistModal: React.FC<PricingWaitlistModalProps> = ({
   const [agreedToContactPolicy, setAgreedToContactPolicy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setAgreedToContactPolicy(false);
-  }, [plan?.key]);
-
-  useEffect(() => {
-    if (!plan) return;
-    const previousFocused = document.activeElement as HTMLElement | null;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const getFocusable = (): HTMLElement[] =>
-      Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      );
-
-    window.setTimeout(() => getFocusable()[0]?.focus(), 0);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (showTerms || showPrivacy) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (!submitting) onClose();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = getFocusable();
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previousFocused?.focus();
-    };
-  }, [onClose, plan, showPrivacy, showTerms, submitting]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => { setAgreedToContactPolicy(false); }, [plan?.key]);
 
   if (!plan) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => !submitting && onClose()}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pricing-waitlist-title"
-        aria-describedby="pricing-waitlist-desc"
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <>
+    <ModalShell isOpen={!!plan} onClose={() => !submitting && onClose()} title="대기 신청" titleId="pricing-waitlist-title" describedBy="pricing-waitlist-desc" zIndex={200} closeable={!submitting} maxWidth="max-w-md">
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
           <div className="flex items-center justify-between">
             <div>
@@ -174,10 +120,10 @@ const PricingWaitlistModal: React.FC<PricingWaitlistModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-      {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
-      {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
-    </div>
+    </ModalShell>
+    {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
+    {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
+    </>
   );
 };
 

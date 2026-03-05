@@ -475,18 +475,19 @@ export const authService = {
     }
 
     // 세션 토큰 발급 및 저장 (중복 로그인 차단용)
+    // sessionStorage 사용: XSS 시 탈취 범위 축소 (탭 닫힘 시 자동 소멸, 탭 간 격리)
     // RPC 실패/지연 시 stale 토큰으로 인한 false 로그아웃 방지 — 먼저 기존 토큰 제거
-    localStorage.removeItem('dentweb_session_token');
+    sessionStorage.removeItem('dentweb_session_token');
     try {
       const token = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
       await Promise.race([
         supabase.rpc('set_session_token', { p_token: token }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5_000)),
       ]);
-      localStorage.setItem('dentweb_session_token', token);
+      sessionStorage.setItem('dentweb_session_token', token);
     } catch (tokenError) {
       console.warn('[authService] session token setup failed:', tokenError);
-      // localStorage는 이미 비워짐 → validateSessionToken이 true 반환
+      // sessionStorage는 이미 비워짐 → validateSessionToken이 true 반환
     }
 
     return { success: true };
@@ -494,7 +495,7 @@ export const authService = {
 
   /** 로그아웃 */
   async signOut(): Promise<void> {
-    localStorage.removeItem('dentweb_session_token');
+    sessionStorage.removeItem('dentweb_session_token');
     await supabase.auth.signOut();
   },
 
@@ -824,7 +825,7 @@ export const authService = {
     try {
       const newToken = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
       await supabase.rpc('set_session_token', { p_token: newToken });
-      localStorage.setItem('dentweb_session_token', newToken);
+      sessionStorage.setItem('dentweb_session_token', newToken);
     } catch (e) {
       console.warn('[authService] session token reissue after OTP failed:', e);
     }

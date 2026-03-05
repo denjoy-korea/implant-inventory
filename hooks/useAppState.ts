@@ -263,9 +263,9 @@ export function useAppState(onNotify?: NotifyFn) {
     }
   };
 
-  /** 세션 토큰 검증 — DB 토큰과 localStorage 토큰 비교 */
+  /** 세션 토큰 검증 — DB 토큰과 sessionStorage 토큰 비교 */
   const validateSessionToken = async (): Promise<boolean> => {
-    const localToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const localToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
     if (!localToken) return true; // 토큰 없으면 구 세션이므로 무시
 
     try {

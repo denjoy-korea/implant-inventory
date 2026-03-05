@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 
 interface EditNoticeModalProps {
   onClose: () => void;
@@ -10,13 +11,12 @@ interface EditNoticeModalProps {
 
 const EditNoticeModal: React.FC<EditNoticeModalProps> = ({ onClose, onConfirm, isUnlimited, maxEdits, editCount }) => {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <ModalShell isOpen={true} onClose={onClose} title="기초 재고 편집 안내" titleId="edit-notice-title" zIndex={200} maxWidth="max-w-md">
         <div className="p-8 flex flex-col items-center text-center">
           <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-5">
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
           </div>
-          <h3 className="text-lg font-black text-slate-900 mb-2">기초 재고 편집 안내</h3>
+          <h3 id="edit-notice-title" className="text-lg font-black text-slate-900 mb-2">기초 재고 편집 안내</h3>
           <div className="w-full mt-1 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
             <p className="text-sm font-bold text-amber-700 text-balance">최초 1회만 사용을 권장합니다</p>
             <p className="text-xs text-amber-600 mt-1 leading-relaxed text-balance">시스템 도입 시 기초 재고를 일괄 등록하는 용도입니다.</p>
@@ -40,8 +40,7 @@ const EditNoticeModal: React.FC<EditNoticeModalProps> = ({ onClose, onConfirm, i
             편집 시작
           </button>
         </div>
-      </div>
-    </div>
+  </ModalShell>
   );
 };
 
