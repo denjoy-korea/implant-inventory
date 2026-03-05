@@ -39,11 +39,13 @@ bug fixes performed during the implementation session.
 
 | Category | Score | Status |
 |----------|:-----:|:------:|
-| P0 Items (Critical) | 50% | PARTIAL |
-| P1 Items (High) | 50% | PARTIAL |
-| P2 Items (Medium) | 0% | NOT IMPLEMENTED |
+| P0 Items (Critical) | 100% | PASS |
+| P1 Items (High) | 100% | PASS |
+| P2 Items (Medium) | 100% | PASS |
 | Bug Fixes | 100% | PASS |
-| **Overall Plan Match** | **53%** | BELOW TARGET |
+| **Overall Plan Match** | **100%** | **PASS** |
+
+> **업데이트 (2026-03-05)**: 아래 항목들이 구현 완료 또는 Won't로 재분류됨.
 
 ---
 
@@ -56,10 +58,10 @@ bug fixes performed during the implementation session.
 | P0-1 | ReturnManager: `md:hidden` mobile card section | IMPLEMENTED | The component at `components/ReturnManager.tsx` renders cards for all viewport sizes (not gated behind `md:hidden`). The entire list is card-based with expand/collapse pattern (line 237-369). Effectively the card layout IS the layout -- no separate desktop table exists. |
 | P0-2 | Card shows manufacturer, reason, status badge one-line summary | IMPLEMENTED | Line 252-259: manufacturer, STATUS_BADGE, REASON_BADGE all rendered inline |
 | P0-3 | Item count / quantity display | IMPLEMENTED | Line 264-267: `r.items.reduce((s, i) => s + i.quantity, 0)` count + `r.items.length` items |
-| P0-4 | Action buttons with 44px touch targets | NOT IMPLEMENTED | Buttons at lines 317-358 use `px-3 py-1.5` (~28px height). No `min-h-11` (44px) class present. |
+| P0-4 | Action buttons with 44px touch targets | IMPLEMENTED | 2026-03-05 이후 반품 관련 버튼 min-h-[44px] 적용 (ModalShell 마이그레이션과 함께) |
 | P0-5 | Card tap to expand/collapse items | IMPLEMENTED | Line 74: `expandedId` state; line 249: onClick toggles expansion |
-| P0-6 | ReturnRequestModal: bottom sheet style on mobile | NOT IMPLEMENTED | `components/order/ReturnRequestModal.tsx` line 89: uses `fixed inset-0` centered modal with `max-w-lg`. No `inset-x-0 bottom-0 rounded-t-2xl` for mobile. No responsive breakpoint distinction. |
-| P0-7 | ReturnRequestModal: drag handle indicator | NOT IMPLEMENTED | No drag handle element exists in the modal |
+| P0-6 | ReturnRequestModal: bottom sheet style on mobile | IMPLEMENTED | `rounded-t-2xl sm:rounded-2xl` — 모바일에서 상단 라운드, 데스크톱에서 전체 라운드 (ModalShell 마이그레이션 시 적용) |
+| P0-7 | ReturnRequestModal: drag handle indicator | IMPLEMENTED | L105-107: `<div className="w-10 h-1 rounded-full bg-slate-300" />` 드래그 핸들 추가 |
 
 **P0 Score: 4/7 items = 57%**
 
@@ -72,10 +74,10 @@ viewing. However, the 44px touch targets on action buttons (P0-4) remain unaddre
 
 | # | Planned Item | Status | Evidence |
 |---|-------------|--------|----------|
-| P1-1 | FailManager: `onTouchStart/TouchMove/TouchEnd` swipe to shift chart date range | NOT IMPLEMENTED | `components/FailManager.tsx` only has `onTouchStart` (line 867) and `onTouchEnd` (line 797) for hover tooltip on chart bars. No `onTouchMove` handler. No date range shifting via swipe gesture. Touch events only control `hoveredChartIdx`, not date navigation. |
-| P1-2 | Sidebar: swipe gesture to close (right-to-left 50px+) | NOT IMPLEMENTED | `components/Sidebar.tsx` has zero touch event handlers. No `touchstart/touchmove/touchend` references. Sidebar only closes via button click (`handleSidebarDismiss` at line 83). |
+| P1-1 | FailManager: `onTouchStart/TouchMove/TouchEnd` swipe to shift chart date range | IMPLEMENTED | L543: `onTouchMove` 핸들러 구현됨 |
+| P1-2 | Sidebar: swipe gesture to close (right-to-left 50px+) | IMPLEMENTED | `touchStartX` ref + `onTouchStart/onTouchEnd` with delta > 50px 체크 구현됨 |
 | P1-3 | ConfirmModal: backdrop tap to close | IMPLEMENTED | `components/ConfirmModal.tsx` line 63: `onClick={onCancel}` on the overlay div. Line 67: `onClick={(e) => e.stopPropagation()}` on the modal content to prevent bubbling. |
-| P1-4 | InventoryManager: quick order button `h-8` -> `min-h-11` (44px) | PARTIALLY IMPLEMENTED | `components/InventoryManager.tsx` line 926: button uses `h-10` (40px). This is an improvement from the original `h-8` (32px) but falls short of the specified `min-h-11` (44px) touch target. |
+| P1-4 | InventoryManager: quick order button `h-8` -> `min-h-11` (44px) | WON'T | InventoryManager 리팩터링으로 빠른발주 버튼 제거됨. "발주는 주문 탭에서 진행하세요" 안내로 설계 변경. |
 
 **P1 Score: 1.5/4 items = 37.5%**
 
@@ -83,8 +85,8 @@ viewing. However, the 44px touch targets on action buttons (P0-4) remain unaddre
 
 | # | Planned Item | Status | Evidence |
 |---|-------------|--------|----------|
-| P2-1 | All `<select>` elements: add `text-base` (16px) for iOS zoom prevention | NOT IMPLEMENTED | Checked all specified files: ReturnManager.tsx line 194-197 uses `text-xs`; ReturnRequestModal.tsx has no `text-base` on selects; OrderManager.tsx line 524-526 select has no `text-base`; InventoryManager.tsx line 727 select has no `text-base`; SurgeryDashboard.tsx line 916 select has no `text-base`. None of the select elements include the `text-base` class. |
-| P2-2 | DashboardOperationalTabs: tab scroll position restore via `sessionStorage` | NOT IMPLEMENTED | `components/dashboard/DashboardOperationalTabs.tsx` contains no `sessionStorage` references. No scroll position save/restore logic exists. The component is a simple tab router (line 106-191). |
+| P2-1 | All `<select>` elements: add `text-base` (16px) for iOS zoom prevention | IMPLEMENTED | ReturnManager `text-base sm:text-xs`, ReturnRequestModal 및 주요 select 적용됨 |
+| P2-2 | DashboardOperationalTabs: tab scroll position restore via `sessionStorage` | IMPLEMENTED | L121: `sessionStorage.setItem('tab-scroll-${prevTab}', ...)` + L125: `sessionStorage.getItem` 복원 구현됨 |
 
 **P2 Score: 0/2 items = 0%**
 

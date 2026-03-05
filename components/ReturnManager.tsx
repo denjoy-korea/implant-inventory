@@ -165,16 +165,33 @@ const ReturnManager: React.FC<ReturnManagerProps> = ({
 
   if (!hospitalId) return null;
 
+  const stats = useMemo(() => ({
+    total: returnRequests.length,
+    inProgress: returnRequests.filter(r => r.status === 'requested' || r.status === 'picked_up').length,
+    completed: returnRequests.filter(r => r.status === 'completed').length,
+    rejected: returnRequests.filter(r => r.status === 'rejected').length,
+  }), [returnRequests]);
+
   return (
     <div className="space-y-4">
-      {/* 헤더: embedded 모드에서는 섹션 제목 숨김, 버튼만 오른쪽 정렬 */}
-      <div className="flex items-center justify-between">
-        {!embedded && <h3 className="text-sm font-bold text-gray-700">반품 관리</h3>}
-        {embedded && <span className="text-xs font-black text-slate-500 tracking-wide">반품 신청 내역</span>}
+      {/* 헤더 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {!embedded && <h3 className="text-sm font-bold text-gray-700 shrink-0">반품 관리</h3>}
+          {embedded && <span className="text-xs font-black text-slate-500 tracking-wide shrink-0">반품 신청 내역</span>}
+          {stats.total > 0 && (
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 flex-wrap">
+              <span>총 {stats.total}건</span>
+              {stats.inProgress > 0 && <><span className="text-slate-200">|</span><span className="text-blue-500">진행중 {stats.inProgress}건</span></>}
+              {stats.completed > 0 && <><span className="text-slate-200">|</span><span className="text-emerald-500">완료 {stats.completed}건</span></>}
+              {stats.rejected > 0 && <><span className="text-slate-200">|</span><span className="text-gray-400">거절 {stats.rejected}건</span></>}
+            </div>
+          )}
+        </div>
         {!isReadOnly && (
           <button
             onClick={() => setShowModal(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors shrink-0"
           >
             + 반품 신청
           </button>
