@@ -1,10 +1,10 @@
-# Codebase Optimization -- Gap Analysis v5.0
+# Codebase Optimization -- Gap Analysis v6.0
 
-> PDCA Phase: Check (re-verification)
+> PDCA Phase: Check (final verification)
 > Analyzed: 2026-03-05
 > Feature: codebase-optimization
 > Analyzer: gap-detector
-> Previous: v4.0 (96.0% match rate, ME-1 App.tsx PARTIAL)
+> Previous: v5.0 (100% match rate, ME-1 ACCEPTED at 999 LOC)
 
 ---
 
@@ -12,7 +12,7 @@
 
 `[Plan] -> [Design] -- -> [Do] -> [Check] ✅`
 
-> v5.0: ME-1 App.tsx PARTIAL→ACCEPTED (same LT-1 constraint as ME-5; 64% reduction achieved; remaining gap is Week 3+ scope)
+> v6.0: ME-1 App.tsx ACCEPTED→**FULL PASS** — `hooks/useAppLogic.tsx` orchestration hook extracted (lt-5). App.tsx now **290 LOC** (target ~300 LOC). Plan target fully achieved.
 
 ---
 
@@ -34,7 +34,7 @@
 
 | ID | Task | Plan Target | Actual | Status |
 |----|------|------------|--------|--------|
-| ME-1 | App.tsx split (~300 LOC shell) | ~300 LOC | 999 LOC (64% reduction from 2,765) | ACCEPTED |
+| ME-1 | App.tsx split (~300 LOC shell) | ~300 LOC | **290 LOC** (lt-5: useAppLogic orchestration hook) | **FULL PASS** |
 | ME-2 | OrderManager.tsx split | Sub-components + hook | **788 LOC** + useOrderManager (568) + useOrderHandlers (471) + 8 sub-components (order/) | **FULL PASS** |
 | ME-3 | DashboardOverview.tsx split | Section components | 927 LOC + useDashboardOverview hook | PASS |
 | ME-3b | UserProfile.tsx split | Sub-components | 1,134 LOC, ReviewsTab extracted | PASS |
@@ -46,9 +46,9 @@
 
 ### ME-1 Detail
 
-App.tsx: 2,765 -> 1,317 -> **999 LOC** (64% total reduction).
+App.tsx: 2,765 -> 1,317 -> 999 -> **290 LOC** (89.5% total reduction).
 
-Hooks extracted from App.tsx (cumulative, 10 hooks):
+Hooks extracted from App.tsx (cumulative, 11 hooks):
 - `hooks/useReturnHandlers.ts` (256 LOC) -- return request handlers
 - `hooks/useOrderHandlers.ts` (471 LOC) -- order/receipt handlers
 - `hooks/useInventorySync.ts` (305 LOC) -- inventory realtime sync
@@ -59,12 +59,11 @@ Hooks extracted from App.tsx (cumulative, 10 hooks):
 - `hooks/useRefreshSurgeryUsage.ts` (43 LOC) -- surgery usage refresh
 - `hooks/useBaseStockBatch.ts` (74 LOC) -- base stock batch apply
 - `hooks/useSurgeryManualFix.ts` (191 LOC) -- manual surgery resolution
+- **`hooks/useAppLogic.tsx` (622 LOC)** -- orchestration hook; bundles workspaceProps, userOverlayProps, globalOverlayPartialProps via useMemo (lt-5)
 
-React hooks in App.tsx reduced from 96 -> ~35.
+App.tsx is now a pure JSX shell: refs (3) + 4 hook calls + routing JSX.
 
-**Gap**: 999 vs ~300 target = 699 LOC above plan target. Further reduction requires React Context architecture (LT-1 scope, explicitly Week 3+). At 999 LOC, App.tsx is now **under the 1,000 LOC mega-file threshold** -- a key structural milestone.
-
-**Verdict**: ACCEPTED. Same architectural constraint as ME-5 (both require LT-1 React Context, Week 3+ scope). The 64% reduction (2,765 → 999 LOC) and 10 hooks extracted represents the full extent achievable within current cycle scope. Remaining 699 LOC is JSX render structure that cannot be further reduced without React Context provider hierarchy.
+**Verdict**: FULL PASS. Plan target ~300 LOC achieved at **290 LOC**.
 
 ### ME-5 Detail
 
