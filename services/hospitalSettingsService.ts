@@ -70,3 +70,78 @@ export const hospitalSettingsService = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------
+// UI 스누즈 설정 서비스 (구 snoozeService.ts)
+// ui_snooze_settings 테이블에 범용 key-value 형태로 저장.
+// Supabase 우선 → 실패 시 localStorage fallback.
+// ---------------------------------------------------------------------------
+export const snoozeService = {
+  async get(hospitalId: string, key: string): Promise<Record<string, string>> {
+    try {
+      const { data, error } = await supabase
+        .from('ui_snooze_settings')
+        .select('data')
+        .eq('hospital_id', hospitalId)
+        .eq('key', key)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data?.data) {
+        const raw = data.data as Record<string, string>;
+        const now = new Date().toISOString();
+        const cleaned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          if (v > now) cleaned[k] = v;
+        }
+        return cleaned;
+      }
+    } catch {
+      // Supabase 실패 시 localStorage fallback
+    }
+    return _snoozeFromLocalStorage(key, hospitalId);
+  },
+
+  async set(hospitalId: string, key: string, data: Record<string, string>): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('ui_snooze_settings')
+        .upsert(
+          { hospital_id: hospitalId, key, data, updated_at: new Date().toISOString() },
+          { onConflict: 'hospital_id,key' }
+        );
+      if (error) throw error;
+      _snoozeToLocalStorage(key, hospitalId, data);
+      return;
+    } catch {
+      // Supabase 실패 시 localStorage fallback
+    }
+    _snoozeToLocalStorage(key, hospitalId, data);
+  },
+};
+
+function _snoozeLocalKey(key: string, hospitalId: string) {
+  return `${key}_${hospitalId}`;
+}
+
+function _snoozeFromLocalStorage(key: string, hospitalId: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(_snoozeLocalKey(key, hospitalId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    const now = new Date().toISOString();
+    const cleaned: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v > now) cleaned[k] = v;
+    }
+    return cleaned;
+  } catch {
+    return {};
+  }
+}
+
+function _snoozeToLocalStorage(key: string, hospitalId: string, data: Record<string, string>): void {
+  try {
+    localStorage.setItem(_snoozeLocalKey(key, hospitalId), JSON.stringify(data));
+  } catch {}
+}

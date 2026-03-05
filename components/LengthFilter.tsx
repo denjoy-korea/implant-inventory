@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ExcelSheet } from '../types';
-import { extractLengthFromSize } from '../services/sizeUtils';
+import { extractLengthFromSize } from '../services/sizeNormalizer';
 import { MIN_FIXTURE_LENGTH } from '../constants';
 
 interface LengthFilterProps {

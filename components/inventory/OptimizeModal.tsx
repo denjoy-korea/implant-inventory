@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { InventoryItem, CreateReturnParams } from '../../types';
-import { snoozeService } from '../../services/snoozeService';
+import { snoozeService } from '../../services/hospitalSettingsService';
 import ModalShell from '../shared/ModalShell';
 
 interface DeadStockItem extends InventoryItem {

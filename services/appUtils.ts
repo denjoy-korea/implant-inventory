@@ -1,4 +1,7 @@
+import { InventoryItem } from '../types';
 import { normalizeInventory, normalizeSurgery } from './normalizationService';
+import { fixIbsImplant } from './mappers';
+import { toCanonicalSize, getSizeMatchKey } from './sizeNormalizer';
 
 /**
  * 교환 카테고리 제조사 prefix 판별 (구 '수술중FAIL_' + 신 '수술중교환_' 양쪽 호환)
@@ -31,4 +34,18 @@ export function manufacturerAliasKey(raw: string): string {
   }
 
   return normalizeSurgery(value).replace(/implant/g, '');
+}
+
+// ---------------------------------------------------------------------------
+// 재고 중복 키 생성 (구 inventoryUtils.ts)
+// ---------------------------------------------------------------------------
+export function buildInventoryDuplicateKey(
+  item: Pick<InventoryItem, 'manufacturer' | 'brand' | 'size'>
+): string {
+  const fixed = fixIbsImplant(String(item.manufacturer || ''), String(item.brand || ''));
+  const canonicalSize = toCanonicalSize(String(item.size || ''), fixed.manufacturer);
+  const manufacturerKey = manufacturerAliasKey(fixed.manufacturer);
+  const brandKey = normalizeInventory(fixed.brand);
+  const sizeKey = getSizeMatchKey(canonicalSize, fixed.manufacturer);
+  return `${manufacturerKey}|${brandKey}|${sizeKey}`;
 }

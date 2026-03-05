@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, ExcelData, ExcelRow } from '../types';
-import { extractLengthFromSize } from '../services/sizeUtils';
+import { extractLengthFromSize } from '../services/sizeNormalizer';
 import { normalizeLength } from '../components/LengthFilter';
 import { isExchangePrefix } from '../services/appUtils';
 

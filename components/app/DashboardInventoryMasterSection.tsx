@@ -16,7 +16,7 @@ import { operationLogService } from '../../services/operationLogService';
 import { planService } from '../../services/planService';
 import { fixIbsImplant } from '../../services/mappers';
 import { toCanonicalSize } from '../../services/sizeNormalizer';
-import { buildInventoryDuplicateKey } from '../../services/inventoryUtils';
+import { buildInventoryDuplicateKey } from '../../services/appUtils';
 import { isExchangePrefix, stripExchangePrefix } from '../../services/appUtils';
 
 interface ResolveManualSurgeryInputParams {

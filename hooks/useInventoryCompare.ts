@@ -5,7 +5,7 @@ import { fixIbsImplant } from '../services/mappers';
 import { toCanonicalSize, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { inventoryService } from '../services/inventoryService';
 import { operationLogService } from '../services/operationLogService';
-import { buildInventoryDuplicateKey } from '../services/inventoryUtils';
+import { buildInventoryDuplicateKey } from '../services/appUtils';
 import { isExchangePrefix } from '../services/appUtils';
 import { ToastType } from './useToast';
 

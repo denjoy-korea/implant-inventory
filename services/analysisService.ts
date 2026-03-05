@@ -4,7 +4,7 @@ import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './si
 import { fixIbsImplant } from './mappers';
 import { normalizeSurgery as normalize } from './normalizationService';
 import { DAYS_PER_MONTH } from '../constants';
-import { buildInventoryDuplicateKey } from './inventoryUtils';
+import { buildInventoryDuplicateKey } from './appUtils';
 import { buildBrandSizeFormatIndex, isListBasedSurgeryInput } from './surgeryUnregisteredUtils';
 import {
   getSurgeryClassification,
