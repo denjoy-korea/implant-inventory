@@ -21,3 +21,5 @@
 | product-strategy | 93% | 2026-03-05 | [product-strategy/](./product-strategy/) |
 | withdrawal-process | 100% | 2026-03-05 | [withdrawal-process/](./withdrawal-process/) |
 | feature-showcase | 97% | 2026-03-05 | [feature-showcase/](./feature-showcase/) |
+| mobile-tab-ux-refactor | 94% | 2026-03-05 | [mobile-tab-ux-refactor/](./mobile-tab-ux-refactor/) |
+| codebase-optimization | 88% | 2026-03-05 | [codebase-optimization/](./codebase-optimization/) |
