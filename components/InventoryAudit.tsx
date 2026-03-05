@@ -1,11 +1,9 @@
-
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React from 'react';
 import { InventoryItem } from '../types';
-import { auditService, AuditEntry, AuditHistoryItem } from '../services/auditService';
-import { operationLogService } from '../services/operationLogService';
-import { useToast } from '../hooks/useToast';
-import { isExchangePrefix } from '../services/appUtils';
 import AuditReportDashboard from './audit/AuditReportDashboard';
+import AuditHistoryModal from './audit/AuditHistoryModal';
+import { useInventoryAudit } from '../hooks/useInventoryAudit';
+
 
 interface InventoryAuditProps {
   inventory: InventoryItem[];
@@ -20,302 +18,41 @@ interface InventoryAuditProps {
 const MISMATCH_REASONS = ['기록 누락', '수술기록 오입력', '분실', '입고 수량 오류', '기타'] as const;
 
 const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory }) => {
-  const [activeBrand, setActiveBrand] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeManufacturer, setActiveManufacturer] = useState<string | null>(null);
-  const [auditResults, setAuditResults] = useState<Record<string, { matched: boolean; actualCount?: number; reason?: string }>>({});
-  const [showAuditSummary, setShowAuditSummary] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
-  const [isAuditActive, setIsAuditActive] = useState(false);
-  const [customReasonMode, setCustomReasonMode] = useState<Record<string, boolean>>({});
-  const [confirmedItems, setConfirmedItems] = useState<string[]>([]);
-  const confirmedItemsSet = useMemo(() => new Set(confirmedItems), [confirmedItems]);
-  const [expandedAuditKeys, setExpandedAuditKeys] = useState<Set<string>>(new Set());
-  const { toast, showToast } = useToast();
-  const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
-  const historyModalRef = useRef<HTMLDivElement>(null);
-  const historyCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const summaryModalRef = useRef<HTMLDivElement>(null);
-  const summaryCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
-
-  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
-
-  const loadHistory = useCallback(async () => {
-    if (!hospitalId) return;
-    setIsHistoryLoading(true);
-    const data = await auditService.getAuditHistory(hospitalId);
-    setAuditHistory(data);
-    setIsHistoryLoading(false);
-  }, [hospitalId]);
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mediaQuery = window.matchMedia('(max-width: 1023px)');
-    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
-    syncViewport();
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', syncViewport);
-      return () => mediaQuery.removeEventListener('change', syncViewport);
-    }
-    mediaQuery.addListener(syncViewport);
-    return () => mediaQuery.removeListener(syncViewport);
-  }, []);
-
-  // 이력을 실사일+담당자 기준으로 그룹핑
-  const groupedHistory = useMemo(() => {
-    // 같은 날 같은 사람이 여러 번 실사할 수 있으므로 created_at 분 단위로 세션 분리
-    const groups: Record<string, { date: string; createdAt: string; performedBy: string | null; items: AuditHistoryItem[] }> = {};
-    auditHistory.forEach(h => {
-      const sessionMinute = h.createdAt.substring(0, 16); // "2026-02-20T16:02"
-      const key = `${sessionMinute}__${h.performedBy || ''}`;
-      if (!groups[key]) groups[key] = { date: h.auditDate, createdAt: h.createdAt, performedBy: h.performedBy ?? null, items: [] };
-      groups[key].items.push(h);
-    });
-    return Object.entries(groups).sort(([, a], [, b]) => b.createdAt.localeCompare(a.createdAt));
-  }, [auditHistory]);
-
-  const toggleExpand = (key: string) => {
-    setExpandedAuditKeys(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const visibleInventory = useMemo(() => {
-    return inventory.filter(item =>
-      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
-    );
-  }, [inventory]);
-
-  const manufacturersList = useMemo(() => {
-    const set = new Set<string>();
-    visibleInventory.forEach(item => { if (item.manufacturer) set.add(item.manufacturer); });
-    return Array.from(set).sort();
-  }, [visibleInventory]);
-
-  const brandsList = useMemo(() => {
-    const set = new Set<string>();
-    visibleInventory
-      .filter(item => activeManufacturer === null || item.manufacturer === activeManufacturer)
-      .forEach(item => { if (item.brand) set.add(item.brand); });
-    return Array.from(set).sort();
-  }, [visibleInventory, activeManufacturer]);
-
-  useEffect(() => {
-    if (activeBrand === null && brandsList.length > 0) {
-      setActiveBrand(brandsList[0]);
-    }
-  }, [brandsList, activeBrand]);
-
-  const filteredInventory = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return visibleInventory
-      .filter(item => activeManufacturer === null || item.manufacturer === activeManufacturer)
-      .filter(item => activeBrand === null || item.brand === activeBrand)
-      .filter(item => {
-        if (!q) return true;
-        return (
-          item.brand.toLowerCase().includes(q) ||
-          item.size.toLowerCase().includes(q) ||
-          item.manufacturer.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const mComp = a.manufacturer.localeCompare(b.manufacturer, 'ko');
-        if (mComp !== 0) return mComp;
-        const bComp = a.brand.localeCompare(b.brand, 'ko');
-        if (bComp !== 0) return bComp;
-        return a.size.localeCompare(b.size, 'ko', { numeric: true });
-      });
-  }, [visibleInventory, activeBrand, activeManufacturer, searchQuery]);
-
-  // KPI: 완료(confirmedItems) 기준 — 불일치 항목은 완료 버튼 클릭 후에만 카운팅
-  const { totalItems, totalAudited, totalMatched, totalMismatched, totalMismatchedQty, progressPct } = useMemo(() => {
-    const items = filteredInventory.length;
-    const confirmed = filteredInventory.filter(i => confirmedItemsSet.has(i.id));
-    const matched = confirmed.filter(i => auditResults[i.id]?.matched).length;
-    const mismatchedEntries = confirmed.filter(i => auditResults[i.id] && !auditResults[i.id].matched);
-    const mismatchedQty = mismatchedEntries.reduce((sum, i) => {
-      const r = auditResults[i.id];
-      return sum + Math.abs((r.actualCount ?? 0) - (i.currentStock ?? 0));
-    }, 0);
-    return {
-      totalItems: items,
-      totalAudited: confirmed.length,
-      totalMatched: matched,
-      totalMismatched: mismatchedEntries.length,
-      totalMismatchedQty: mismatchedQty,
-      progressPct: items > 0 ? Math.round((confirmed.length / items) * 100) : 0,
-    };
-  }, [filteredInventory, auditResults, confirmedItemsSet]);
-
-  // 불일치 item 상세 (배너용) — 완료된 항목만
-  const mismatchItems = useMemo(() => {
-    return filteredInventory
-      .filter(i => confirmedItemsSet.has(i.id) && auditResults[i.id] && !auditResults[i.id].matched)
-      .map(i => ({ id: i.id, result: auditResults[i.id], item: i }));
-  }, [auditResults, filteredInventory, confirmedItemsSet]);
-
-  // 브랜드별 실사 통계 (탭 dot 색 계산용) — 완료 기준
-  const brandStats = useMemo(() => {
-    const stats: Record<string, { total: number; audited: number; mismatch: number }> = {};
-    visibleInventory.forEach(item => {
-      if (!stats[item.brand]) stats[item.brand] = { total: 0, audited: 0, mismatch: 0 };
-      stats[item.brand].total++;
-      if (confirmedItemsSet.has(item.id)) {
-        stats[item.brand].audited++;
-        if (auditResults[item.id] && !auditResults[item.id].matched) stats[item.brand].mismatch++;
-      }
-    });
-    return stats;
-  }, [visibleInventory, auditResults, confirmedItemsSet]);
-
-  const auditedCount = Object.keys(auditResults).length;
-  const pendingAuditItems = useMemo(
-    () => filteredInventory.filter(item => !confirmedItemsSet.has(item.id)),
-    [filteredInventory, confirmedItemsSet]
-  );
-
-  // 브랜드 내 모든 항목 완료(confirmedItems) 시 자동으로 다음 브랜드로 이동
-  // 불일치 항목은 '완료' 버튼 클릭 후 confirmedItems에 추가되므로, 단순 체크만으로는 이동하지 않음
-  useEffect(() => {
-    if (!isAuditActive || activeBrand === null) return;
-    const brandItems = visibleInventory.filter(i => i.brand === activeBrand);
-    if (brandItems.length === 0) return;
-    const allConfirmed = brandItems.every(i => confirmedItemsSet.has(i.id));
-    if (!allConfirmed) return;
-    const allBrandsDone = brandsList.every(b => {
-      const bItems = visibleInventory.filter(i => i.brand === b);
-      return bItems.length === 0 || bItems.every(i => confirmedItemsSet.has(i.id));
-    });
-    if (allBrandsDone) {
-      const timer = setTimeout(() => setActiveBrand(null), 600);
-      return () => clearTimeout(timer);
-    }
-    const currentIdx = brandsList.indexOf(activeBrand);
-    const nextBrand = brandsList[currentIdx + 1];
-    if (!nextBrand) return;
-    const timer = setTimeout(() => setActiveBrand(nextBrand), 600);
-    return () => clearTimeout(timer);
-  }, [confirmedItemsSet, activeBrand, brandsList, isAuditActive, visibleInventory]);
-
-  const handleAuditComplete = useCallback(() => setShowAuditSummary(true), []);
-  const handleAuditClose = useCallback(() => { setAuditResults({}); setShowAuditSummary(false); setIsAuditActive(false); setCustomReasonMode({}); setConfirmedItems([]); }, []);
-
-  useEffect(() => {
-    if (showHistory) historyCloseButtonRef.current?.focus();
-  }, [showHistory]);
-
-  useEffect(() => {
-    if (showAuditSummary) summaryCloseButtonRef.current?.focus();
-  }, [showAuditSummary]);
-
-  useEffect(() => {
-    if (!showHistory && !showAuditSummary) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (showAuditSummary) handleAuditClose();
-        else onCloseHistory?.();
-        return;
-      }
-
-      if (e.key !== 'Tab') return;
-      const container = showAuditSummary ? summaryModalRef.current : historyModalRef.current;
-      if (!container) return;
-
-      const focusable = Array.from(
-        container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')
-      ) as HTMLElement[];
-      const enabledFocusable = focusable.filter((el) => !el.hasAttribute('disabled'));
-      if (enabledFocusable.length === 0) return;
-
-      const first = enabledFocusable[0];
-      const last = enabledFocusable[enabledFocusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-
-      if (e.shiftKey) {
-        if (active === first || !container.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleAuditClose, onCloseHistory, showAuditSummary, showHistory]);
-
-  const handleApply = async () => {
-    setIsApplying(true);
-    try {
-      // 불일치 항목만 저장 (속도 최적화)
-      // 불일치가 없을 경우 첫 번째 항목 1건만 difference=0으로 저장해 실사 기록 남김
-      let entries: AuditEntry[];
-      if (mismatchItems.length > 0) {
-        entries = mismatchItems
-          .map(({ id, result }): AuditEntry | null => {
-            const item = inventory.find(i => i.id === id);
-            if (!item) return null;
-            const actualStock = result.actualCount ?? item.currentStock;
-            return {
-              inventoryId: id,
-              systemStock: item.currentStock,
-              actualStock,
-              difference: actualStock - item.currentStock,
-              reason: result.reason || MISMATCH_REASONS[0],
-              performedBy: userName,
-            };
-          })
-          .filter((e): e is AuditEntry => e !== null);
-      } else {
-        // 전 품목 일치 — 실사 완료 기록만 남김 (첫 번째 항목 1건)
-        const firstItem = visibleInventory[0];
-        entries = firstItem ? [{
-          inventoryId: firstItem.id,
-          systemStock: firstItem.currentStock,
-          actualStock: firstItem.currentStock,
-          difference: 0,
-          reason: null,
-          performedBy: userName,
-        }] : [];
-      }
-      const mismatchCount = mismatchItems.length;
-      const { success, error } = await auditService.applyAudit(hospitalId, entries);
-      if (success) {
-        operationLogService.logOperation('inventory_audit', `재고 실사 적용: 불일치 ${mismatchCount}건`, { mismatchCount });
-        showToast(mismatchCount > 0 ? `실사 완료: 불일치 ${mismatchCount}건 반영` : '실사 완료: 전 품목 일치', 'success');
-        handleAuditClose();
-        loadHistory();
-        onApplied();
-        onAuditSessionComplete?.();
-      } else {
-        showToast(`실사 적용 실패: ${error}`, 'error');
-      }
-    } finally {
-      setIsApplying(false);
-    }
-  };
-
-  const getBrandDotColor = (brand: string) => {
-    const s = brandStats[brand];
-    if (!s || s.audited === 0) return 'bg-slate-300';
-    if (s.mismatch > 0) return 'bg-rose-500';
-    if (s.audited === s.total) return 'bg-emerald-500';
-    return 'bg-indigo-400';
-  };
+  const {
+    activeBrand, setActiveBrand,
+    searchQuery, setSearchQuery,
+    activeManufacturer, setActiveManufacturer,
+    auditResults, setAuditResults,
+    showAuditSummary,
+    isApplying,
+    isAuditActive, setIsAuditActive,
+    customReasonMode, setCustomReasonMode,
+    confirmedItems, setConfirmedItems,
+    expandedAuditKeys,
+    toast,
+    isMobileViewport,
+    isHistoryLoading,
+    groupedHistory,
+    visibleInventory,
+    manufacturersList,
+    brandsList,
+    filteredInventory,
+    totalItems, totalAudited, totalMatched, totalMismatched, totalMismatchedQty, progressPct,
+    mismatchItems,
+    brandStats,
+    auditedCount,
+    pendingAuditItems,
+    toggleExpand,
+    handleAuditComplete,
+    handleAuditClose,
+    handleApply,
+    getBrandDotColor,
+    historyModalRef,
+    historyCloseButtonRef,
+    summaryModalRef,
+    summaryCloseButtonRef,
+    auditHistory,
+  } = useInventoryAudit({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory });
 
   // PC: 리포트 대시보드, 모바일: 기존 실사 입력 UI
   if (!isMobileViewport) {
@@ -1035,148 +772,15 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           })}
         </div>
 
-        {/* 실사 이력 모달 */}
-        {showHistory && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => onCloseHistory?.()}>
-            <div
-              ref={historyModalRef}
-              className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="audit-history-title"
-              aria-describedby="audit-history-desc"
-            >
-              {/* 헤더 */}
-              <div className="px-7 pt-6 pb-5 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
-                <div>
-                  <h3 id="audit-history-title" className="text-xl font-bold text-slate-900">실사 이력 조회</h3>
-                  <p id="audit-history-desc" className="text-sm text-slate-400 mt-0.5 tabular-nums">{groupedHistory.length}회의 실사 이력</p>
-                </div>
-                <button
-                  ref={historyCloseButtonRef}
-                  onClick={onCloseHistory}
-                  aria-label="닫기"
-                  className="p-2 border-2 border-slate-200 hover:border-slate-400 rounded-full transition-colors text-slate-400 hover:text-slate-700"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-
-              {/* 테이블 */}
-              <div className="flex-1 overflow-y-auto">
-                {groupedHistory.length > 0 ? (
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
-                      <tr>
-                        <th className="px-7 py-3 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wide">실사일</th>
-                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">시스템</th>
-                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">실제</th>
-                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">오차</th>
-                        <th className="px-4 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">담당자</th>
-                        <th className="px-7 py-3 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wide">상세</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {groupedHistory.map(([key, group]) => {
-                        const isExpanded = expandedAuditKeys.has(key);
-                        const mismatchOnly = group.items.filter(h => h.difference !== 0);
-                        const isAllMatch = mismatchOnly.length === 0;
-                        const totalDiff = group.items.reduce((s, h) => s + h.difference, 0);
-                        const localTime = new Date(group.createdAt);
-                        const timeStr = localTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-                        const dateStr = localTime.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                        return (
-                          <React.Fragment key={key}>
-                            <tr className="hover:bg-slate-50 transition-colors">
-                              <td className="px-7 py-4">
-                                <span className="font-semibold text-slate-800">{dateStr}</span>
-                                <span className="text-xs text-slate-400 ml-2">{timeStr}</span>
-                              </td>
-                              {isAllMatch ? (
-                                <>
-                                  <td colSpan={2} className="px-4 py-4 text-center">
-                                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">전 품목 일치</span>
-                                  </td>
-                                  <td className="px-4 py-4 text-center">
-                                    <span className="text-sm font-bold text-slate-300">0</span>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="px-4 py-4 text-center font-semibold text-slate-600 tabular-nums">{mismatchOnly.reduce((s, h) => s + h.systemStock, 0)}</td>
-                                  <td className="px-4 py-4 text-center font-bold text-slate-900 tabular-nums">{mismatchOnly.reduce((s, h) => s + h.actualStock, 0)}</td>
-                                  <td className="px-4 py-4 text-center">
-                                    <span className={`text-sm font-bold tabular-nums ${totalDiff < 0 ? 'text-rose-500' : totalDiff > 0 ? 'text-blue-500' : 'text-slate-400'}`}>
-                                      {totalDiff > 0 ? '+' : ''}{totalDiff}
-                                    </span>
-                                  </td>
-                                </>
-                              )}
-                              <td className="px-4 py-4 text-center text-sm text-slate-500">{group.performedBy || '-'}</td>
-                              <td className="px-7 py-4 text-center">
-                                {isAllMatch ? (
-                                  <span className="text-slate-300 text-sm">-</span>
-                                ) : (
-                                  <button
-                                    onClick={() => toggleExpand(key)}
-                                    className="text-sm font-semibold text-indigo-500 hover:text-indigo-700 transition-colors"
-                                  >
-                                    {isExpanded ? '접기' : '보기'}
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-
-                            {/* 상세 확장 행 */}
-                            {isExpanded && !isAllMatch && (
-                              <tr>
-                                <td colSpan={6} className="px-7 pb-4 pt-0 bg-slate-50/60">
-                                  <table className="w-full text-left border-collapse">
-                                    <thead>
-                                      <tr className="border-b border-slate-200">
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">브랜드</th>
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">규격</th>
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">시스템</th>
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">실제</th>
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide text-center">오차</th>
-                                        <th className="py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">사유</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {mismatchOnly.map(h => (
-                                        <tr key={h.id}>
-                                          <td className="py-2.5 pr-4 text-sm font-semibold text-slate-700">{h.brand}</td>
-                                          <td className="py-2.5 pr-4 text-sm text-slate-500">{h.size}</td>
-                                          <td className="py-2.5 text-sm text-slate-500 text-center tabular-nums">{h.systemStock}</td>
-                                          <td className="py-2.5 text-sm font-bold text-slate-900 text-center tabular-nums">{h.actualStock}</td>
-                                          <td className="py-2.5 text-center">
-                                            <span className={`text-sm font-bold tabular-nums ${h.difference < 0 ? 'text-rose-500' : h.difference > 0 ? 'text-blue-500' : 'text-slate-400'}`}>
-                                              {h.difference > 0 ? '+' : ''}{h.difference}
-                                            </span>
-                                          </td>
-                                          <td className="py-2.5 text-sm text-slate-400">{h.reason || '-'}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="py-20 text-center">
-                    <p className="text-sm text-slate-400">실사 이력이 없습니다.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <AuditHistoryModal
+          show={!!showHistory}
+          modalRef={historyModalRef}
+          closeButtonRef={historyCloseButtonRef}
+          groupedHistory={groupedHistory}
+          expandedAuditKeys={expandedAuditKeys}
+          onClose={() => onCloseHistory?.()}
+          onToggleExpand={toggleExpand}
+        />
 
         {/* 실사 결과 모달 */}
         {showAuditSummary && (
