@@ -1,18 +1,18 @@
-import React, { lazy } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
 import PlanLimitToast, { LimitType } from '../PlanLimitToast';
 import ReadOnlyBanner from '../ReadOnlyBanner';
-import DashboardOverview from '../DashboardOverview';
 import FeatureGate from '../FeatureGate';
 import RawDataUploadGuide from '../RawDataUploadGuide';
-import DashboardInventoryMasterSection from './DashboardInventoryMasterSection';
 /* Lazy-loaded tab components — loaded only when user navigates to the tab */
 const MemberManager = lazy(() => import('../MemberManager'));
 const DashboardFixtureEditSection = lazy(() => import('./DashboardFixtureEditSection'));
-import DashboardOperationalTabs from '../dashboard/DashboardOperationalTabs';
+const DashboardOverview = lazy(() => import('../DashboardOverview'));
+const DashboardInventoryMasterSection = lazy(() => import('./DashboardInventoryMasterSection'));
+const DashboardOperationalTabs = lazy(() => import('../dashboard/DashboardOperationalTabs'));
 import { ReceiptUpdate } from '../ReceiptConfirmationModal';
 
 interface FixtureEditBindings {
@@ -228,20 +228,22 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
       )}
 
       {state.dashboardTab === 'overview' && (
-        <DashboardOverview
-          inventory={state.inventory}
-          orders={state.orders}
-          surgeryMaster={state.surgeryMaster}
-          surgeryUnregisteredItems={surgeryUnregisteredItems}
-          hospitalId={state.user?.hospitalId}
-          hospitalWorkDays={state.hospitalWorkDays}
-          onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
-          planState={state.planState}
-          onboardingStep={onboardingStep}
-          onResumeOnboarding={onResumeOnboarding}
-          onSurgeryUploadClick={onSurgeryUploadClick}
-          onUpgrade={() => onOpenPaymentModal ? onOpenPaymentModal('basic') : onGoToPricing()}
-        />
+        <Suspense fallback={null}>
+          <DashboardOverview
+            inventory={state.inventory}
+            orders={state.orders}
+            surgeryMaster={state.surgeryMaster}
+            surgeryUnregisteredItems={surgeryUnregisteredItems}
+            hospitalId={state.user?.hospitalId}
+            hospitalWorkDays={state.hospitalWorkDays}
+            onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
+            planState={state.planState}
+            onboardingStep={onboardingStep}
+            onResumeOnboarding={onResumeOnboarding}
+            onSurgeryUploadClick={onSurgeryUploadClick}
+            onUpgrade={() => onOpenPaymentModal ? onOpenPaymentModal('basic') : onGoToPricing()}
+          />
+        </Suspense>
       )}
 
       {state.dashboardTab === 'member_management' && state.user && (
@@ -293,25 +295,28 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
       )}
 
       {state.dashboardTab === 'inventory_master' && (
-        <DashboardInventoryMasterSection
-          state={state}
-          setState={setState}
-          isReadOnly={isReadOnly}
-          effectivePlan={effectivePlan}
-          billableItemCount={billableItemCount}
-          virtualSurgeryData={inventoryMaster.virtualSurgeryData}
-          initialShowBaseStockEdit={inventoryMaster.initialShowBaseStockEdit}
-          onBaseStockEditApplied={inventoryMaster.onBaseStockEditApplied}
-          surgeryUnregisteredItems={surgeryUnregisteredItems}
-          applyBaseStockBatch={inventoryMaster.applyBaseStockBatch}
-          refreshLatestSurgeryUsage={inventoryMaster.refreshLatestSurgeryUsage}
-          resolveManualSurgeryInput={inventoryMaster.resolveManualSurgeryInput}
-          onAddOrder={onAddOrder}
-          onCreateReturn={onCreateReturn}
-          showAlertToast={inventoryMaster.onShowAlertToast}
-        />
+        <Suspense fallback={null}>
+          <DashboardInventoryMasterSection
+            state={state}
+            setState={setState}
+            isReadOnly={isReadOnly}
+            effectivePlan={effectivePlan}
+            billableItemCount={billableItemCount}
+            virtualSurgeryData={inventoryMaster.virtualSurgeryData}
+            initialShowBaseStockEdit={inventoryMaster.initialShowBaseStockEdit}
+            onBaseStockEditApplied={inventoryMaster.onBaseStockEditApplied}
+            surgeryUnregisteredItems={surgeryUnregisteredItems}
+            applyBaseStockBatch={inventoryMaster.applyBaseStockBatch}
+            refreshLatestSurgeryUsage={inventoryMaster.refreshLatestSurgeryUsage}
+            resolveManualSurgeryInput={inventoryMaster.resolveManualSurgeryInput}
+            onAddOrder={onAddOrder}
+            onCreateReturn={onCreateReturn}
+            showAlertToast={inventoryMaster.onShowAlertToast}
+          />
+        </Suspense>
       )}
 
+      <Suspense fallback={null}>
       <DashboardOperationalTabs
         dashboardTab={state.dashboardTab}
         user={state.user}
@@ -358,6 +363,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         stockCalcSettings={stockCalcSettings}
         onStockCalcSettingsChange={onStockCalcSettingsChange}
       />
+      </Suspense>
     </div>
   );
 };

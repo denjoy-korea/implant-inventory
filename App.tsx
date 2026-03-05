@@ -48,6 +48,8 @@ import { reviewService, ReviewType } from './services/reviewService';
 import { pageViewService } from './services/pageViewService';
 import { useInventoryCompare } from './hooks/useInventoryCompare';
 import { useFixtureEditControls } from './hooks/useFixtureEditControls';
+import { useUIState } from './hooks/useUIState';
+import { useOnboarding } from './hooks/useOnboarding';
 import { getDashboardTabTitle } from './components/dashboard/dashboardTabTitle';
 import {
   appendUnregisteredSample,
@@ -64,9 +66,6 @@ declare global {
   var __securityMaintenanceService: typeof securityMaintenanceService | undefined;
 }
 
-
-const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1360;
-const MOBILE_VIEWPORT_MAX_WIDTH = 767;
 
 const SURGERY_UPLOAD_STEPS = [
   '파일을 읽는 중...',
@@ -131,20 +130,11 @@ const App: React.FC = () => {
 
   // 후기 팝업 state
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
-  // localStorage 영속 상태 + 메모리 상태 합산 (새로고침/재로그인 후에도 유지)
-  const _obHid = state.user?.hospitalId;
-  const effectiveDismissed = onboardingDismissed || (_obHid ? onboardingService.isDismissed(_obHid) : false);
-  const onboardingAutoResumeRef = useRef<string | null>(null);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
   const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
   const [billingProgramError, setBillingProgramError] = useState('');
   const [pendingFailCandidates, setPendingFailCandidates] = useState<FailCandidate[]>([]);
-  const [forcedOnboardingStep, setForcedOnboardingStep] = useState<number | null>(null);
-  const [toastCompletedLabel, setToastCompletedLabel] = useState<string | null>(null);
-  const prevFirstIncompleteStepRef = useRef<number | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 대시보드 진입 시 후기 팝업 여부 확인
   useEffect(() => {
@@ -191,18 +181,6 @@ const App: React.FC = () => {
   const [showAuditHistory, setShowAuditHistory] = React.useState(false);
   const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
   const [autoOpenFailBulkModal, setAutoOpenFailBulkModal] = useState(false);
-  const [showOnboardingComplete, setShowOnboardingComplete] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSidebarToggleVisible, setIsSidebarToggleVisible] = useState(false);
-  const [isFinePointer, setIsFinePointer] = useState(true);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [mobileOrderNav, setMobileOrderNav] = useState<'order' | 'receipt'>('order');
-  const [dashboardHeaderHeight, setDashboardHeaderHeight] = useState(44);
-  const [isOffline, setIsOffline] = useState<boolean>(() => (
-    typeof navigator !== 'undefined' ? !navigator.onLine : false
-  ));
 
   // 초대 토큰 상태
   const [inviteInfo, setInviteInfo] = React.useState<{
@@ -292,7 +270,23 @@ const App: React.FC = () => {
   const showStandardDashboardHeader = state.currentView === 'dashboard'
     && !requiresBillingProgramSetup
     && !(isSystemAdmin && state.adminViewMode !== 'user');
-  const showMobileDashboardNav = showDashboardSidebar && showStandardDashboardHeader && isNarrowViewport;
+  const {
+    isSidebarCollapsed, setIsSidebarCollapsed,
+    isSidebarToggleVisible, setIsSidebarToggleVisible,
+    isFinePointer,
+    isNarrowViewport,
+    isMobileMenuOpen, setIsMobileMenuOpen,
+    mobileOrderNav, setMobileOrderNav,
+    dashboardHeaderHeight,
+    isOffline,
+    showMobileDashboardNav,
+  } = useUIState({
+    showDashboardSidebar,
+    showStandardDashboardHeader,
+    dashboardHeaderRef,
+    dashboardTab: state.dashboardTab,
+  });
+
   const isPublicBottomNavView =
     state.currentView === 'landing' ||
     state.currentView === 'value' ||
@@ -336,124 +330,7 @@ const App: React.FC = () => {
     pageViewService.track(state.currentView);
   }, [state.currentView]);
 
-  // sticky 섹션들이 참조할 대시보드 헤더 높이 동기화
-  useEffect(() => {
-    if (!showStandardDashboardHeader) return;
-
-    const headerEl = dashboardHeaderRef.current;
-    if (!headerEl) return;
-
-    const syncHeaderHeight = () => {
-      const measured = Math.round(headerEl.getBoundingClientRect().height);
-      if (measured > 0) {
-        setDashboardHeaderHeight(prev => (prev === measured ? prev : measured));
-      }
-    };
-
-    syncHeaderHeight();
-    window.addEventListener('resize', syncHeaderHeight);
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(syncHeaderHeight);
-      observer.observe(headerEl);
-    }
-
-    return () => {
-      window.removeEventListener('resize', syncHeaderHeight);
-      observer?.disconnect();
-    };
-  }, [showStandardDashboardHeader, state.dashboardTab]);
-
-  useEffect(() => {
-    if (!showDashboardSidebar) {
-      setIsMobileViewport(false);
-      setIsMobileMenuOpen(false);
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`);
-    const syncViewport = () => {
-      const isMobile = mediaQuery.matches;
-      setIsMobileViewport(isMobile);
-      if (!isMobile) {
-        setIsMobileMenuOpen(false);
-      }
-    };
-
-    syncViewport();
-    mediaQuery.addEventListener('change', syncViewport);
-    return () => mediaQuery.removeEventListener('change', syncViewport);
-  }, [showDashboardSidebar]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const syncNetworkStatus = () => setIsOffline(!window.navigator.onLine);
-    syncNetworkStatus();
-    window.addEventListener('online', syncNetworkStatus);
-    window.addEventListener('offline', syncNetworkStatus);
-    return () => {
-      window.removeEventListener('online', syncNetworkStatus);
-      window.removeEventListener('offline', syncNetworkStatus);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!showMobileDashboardNav || !isMobileMenuOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [showMobileDashboardNav, isMobileMenuOpen]);
-
-  // 터치 환경에서는 hover가 없으므로 사이드바 열기 버튼을 항상 노출
-  useEffect(() => {
-    if (!showDashboardSidebar) return;
-    const mediaQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
-    const syncPointerMode = () => setIsFinePointer(mediaQuery.matches);
-
-    syncPointerMode();
-    mediaQuery.addEventListener('change', syncPointerMode);
-    return () => mediaQuery.removeEventListener('change', syncPointerMode);
-  }, [showDashboardSidebar]);
-
-  // 화면이 좁아지면 사이드바 자동 접기
-  useEffect(() => {
-    if (!showDashboardSidebar) {
-      setIsSidebarToggleVisible(false);
-      setIsNarrowViewport(false);
-      return;
-    }
-
-    const syncSidebarForViewport = () => {
-      const isNarrow = window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_WIDTH;
-      setIsNarrowViewport(isNarrow);
-      if (isNarrow) {
-        setIsSidebarCollapsed(true);
-      }
-    };
-
-    syncSidebarForViewport();
-    window.addEventListener('resize', syncSidebarForViewport);
-    return () => window.removeEventListener('resize', syncSidebarForViewport);
-  }, [showDashboardSidebar]);
-
-  // Notion 스타일 단축키: Ctrl/Cmd + \
-  useEffect(() => {
-    if (!showDashboardSidebar) return;
-
-    const handleSidebarShortcut = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key !== '\\') return;
-      event.preventDefault();
-      setIsSidebarCollapsed(prev => !prev);
-      setIsSidebarToggleVisible(false);
-    };
-
-    window.addEventListener('keydown', handleSidebarShortcut);
-    return () => window.removeEventListener('keydown', handleSidebarShortcut);
-  }, [showDashboardSidebar]);
+  // ↑ Viewport / sidebar / network 상태는 hooks/useUIState.ts로 이동됨
 
   /** 플랜 품목 수 계산 시 수술중교환_ / 보험청구 제외 */
   const countBillableItems = useCallback((items: InventoryItem[]) => {
@@ -490,99 +367,30 @@ const App: React.FC = () => {
     return null;
   }, [state.planState, billableItemCount, failOrderCount]);
 
-  // 7단계 기준 첫 번째 미완료 단계 계산 (뷰/탭 조건 없이 순수 진행 상태만)
-  // ⚠️ IIFE 유지 필수: onboardingService.mark*() 는 localStorage 기록이라 React deps에 포함 불가.
-  //    useMemo로 바꾸면 mark* 호출 직후 재렌더 시 캐시된 이전 값을 반환해 wizard가 재등장함.
-  const firstIncompleteStep = (() => {
-    if (requiresBillingProgramSetup) return null;
-    if (state.user?.status !== 'active') return null;
-    const hid = state.user?.hospitalId ?? '';
-    // Step 1은 localStorage만 체크 — DB 로딩 완료 전에도 즉시 표시 가능
-    if (!onboardingService.isWelcomeSeen(hid)) return 1;
-    // 이후 단계는 DB 데이터 필요 → 로딩 완료 후 체크
-    if (state.isLoading) return null;
-    if (!onboardingService.isFixtureDownloaded(hid)) return 2;
-    // Step 3: 로딩 완료 후 재고가 비어있으면 데이터 초기화된 것 → 항상 step 3
-    if (state.inventory.length === 0) return 3;
-    if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
-    const hasSurgery = Object.values(state.surgeryMaster).some(rows => rows.length > 0);
-    if (!hasSurgery) return 5;
-    if (!onboardingService.isInventoryAuditSeen(hid)) return 6;
-    if (!onboardingService.isFailAuditDone(hid)) return 7;
-    return null;
-  })();
-
-  const onboardingStep = (() => {
-    if (forcedOnboardingStep !== null) return forcedOnboardingStep;
-    if (effectiveDismissed) return null;
-    if (state.currentView !== 'dashboard') return null;
-    if (
-      state.dashboardTab === 'fixture_upload' ||
-      state.dashboardTab === 'fixture_edit' ||
-      state.dashboardTab === 'surgery_database' ||
-      state.dashboardTab === 'fail_management' ||
-      state.dashboardTab === 'inventory_audit' ||
-      state.dashboardTab === 'inventory_master'
-    ) return null;
-    return firstIncompleteStep;
-  })();
-  const shouldShowOnboarding = onboardingStep !== null;
-
-  const ONBOARDING_STEP_PROGRESS: Record<number, number> = { 1: 0, 2: 15, 3: 15, 4: 30, 5: 50, 6: 70, 7: 85 };
-  const showOnboardingToast = (
-    state.currentView === 'dashboard' &&
-    firstIncompleteStep !== null &&
-    !shouldShowOnboarding
-  );
-  const onboardingProgress = firstIncompleteStep ? (ONBOARDING_STEP_PROGRESS[firstIncompleteStep] ?? 0) : 100;
-
-  // Step 5→6 전환 감지: surgery_database 탭에서 직접 업로드 완료 후 토스트에 피드백
-  useEffect(() => {
-    const prev = prevFirstIncompleteStepRef.current;
-    prevFirstIncompleteStepRef.current = firstIncompleteStep;
-    if (prev === 5 && firstIncompleteStep === 6 && showOnboardingToast) {
-      setToastCompletedLabel('수술기록 업로드 완료');
-      if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = setTimeout(() => setToastCompletedLabel(null), 2500);
-    }
-  }, [firstIncompleteStep, showOnboardingToast]);
-
-  // 병원/사용자 컨텍스트가 바뀌면 세션 자동 재개 상태를 초기화
-  useEffect(() => {
-    const hid = state.user?.hospitalId ?? null;
-    if (!hid) {
-      onboardingAutoResumeRef.current = null;
-      return;
-    }
-    if (onboardingAutoResumeRef.current && onboardingAutoResumeRef.current !== hid) {
-      onboardingAutoResumeRef.current = null;
-    }
-  }, [state.user?.hospitalId]);
-
-  // 새로고침/재로그인 후 대시보드 진입 시 미완료 온보딩을 중앙에서 즉시 재개
-  useEffect(() => {
-    if (state.currentView !== 'dashboard') return;
-    if (state.isLoading) return;
-    if (!state.user?.hospitalId) return;
-    if (!firstIncompleteStep) return;
-    if (requiresBillingProgramSetup) return;
-    if (state.user.status !== 'active') return;
-    if (onboardingAutoResumeRef.current === state.user.hospitalId) return;
-
-    if (onboardingService.isSnoozed(state.user.hospitalId)) return;
-
-    onboardingAutoResumeRef.current = state.user.hospitalId;
-    onboardingService.clearDismissed(state.user.hospitalId);
-    setOnboardingDismissed(false);
-    setForcedOnboardingStep(firstIncompleteStep);
-  }, [
+  // 온보딩 상태는 hooks/useOnboarding.ts로 이동됨
+  const {
+    onboardingDismissed,
+    setOnboardingDismissed,
+    forcedOnboardingStep,
+    setForcedOnboardingStep,
+    toastCompletedLabel,
+    showOnboardingComplete,
+    setShowOnboardingComplete,
     firstIncompleteStep,
+    onboardingStep,
+    shouldShowOnboarding,
+    showOnboardingToast,
+    onboardingProgress,
+  } = useOnboarding({
+    user: state.user,
+    isLoading: state.isLoading,
+    currentView: state.currentView,
+    dashboardTab: state.dashboardTab,
+    inventoryLength: state.inventory.length,
+    surgeryMaster: state.surgeryMaster,
     requiresBillingProgramSetup,
-    state.currentView,
-    state.isLoading,
-    state.user?.hospitalId,
-    state.user?.status,
-  ]);
+    planState: state.planState,
+  });
 
   // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
