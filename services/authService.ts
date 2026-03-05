@@ -91,7 +91,16 @@ async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
 
     await Promise.all(tasks);
     if (Object.keys(updates).length > 0) {
-      await supabase.from('profiles').update(updates).eq('id', profile.id);
+      // H-5: DB-level guard — cross-tab 동시 암호화 시 이중 암호화 방지
+      // 탭 A가 먼저 암호화 완료하면 탭 B의 업데이트는 WHERE 조건 불일치로 no-op
+      const q = supabase.from('profiles').update(updates).eq('id', profile.id);
+      if (updates.name) {
+        await q.not('name', 'like', 'ENCv2:%').not('name', 'like', 'ENC:%');
+      } else if (updates.email) {
+        await q.not('email', 'like', 'ENCv2:%').not('email', 'like', 'ENC:%');
+      } else {
+        await q; // hash-only 업데이트는 멱등성 있음 — 조건 없이 실행
+      }
     }
   } catch (e) {
     console.warn('[authService] lazyEncryptProfile failed:', e);
