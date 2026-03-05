@@ -12,6 +12,20 @@ import {
 import { UNLIMITED_DAYS } from '../constants';
 import { getTrialDurationDays } from '../utils/trialPolicy';
 
+function resolveIsTestPayment(): boolean {
+  // 기본값은 테스트(true). 실결제 전환 시 VITE_PAYMENT_LIVE_MODE=true로 반전.
+  const liveMode = String(import.meta.env.VITE_PAYMENT_LIVE_MODE ?? '').trim().toLowerCase();
+  return liveMode !== 'true';
+}
+
+function isMissingIsTestPaymentColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : '';
+  return message.includes('is_test_payment');
+}
+
 export const planService = {
   /** 병원의 플랜 상태 조회 */
   async getHospitalPlan(hospitalId: string): Promise<HospitalPlanState> {
@@ -277,8 +291,34 @@ export const planService = {
     const price = billingCycle === 'yearly'
       ? PLAN_PRICING[plan].yearlyPrice * 12
       : PLAN_PRICING[plan].monthlyPrice;
+    const isTestPayment = resolveIsTestPayment();
 
-    const { data, error } = await supabase
+    const primary = await supabase
+      .from('billing_history')
+      .insert({
+        hospital_id: hospitalId,
+        plan,
+        billing_cycle: billingCycle,
+        amount: price,
+        is_test_payment: isTestPayment,
+        payment_status: 'pending',
+        payment_method: 'payment_teacher',
+        created_by: createdBy || null,
+      })
+      .select('id')
+      .single();
+
+    if (!primary.error && primary.data?.id) {
+      return primary.data.id as string;
+    }
+
+    if (!isMissingIsTestPaymentColumnError(primary.error)) {
+      console.error('[planService] createBillingRecord failed:', primary.error);
+      return null;
+    }
+
+    // Backward compatibility: migration 미적용 환경에서는 컬럼 없이 insert
+    const fallback = await supabase
       .from('billing_history')
       .insert({
         hospital_id: hospitalId,
@@ -292,25 +332,39 @@ export const planService = {
       .select('id')
       .single();
 
-    if (error) {
-      console.error('[planService] createBillingRecord failed:', error);
+    if (fallback.error || !fallback.data?.id) {
+      console.error('[planService] createBillingRecord fallback failed:', fallback.error);
       return null;
     }
-    return data?.id || null;
+
+    console.warn('[planService] billing_history is_test_payment column missing; fallback insert executed.');
+    return fallback.data.id as string;
   },
 
   /** 구독 해지 (즉시 Free 다운그레이드) */
   async cancelSubscription(hospitalId: string): Promise<boolean> {
     const result = await this.changePlan(hospitalId, 'free', 'monthly');
     if (result) {
-      await supabase.from('billing_history').insert({
+      const primary = await supabase.from('billing_history').insert({
         hospital_id: hospitalId,
         plan: 'free',
         amount: 0,
+        is_test_payment: true,
         payment_status: 'completed',
         payment_method: 'self_cancel',
         description: '사용자 구독 해지',
       });
+
+      if (primary.error && isMissingIsTestPaymentColumnError(primary.error)) {
+        await supabase.from('billing_history').insert({
+          hospital_id: hospitalId,
+          plan: 'free',
+          amount: 0,
+          payment_status: 'completed',
+          payment_method: 'self_cancel',
+          description: '사용자 구독 해지',
+        });
+      }
     }
     return result;
   },

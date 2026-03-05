@@ -26,3 +26,4 @@
 
 - preflight 로그: `docs/04-report/weekly-ops-preflight-2026-03-05.md`
 - 블로커 해제 계획: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-plan-2026-03-05.md`
+- 실결제 전환 준비 실행: `docs/04-report/payment-live-prep-execution-2026-03-06.md`

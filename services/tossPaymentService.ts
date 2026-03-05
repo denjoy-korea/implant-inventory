@@ -35,6 +35,72 @@ const TOSS_SDK_URL = 'https://js.tosspayments.com/v1/payment';
 
 let sdkLoadPromise: Promise<void> | null = null;
 
+function resolveIsTestPayment(): boolean {
+  // 실결제 전환 전에는 기본값(true) 유지. 전환 시 VITE_PAYMENT_LIVE_MODE=true로 반전.
+  const liveMode = String(import.meta.env.VITE_PAYMENT_LIVE_MODE ?? '').trim().toLowerCase();
+  return liveMode !== 'true';
+}
+
+function isMissingIsTestPaymentColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : '';
+  return message.includes('is_test_payment');
+}
+
+async function createBillingRecordWithCompatibility(params: {
+  hospitalId: string;
+  plan: PlanType;
+  billingCycle: BillingCycle;
+  totalAmount: number;
+  paymentMethod: 'card' | 'transfer';
+  isTestPayment: boolean;
+}): Promise<{ billingId: string | null; error: unknown }> {
+  const primary = await supabase
+    .from('billing_history')
+    .insert({
+      hospital_id: params.hospitalId,
+      plan: params.plan,
+      billing_cycle: params.billingCycle,
+      amount: params.totalAmount,
+      is_test_payment: params.isTestPayment,
+      payment_status: 'pending',
+      payment_method: params.paymentMethod,
+    })
+    .select('id')
+    .single();
+
+  if (!primary.error && primary.data?.id) {
+    return { billingId: primary.data.id as string, error: null };
+  }
+
+  if (!isMissingIsTestPaymentColumnError(primary.error)) {
+    return { billingId: null, error: primary.error };
+  }
+
+  // Backward compatibility: migration 미적용 환경에서는 컬럼 없이 insert
+  const fallback = await supabase
+    .from('billing_history')
+    .insert({
+      hospital_id: params.hospitalId,
+      plan: params.plan,
+      billing_cycle: params.billingCycle,
+      amount: params.totalAmount,
+      payment_status: 'pending',
+      payment_method: params.paymentMethod,
+    })
+    .select('id')
+    .single();
+
+  if (fallback.error || !fallback.data?.id) {
+    return { billingId: null, error: fallback.error };
+  }
+
+  console.warn('[tossPaymentService] billing_history is_test_payment column missing; fallback insert executed.');
+  return { billingId: fallback.data.id as string, error: null };
+}
+
 async function loadTossSdk(): Promise<void> {
   if (window.TossPayments) return;
   if (sdkLoadPromise) return sdkLoadPromise;
@@ -111,27 +177,22 @@ export const tossPaymentService = {
 
     // 1. 금액 계산 (VAT 포함)
     const totalAmount = this.calcTotalAmount(plan, billingCycle);
+    const isTestPayment = resolveIsTestPayment();
 
     // 2. billing_history 레코드 생성
-    const { data, error: dbError } = await supabase
-      .from('billing_history')
-      .insert({
-        hospital_id: hospitalId,
-        plan,
-        billing_cycle: billingCycle,
-        amount: totalAmount,
-        payment_status: 'pending',
-        payment_method: paymentMethod,
-      })
-      .select('id')
-      .single();
+    const { billingId, error: dbError } = await createBillingRecordWithCompatibility({
+      hospitalId,
+      plan,
+      billingCycle,
+      totalAmount,
+      paymentMethod,
+      isTestPayment,
+    });
 
-    if (dbError || !data?.id) {
+    if (dbError || !billingId) {
       console.error('[tossPaymentService] billing_history insert failed:', dbError);
       return { error: '결제 이력 생성 실패. 다시 시도해주세요.' };
     }
-
-    const billingId: string = data.id;
 
     // 3. TossPayments SDK 로드
     try {

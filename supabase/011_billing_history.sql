@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS billing_history (
   plan TEXT NOT NULL,
   billing_cycle TEXT CHECK (billing_cycle IS NULL OR billing_cycle IN ('monthly', 'yearly')),
   amount INTEGER NOT NULL DEFAULT 0,
+  is_test_payment BOOLEAN NOT NULL DEFAULT TRUE,
   payment_method TEXT DEFAULT 'payment_teacher',
   payment_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (payment_status IN ('pending', 'completed', 'failed', 'cancelled')),
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS billing_history (
 CREATE INDEX IF NOT EXISTS idx_billing_history_hospital ON billing_history(hospital_id);
 CREATE INDEX IF NOT EXISTS idx_billing_history_status ON billing_history(payment_status);
 CREATE INDEX IF NOT EXISTS idx_billing_history_created ON billing_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_history_test_flag ON billing_history(is_test_payment, created_at DESC);
 
 -- updated_at 트리거
 CREATE TRIGGER billing_history_updated_at

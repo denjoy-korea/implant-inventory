@@ -34,6 +34,53 @@ function calcCanonicalAmount(plan: string, billingCycle: string): number | null 
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
 
+type BillingRow = {
+  hospital_id: string;
+  payment_status: string;
+  plan: string;
+  billing_cycle: string;
+  is_test_payment: boolean;
+};
+
+async function fetchBillingRowWithCompatibility(
+  adminClient: ReturnType<typeof createClient>,
+  billingId: string,
+): Promise<{ billing: BillingRow | null; billingError: { message: string } | null }> {
+  const primary = await adminClient
+    .from("billing_history")
+    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment")
+    .eq("id", billingId)
+    .single();
+
+  if (!primary.error && primary.data) {
+    return { billing: primary.data as BillingRow, billingError: null };
+  }
+
+  const message = primary.error?.message || "";
+  if (!message.includes("is_test_payment")) {
+    return { billing: null, billingError: primary.error as { message: string } };
+  }
+
+  // Backward compatibility: migration 미적용 환경에서는 전건 test 결제로 간주
+  const fallback = await adminClient
+    .from("billing_history")
+    .select("hospital_id, payment_status, plan, billing_cycle")
+    .eq("id", billingId)
+    .single();
+
+  if (fallback.error || !fallback.data) {
+    return { billing: null, billingError: fallback.error as { message: string } };
+  }
+
+  return {
+    billing: {
+      ...(fallback.data as Omit<BillingRow, "is_test_payment">),
+      is_test_payment: true,
+    },
+    billingError: null,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
   function jsonResponse(body: unknown, status = 200): Response {
@@ -105,11 +152,7 @@ Deno.serve(async (req: Request) => {
   });
 
   // billing_history 레코드 검증 (orderId = billing_history.id)
-  const { data: billing, error: billingError } = await adminClient
-    .from("billing_history")
-    .select("hospital_id, payment_status, plan, billing_cycle")
-    .eq("id", orderId.trim())
-    .single();
+  const { billing, billingError } = await fetchBillingRowWithCompatibility(adminClient, orderId.trim());
 
   if (billingError || !billing) {
     return jsonResponse({ error: "Billing record not found" }, 404);
@@ -121,23 +164,28 @@ Deno.serve(async (req: Request) => {
     .select("hospital_id")
     .eq("id", user.id)
     .single();
-  if (!profile || profile.hospital_id !== (billing as { hospital_id: string }).hospital_id) {
+  if (!profile || profile.hospital_id !== billing.hospital_id) {
     return jsonResponse({ error: "Access denied" }, 403);
   }
 
-  if ((billing as { payment_status: string }).payment_status !== "pending") {
-    const status = (billing as { payment_status: string }).payment_status;
+  if (billing.payment_status !== "pending") {
+    const status = billing.payment_status;
     // 이미 완료된 경우: 멱등성 허용 (중복 redirect 처리)
     if (status === "completed") {
-      return jsonResponse({ ok: true, billing_id: orderId, alreadyCompleted: true });
+      return jsonResponse({
+        ok: true,
+        billing_id: orderId,
+        alreadyCompleted: true,
+        is_test_payment: billing.is_test_payment ?? true,
+      });
     }
     return jsonResponse({ error: "Billing is not pending", status }, 409);
   }
 
   // 금액 검증: plan + billing_cycle로 서버에서 정가를 독립 계산
   // billing_history.amount는 클라이언트 작성값이므로 신뢰하지 않음
-  const billingPlan = (billing as { plan: string }).plan;
-  const billingCycleVal = (billing as { billing_cycle: string }).billing_cycle;
+  const billingPlan = billing.plan;
+  const billingCycleVal = billing.billing_cycle;
   const canonicalAmount = calcCanonicalAmount(billingPlan, billingCycleVal);
 
   if (canonicalAmount === null) {
@@ -213,5 +261,10 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  return jsonResponse({ ok: true, billing_id: orderId.trim(), payment_ref: paymentRef });
+  return jsonResponse({
+    ok: true,
+    billing_id: orderId.trim(),
+    payment_ref: paymentRef,
+    is_test_payment: billing.is_test_payment ?? true,
+  });
 });

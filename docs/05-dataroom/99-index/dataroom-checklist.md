@@ -1,6 +1,6 @@
 # Data Room Checklist
 
-- 기준일: 2026-03-05 (최종 업데이트)
+- 기준일: 2026-03-06 (최종 업데이트)
 - 상태 값: `todo` | `in_progress` | `done` | `blocked`
 
 ## 1) 01~03 상업 증빙
@@ -9,7 +9,9 @@
 - [x] 가격/플랜 표기 코드 기준 정합성 반영 (`done` 2026-03-05 — Plus/Business 명칭 및 연간 월환산 가격 기준으로 정정, 구표기 제거)
 - [x] `03-refund-termination` 환불/해지 로그 작성 (`done` 2026-03-05 — 0건 기록 → `refund-termination-log.md`)
 - [x] C/B/R 원본 증빙 레저 정리 (`done` 2026-03-05 — `01-contracts/2026-03-05_contract-evidence-ledger_v1.md`, `02-billing-reconciliation/2026-03-05_billing-evidence-ledger_v1.md`, `03-refund-termination/2026-03-05_refund-termination-evidence-ledger_v1.md`)
-- [ ] MRR 계산식과 원장(raw) 일치 검증 (`blocked` — 실결제 전환 후 가능, 책임: Finance(denjoy)/Engineering(맹준호), 해제 플랜: `02-billing-reconciliation/mrr-raw-unblock-plan-2026-03-05.md`, 최신 점검: `02-billing-reconciliation/mrr-raw-unblock-check-2026-03-05.md`, 재확인 2026-03-12 KST, 재실행: `npm run report:mrr:unblock-check`)
+- [ ] MRR 계산식과 원장(raw) 일치 검증 (`blocked` — 실결제 전환 후 가능, 책임: Finance(denjoy)/Engineering(맹준호), 해제 플랜: `02-billing-reconciliation/mrr-raw-unblock-plan-2026-03-05.md`, 최신 점검: `02-billing-reconciliation/mrr-raw-unblock-check-2026-03-06.md`(`is_test_payment=false` 기준), 재확인 2026-03-12 KST, 재실행: `npm run report:mrr:unblock-check`)
+- [ ] `is_test_payment` 원격 migration 반영 (`blocked` 2026-03-06 — `SUPABASE_ACCESS_TOKEN` 미주입으로 CLI `db push --linked` 미실행)
+- [ ] GitHub Actions secret 활성화 (`blocked` 2026-03-06 — `gh auth` 토큰 무효)
 
 ## 2) 05 정책 버전
 - [x] `05-policy-versioning` 약관/개인정보처리방침 최신 버전 확정 (`done` 2026-03-04 — v1.0)

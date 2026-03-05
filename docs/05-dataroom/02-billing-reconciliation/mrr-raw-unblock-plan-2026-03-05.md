@@ -24,9 +24,15 @@
 -- 월별 청구/수금/환불 요약
 select
   date_trunc('month', created_at) as month,
-  sum(case when status = 'charged' then amount else 0 end) as charged_amount,
-  sum(case when status = 'paid' then amount else 0 end) as paid_amount,
-  sum(case when status = 'refunded' then amount else 0 end) as refunded_amount
+  sum(amount) as charged_amount,
+  sum(case when payment_status = 'completed' then amount else 0 end) as paid_amount,
+  sum(case when payment_status = 'cancelled' then amount else 0 end) as refunded_proxy_amount,
+  sum(case when payment_status = 'completed' and is_test_payment = false then amount else 0 end) as paid_live_amount,
+  count(*) filter (
+    where payment_status = 'completed'
+      and amount > 0
+      and is_test_payment = false
+  ) as paid_non_zero_live_count
 from billing_history
 group by 1
 order by 1 desc;
@@ -45,5 +51,5 @@ npm run report:mrr:unblock-check
 
 - 산출물: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-check-YYYY-MM-DD.md`
 - 판정 기준:
-  - `READY`: paid 레코드 1건 이상 (raw 대사 단계 진행)
-  - `BLOCKED`: paid 레코드 0건 (현 상태 유지)
+  - `READY`: paid(=completed) 중 `amount > 0`이며 `is_test_payment=false` 레코드 1건 이상
+  - `BLOCKED`: 위 조건 미충족 (현 상태 유지)

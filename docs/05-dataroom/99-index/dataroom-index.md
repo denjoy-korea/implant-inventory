@@ -1,7 +1,7 @@
 # Data Room Index
 
 - 작성일: 2026-03-04
-- 최종 업데이트: 2026-03-05
+- 최종 업데이트: 2026-03-06
 - 목적: 투자/파트너 검토 시 필요한 증빙의 위치와 최신 상태를 단일 문서에서 확인
 
 ## 01-contracts
@@ -13,7 +13,8 @@
 - 청구/수금 증빙 레저: `docs/05-dataroom/02-billing-reconciliation/2026-03-05_billing-evidence-ledger_v1.md` ✅
 - 대사 템플릿: `docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-template.csv`
 - MRR raw 해제 플랜: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-plan-2026-03-05.md` ⚠️
-- MRR raw 최신 점검: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-check-2026-03-05.md` ⚠️ (`BLOCKED` 유지)
+- MRR raw 최신 점검: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-check-2026-03-06.md` ⚠️ (`BLOCKED` 유지, live 기준=`is_test_payment=false`)
+- 실결제 전환 런북: `docs/04-report/payment-live-cutover-runbook-2026-03-06.md` ✅
 
 ## 03-refund-termination
 - 환불/해지 로그: `docs/05-dataroom/03-refund-termination/refund-termination-log.md` ✅ (2026-03-05 — 0건)
@@ -52,3 +53,4 @@
 - 실행 추적: `docs/05-dataroom/execution-tracker-2026-03-04.md`
 - 증빙 수집 체크리스트: `docs/05-dataroom/evidence-collection-checklist-2026-03-04.md`
 - 계획 대비 갭 분석: `docs/05-dataroom/99-index/2026-03-05_plan-gap-analysis_v1.md`
+- 자동 트리거 워크플로: `.github/workflows/mrr-unblock-auto-trigger.yml` ✅

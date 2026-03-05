@@ -199,10 +199,12 @@ export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
 
 export interface DbBillingHistory {
   id: string;
-  hospital_id: string;
+  hospital_id: string | null; // 병원 삭제 시 SET NULL (migration 20260223040000)
   plan: PlanType;
   billing_cycle: BillingCycle | null;
   amount: number;
+  /** true=test/sandbox, false=live settlement */
+  is_test_payment: boolean;
   payment_method: string;
   payment_status: PaymentStatus;
   payment_ref: string | null;
