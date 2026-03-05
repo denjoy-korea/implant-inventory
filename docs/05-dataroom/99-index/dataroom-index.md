@@ -12,6 +12,8 @@
 - 청구/수금 대사: `docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-2026-03.md` ✅ (2026-03-05 — 테스트 모드, 가격/플랜 정합성 반영)
 - 청구/수금 증빙 레저: `docs/05-dataroom/02-billing-reconciliation/2026-03-05_billing-evidence-ledger_v1.md` ✅
 - 대사 템플릿: `docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-template.csv`
+- MRR raw 해제 플랜: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-plan-2026-03-05.md` ⚠️
+- MRR raw 최신 점검: `docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-check-2026-03-05.md` ⚠️ (`BLOCKED` 유지)
 
 ## 03-refund-termination
 - 환불/해지 로그: `docs/05-dataroom/03-refund-termination/refund-termination-log.md` ✅ (2026-03-05 — 0건)
@@ -22,7 +24,10 @@
 - verify:release Green: `docs/05-dataroom/04-security-operations/verify-release-log-2026-03-05.md` ✅
 - 보안 운영 주간 업데이트: `docs/05-dataroom/04-security-operations/2026-03-05_security-operations-weekly-update_v1.md` ✅
 - 보안 운영 증빙 최신화 패키지: `docs/05-dataroom/04-security-operations/2026-03-05_security-operations-evidence-refresh_v1.md` ✅
-- 이전 보안 운영 증빙: `docs/05-dataroom/04-security-operations/2026-03-04_*`
+- 이전 보안 운영 증빙:
+  - `docs/05-dataroom/04-security-operations/2026-03-04_security_verify-release-run_v1.md`
+  - `docs/05-dataroom/04-security-operations/2026-03-04_security_rls-policy-index_v1.md`
+  - `docs/05-dataroom/04-security-operations/2026-03-04_security_incident-history_v1.md`
 
 ## 05-policy-versioning
 - 이용약관 v1.0: `docs/05-dataroom/05-policy-versioning/2026-03-04_terms-of-service_v1.md` ✅
@@ -44,3 +49,4 @@
 - 체크리스트: `docs/05-dataroom/99-index/dataroom-checklist.md`
 - 실행 추적: `docs/05-dataroom/execution-tracker-2026-03-04.md`
 - 증빙 수집 체크리스트: `docs/05-dataroom/evidence-collection-checklist-2026-03-04.md`
+- 계획 대비 갭 분석: `docs/05-dataroom/99-index/2026-03-05_plan-gap-analysis_v1.md`

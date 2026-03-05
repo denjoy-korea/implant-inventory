@@ -16,7 +16,10 @@ npm run report:traffic:coverage
 ## 운영 규칙
 1. 매일 KST 23:50~23:59 사이 1회 실행
 2. 실패 시 다음날 오전 09:30 이전 재실행
-3. 월간 리포트 작성 전 커버리지 기준(`28일 중 27일`) 충족 확인
+3. 커버리지 임계값은 출시 경과일 기반 동적 기준으로 판정한다
+   - 규칙: `minRequired = clamp(daysSinceLaunch, 7, 27)`
+   - 초기 운영 구간: 7/28 이상
+   - 성숙 운영 구간: 27/28 기준
 
 ## 실패 대응
 1. `.env.local`에 `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 확인

@@ -46,13 +46,7 @@ jobs:
 
       - name: Check snapshot coverage
         run: |
-          # 서비스 출시일(2026-02-25) 기준 경과 일수 계산 → 동적 임계값
-          LAUNCH="2026-02-25"
-          DAYS_SINCE=$(( ( $(date -u +%s) - $(date -u -d "$LAUNCH" +%s 2>/dev/null || date -u -j -f '%Y-%m-%d' "$LAUNCH" +%s) ) / 86400 ))
-          # 최소 7일, 최대 27일 (28일 윈도우 기준)
-          MIN_REQUIRED=$(( DAYS_SINCE < 7 ? 7 : (DAYS_SINCE > 27 ? 27 : DAYS_SINCE) ))
-          echo "서비스 경과 ${DAYS_SINCE}일 → 커버리지 임계값: ${MIN_REQUIRED}일/28일"
-          node scripts/traffic-snapshot-coverage.mjs 28 "$MIN_REQUIRED"
+          node scripts/traffic-snapshot-coverage-auto.mjs 28 --launch-date=2026-02-25
 
       - name: Commit snapshot
         run: |

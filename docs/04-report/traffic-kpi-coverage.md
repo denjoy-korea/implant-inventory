@@ -1,6 +1,6 @@
 # Traffic Snapshot Coverage
 
-- 생성시각(KST): 2026-03-05T22:55:43.184+09:00
+- 생성시각(KST): 2026-03-05T23:14:42.978+09:00
 - 대상 디렉터리: `/Users/mac/Downloads/Projects/implant-inventory/docs/04-report/traffic-kpi-daily`
 - 기준일(KST): 2026-03-05
 - 검사 구간: 최근 28일
