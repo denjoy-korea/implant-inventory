@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireAuth, createAdminClient } from "../_shared/authUtils.ts";
+import { jsonOk, jsonError } from "../_shared/responseUtils.ts";
+
+const PLAN_MAX_USERS: Record<string, number> = {
+  free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
+};
 
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
@@ -10,44 +15,21 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    // service role 클라이언트: RLS 우회하여 invitation 처리
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
     // SEC-02: 요청자 JWT 검증 — 인증된 사용자만 초대 수락 가능
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "인증이 필요합니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user: callerUser }, error: authError } = await anonClient.auth.getUser();
-    if (authError || !callerUser) {
-      return new Response(
-        JSON.stringify({ error: "인증에 실패했습니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const auth = await requireAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const callerUser = auth.user;
+
+    const supabase = createAdminClient();
 
     const { token, userId } = await req.json();
     if (!token || !userId) {
-      return new Response(
-        JSON.stringify({ error: "token과 userId는 필수입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("token과 userId는 필수입니다.", 400, corsHeaders);
     }
 
     // SEC-02: 요청 body의 userId가 JWT 토큰의 실제 사용자와 일치하는지 검증
     if (userId !== callerUser.id) {
-      return new Response(
-        JSON.stringify({ error: "권한이 없습니다." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("권한이 없습니다.", 403, corsHeaders);
     }
 
     // 유효한 초대 조회
@@ -60,10 +42,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (inviteError || !invitation) {
-      return new Response(
-        JSON.stringify({ error: "유효하지 않거나 만료된 초대입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("유효하지 않거나 만료된 초대입니다.", 400, corsHeaders);
     }
 
     // 병원 플랜 조회 후 최대 사용자 수 적용
@@ -73,10 +52,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", invitation.hospital_id)
       .single();
 
-    const PLAN_MAX_USERS: Record<string, number> = {
-      free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
-    };
-    const maxUsers = PLAN_MAX_USERS[hospital?.plan ?? 'free'] ?? 1;
+    const maxUsers = PLAN_MAX_USERS[hospital?.plan ?? "free"] ?? 1;
 
     // 현재 활성 멤버 수 확인
     const { count: memberCount } = await supabase
@@ -86,14 +62,10 @@ Deno.serve(async (req: Request) => {
       .eq("status", "active");
 
     if (maxUsers !== Infinity && (memberCount ?? 0) >= maxUsers) {
-      return new Response(
-        JSON.stringify({ error: `병원의 최대 구성원 수(${maxUsers}명)에 도달했습니다.` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError(`병원의 최대 구성원 수(${maxUsers}명)에 도달했습니다.`, 400, corsHeaders);
     }
 
     // profiles 업데이트: hospital_id 연결 + role 설정 + status=active
-    // (초대받은 사람은 바로 active — 관리자가 초대한 것이므로 승인 불필요)
     const { data: updatedRows, error: profileError } = await supabase
       .from("profiles")
       .update({
@@ -108,10 +80,7 @@ Deno.serve(async (req: Request) => {
 
     if (profileError) {
       console.error("profile update error:", profileError);
-      return new Response(
-        JSON.stringify({ error: "프로필 업데이트에 실패했습니다." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("프로필 업데이트에 실패했습니다.", 500, corsHeaders);
     }
 
     // 프로필이 아직 생성되지 않은 경우 (signUp trigger 지연) — upsert로 재시도
@@ -131,10 +100,7 @@ Deno.serve(async (req: Request) => {
 
       if (upsertError) {
         console.error("profile upsert error:", upsertError);
-        return new Response(
-          JSON.stringify({ error: "프로필 업데이트에 실패했습니다." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonError("프로필 업데이트에 실패했습니다.", 500, corsHeaders);
       }
     }
 
@@ -160,19 +126,13 @@ Deno.serve(async (req: Request) => {
       // 프로필은 이미 업데이트됐으므로 경고만
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        hospitalId: invitation.hospital_id,
-        message: "초대 수락이 완료되었습니다.",
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonOk({
+      success: true,
+      hospitalId: invitation.hospital_id,
+      message: "초대 수락이 완료되었습니다.",
+    }, corsHeaders);
   } catch (err) {
     console.error("accept-invite error:", err);
-    return new Response(
-      JSON.stringify({ error: "서버 오류가 발생했습니다." }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonError("서버 오류가 발생했습니다.", 500, corsHeaders);
   }
 });

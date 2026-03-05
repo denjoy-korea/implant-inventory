@@ -1,58 +1,33 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireAuth, createAdminClient } from "../_shared/authUtils.ts";
+import { jsonOk, jsonError } from "../_shared/responseUtils.ts";
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
-    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const corsHeaders = getCorsHeaders(req);
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "인증이 필요합니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     // 호출자 확인
-    const authClient = createClient(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user: caller }, error: callerError } = await authClient.auth.getUser();
-    if (callerError || !caller) {
-      return new Response(
-        JSON.stringify({ error: "유효하지 않은 인증입니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const auth = await requireAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const caller = auth.user;
 
     const { targetUserId } = await req.json();
     if (!targetUserId) {
-      return new Response(
-        JSON.stringify({ error: "targetUserId는 필수입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("targetUserId는 필수입니다.", 400, corsHeaders);
     }
 
     // 자기 자신 삭제 방지
     if (targetUserId === caller.id) {
-      return new Response(
-        JSON.stringify({ error: "자신의 계정은 삭제할 수 없습니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("자신의 계정은 삭제할 수 없습니다.", 400, corsHeaders);
     }
 
     // service role 클라이언트
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createAdminClient();
 
     // 호출자가 admin 역할인지 확인
     const { data: callerProfile } = await supabase
@@ -62,10 +37,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (callerProfile?.role !== "admin") {
-      return new Response(
-        JSON.stringify({ error: "시스템 운영자만 회원을 삭제할 수 있습니다." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("시스템 운영자만 회원을 삭제할 수 있습니다.", 403, corsHeaders);
     }
 
     // 대상 유저도 admin이면 삭제 불가
@@ -76,10 +48,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (targetProfile?.role === "admin") {
-      return new Response(
-        JSON.stringify({ error: "운영자 계정은 삭제할 수 없습니다." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("운영자 계정은 삭제할 수 없습니다.", 403, corsHeaders);
     }
 
     // 감사 로그를 삭제 전에 기록 (hospital CASCADE 삭제 후엔 FK 위반으로 INSERT 불가)
@@ -139,21 +108,12 @@ Deno.serve(async (req: Request) => {
     const { error: deleteError } = await supabase.auth.admin.deleteUser(targetUserId);
     if (deleteError) {
       console.error("deleteUser error:", deleteError);
-      return new Response(
-        JSON.stringify({ error: "계정 삭제에 실패했습니다." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("계정 삭제에 실패했습니다.", 500, corsHeaders);
     }
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonOk({ success: true }, corsHeaders);
   } catch (err) {
     console.error("admin-delete-user error:", err);
-    return new Response(
-      JSON.stringify({ error: "서버 오류가 발생했습니다." }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonError("서버 오류가 발생했습니다.", 500, corsHeaders);
   }
 });

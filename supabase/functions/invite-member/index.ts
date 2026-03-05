@@ -1,53 +1,36 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireAuth, createAdminClient } from "../_shared/authUtils.ts";
+import { jsonOk, jsonError } from "../_shared/responseUtils.ts";
+
+const VALID_CLINIC_ROLES = ["director", "manager", "team_lead", "staff"];
+
+const PLAN_MAX_USERS: Record<string, number> = {
+  free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
+};
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
-    const corsHeaders = getCorsHeaders(req);
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const corsHeaders = getCorsHeaders(req);
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
     // 요청자 JWT 검증
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "인증이 필요합니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const auth = await requireAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
 
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authError } = await anonClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "인증에 실패했습니다." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const supabase = createAdminClient();
 
-    const VALID_CLINIC_ROLES = ['director', 'manager', 'team_lead', 'staff'];
     // SEC-07: siteUrl은 클라이언트 입력을 받지 않음 — 서버 환경변수만 사용 (피싱 방지)
     const { email, name, hospitalId, clinicRole } = await req.json();
     if (!email || !name || !hospitalId || !clinicRole) {
-      return new Response(
-        JSON.stringify({ error: "email, name, hospitalId, clinicRole는 필수입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("email, name, hospitalId, clinicRole는 필수입니다.", 400, corsHeaders);
     }
     if (!VALID_CLINIC_ROLES.includes(clinicRole)) {
-      return new Response(
-        JSON.stringify({ error: "유효하지 않은 역할입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("유효하지 않은 역할입니다.", 400, corsHeaders);
     }
 
     // 요청자가 해당 병원의 master_admin인지 확인
@@ -58,24 +41,14 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (hospError || !hospital) {
-      return new Response(
-        JSON.stringify({ error: "병원을 찾을 수 없습니다." }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("병원을 찾을 수 없습니다.", 404, corsHeaders);
     }
 
     if (hospital.master_admin_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "권한이 없습니다. 병원 관리자만 초대할 수 있습니다." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("권한이 없습니다. 병원 관리자만 초대할 수 있습니다.", 403, corsHeaders);
     }
 
-    // 플랜별 최대 사용자 수 (PLAN_LIMITS와 동기화)
-    const PLAN_MAX_USERS: Record<string, number> = {
-      free: 1, basic: 1, plus: 5, business: Infinity, ultimate: Infinity,
-    };
-    const maxUsers = PLAN_MAX_USERS[hospital.plan ?? 'free'] ?? 1;
+    const maxUsers = PLAN_MAX_USERS[hospital.plan ?? "free"] ?? 1;
 
     // 현재 활성 멤버 수 확인
     const { count: memberCount } = await supabase
@@ -85,9 +58,10 @@ Deno.serve(async (req: Request) => {
       .eq("status", "active");
 
     if (maxUsers !== Infinity && (memberCount ?? 0) >= maxUsers) {
-      return new Response(
-        JSON.stringify({ error: `현재 플랜(${hospital.plan})에서는 최대 ${maxUsers}명까지 구성원을 등록할 수 있습니다.` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return jsonError(
+        `현재 플랜(${hospital.plan})에서는 최대 ${maxUsers}명까지 구성원을 등록할 수 있습니다.`,
+        400,
+        corsHeaders
       );
     }
 
@@ -102,10 +76,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (existing) {
-      return new Response(
-        JSON.stringify({ error: "해당 이메일로 이미 유효한 초대가 존재합니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("해당 이메일로 이미 유효한 초대가 존재합니다.", 400, corsHeaders);
     }
 
     // 이미 해당 병원 소속인지 확인
@@ -117,10 +88,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (alreadyMember) {
-      return new Response(
-        JSON.stringify({ error: "해당 이메일은 이미 구성원입니다." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("해당 이메일은 이미 구성원입니다.", 400, corsHeaders);
     }
 
     // 토큰 생성 (crypto API)
@@ -144,10 +112,7 @@ Deno.serve(async (req: Request) => {
 
     if (insertError) {
       console.error("invite insert error:", insertError);
-      return new Response(
-        JSON.stringify({ error: "초대 생성에 실패했습니다." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonError("초대 생성에 실패했습니다.", 500, corsHeaders);
     }
 
     // SEC-07: 서버 환경변수만 사용 (클라이언트 입력 불허 — 피싱 방지)
@@ -231,20 +196,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        inviteUrl,
-        token,
-        message: `${name}(${email})에게 초대 링크가 생성되었습니다.`,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonOk({
+      success: true,
+      inviteUrl,
+      token,
+      message: `${name}(${email})에게 초대 링크가 생성되었습니다.`,
+    }, corsHeaders);
   } catch (err) {
     console.error("invite-member error:", err);
-    return new Response(
-      JSON.stringify({ error: "서버 오류가 발생했습니다." }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonError("서버 오류가 발생했습니다.", 500, corsHeaders);
   }
 });
