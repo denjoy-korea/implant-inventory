@@ -9,14 +9,13 @@ import {
   SurgeryUnregisteredItem,
 } from '../types';
 import { planService } from '../services/planService';
-import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { auditService, AuditHistoryItem } from '../services/auditService';
-import { manufacturerAliasKey, isExchangePrefix } from '../services/appUtils';
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
 import { buildSparklinePath } from '../utils/chartUtils';
 import { holidayService } from '../services/holidayService';
 import { failThresholdService, getFailSeverity, FailThresholds } from '../services/failThresholdService';
 import FailThresholdModal from './dashboard/FailThresholdModal';
+import { useDashboardOverviewData, parseQty, parseDate } from '../hooks/useDashboardOverviewData';
 
 interface DashboardOverviewProps {
   inventory: InventoryItem[];
@@ -32,22 +31,6 @@ interface DashboardOverviewProps {
   onSurgeryUploadClick?: () => void;
   onUpgrade?: () => void;
 }
-
-type ShortageEntry = {
-  item: InventoryItem;
-  rawDeficit: number;
-  pendingQty: number;
-  remainingDeficit: number;
-};
-
-type FailExchangeEntry = {
-  manufacturer: string;
-  brand: string;
-  size: string;
-  pendingFails: number;
-  orderedExchange: number;
-  remainingToExchange: number;
-};
 
 type LatestAuditSummary = {
   date: string | null;
@@ -90,27 +73,6 @@ type ActionItem = {
   uploadAction?: () => void;
 };
 
-type ManufacturerUsageRow = {
-  manufacturer: string;
-  totalQty: number;
-  recentQty: number;
-  placementQty: number;
-  failQty: number;
-  failRate: number;
-  topBrands: Array<{ brand: string; qty: number }>;
-  monthly: Array<{ month: string; qty: number }>;
-};
-
-type ManufacturerUsageSummary = {
-  rows: ManufacturerUsageRow[];
-  totalQty: number;
-  recentQty: number;
-  placementQty: number;
-  failQty: number;
-};
-
-const normalize = (value: string) => String(value || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-
 const PRIORITY_WEIGHT: Record<PriorityLevel, number> = {
   critical: 3,
   warning: 2,
@@ -122,19 +84,6 @@ const PRIORITY_BADGE: Record<PriorityLevel, { label: string; className: string }
   warning: { label: '주의', className: 'bg-amber-100 text-amber-700' },
   ok: { label: '안정', className: 'bg-emerald-100 text-emerald-700' },
 };
-
-function parseQty(value: unknown): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
-  return parsed;
-}
-
-function parseDate(value: unknown): Date | null {
-  if (!value) return null;
-  const parsed = new Date(String(value));
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '-';
@@ -160,40 +109,6 @@ function formatDateKorean(value: string | null | undefined): string {
   const day = parsed.getDate();
   const dow = ['일', '월', '화', '수', '목', '금', '토'][parsed.getDay()];
   return `${year}년 ${month}월 ${day}일 (${dow})`;
-}
-
-function monthKeyFromDate(value: unknown): string | null {
-  const parsed = parseDate(value);
-  if (!parsed) return null;
-  const y = parsed.getFullYear();
-  const m = String(parsed.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-}
-
-
-function getRecentMonthKeys(count: number): string[] {
-  const now = new Date();
-  return Array.from({ length: count }, (_, index) => {
-    const offset = count - 1 - index;
-    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-  });
-}
-
-function pickDisplayManufacturer(current: string, candidate: string): string {
-  const a = String(current || '').trim();
-  const b = String(candidate || '').trim();
-  if (!a) return b;
-  if (!b) return a;
-
-  const aHasImplant = /implant/i.test(a);
-  const bHasImplant = /implant/i.test(b);
-  if (bHasImplant && !aHasImplant) return b;
-  if (aHasImplant && !bHasImplant) return a;
-
-  return b.length > a.length ? b : a;
 }
 
 const ONBOARDING_STEP_LABELS: Record<number, { title: string; desc: string }> = {
@@ -265,155 +180,23 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     failThresholdService.get(hospitalId).then(setFailThresholds).catch(() => {});
   }, [hospitalId]);
 
-  const visibleInventory = useMemo(
-    () =>
-      inventory.filter(
-        (item) =>
-          !isExchangePrefix(item.manufacturer) &&
-          item.manufacturer !== '보험청구' &&
-          item.brand !== '보험임플란트'
-      ),
-    [inventory]
-  );
-
-  const buildOrderItemKey = (manufacturer: string, brand: string, size: string) =>
-    `${normalize(manufacturer)}|${normalize(brand)}|${getSizeMatchKey(size, manufacturer)}`;
-
-  const pendingReplenishmentQtyByKey = useMemo(() => {
-    const map = new Map<string, number>();
-
-    orders.forEach((order) => {
-      if (order.status !== 'ordered' || order.type !== 'replenishment') return;
-      order.items.forEach((item) => {
-        const key = buildOrderItemKey(order.manufacturer, item.brand, item.size);
-        map.set(key, (map.get(key) ?? 0) + Number(item.quantity || 0));
-      });
-    });
-
-    return map;
-  }, [orders]);
-
-  const pendingFailExchangeQtyByKey = useMemo(() => {
-    const map = new Map<string, number>();
-
-    orders.forEach((order) => {
-      if (order.status !== 'ordered' || order.type !== 'fail_exchange') return;
-      order.items.forEach((item) => {
-        const key = buildOrderItemKey(order.manufacturer, item.brand, item.size);
-        map.set(key, (map.get(key) ?? 0) + Number(item.quantity || 0));
-      });
-    });
-
-    return map;
-  }, [orders]);
-
-  const shortageEntries = useMemo<ShortageEntry[]>(() => {
-    return visibleInventory
-      .map((item) => {
-        const rawDeficit = Math.max(0, item.recommendedStock - item.currentStock);
-        if (rawDeficit <= 0) return null;
-
-        const key = buildOrderItemKey(item.manufacturer, item.brand, item.size);
-        const pendingQty = pendingReplenishmentQtyByKey.get(key) ?? 0;
-        const remainingDeficit = Math.max(0, rawDeficit - pendingQty);
-        if (remainingDeficit <= 0) return null;
-
-        return { item, rawDeficit, pendingQty, remainingDeficit };
-      })
-      .filter((entry): entry is ShortageEntry => entry !== null)
-      .sort((a, b) => b.remainingDeficit - a.remainingDeficit);
-  }, [visibleInventory, pendingReplenishmentQtyByKey]);
-
-  const shortageSummary = useMemo(
-    () => ({
-      itemCount: shortageEntries.length,
-      deficitQty: shortageEntries.reduce((sum, entry) => sum + entry.remainingDeficit, 0),
-    }),
-    [shortageEntries]
-  );
-
-  const orderedReplenishment = useMemo(
-    () => orders.filter((o) => o.status === 'ordered' && o.type === 'replenishment'),
-    [orders]
-  );
-  const orderedFailExchange = useMemo(
-    () => orders.filter((o) => o.status === 'ordered' && o.type === 'fail_exchange'),
-    [orders]
-  );
-
-  const pendingOrderSummary = useMemo(
-    () => ({
-      replenishmentCount: orderedReplenishment.length,
-      replenishmentQty: orderedReplenishment.reduce(
-        (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0),
-        0
-      ),
-      failExchangeCount: orderedFailExchange.length,
-      failExchangeQty: orderedFailExchange.reduce(
-        (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0),
-        0
-      ),
-    }),
-    [orderedFailExchange, orderedReplenishment]
-  );
-
-  const surgeryRows = surgeryMaster['수술기록지'] || [];
-
-  const cleanSurgeryRows = useMemo(
-    () =>
-      surgeryRows.filter((row) => !Object.values(row).some((val) => String(val).includes('합계'))),
-    [surgeryRows]
-  );
-
-  const pendingFailRows = useMemo(
-    () => cleanSurgeryRows.filter((row) => String(row['구분'] || '').trim() === '수술중교환'),
-    [cleanSurgeryRows]
-  );
-
-  const failExchangeEntries = useMemo<FailExchangeEntry[]>(() => {
-    const aggregated = new Map<string, { manufacturer: string; brand: string; size: string; pendingFails: number }>();
-
-    pendingFailRows.forEach((row) => {
-      const manufacturer = String(row['제조사'] || '').trim() || '기타';
-      const brand = String(row['브랜드'] || '').trim() || '-';
-      const size = String(row['규격(SIZE)'] || '').trim() || '-';
-      const key = buildOrderItemKey(manufacturer, brand, size);
-      const current = aggregated.get(key);
-      const qty = parseQty(row['갯수']);
-
-      if (current) {
-        current.pendingFails += qty;
-      } else {
-        aggregated.set(key, { manufacturer, brand, size, pendingFails: qty });
-      }
-    });
-
-    return Array.from(aggregated.entries())
-      .map(([key, value]) => {
-        const orderedExchange = pendingFailExchangeQtyByKey.get(key) ?? 0;
-        const remainingToExchange = Math.max(0, value.pendingFails - orderedExchange);
-        return { ...value, orderedExchange, remainingToExchange };
-      })
-      .filter((entry) => entry.remainingToExchange > 0)
-      .sort((a, b) => b.remainingToExchange - a.remainingToExchange);
-  }, [pendingFailRows, pendingFailExchangeQtyByKey]);
-
-  const failSummary = useMemo(
-    () => ({
-      pendingRows: pendingFailRows.length,
-      pendingQty: pendingFailRows.reduce((sum, row) => sum + parseQty(row['갯수']), 0),
-      remainingExchangeQty: failExchangeEntries.reduce((sum, entry) => sum + entry.remainingToExchange, 0),
-    }),
-    [failExchangeEntries, pendingFailRows]
-  );
-
-  const unregisteredSummary = useMemo(
-    () => ({
-      count: surgeryUnregisteredItems.length,
-      usageQty: surgeryUnregisteredItems.reduce((sum, item) => sum + Number(item.usageCount || 0), 0),
-    }),
-    [surgeryUnregisteredItems]
-  );
+  const {
+    visibleInventory,
+    shortageEntries,
+    shortageSummary,
+    pendingOrderSummary,
+    cleanSurgeryRows,
+    failExchangeEntries,
+    failSummary,
+    unregisteredSummary,
+    monthlyTotals,
+    orderProcessing,
+    thisMonthSurgery,
+    latestSurgeryDate,
+    recentMonthKeys,
+    manufacturerUsageSummary,
+    hasBaseStockSet,
+  } = useDashboardOverviewData({ inventory, orders, surgeryMaster, surgeryUnregisteredItems });
 
   const latestAuditSummary = useMemo<LatestAuditSummary>(() => {
     if (auditHistory.length === 0) {
@@ -462,30 +245,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     });
     return [...sessMap.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   }, [auditHistory]);
-
-  const monthlyTotals = useMemo(() => {
-    const monthMap = new Map<string, { placement: number; fail: number }>();
-
-    cleanSurgeryRows.forEach((row) => {
-      const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중교환') return;
-
-      const monthKey = monthKeyFromDate(row['날짜']);
-      if (!monthKey) return;
-
-      const qty = parseQty(row['갯수']);
-      const current = monthMap.get(monthKey) ?? { placement: 0, fail: 0 };
-
-      if (cls === '식립') current.placement += qty;
-      if (cls === '수술중교환') current.fail += qty;
-
-      monthMap.set(monthKey, current);
-    });
-
-    return Array.from(monthMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, value]) => ({ month, ...value }));
-  }, [cleanSurgeryRows]);
 
   const trendMonths = useMemo(() => monthlyTotals.map((row) => row.month), [monthlyTotals]);
   const workDaysMap = useWorkDaysMap(trendMonths, hospitalWorkDays);
@@ -541,32 +300,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     }
     return last;
   }, [recentMonthlyTrend]);
-
-  const orderProcessing = useMemo(() => {
-    const total = orders.length;
-    const received = orders.filter((order) => order.status === 'received').length;
-    const pending = orders.filter((order) => order.status === 'ordered').length;
-    const rate = total > 0 ? Math.round((received / total) * 100) : 0;
-
-    return { total, received, pending, rate };
-  }, [orders]);
-
-  const thisMonthSurgery = useMemo(() => {
-    const thisMonth = new Date().toISOString().slice(0, 7);
-    let placementQty = 0;
-    let failQty = 0;
-
-    cleanSurgeryRows.forEach((row) => {
-      const rawDate = String(row['날짜'] || '');
-      if (!rawDate.startsWith(thisMonth)) return;
-      const cls = String(row['구분'] || '').trim();
-      const qty = parseQty(row['갯수']);
-      if (cls === '식립') placementQty += qty;
-      if (cls === '수술중교환') failQty += qty;
-    });
-
-    return { placementQty, failQty };
-  }, [cleanSurgeryRows]);
 
   // 진행율 기반 전월 대비 delta 계산
   // 이번달 경과 진료일수 / 이번달 전체 진료일수 = 진행율
@@ -667,105 +400,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workDaysMap, hospitalWorkDays, cleanSurgeryRows, thisMonthSurgery]);
 
-  const latestSurgeryDate = useMemo(() => {
-    let maxDate: Date | null = null;
-    for (const row of cleanSurgeryRows) {
-      // 수술중교환 구분은 수술기록 최신일 산정에서 제외
-      if (String(row['구분'] ?? '').trim() === '수술중교환') continue;
-      const parsed = parseDate(row['날짜']);
-      if (!parsed) continue;
-      if (!maxDate || parsed > maxDate) maxDate = parsed;
-    }
-    return maxDate ? maxDate.toISOString().slice(0, 10) : null;
-  }, [cleanSurgeryRows]);
-
-  const recentMonthKeys = useMemo(() => getRecentMonthKeys(6), []);
-
-  const manufacturerUsageSummary = useMemo<ManufacturerUsageSummary>(() => {
-    const monthSet = new Set(recentMonthKeys);
-    const map = new Map<
-      string,
-      {
-        manufacturer: string;
-        totalQty: number;
-        recentQty: number;
-        placementQty: number;
-        failQty: number;
-        brandMap: Map<string, number>;
-        monthMap: Map<string, number>;
-      }
-    >();
-
-    cleanSurgeryRows.forEach((row) => {
-      const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중교환') return;
-
-      const manufacturer = String(row['제조사'] || '').trim();
-      const brand = String(row['브랜드'] || '').trim() || '-';
-      if (!manufacturer) return;
-      if (isExchangePrefix(manufacturer) || manufacturer === '보험청구' || brand === '보험임플란트') return;
-      const manufacturerKey = manufacturerAliasKey(manufacturer);
-      if (!manufacturerKey) return;
-
-      const qty = parseQty(row['갯수']);
-      const monthKey = monthKeyFromDate(row['날짜']);
-      const current = map.get(manufacturerKey) ?? {
-        manufacturer,
-        totalQty: 0,
-        recentQty: 0,
-        placementQty: 0,
-        failQty: 0,
-        brandMap: new Map<string, number>(),
-        monthMap: new Map<string, number>(),
-      };
-
-      current.manufacturer = pickDisplayManufacturer(current.manufacturer, manufacturer);
-      current.totalQty += qty;
-      if (cls === '식립') current.placementQty += qty;
-      if (cls === '수술중교환') current.failQty += qty;
-      if (monthKey && monthSet.has(monthKey)) current.recentQty += qty;
-      current.brandMap.set(brand, (current.brandMap.get(brand) ?? 0) + qty);
-      if (monthKey) current.monthMap.set(monthKey, (current.monthMap.get(monthKey) ?? 0) + qty);
-
-      map.set(manufacturerKey, current);
-    });
-
-    const rows = Array.from(map.values())
-      .map((value) => {
-        const topBrands = Array.from(value.brandMap.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([brand, qty]) => ({ brand, qty }));
-        const monthly = recentMonthKeys.map((month) => ({
-          month,
-          qty: value.monthMap.get(month) ?? 0,
-        }));
-        const failRate = value.totalQty > 0 ? Math.round((value.failQty / value.totalQty) * 100) : 0;
-        return {
-          manufacturer: value.manufacturer,
-          totalQty: value.totalQty,
-          recentQty: value.recentQty,
-          placementQty: value.placementQty,
-          failQty: value.failQty,
-          failRate,
-          topBrands,
-          monthly,
-        };
-      })
-      .sort((a, b) => {
-        if (b.recentQty !== a.recentQty) return b.recentQty - a.recentQty;
-        return b.totalQty - a.totalQty;
-      });
-
-    return {
-      rows,
-      totalQty: rows.reduce((sum, row) => sum + row.totalQty, 0),
-      recentQty: rows.reduce((sum, row) => sum + row.recentQty, 0),
-      placementQty: rows.reduce((sum, row) => sum + row.placementQty, 0),
-      failQty: rows.reduce((sum, row) => sum + row.failQty, 0),
-    };
-  }, [cleanSurgeryRows, recentMonthKeys]);
-
   const surgeryStaleDays = daysSince(latestSurgeryDate);
   const auditStaleDays = daysSince(latestAuditSummary.date);
 
@@ -798,11 +432,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       message: `최근 수술기록지 등록일  ${dateStr}  ·  업데이트 후 ${days}일 경과  ·  수술기록지가 오래되었습니다  ·  즉시 업데이트하여 정확한 재고 관리 및 주문 현황을 유지하세요`,
     };
   }, [surgeryStaleDays, latestSurgeryDate]);
-
-  const hasBaseStockSet = useMemo(
-    () => visibleInventory.some((item) => item.initialStock > 0),
-    [visibleInventory]
-  );
 
   const alertCards = useMemo<AlertCard[]>(() => {
     const shortageSeverity: PriorityLevel =
