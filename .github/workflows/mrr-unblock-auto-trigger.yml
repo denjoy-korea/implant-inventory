@@ -1,0 +1,64 @@
+name: MRR Unblock Auto Trigger
+
+on:
+  schedule:
+    # 30분 간격으로 실결제 전환(READY) 여부를 감지한다.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      month:
+        description: '점검 월 (YYYY-MM, 비우면 현재 KST 월)'
+        required: false
+        default: ''
+
+concurrency:
+  group: mrr-unblock-auto-trigger
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Probe and auto-trigger MRR unblock check
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "${{ github.event.inputs.month }}" ]; then
+            node scripts/mrr-raw-unblock-auto-trigger.mjs --month=${{ github.event.inputs.month }}
+          else
+            node scripts/mrr-raw-unblock-auto-trigger.mjs
+          fi
+
+      - name: Commit trigger outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-check-*.md 2>/dev/null || true
+          git add docs/05-dataroom/02-billing-reconciliation/mrr-raw-unblock-trigger-state.json 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "변경사항 없음 — BLOCKED 유지 또는 이미 trigger 완료"
+          else
+            git commit -m "chore: auto-trigger mrr unblock $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            git push
+          fi
