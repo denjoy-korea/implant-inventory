@@ -28,3 +28,12 @@ dist-ssr
 .env
 .env.local
 .env.production
+
+# Supabase CLI temp files
+supabase/.temp/
+supabase/supabase/
+
+# Python cache
+dentweb-auto/.pycache_tmp/
+**/__pycache__/
+*.pyc
