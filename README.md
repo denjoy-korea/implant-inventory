@@ -72,3 +72,44 @@ vercel --prod
 ## Related Docs
 - 운영 점검: `docs/04-report/security-smoke-test-checklist.md`
 - 암호화 마이그레이션 런북: `docs/04-report/patient-encryption-migration-runbook.md`
+
+## Dentweb Auto Upload (Edge Function)
+`dentweb-auto`에서 생성한 엑셀을 서버로 자동 수집하려면 `dentweb-upload` Edge Function을 사용합니다.
+
+1. 함수 배포
+```bash
+supabase functions deploy dentweb-upload --no-verify-jwt
+supabase functions deploy dentweb-automation
+```
+
+2. 시크릿 설정
+```bash
+supabase secrets set DENTWEB_UPLOAD_TOKEN=your-strong-token
+supabase secrets set PATIENT_DATA_KEY=your-patient-data-key
+```
+
+멀티 병원(권장): 병원별 토큰 매핑
+```bash
+supabase secrets set DENTWEB_UPLOAD_TOKEN_MAP='{
+  "token-for-hospital-a":"35e35c91-4ec2-4b3b-8975-089907784497",
+  "token-for-hospital-b":"5a9a3d30-cca8-4e5a-8637-6b2e026089db"
+}'
+```
+
+3. 업로드 URL
+```text
+https://<project-ref>.supabase.co/functions/v1/dentweb-upload
+```
+
+4. 요청 형식 (`multipart/form-data`)
+- `Authorization: Bearer <DENTWEB_UPLOAD_TOKEN>`
+- `hospital_id`: UUID (`DENTWEB_UPLOAD_TOKEN_MAP` 사용 시 생략 가능)
+- `file`: `.xlsx`/`.xls`
+
+## Dentweb Agent Control (Interval + Run Now)
+앱에서 간격 자동 실행/즉시 실행을 제어하려면 `dentweb-automation` Edge Function을 사용합니다.
+
+- 인증: Supabase 회원 JWT
+- `claim_run`: 에이전트가 실행 여부 폴링
+- `request_run`: 앱에서 "지금 실행 요청"
+- `report_run`: 에이전트 실행 결과 보고
