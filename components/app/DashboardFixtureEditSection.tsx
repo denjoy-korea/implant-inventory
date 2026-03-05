@@ -32,6 +32,7 @@ interface DashboardFixtureEditSectionProps {
   onRequestDownloadExcel: () => void;
   onRequestApplyToInventory: () => void;
   onGoToFixtureUpload: () => void;
+  onOpenPaymentModal?: (plan: PlanType) => void;
 }
 
 const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = ({
@@ -58,6 +59,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
   onRequestDownloadExcel,
   onRequestApplyToInventory,
   onGoToFixtureUpload,
+  onOpenPaymentModal,
 }) => {
   const activeSheet = fixtureData?.sheets?.[fixtureData?.activeSheetName ?? ''];
 
@@ -135,7 +137,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
         onToggle={onManufacturerToggle}
       />
 
-      <FeatureGate feature="brand_analytics" plan={effectivePlan}>
+      <FeatureGate feature="brand_analytics" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
         <BrandChart
           data={activeSheet}
           enabledManufacturers={enabledManufacturers}

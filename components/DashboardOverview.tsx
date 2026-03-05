@@ -8,6 +8,7 @@ import {
   Order,
   SurgeryUnregisteredItem,
 } from '../types';
+import { planService } from '../services/planService';
 import { getSizeMatchKey } from '../services/sizeNormalizer';
 import { auditService, AuditHistoryItem } from '../services/auditService';
 import { manufacturerAliasKey, isExchangePrefix } from '../services/appUtils';
@@ -29,6 +30,7 @@ interface DashboardOverviewProps {
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
   onSurgeryUploadClick?: () => void;
+  onUpgrade?: () => void;
 }
 
 type ShortageEntry = {
@@ -212,9 +214,11 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   hospitalId,
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   onNavigate,
+  planState,
   onboardingStep,
   onResumeOnboarding,
   onSurgeryUploadClick,
+  onUpgrade,
 }) => {
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -1108,6 +1112,18 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     [manufacturerUsageSummary.rows]
   );
 
+  /** FOMO 배너 — Free 플랜 전용 축적 데이터 수치 */
+  const fomoData = useMemo(() => {
+    if (!planState || planState.plan !== 'free' || planState.isTrialActive) return null;
+    const surgeryCount = Object.values(surgeryMaster).flat().length;
+    const failOrderCount = orders.filter(o => (o as { type: string }).type === 'fail_exchange').length;
+    const canBrandAnalytics = planService.canAccess('free', 'brand_analytics');
+    const canFailMgmt = planService.canAccess('free', 'fail_management');
+    const canOrderExec = planService.canAccess('free', 'order_execution');
+    if (canBrandAnalytics && canFailMgmt && canOrderExec) return null; // 이미 모두 접근 가능
+    return { surgeryCount, failOrderCount, inventoryCount: inventory.length };
+  }, [planState, surgeryMaster, orders, inventory.length]);
+
   return (
     <>
     <div className="space-y-5 [&_button]:cursor-pointer">
@@ -1131,6 +1147,95 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── Free 플랜 FOMO 배너 ──────────────────────────────────── */}
+      {fomoData && (
+        <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-2xl p-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* 왼쪽: 축적 데이터 수치 */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black rounded-md tracking-wide">FREE</span>
+                <p className="text-xs font-bold text-indigo-800">지금까지 쌓인 데이터로 더 많은 것을 할 수 있어요</p>
+              </div>
+              {/* 축적 수치 */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {fomoData.surgeryCount > 0 && (
+                  <span className="px-2.5 py-1 bg-white/80 border border-indigo-100 rounded-lg text-[11px] font-bold text-slate-700">
+                    수술기록 <span className="text-indigo-700">{fomoData.surgeryCount.toLocaleString()}건</span>
+                  </span>
+                )}
+                <span className="px-2.5 py-1 bg-white/80 border border-indigo-100 rounded-lg text-[11px] font-bold text-slate-700">
+                  재고 <span className="text-indigo-700">{fomoData.inventoryCount}종</span>
+                </span>
+                {fomoData.failOrderCount > 0 && (
+                  <span className="px-2.5 py-1 bg-white/80 border border-rose-100 rounded-lg text-[11px] font-bold text-slate-700">
+                    FAIL 미관리 <span className="text-rose-600">{fomoData.failOrderCount}건</span>
+                  </span>
+                )}
+              </div>
+              {/* 잠긴 기능 목록 */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '교환 관리', tab: 'fail_management' as DashboardTab },
+                  { label: '발주 관리', tab: 'order_management' as DashboardTab },
+                  { label: '수술기록 분석', tab: 'surgery_database' as DashboardTab },
+                ].map(({ label }) => (
+                  <span key={label} className="flex items-center gap-1 px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[10px] font-bold text-slate-500">
+                    <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    {label}
+                  </span>
+                ))}
+                <span className="px-2 py-0.5 text-[10px] font-bold text-indigo-500">Basic부터 해제</span>
+              </div>
+            </div>
+            {/* 오른쪽: CTA */}
+            {onUpgrade && (
+              <div className="shrink-0">
+                <button
+                  onClick={onUpgrade}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-300 whitespace-nowrap"
+                >
+                  Basic 업그레이드 →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 수술기록 만료 예고 배너 (Free 전환 유저) ──────────────── */}
+      {planState?.retentionDaysLeft !== undefined && planState.retentionDaysLeft <= 30 && (
+        <div className={`flex items-start gap-3 rounded-2xl px-4 py-3 border ${
+          planState.retentionDaysLeft <= 7
+            ? 'bg-rose-50 border-rose-200'
+            : 'bg-amber-50 border-amber-200'
+        }`}>
+          <svg className={`w-4 h-4 mt-0.5 shrink-0 ${planState.retentionDaysLeft <= 7 ? 'text-rose-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs font-black ${planState.retentionDaysLeft <= 7 ? 'text-rose-700' : 'text-amber-700'}`}>
+              수술기록이 {planState.retentionDaysLeft}일 후 만료됩니다
+            </p>
+            <p className={`text-[11px] mt-0.5 ${planState.retentionDaysLeft <= 7 ? 'text-rose-600' : 'text-amber-600'}`}>
+              Free 플랜 보관 기간(3개월)이 곧 종료됩니다. 플랜을 업그레이드하면 데이터가 영구 보존됩니다.
+            </p>
+          </div>
+          {onUpgrade && (
+            <button
+              onClick={onUpgrade}
+              className={`shrink-0 px-3 py-1.5 text-xs font-black rounded-lg text-white transition-colors ${
+                planState.retentionDaysLeft <= 7 ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-500 hover:bg-amber-600'
+              }`}
+            >
+              업그레이드
+            </button>
+          )}
+        </div>
+      )}
 
       <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">

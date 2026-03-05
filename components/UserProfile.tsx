@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, TrustedDevice } from '../types';
+import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, BillingCycle, TrustedDevice } from '../types';
 import { contactService } from '../services/contactService';
 import { authService } from '../services/authService';
 import { planService } from '../services/planService';
@@ -224,7 +224,7 @@ interface UserProfileProps {
     hospitalName?: string;
     onClose: () => void;
     onDeleteAccount?: () => void;
-    onChangePlan?: () => void;
+    onChangePlan?: (plan: PlanType, billing: BillingCycle) => void;
 }
 
 const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName, onClose, onDeleteAccount, onChangePlan }) => {
@@ -303,7 +303,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [showPlanPicker, setShowPlanPicker] = useState(false);
     const [pickerCycle, setPickerCycle] = useState<'monthly' | 'yearly'>(planState?.billingCycle ?? 'monthly');
     const [pickerSelectedPlan, setPickerSelectedPlan] = useState<PlanType | null>(null);
-    const [isRequestingPlan, setIsRequestingPlan] = useState(false);
 
     const planName = isUltimatePlan ? 'Ultimate' : (planState ? PLAN_NAMES[planState.plan] : 'Free');
     const billingLabel = planState?.billingCycle === 'yearly' ? '연간' : planState?.billingCycle === 'monthly' ? '월간' : null;
@@ -408,27 +407,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
         }
     };
 
-    const handleRequestPlanChange = async () => {
+    const handleRequestPlanChange = () => {
         if (!pickerSelectedPlan) return;
-        setIsRequestingPlan(true);
-        try {
-            await contactService.submit({
-                hospital_name: hospitalName || '미등록',
-                contact_name: user.name,
-                email: user.email,
-                phone: user.phone || '미등록',
-                weekly_surgeries: '-',
-                inquiry_type: `plan_change_${pickerSelectedPlan}`,
-                content: `[플랜 변경 신청]\n현재 플랜: ${planName} (${billingLabel || '무료'})\n신청 플랜: ${PLAN_NAMES[pickerSelectedPlan]} (${pickerCycle === 'yearly' ? '연간' : '월간'})\nhospital_id: ${user.hospitalId ?? ''}`,
-            });
-            showToast('플랜 변경 신청이 완료되었습니다. 영업일 기준 1-2일 내 처리됩니다.', 'success');
-            setShowPlanPicker(false);
-            setPickerSelectedPlan(null);
-        } catch {
-            showToast('신청에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'error');
-        } finally {
-            setIsRequestingPlan(false);
-        }
+        setShowPlanPicker(false);
+        setPickerSelectedPlan(null);
+        onChangePlan?.(pickerSelectedPlan, pickerCycle);
     };
 
     const handleSave = async () => {
@@ -770,15 +753,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                 {/* 신청 버튼 영역 */}
                                 {pickerSelectedPlan ? (
                                     <div>
-                                        <p className="text-[10px] text-slate-500 text-center mb-1.5">
-                                            <span className="font-bold text-slate-700">{PLAN_NAMES[pickerSelectedPlan]}</span> 플랜 ({pickerCycle === 'yearly' ? '연간' : '월간'}) 변경 신청 시 영업일 기준 1-2일 내 처리됩니다.
-                                        </p>
                                         <button
                                             onClick={handleRequestPlanChange}
-                                            disabled={isRequestingPlan}
-                                            className="w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-colors"
                                         >
-                                            {isRequestingPlan ? '신청 중...' : `${PLAN_NAMES[pickerSelectedPlan]} 플랜으로 변경 신청`}
+                                            {`${PLAN_NAMES[pickerSelectedPlan]} 플랜 결제하기`}
                                         </button>
                                     </div>
                                 ) : (

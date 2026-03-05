@@ -39,7 +39,7 @@ test('app handles order conflict responses and re-syncs order list', () => {
   assert.match(app, /const refreshOrdersFromServer = useCallback\(async \(\) => \{/);
   assert.match(
     app,
-    /orderService\.updateStatus\(orderId,\s*status,\s*\{\s*expectedCurrentStatus:\s*currentOrder\.status,\s*receivedDate:\s*nextReceivedDate,\s*\}\)/s,
+    /orderService\.updateStatus\(orderId,\s*status,\s*\{[\s\S]*?expectedCurrentStatus:\s*currentOrder\.status,[\s\S]*?receivedDate:\s*nextReceivedDate,[\s\S]*?\}\)/s,
   );
   assert.match(
     app,

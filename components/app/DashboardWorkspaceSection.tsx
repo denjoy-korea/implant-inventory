@@ -72,6 +72,7 @@ export interface DashboardWorkspaceSectionProps {
   isSystemAdmin: boolean;
   isReadOnly: boolean;
   activeNudge: NudgeType | null;
+  failOrderCount?: number;
   planLimitToast: LimitType | null;
   billableItemCount: number;
   surgeryUnregisteredItems: SurgeryUnregisteredItem[];
@@ -81,6 +82,7 @@ export interface DashboardWorkspaceSectionProps {
   returnRequests: ReturnRequest[];
   onLoadHospitalData: (user: User) => Promise<void>;
   onGoToPricing: () => void;
+  onOpenPaymentModal?: (plan: PlanType) => void;
   onDismissPlanLimitToast: () => void;
   onUpgradeFromPlanLimitToast: () => void;
   onStartOverviewTrial: () => Promise<void>;
@@ -122,6 +124,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   isSystemAdmin,
   isReadOnly,
   activeNudge,
+  failOrderCount,
   planLimitToast,
   billableItemCount,
   surgeryUnregisteredItems,
@@ -155,6 +158,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   orderHistoryOnly,
   stockCalcSettings,
   onStockCalcSettingsChange,
+  onOpenPaymentModal,
 }) => {
   const buildQuickOrder = (item: InventoryItem): Order => ({
     id: `order_${Date.now()}`,
@@ -181,6 +185,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           daysLeft={state.planState?.trialDaysRemaining}
           currentCount={billableItemCount}
           maxCount={PLAN_LIMITS.free.maxItems}
+          failCount={failOrderCount}
           onUpgrade={onGoToPricing}
         />
       )}
@@ -235,11 +240,12 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           onboardingStep={onboardingStep}
           onResumeOnboarding={onResumeOnboarding}
           onSurgeryUploadClick={onSurgeryUploadClick}
+          onUpgrade={() => onOpenPaymentModal ? onOpenPaymentModal('basic') : onGoToPricing()}
         />
       )}
 
       {state.dashboardTab === 'member_management' && state.user && (
-        <FeatureGate feature="role_management" plan={effectivePlan}>
+        <FeatureGate feature="role_management" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
           <MemberManager
             currentUser={state.user}
             onClose={() => setState(prev => ({ ...prev, dashboardTab: 'overview' }))}
@@ -282,6 +288,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           onRequestDownloadExcel={fixtureEdit.onRequestFixtureExcelDownload}
           onRequestApplyToInventory={fixtureEdit.onRequestApplyFixtureToInventory}
           onGoToFixtureUpload={() => setState(prev => ({ ...prev, dashboardTab: 'fixture_upload' }))}
+          onOpenPaymentModal={onOpenPaymentModal}
         />
       )}
 
@@ -341,6 +348,8 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onCompleteReturn={onCompleteReturn}
         onDeleteReturn={onDeleteReturn}
         showAlertToast={showAlertToast}
+        onGoToPricing={onGoToPricing}
+        onOpenPaymentModal={onOpenPaymentModal}
         onAuditSessionComplete={onAuditSessionComplete}
         initialShowFailBulkModal={initialShowFailBulkModal}
         onFailBulkModalOpened={onFailBulkModalOpened}

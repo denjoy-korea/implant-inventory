@@ -1,7 +1,7 @@
 import { PlanType } from '../../types';
 
 export const SIGNUP_PLANS: { key: PlanType; label: string; tag?: string; price: string; summary: string; trial: boolean }[] = [
-  { key: 'free', label: 'Free', price: '무료', summary: '재고 100개 · 1인 · 3개월 기록', trial: false },
+  { key: 'free', label: 'Free', price: '무료', summary: '재고 50개 · 1인 · 3개월 기록', trial: false },
   { key: 'basic', label: 'Basic', tag: '팀용', price: '29,000원/월', summary: '재고 200개 · 3인 · 6개월 기록', trial: true },
   { key: 'plus', label: 'Plus', tag: '추천', price: '69,000원/월', summary: '재고 500개 · 5인 · 12개월 기록', trial: true },
   { key: 'business', label: 'Business', tag: '기업용', price: '129,000원/월', summary: '재고 무제한 · 인원 무제한 · 24개월', trial: true },

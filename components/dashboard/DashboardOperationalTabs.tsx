@@ -61,6 +61,8 @@ interface DashboardOperationalTabsProps {
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  onGoToPricing?: () => void;
+  onOpenPaymentModal?: (plan: PlanType) => void;
   onAuditSessionComplete?: () => void;
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
@@ -100,6 +102,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   onCompleteReturn,
   onDeleteReturn,
   showAlertToast,
+  onGoToPricing,
   onAuditSessionComplete,
   initialShowFailBulkModal,
   onFailBulkModalOpened,
@@ -107,6 +110,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   orderHistoryOnly,
   stockCalcSettings,
   onStockCalcSettingsChange,
+  onOpenPaymentModal,
 }) => {
   const prevTabRef = useRef<DashboardTab>(dashboardTab);
 
@@ -129,19 +133,21 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   return (
     <>
       {dashboardTab === 'inventory_audit' && (
-        <InventoryAudit
-          inventory={inventory}
-          hospitalId={user?.hospitalId || ''}
-          userName={user?.name}
-          onApplied={() => {
-            if (user) {
-              void onLoadHospitalData(user);
-            }
-          }}
-          onAuditSessionComplete={onAuditSessionComplete}
-          showHistory={showAuditHistory}
-          onCloseHistory={onCloseAuditHistory}
-        />
+        <FeatureGate feature="inventory_audit" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
+          <InventoryAudit
+            inventory={inventory}
+            hospitalId={user?.hospitalId || ''}
+            userName={user?.name}
+            onApplied={() => {
+              if (user) {
+                void onLoadHospitalData(user);
+              }
+            }}
+            onAuditSessionComplete={onAuditSessionComplete}
+            showHistory={showAuditHistory}
+            onCloseHistory={onCloseAuditHistory}
+          />
+        </FeatureGate>
       )}
       {(dashboardTab === 'surgery_database' || dashboardTab === 'surgery_upload') && (
         <SurgeryDashboard
@@ -155,29 +161,40 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           hospitalId={user?.hospitalId}
           isReadOnly={isReadOnly}
           currentUserName={user?.name || '관리자'}
+          onUpgrade={onGoToPricing}
         />
       )}
       {dashboardTab === 'fail_management' && (
-        <FailManager
-          surgeryMaster={surgeryMaster}
-          inventory={inventory}
-          failOrders={orders.filter(o => o.type === 'fail_exchange' || o.type === 'return')}
-          returnRequests={returnRequests}
-          onCreateReturn={onCreateReturn}
-          currentUserName={user?.name || '관리자'}
-          isReadOnly={isReadOnly}
-          hospitalId={user?.hospitalId}
-          onBulkSetupComplete={async () => {
-            if (user) await onLoadHospitalData(user);
-            onFailAuditDone?.();
-          }}
-          initialShowBulkModal={initialShowFailBulkModal}
-          onInitialModalOpened={onFailBulkModalOpened}
-          onDeleteOrder={onDeleteOrder}
-        />
+        <FeatureGate
+          feature="fail_management"
+          plan={effectivePlan}
+          onOpenPaymentModal={onOpenPaymentModal}
+          dataHint={(() => {
+            const count = orders.filter(o => o.type === 'fail_exchange').length;
+            return count > 0 ? `FAIL 기록 ${count}건이 쌓여 있습니다 — 지금 관리를 시작하세요` : undefined;
+          })()}
+        >
+          <FailManager
+            surgeryMaster={surgeryMaster}
+            inventory={inventory}
+            failOrders={orders.filter(o => o.type === 'fail_exchange' || o.type === 'return')}
+            returnRequests={returnRequests}
+            onCreateReturn={onCreateReturn}
+            currentUserName={user?.name || '관리자'}
+            isReadOnly={isReadOnly}
+            hospitalId={user?.hospitalId}
+            onBulkSetupComplete={async () => {
+              if (user) await onLoadHospitalData(user);
+              onFailAuditDone?.();
+            }}
+            initialShowBulkModal={initialShowFailBulkModal}
+            onInitialModalOpened={onFailBulkModalOpened}
+            onDeleteOrder={onDeleteOrder}
+          />
+        </FeatureGate>
       )}
       {dashboardTab === 'order_management' && (
-        <FeatureGate feature="one_click_order" plan={effectivePlan}>
+        <FeatureGate feature="order_execution" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
           <OrderManager
             orders={orders}
             inventory={inventory}
@@ -197,6 +214,8 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             showAlertToast={showAlertToast}
             isReadOnly={isReadOnly}
             historyOnly={orderHistoryOnly}
+            plan={effectivePlan}
+            onUpgradePlan={() => onOpenPaymentModal?.('basic')}
           />
         </FeatureGate>
       )}
@@ -215,7 +234,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         />
       )}
       {dashboardTab === 'audit_log' && user?.hospitalId && (
-        <FeatureGate feature="audit_log" plan={effectivePlan}>
+        <FeatureGate feature="audit_log" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
           <AuditLogViewer hospitalId={user.hospitalId} />
         </FeatureGate>
       )}

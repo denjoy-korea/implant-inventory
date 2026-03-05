@@ -18,8 +18,9 @@ const DashboardGuardedContent = lazy(() => import('./components/app/DashboardGua
 const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRouteSection'));
 const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
+const DirectPaymentModal = lazy(() => import('./components/DirectPaymentModal'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem, FailCandidate } from './types';
+import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem, FailCandidate } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
 import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
 import { authService } from './services/authService';
@@ -136,6 +137,7 @@ const App: React.FC = () => {
   const effectiveDismissed = onboardingDismissed || (_obHid ? onboardingService.isDismissed(_obHid) : false);
   const onboardingAutoResumeRef = useRef<string | null>(null);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
+  const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
   const [billingProgramError, setBillingProgramError] = useState('');
   const [pendingFailCandidates, setPendingFailCandidates] = useState<FailCandidate[]>([]);
@@ -462,22 +464,31 @@ const App: React.FC = () => {
 
   const billableItemCount = useMemo(() => countBillableItems(state.inventory), [state.inventory, countBillableItems]);
 
+  /** Free 유저의 FAIL 기록 수 (Endowment Effect 넛지용) */
+  const failOrderCount = useMemo(
+    () => state.orders.filter(o => o.type === 'fail_exchange').length,
+    [state.orders]
+  );
+
   const activeNudge = useMemo<NudgeType | null>(() => {
     const ps = state.planState;
     if (!ps) return null;
     // T5: 체험 만료 (Free로 복귀, 체험 사용됨)
     if (ps.plan === 'free' && ps.trialUsed && !ps.isTrialActive) return 'trial_expired';
+    // T7: 유료 구독 만료 (체험 미사용, expiresAt 경과)
+    if (ps.plan === 'free' && !ps.trialUsed && ps.expiresAt && new Date(ps.expiresAt) < new Date()) return 'subscription_expired';
     // T4: 체험 D-3 이하 (아직 체험 중)
     if (ps.isTrialActive && ps.trialDaysRemaining <= 3) return 'trial_ending';
-    // T1: 데이터 보관 만료 D-7 (planService에 retentionDaysLeft 필드 추가 후 활성화)
-    // T1: 데이터 보관 만료 D-7 (planService에 retentionDaysLeft 추가 후 자동 활성화)
+    // T1: 데이터 보관 만료 D-7
     if (ps.plan === 'free' && !ps.isTrialActive && ps.retentionDaysLeft !== undefined && ps.retentionDaysLeft <= 7) return 'data_expiry_warning';
     // T2: Free 플랜 재고 품목 90% 이상
     if (ps.plan === 'free' && !ps.isTrialActive && billableItemCount >= PLAN_LIMITS.free.maxItems * 0.9) return 'item_limit_warning';
-    // T3: 업로드 한도 초과 (planService에 uploadLimitExceeded 추가 후 자동 활성화)
+    // T3: 업로드 한도 초과
     if (ps.plan === 'free' && !ps.isTrialActive && ps.uploadLimitExceeded === true) return 'upload_limit';
+    // T6: FAIL 기록 있는데 관리 기능 잠김 (Endowment Effect)
+    if (ps.plan === 'free' && !ps.isTrialActive && failOrderCount > 0) return 'fail_locked';
     return null;
-  }, [state.planState, billableItemCount]);
+  }, [state.planState, billableItemCount, failOrderCount]);
 
   // 7단계 기준 첫 번째 미완료 단계 계산 (뷰/탭 조건 없이 순수 진행 상태만)
   // ⚠️ IIFE 유지 필수: onboardingService.mark*() 는 localStorage 기록이라 React deps에 포함 불가.
@@ -1859,6 +1870,10 @@ const App: React.FC = () => {
     await hospitalSettingsService.set(hospitalId, { ...current, stockCalcSettings: settings });
   }, [state.user?.hospitalId, syncInventoryWithUsageAndOrders]);
 
+  const handleOpenDirectPayment = useCallback((plan: PlanType, billing: BillingCycle = 'monthly') => {
+    setDirectPayment({ plan, billing });
+  }, []);
+
   const handleAddOrder = useCallback(async (order: Order) => {
     // Pre-calculate fail record IDs for Supabase update
     let failRecordIds: string[] = [];
@@ -2500,6 +2515,7 @@ const App: React.FC = () => {
                           isSystemAdmin,
                           isReadOnly,
                           activeNudge,
+                          failOrderCount,
                           planLimitToast,
                           billableItemCount,
                           surgeryUnregisteredItems,
@@ -2543,10 +2559,11 @@ const App: React.FC = () => {
                           },
                           onLoadHospitalData: loadHospitalData,
                           onGoToPricing: () => setState(prev => ({ ...prev, currentView: 'pricing' })),
+                          onOpenPaymentModal: handleOpenDirectPayment,
                           onDismissPlanLimitToast: () => setPlanLimitToast(null),
                           onUpgradeFromPlanLimitToast: () => {
                             setPlanLimitToast(null);
-                            setState(prev => ({ ...prev, currentView: 'pricing' }));
+                            handleOpenDirectPayment('basic');
                           },
                           onStartOverviewTrial: async () => {
                             if (state.user?.hospitalId) {
@@ -2653,7 +2670,10 @@ const App: React.FC = () => {
           toastCompletedLabel={toastCompletedLabel}
           onCloseProfile={() => setState(prev => ({ ...prev, showProfile: false }))}
           onDeleteAccount={handleDeleteAccount}
-          onChangePlan={() => setState(prev => ({ ...prev, showProfile: false, currentView: 'pricing' }))}
+          onChangePlan={(plan, billing) => {
+            setState(prev => ({ ...prev, showProfile: false }));
+            handleOpenDirectPayment(plan, billing);
+          }}
           onReviewSubmitted={() => {
             setReviewPopupType(null);
             showAlertToast('후기를 남겨주셔서 감사합니다!', 'success');
@@ -2715,6 +2735,18 @@ const App: React.FC = () => {
         />
       </Suspense>
 
+      {directPayment && (
+        <Suspense fallback={null}>
+          <DirectPaymentModal
+            plan={directPayment.plan}
+            billing={directPayment.billing}
+            user={state.user}
+            hospitalName={state.hospitalName}
+            onDismiss={() => setDirectPayment(null)}
+          />
+        </Suspense>
+      )}
+
       {pendingFailCandidates.length > 0 && state.user?.hospitalId && (
         <Suspense fallback={null}>
           <FailDetectionModal
@@ -2744,7 +2776,7 @@ const App: React.FC = () => {
         onClosePlanLimitModal={closePlanLimitModal}
         onUpgradePlan={() => {
           closePlanLimitModal();
-          setState(prev => ({ ...prev, currentView: 'pricing' }));
+          handleOpenDirectPayment('basic');
         }}
         onCloseConfirmModal={() => setConfirmModal(null)}
         onConfirmInventoryCompare={handleConfirmApplyToInventory}

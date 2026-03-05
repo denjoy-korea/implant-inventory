@@ -5,7 +5,6 @@ import { toCanonicalSize } from '../services/sizeNormalizer';
 import { fixIbsImplant } from '../services/mappers';
 import { isExchangePrefix } from '../services/appUtils';
 import {
-  DENTWEB_DEFAULTS,
   getDentwWebManufacturers,
   getDentwWebBrands,
   getDentwWebSizes,

@@ -129,9 +129,9 @@ test('maintenance service is wired for dev operations', () => {
   assert.match(service, /startsWith\('ENCv2:'\)/);
 });
 
-test('free plan max item limit is 100', () => {
+test('free plan max item limit is 50', () => {
   const typesTs = read('types.ts');
-  assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*100[\s\S]*?\}/m);
+  assert.match(typesTs, /free:\s*\{[\s\S]*?maxItems:\s*50[\s\S]*?\}/m);
 });
 
 test('crypto utils request auth token for encryption and decryption', () => {

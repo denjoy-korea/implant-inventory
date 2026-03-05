@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { InventoryItem, ExcelData, Order, PlanType, PLAN_LIMITS, SurgeryUnregisteredItem, CreateReturnParams } from '../types';
+import { planService } from '../services/planService';
 import { useInventoryManagerControls } from '../hooks/useInventoryManagerControls';
 import { useSparklineSeries } from '../hooks/useSparklineSeries';
 import { isExchangePrefix, stripExchangePrefix } from '../services/appUtils';
@@ -77,6 +78,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 }) => {
   const maxEdits = PLAN_LIMITS[plan].maxBaseStockEdits;
   const isUnlimited = maxEdits === Infinity;
+  const canAiForecast = planService.canAccess(plan, 'ai_forecast');
   const {
     monthFactor,
     saveStatus,
@@ -741,6 +743,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                       <p className="text-[11px] font-semibold text-slate-500 mt-1">
                         현재 {item.currentStock} / 권장 {recommended}
                       </p>
+                      {canAiForecast && item.predictedDailyUsage != null && item.predictedDailyUsage > 0 && (() => {
+                        const days = item.currentStock > 0 ? Math.floor(item.currentStock / item.predictedDailyUsage) : 0;
+                        const color = days <= 7 ? 'text-rose-500' : days <= 14 ? 'text-amber-500' : 'text-emerald-600';
+                        return (
+                          <p className={`text-[10px] font-black mt-0.5 ${color}`}>
+                            약 {days}일 후 소진 예상
+                          </p>
+                        );
+                      })()}
                     </div>
                     {alreadyOrdered ? (
                       <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 shrink-0">
@@ -792,7 +803,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0">
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">월평균</p>
                   <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">지난달</p>
-                  <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">현재재고</p>
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">현재재고</p>
+                    {canAiForecast && <p className="text-[8px] font-bold text-indigo-400 leading-none mt-0.5">소진예상</p>}
+                  </div>
                   <p className="text-[9px] font-bold text-rose-400 text-center uppercase tracking-wide">부족분</p>
                 </div>
                 <div className="w-[120px] sm:w-[176px] shrink-0 text-center">
@@ -845,9 +859,16 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                           {isDrop && <span className="text-[8px] font-black text-blue-400 bg-blue-50 px-0.5 rounded leading-none">↓</span>}
                         </div>
                         {/* 현재재고 */}
-                        <p className={`text-xs font-bold tabular-nums text-center ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
-                          {item.currentStock}
-                        </p>
+                        <div className="flex flex-col items-center">
+                          <p className={`text-xs font-bold tabular-nums ${item.currentStock <= 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+                            {item.currentStock}
+                          </p>
+                          {canAiForecast && item.predictedDailyUsage != null && item.predictedDailyUsage > 0 && (() => {
+                            const days = item.currentStock > 0 ? Math.floor(item.currentStock / item.predictedDailyUsage) : 0;
+                            const color = days <= 7 ? 'text-rose-500' : days <= 14 ? 'text-amber-500' : 'text-emerald-600';
+                            return <p className={`text-[9px] font-black tabular-nums leading-none mt-0.5 ${color}`}>{days}일</p>;
+                          })()}
+                        </div>
                         {/* 부족분 */}
                         {(() => {
                           const recommended = Math.ceil((item.recommendedStock ?? 0) * monthFactor);

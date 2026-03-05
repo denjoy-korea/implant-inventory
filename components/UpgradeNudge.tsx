@@ -5,7 +5,9 @@ export type NudgeType =
   | 'trial_ending'
   | 'item_limit_warning'
   | 'data_expiry_warning'
-  | 'upload_limit';
+  | 'upload_limit'
+  | 'fail_locked'
+  | 'subscription_expired';
 
 interface NudgeConfig {
   urgent: boolean;
@@ -18,6 +20,7 @@ interface NudgeContext {
   daysLeft?: number;
   currentCount?: number;
   maxCount?: number;
+  failCount?: number;
 }
 
 const NUDGE_CONFIG: Record<NudgeType, NudgeConfig> = {
@@ -76,23 +79,50 @@ const NUDGE_CONFIG: Record<NudgeType, NudgeConfig> = {
     message: () => '이번 달 수술기록 업로드 한도를 초과했습니다. 더 업로드하려면 플랜을 업그레이드하세요.',
     cta: '업그레이드',
   },
+  fail_locked: {
+    urgent: false,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+    ),
+    message: ({ failCount }) =>
+      failCount && failCount > 0
+        ? `교환(FAIL) 기록 ${failCount}건이 대기 중입니다. Basic 플랜으로 업그레이드하면 지금 바로 관리할 수 있습니다.`
+        : '교환(FAIL) 관리 기능을 사용하려면 Basic 플랜으로 업그레이드하세요.',
+    cta: '교환 관리 사용하기',
+  },
+  subscription_expired: {
+    urgent: true,
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+    ),
+    message: () => '구독이 만료되어 Free 플랜으로 전환되었습니다. 다시 구독하면 모든 기능과 데이터가 즉시 복원됩니다.',
+    cta: '구독 재개하기',
+  },
 };
+
+const DISMISS_FOREVER_KEY = (type: NudgeType) => `nudge_hide_forever_${type}`;
 
 interface Props {
   type: NudgeType;
   daysLeft?: number;
   currentCount?: number;
   maxCount?: number;
+  failCount?: number;
   onUpgrade: () => void;
 }
 
-export default function UpgradeNudge({ type, daysLeft, currentCount, maxCount, onUpgrade }: Props) {
-  const [dismissed, setDismissed] = useState(false);
+export default function UpgradeNudge({ type, daysLeft, currentCount, maxCount, failCount, onUpgrade }: Props) {
+  const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(DISMISS_FOREVER_KEY(type)));
+  const [doNotShow, setDoNotShow] = useState(false);
 
   if (dismissed) return null;
 
   const config = NUDGE_CONFIG[type];
-  const ctx: NudgeContext = { daysLeft, currentCount, maxCount };
+  const ctx: NudgeContext = { daysLeft, currentCount, maxCount, failCount };
 
   const isUrgent = config.urgent;
   const bg = isUrgent ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200';
@@ -102,6 +132,14 @@ export default function UpgradeNudge({ type, daysLeft, currentCount, maxCount, o
     ? 'bg-rose-600 hover:bg-rose-700 text-white'
     : 'bg-amber-500 hover:bg-amber-600 text-white';
   const dismissColor = isUrgent ? 'text-rose-400 hover:text-rose-600' : 'text-amber-400 hover:text-amber-600';
+  const checkColor = isUrgent ? 'accent-rose-500' : 'accent-amber-500';
+
+  const handleClose = () => {
+    if (doNotShow) {
+      localStorage.setItem(DISMISS_FOREVER_KEY(type), '1');
+    }
+    setDismissed(true);
+  };
 
   return (
     <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${bg}`}>
@@ -115,8 +153,18 @@ export default function UpgradeNudge({ type, daysLeft, currentCount, maxCount, o
       >
         {config.cta}
       </button>
+      {/* 다시 보지 않기 */}
+      <label className={`flex items-center gap-1 shrink-0 cursor-pointer select-none ${dismissColor}`}>
+        <input
+          type="checkbox"
+          checked={doNotShow}
+          onChange={e => setDoNotShow(e.target.checked)}
+          className={`w-3 h-3 rounded ${checkColor}`}
+        />
+        <span className="text-[10px] font-medium whitespace-nowrap">다시 보지 않기</span>
+      </label>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={handleClose}
         className={`shrink-0 transition-colors ${dismissColor}`}
         aria-label="닫기"
       >

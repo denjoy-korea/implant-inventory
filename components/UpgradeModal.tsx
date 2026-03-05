@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlanType, BillingCycle, PLAN_NAMES, PLAN_PRICING, PLAN_ORDER, PLAN_LIMITS } from '../types';
+import { PlanType, BillingCycle, PlanFeature, PLAN_NAMES, PLAN_PRICING, PLAN_ORDER, PLAN_LIMITS } from '../types';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface UpgradeModalProps {
@@ -8,10 +8,35 @@ interface UpgradeModalProps {
   currentPlan: PlanType;
   requiredPlan: PlanType;
   triggerMessage: string;
+  feature?: PlanFeature;
   onSelectPlan: (plan: PlanType, billing: BillingCycle) => void;
 }
 
 const formatPrice = (price: number) => price.toLocaleString('ko-KR');
+
+/** 기능별 비용 절감 힌트 */
+const FEATURE_SAVINGS: Partial<Record<PlanFeature, { label: string; saving: string }>> = {
+  fail_management: {
+    label: '교환 실수 1건 방지',
+    saving: '임플란트 재주문 비용 30~50만원 절약',
+  },
+  order_execution: {
+    label: '긴급 발주 마진 절감',
+    saving: '월 5~10만원 이상 비용 절감',
+  },
+  inventory_audit: {
+    label: '재고 오차 제로화',
+    saving: '불필요한 중복 주문 비용 절감',
+  },
+  brand_analytics: {
+    label: '최적 제조사 선택',
+    saving: '교환율 낮은 브랜드로 전환 가능',
+  },
+  monthly_report: {
+    label: '월간 경영 인사이트',
+    saving: '제조사 협상·원가 관리에 활용',
+  },
+};
 
 const UpgradeModal: React.FC<UpgradeModalProps> = ({
   isOpen,
@@ -19,6 +44,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   currentPlan,
   requiredPlan,
   triggerMessage,
+  feature,
   onSelectPlan,
 }) => {
   useEscapeKey(onClose, isOpen);
@@ -26,6 +52,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   if (!isOpen) return null;
 
   const upgradePlans: PlanType[] = ['basic', 'plus', 'business'];
+  const savings = feature ? FEATURE_SAVINGS[feature] : undefined;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -37,7 +64,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
         className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-fade-in-up"
       >
         {/* Header */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-5">
           <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
@@ -46,6 +73,21 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
           <h3 id="upgrade-modal-title" className="text-lg font-bold text-slate-900">업그레이드가 필요합니다</h3>
           <p className="text-sm text-slate-500 mt-1">{triggerMessage}</p>
         </div>
+
+        {/* 비용 절감 힌트 (R-08) */}
+        {savings && (
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-5">
+            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-black text-emerald-800">{savings.label}</p>
+              <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">{savings.saving}</p>
+            </div>
+          </div>
+        )}
 
         {/* Plan Cards */}
         <div className="grid grid-cols-3 gap-3 mb-6">

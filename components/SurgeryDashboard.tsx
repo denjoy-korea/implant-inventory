@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ExcelRow, HospitalPlanState, PLAN_LIMITS, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem, DetectedFail, FailCandidate } from '../types';
+import { ExcelRow, HospitalPlanState, PLAN_LIMITS, PLAN_NAMES, DEFAULT_WORK_DAYS, SurgeryUnregisteredItem, DetectedFail, FailCandidate } from '../types';
+import { planService } from '../services/planService';
 import { failDetectionService } from '../services/failDetectionService';
 import FailDetectionModal from './fail/FailDetectionModal';
 import { useCountUp } from './surgery-dashboard/shared';
@@ -19,6 +20,7 @@ import ClinicalAnalysisSection from './surgery-dashboard/ClinicalAnalysisSection
 import { useWorkDaysMap } from './surgery-dashboard/useWorkDaysMap';
 import CollapsibleSection from './surgery-dashboard/CollapsibleSection';
 import SurgeryDashboardSkeleton from './surgery-dashboard/SurgeryDashboardSkeleton';
+import MonthlyReportModal from './MonthlyReportModal';
 
 // =====================================================
 // Floating TOC Navigator
@@ -153,6 +155,41 @@ function FloatingTOC({ hasClinical }: { hasClinical: boolean }) {
   );
 }
 
+/** 잠긴 분석 섹션 대체 카드 */
+const SectionLockCard: React.FC<{
+  title: string;
+  desc: string;
+  requiredPlan: string;
+  onUpgrade?: () => void;
+}> = ({ title, desc, requiredPlan, onUpgrade }) => (
+  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+        <svg className="w-4.5 h-4.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-sm font-bold text-slate-800">{title}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-3 mt-4">
+      <span className="text-xs text-slate-400">
+        <span className="font-bold text-indigo-600">{requiredPlan}</span> 플랜부터 사용 가능
+      </span>
+      {onUpgrade && (
+        <button
+          onClick={onUpgrade}
+          className="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          업그레이드
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 interface SurgeryDashboardProps {
   rows: ExcelRow[];
   onUpload: () => void;
@@ -166,6 +203,7 @@ interface SurgeryDashboardProps {
   hospitalId?: string;
   isReadOnly?: boolean;
   currentUserName?: string;
+  onUpgrade?: () => void;
 }
 
 const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
@@ -179,8 +217,10 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   hospitalId,
   isReadOnly,
   currentUserName = '관리자',
+  onUpgrade,
 }) => {
   const [mounted, setMounted] = useState(false);
+  const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [showDataViewer, setShowDataViewer] = useState(false);
   const [dataViewerDayFilter, setDataViewerDayFilter] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -299,6 +339,12 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   const filteredStats = useSurgeryStats(filteredRows, workDaysMap);
   const clinicalStats = useClinicalStats(filteredRows);
   const isRangeFiltered = stats.monthlyData.length > 1 && !(effectiveStart === 0 && effectiveEnd >= stats.monthlyData.length - 1);
+
+  // 플랜별 기능 접근 가능 여부
+  const currentPlan = planState?.plan ?? 'free';
+  const canBrandAnalytics = planService.canAccess(currentPlan, 'brand_analytics');
+  const canAdvanced = planService.canAccess(currentPlan, 'dashboard_advanced');
+  const canMonthlyReport = planService.canAccess(currentPlan, 'monthly_report');
 
   // 진행율 기반 전월 대비 델타 (이번달이 진행중인 경우 공휴일·진료일 반영)
   const [progressAwareDeltas, setProgressAwareDeltas] = useState<{
@@ -539,6 +585,12 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 데이터 조회
               </button>
+              {canMonthlyReport && (
+                <button onClick={() => setShowMonthlyReport(true)} className="px-4 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-100 hover:bg-indigo-100 active:scale-[0.98] transition-colors flex items-center gap-2">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  월간 리포트
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -644,69 +696,103 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         </div>
       )}
 
-      {/* D. Charts 2x2 grid (filtered by range slider) */}
-      <CollapsibleSection
-        id="section-charts"
-        title="통계 차트"
-        subtitle=""
-        accentColor="slate"
-        icon={<svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
-        badge="월별 · 요일별 · 구분별"
-        storageKey="surgery-charts"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
-          </div>
-          <DayOfWeekChart dayOfWeekStats={kpiStats.dayOfWeekStats} dayInsight={kpiStats.dayInsight} mounted={mounted} onDayClick={handleDayClick} />
-          <div className="lg:col-span-2">
-            <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
-          </div>
-          <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
-        </div>
-      </CollapsibleSection>
-
-      {/* E. Deep Analysis Section */}
-      <CollapsibleSection
-        id="section-deep"
-        title="심층 분석"
-        subtitle=""
-        accentColor="indigo"
-        icon={<svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
-        badge="제조사 · 치아 부위 · 사이즈"
-        storageKey="surgery-deep"
-      >
-        <ManufacturerAnalysis
-          manufacturerDonut={kpiStats.manufacturerDonut}
-          manufacturerFailStats={kpiStats.manufacturerFailStats}
-          topSizes={kpiStats.topSizes}
-          totalPlacements={kpiStats.classificationStats['식립']}
-          mounted={mounted}
-        />
-        <ToothAnalysis toothAnalysis={kpiStats.toothAnalysis} toothHeatmap={kpiStats.toothHeatmap} mounted={mounted} />
-      </CollapsibleSection>
-
-      {/* F. Clinical Analysis (filtered) */}
-      {clinicalStats.hasClinicalData && (
+      {/* D. Charts 2x2 grid — brand_analytics (Basic+) */}
+      {canBrandAnalytics ? (
         <CollapsibleSection
-          id="section-clinical"
-          title="임상 인사이트"
+          id="section-charts"
+          title="통계 차트"
           subtitle=""
-          accentColor="rose"
-          icon={<svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
-          badge="골질 · 초기고정 · 실패율"
-          storageKey="surgery-clinical"
+          accentColor="slate"
+          icon={<svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
+          badge="월별 · 요일별 · 구분별"
+          storageKey="surgery-charts"
         >
-          <ClinicalAnalysisSection
-            rows={selectedMonth ? selectedMonthRows || [] : filteredRows}
-            manufacturers={kpiStats.manufacturerFailStats}
-            mounted={mounted}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+            </div>
+            <DayOfWeekChart dayOfWeekStats={kpiStats.dayOfWeekStats} dayInsight={kpiStats.dayInsight} mounted={mounted} onDayClick={handleDayClick} />
+            <div className="lg:col-span-2">
+              <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+            </div>
+            <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
+          </div>
         </CollapsibleSection>
+      ) : (
+        <SectionLockCard
+          title="통계 차트"
+          desc="월별 식립 추세, 요일별 패턴, 구분별 비율을 시각화합니다."
+          requiredPlan={PLAN_NAMES['basic']}
+          onUpgrade={onUpgrade}
+        />
       )}
 
-      {/* G. 재식립 감지 현황 */}
-      {hospitalId && (
+      {/* E. Deep Analysis — brand_analytics (Basic+) */}
+      {canBrandAnalytics ? (
+        <CollapsibleSection
+          id="section-deep"
+          title="심층 분석"
+          subtitle=""
+          accentColor="indigo"
+          icon={<svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+          badge="제조사 · 치아 부위 · 사이즈"
+          storageKey="surgery-deep"
+        >
+          <ManufacturerAnalysis
+            manufacturerDonut={kpiStats.manufacturerDonut}
+            manufacturerFailStats={kpiStats.manufacturerFailStats}
+            topSizes={kpiStats.topSizes}
+            totalPlacements={kpiStats.classificationStats['식립']}
+            mounted={mounted}
+          />
+          <ToothAnalysis toothAnalysis={kpiStats.toothAnalysis} toothHeatmap={kpiStats.toothHeatmap} mounted={mounted} />
+        </CollapsibleSection>
+      ) : (
+        <SectionLockCard
+          title="심층 분석"
+          desc="제조사별 교환율, 치아 부위별 식립 패턴, 사이즈 랭킹을 분석합니다."
+          requiredPlan={PLAN_NAMES['basic']}
+          onUpgrade={onUpgrade}
+        />
+      )}
+
+      {/* F. Clinical Analysis — dashboard_advanced (Plus+) */}
+      {canAdvanced ? (
+        clinicalStats.hasClinicalData && (
+          <CollapsibleSection
+            id="section-clinical"
+            title="임상 인사이트"
+            subtitle=""
+            accentColor="rose"
+            icon={<svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
+            badge="골질 · 초기고정 · 실패율"
+            storageKey="surgery-clinical"
+          >
+            <ClinicalAnalysisSection
+              rows={selectedMonth ? selectedMonthRows || [] : filteredRows}
+              manufacturers={kpiStats.manufacturerFailStats}
+              mounted={mounted}
+            />
+          </CollapsibleSection>
+        )
+      ) : (
+        <SectionLockCard
+          title="임상 인사이트"
+          desc="골질·초기고정 분포와 제조사별 실패율 등 심층 임상 데이터를 분석합니다."
+          requiredPlan={PLAN_NAMES['plus']}
+          onUpgrade={onUpgrade}
+        />
+      )}
+
+      {/* G. 재식립 감지 현황 — dashboard_advanced (Plus+) */}
+      {!canAdvanced ? (
+        <SectionLockCard
+          title="재식립 감지 현황"
+          desc="수술기록에서 재식립 가능성을 자동 감지하고 추적합니다."
+          requiredPlan={PLAN_NAMES['plus']}
+          onUpgrade={onUpgrade}
+        />
+      ) : hospitalId && (
         <CollapsibleSection
           id="section-reimplant"
           title="재식립 감지 현황"
@@ -803,6 +889,9 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
 
       {/* Data Viewer Modal */}
       {showDataViewer && <DataViewerModal rows={filteredRows} initialDayFilter={dataViewerDayFilter} onClose={() => { setShowDataViewer(false); setDataViewerDayFilter(null); }} />}
+
+      {/* Monthly Report Modal */}
+      {showMonthlyReport && <MonthlyReportModal rows={rows} onClose={() => setShowMonthlyReport(false)} hospitalId={hospitalId} />}
 
       {/* Reimplant Detection Modal (scan results) */}
       {scanCandidates && hospitalId && (

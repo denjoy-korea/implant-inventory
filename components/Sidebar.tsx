@@ -26,10 +26,13 @@ interface SidebarProps {
 
 /** 탭에 매핑되는 기능 식별자 (해당 기능이 없으면 잠금 아이콘 표시) */
 const TAB_FEATURE_MAP: Partial<Record<DashboardTab, PlanFeature>> = {
-  order_management: 'one_click_order',
-  member_management: 'role_management',
-  audit_log: 'audit_log',
+  fail_management:    'fail_management',
+  order_management:   'order_execution',
+  inventory_audit:    'inventory_audit',
+  member_management:  'role_management',
+  audit_log:          'audit_log',
 };
+
 
 const LockMenuIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -76,6 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   /** 탭 버튼 클릭 처리 — 차단된 탭은 무시 */
   const handleTabClick = (tab: DashboardTab) => {
     if (isPermBlocked(tab)) return;
+    // 플랜 잠금 탭도 클릭 가능 — FeatureGate 오버레이를 보여주기 위해 탭 전환은 허용
     onTabChange(tab);
     if (isMobile) onRequestClose?.();
   };
@@ -254,29 +258,40 @@ const Sidebar: React.FC<SidebarProps> = ({
                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
               {(isPermBlocked('order_management') || isLocked('order_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}
-              주문 관리 마스터
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">주문 관리 마스터</span>
+              {isLocked('order_management') && !isPermBlocked('order_management') && (
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">Basic</span>
+              )}
             </button>
             <button
               onClick={() => handleTabClick('fail_management')}
               disabled={isPermBlocked('fail_management')}
-              title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : undefined}
+              title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : isLocked('fail_management') ? `교환 관리 — Basic 플랜부터 사용 가능` : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('fail_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
-                : activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                : isLocked('fail_management') ? LOCKED_STYLE
+                  : activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              {isPermBlocked('fail_management') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
-              교환 관리
+              {(isPermBlocked('fail_management') || isLocked('fail_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">교환 관리</span>
+              {isLocked('fail_management') && !isPermBlocked('fail_management') && (
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">Basic</span>
+              )}
             </button>
             <button
               onClick={() => handleTabClick('inventory_audit')}
               disabled={isPermBlocked('inventory_audit')}
-              title={isPermBlocked('inventory_audit') ? '접근 권한이 없습니다' : undefined}
+              title={isPermBlocked('inventory_audit') ? '접근 권한이 없습니다' : isLocked('inventory_audit') ? `재고 실사 — Plus 플랜부터 사용 가능` : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('inventory_audit') ? 'opacity-30 cursor-not-allowed text-slate-500'
-                : activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                : isLocked('inventory_audit') ? LOCKED_STYLE
+                  : activeTab === 'inventory_audit' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-              {isPermBlocked('inventory_audit') ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
-              재고 실사
+              {(isPermBlocked('inventory_audit') || isLocked('inventory_audit')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>}
+              <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">재고 실사</span>
+              {isLocked('inventory_audit') && !isPermBlocked('inventory_audit') && (
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">Plus</span>
+              )}
             </button>
           </nav>
         </div>

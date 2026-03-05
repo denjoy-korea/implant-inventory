@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { CLINIC_ROLE_LABELS, HospitalPlanState, InventoryItem, User } from '../../types';
+import { BillingCycle, CLINIC_ROLE_LABELS, HospitalPlanState, InventoryItem, PlanType, User } from '../../types';
 import { ReviewType, ReviewRole } from '../../services/reviewService';
 import ErrorBoundary from '../ErrorBoundary';
 import OnboardingToast from '../onboarding/OnboardingToast';
@@ -23,7 +23,7 @@ interface AppUserOverlayStackProps {
   toastCompletedLabel: string | null;
   onCloseProfile: () => void;
   onDeleteAccount: () => void;
-  onChangePlan: () => void;
+  onChangePlan: (plan: PlanType, billing: BillingCycle) => void;
   onReviewSubmitted: () => void;
   onDismissReview: () => void;
   onOnboardingSkip: (snooze: boolean) => void;
@@ -111,6 +111,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
             hospitalName={hospitalName ?? user.name}
             initialStep={onboardingStep ?? 1}
             inventory={inventory}
+            plan={planState?.plan ?? 'free'}
             onSkip={onOnboardingSkip}
             onGoToDataSetup={onGoToDataSetup}
             onGoToSurgeryUpload={onGoToSurgeryUpload}

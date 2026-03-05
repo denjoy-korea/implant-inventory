@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Order, OrderStatus, OrderType, InventoryItem, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_STATUS_LABELS, RETURN_REASON_LABELS } from '../types';
+import { Order, OrderStatus, OrderType, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_STATUS_LABELS, RETURN_REASON_LABELS } from '../types';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { useCountUp, DONUT_COLORS } from './surgery-dashboard/shared';
 import OrderCancelModal from './order/OrderCancelModal';
@@ -33,6 +33,8 @@ interface OrderManagerProps {
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   isReadOnly?: boolean;
   historyOnly?: boolean;
+  plan?: PlanType;
+  onUpgradePlan?: () => void;
 }
 
 type LowStockEntry = {
@@ -89,6 +91,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   showAlertToast,
   isReadOnly,
   historyOnly,
+  plan,
+  onUpgradePlan,
 }) => {
   const [filterType, setFilterType] = useState<OrderType | 'all' | 'fail_and_return'>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -1557,6 +1561,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             orders={orders}
             returnRequests={returnRequests}
             isReadOnly={isReadOnly}
+            plan={plan}
+            onUpgrade={onUpgradePlan}
             onClose={() => setShowHistoryPanel(false)}
             onReceiptConfirm={(order) => {
               const group = groupedOrders.find(g =>

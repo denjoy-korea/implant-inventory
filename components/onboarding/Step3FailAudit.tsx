@@ -1,10 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Props {
   onGoToFailManagement: () => void;
+  isFreePlan?: boolean;
+  onCompleteFreePlan?: () => void;
 }
 
-export default function Step3FailAudit({ onGoToFailManagement }: Props) {
+export default function Step3FailAudit({ onGoToFailManagement, isFreePlan, onCompleteFreePlan }: Props) {
+  const [showFreeInfo, setShowFreeInfo] = useState(false);
+
+  const handleButtonClick = () => {
+    if (isFreePlan) {
+      setShowFreeInfo(true);
+    } else {
+      onGoToFailManagement();
+    }
+  };
+
+  if (showFreeInfo) {
+    return (
+      <div className="px-5 py-5 flex flex-col h-full items-center justify-center text-center">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mb-4">
+          <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 15v2m0-10v4m-6.364 9.364A9 9 0 1118.364 5.636 9 9 0 015.636 18.364z" />
+          </svg>
+        </div>
+        <h3 className="text-base font-black text-slate-900 mb-2">교환 관리는 Basic 이상 플랜에서 사용 가능합니다</h3>
+        <p className="text-xs text-slate-500 leading-relaxed mb-6 max-w-xs">
+          무료 플랜에서는 교환 재고 정합 처리를 이용할 수 없어요.
+          플랜을 업그레이드하면 교환 관리, 자동 재고 차감 등 더 많은 기능을 사용할 수 있습니다.
+        </p>
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <button
+            onClick={onCompleteFreePlan}
+            className="w-full py-3 text-sm font-bold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 py-5 flex flex-col h-full">
       <h2 className="text-lg font-black text-slate-900 mb-0.5">교환 재고 정합 처리</h2>
@@ -71,7 +109,7 @@ export default function Step3FailAudit({ onGoToFailManagement }: Props) {
       </div>
 
       <button
-        onClick={onGoToFailManagement}
+        onClick={handleButtonClick}
         className="w-full py-3.5 text-sm font-bold text-white bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all mt-auto"
       >
         교환 관리 진행하기

@@ -55,7 +55,7 @@ const plans: Plan[] = [
     cta: '무료로 시작하기',
     limit: 100,
     features: [
-      '재고 품목 최대 100개',
+      '재고 품목 최대 50개',
       '수술 기록 3개월 보관',
       '수술기록 월 1회 업로드',
       '기본 재고 현황 대시보드',
@@ -127,7 +127,7 @@ const comparisonCategories = [
   {
     name: '기본 기능',
     features: [
-      { label: '재고 품목 수', values: ['100개', '200개', '500개', '무제한'] },
+      { label: '재고 품목 수', values: ['50개', '200개', '500개', '무제한'] },
       { label: '수술 기록 보관', values: ['3개월', '6개월', '12개월', '24개월'] },
       { label: '수술기록 업로드', desc: '수술기록 엑셀 업로드 빈도 제한', values: ['월 1회', '상시', '상시', '상시'] },
       { label: '엑셀 업로드/다운로드', values: [true, true, true, true] },
@@ -147,7 +147,7 @@ const comparisonCategories = [
   {
     name: '데이터 분석',
     features: [
-      { label: '브랜드별 소모량 분석', values: [true, true, true, true] },
+      { label: '브랜드별 소모량 분석', values: [false, true, true, true] },
       { label: '월간 리포트', values: [false, false, true, true] },
       { label: '연간 리포트', values: [false, false, false, true] },
     ],
@@ -203,7 +203,7 @@ const faqs = [
   },
   {
     q: '결제 기간이 만료되어 갱신하지 못하면 어떻게 되나요?',
-    a: '결제 만료 시 즉시 Free 플랜으로 전환됩니다. 기존 데이터는 모두 보존되지만, Free 한도(100개)를 초과하는 재고 데이터는 읽기 전용이 됩니다. 언제든 재결제하시면 모든 기능이 즉시 복원됩니다.',
+    a: '결제 만료 시 즉시 Free 플랜으로 전환됩니다. 기존 데이터는 모두 보존되지만, Free 한도(50개)를 초과하는 재고 데이터는 읽기 전용이 됩니다. 언제든 재결제하시면 모든 기능이 즉시 복원됩니다.',
   },
   {
     q: '데이터 보안과 개인정보는 어떻게 관리되나요?',
@@ -773,6 +773,27 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           20% 할인
         </span>
       </div>
+
+      {/* 연간 결제 절약 배너 */}
+      {isYearly && (
+        <div className="max-w-2xl mx-auto px-6 pb-4 w-full">
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3.5 animate-fade-in">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-black text-emerald-800">연간 결제로 최대 <span className="text-emerald-600">312,000원</span> 절약</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
+                <span className="text-[11px] font-semibold text-emerald-600">Basic: 연 72,000원 절약</span>
+                <span className="text-[11px] font-semibold text-emerald-600">Plus: 연 168,000원 절약</span>
+                <span className="text-[11px] font-semibold text-emerald-600">Business: 연 312,000원 절약</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 가용성 조회 실패 배너 */}
       {availabilityError && (

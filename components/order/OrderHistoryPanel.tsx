@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Order, ReturnRequest } from '../../types';
+import { Order, PlanType, ReturnRequest } from '../../types';
 
 const displayMfr = (name: string) => name === 'IBS' ? 'IBS Implant' : name;
 
 const PAGE_SIZE = 10;
+const FREE_PLAN_MAX_ENTRIES = 10;
 
 interface OrderHistoryPanelProps {
     orders: Order[];
@@ -11,6 +12,8 @@ interface OrderHistoryPanelProps {
     onClose: () => void;
     onReceiptConfirm?: (order: Order) => void;
     isReadOnly?: boolean;
+    plan?: PlanType;
+    onUpgrade?: () => void;
 }
 
 type OrderType = Order['type'];
@@ -50,7 +53,7 @@ type HistoryEntry =
     | { kind: 'order'; data: Order; date: string }
     | { kind: 'return'; data: ReturnRequest; date: string };
 
-export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptConfirm, isReadOnly }: OrderHistoryPanelProps) {
+export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptConfirm, isReadOnly, plan, onUpgrade }: OrderHistoryPanelProps) {
     const [visible, setVisible] = useState(false);
     const [searchDate, setSearchDate] = useState('');
     const [showCalendar, setShowCalendar] = useState(false);
@@ -86,10 +89,14 @@ export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptCo
     useEffect(() => { setCurrentPage(0); }, [searchDate]);
 
     // 통합 히스토리 엔트리
-    const allEntries: HistoryEntry[] = [
+    const isFreePlan = plan === 'free';
+    const rawEntries: HistoryEntry[] = [
         ...orders.map(o => ({ kind: 'order' as const, data: o, date: o.date })),
         ...returnRequests.map(r => ({ kind: 'return' as const, data: r, date: r.requestedDate.slice(0, 10) })),
-    ];
+    ].sort((a, b) => b.date.localeCompare(a.date));
+    const totalRawCount = rawEntries.length;
+    const allEntries: HistoryEntry[] = isFreePlan ? rawEntries.slice(0, FREE_PLAN_MAX_ENTRIES) : rawEntries;
+    const isFreeLocked = isFreePlan && totalRawCount > FREE_PLAN_MAX_ENTRIES;
 
     const byDate = allEntries.reduce<Record<string, HistoryEntry[]>>((acc, entry) => {
         if (!acc[entry.date]) acc[entry.date] = [];
@@ -431,6 +438,33 @@ export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptCo
                         );
                     })}
                 </div>
+
+                {/* Free 플랜 이력 제한 배너 */}
+                {isFreeLocked && (
+                    <div className="px-5 sm:px-7 py-4 border-t border-indigo-100 bg-indigo-50/60 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black text-indigo-800">
+                                최근 10건만 표시됩니다
+                            </p>
+                            <p className="text-[11px] text-indigo-500 mt-0.5">
+                                전체 {totalRawCount}건 중 {FREE_PLAN_MAX_ENTRIES}건만 조회 가능 — Basic 플랜으로 업그레이드하면 전체 이력을 볼 수 있습니다
+                            </p>
+                        </div>
+                        {onUpgrade && (
+                            <button
+                                onClick={onUpgrade}
+                                className="shrink-0 text-xs font-black px-3 py-1.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+                            >
+                                업그레이드
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* 페이지네이션 */}
                 {totalPages > 1 && (

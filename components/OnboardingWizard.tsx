@@ -26,6 +26,7 @@ interface Props {
   hospitalName: string;
   initialStep: number;
   inventory: InventoryItem[];
+  plan?: string;
   onSkip: (snooze: boolean) => void;
   onGoToDataSetup: (file?: File, sizeCorrections?: Map<string, string>) => void;
   onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
@@ -39,6 +40,7 @@ export default function OnboardingWizard({
   hospitalName,
   initialStep,
   inventory,
+  plan = 'free',
   onSkip,
   onGoToDataSetup,
   onGoToSurgeryUpload,
@@ -67,6 +69,12 @@ export default function OnboardingWizard({
   // Step 7: 교환 관리 화면으로 이동 (완료 기록은 실제 재고 정리 완료 후 App에서 처리)
   const handleFailAuditNext = () => {
     onGoToFailManagement();
+  };
+
+  // Step 7 (Free 플랜): 교환 관리 사용 불가 → 안내 확인 후 온보딩 완료 처리
+  const handleCompleteFreePlan = () => {
+    onboardingService.markFailAuditDone(hospitalId);
+    onSkip(false);
   };
 
   const handleBack = () => {
@@ -150,7 +158,13 @@ export default function OnboardingWizard({
             onGoToInventoryAudit();
             onSkip(false); // 재고 편집 중 위저드 최소화 (토스트로 전환)
           }} />}
-          {step === 7 && <Step3FailAudit onGoToFailManagement={handleFailAuditNext} />}
+          {step === 7 && (
+            <Step3FailAudit
+              onGoToFailManagement={handleFailAuditNext}
+              isFreePlan={plan === 'free'}
+              onCompleteFreePlan={handleCompleteFreePlan}
+            />
+          )}
         </div>
       </div>
     </div>

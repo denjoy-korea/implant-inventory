@@ -1,4 +1,12 @@
 
+// ── 도메인 타입 re-export ─────────────────────────────────────────
+export * from './types/plan';
+export * from './types/return';
+export * from './types/fail';
+
+// ── 도메인 타입 import (이 파일 내 타입 정의에서 사용) ────────────
+import type { PlanType, BillingCycle, HospitalPlanState } from './types/plan';
+
 export interface ExcelRow {
   [key: string]: string | number | boolean | null | undefined;
 }
@@ -278,187 +286,6 @@ export interface AppState {
 }
 
 // ============================================
-// Plan Types & Constants
-// ============================================
-
-/** 플랜 타입 */
-export type PlanType = 'free' | 'basic' | 'plus' | 'business' | 'ultimate';
-
-/** 결제 주기 */
-export type BillingCycle = 'monthly' | 'yearly';
-
-/** 기능 식별자 */
-export type PlanFeature =
-  | 'dashboard_basic'
-  | 'dashboard_advanced'
-  | 'excel_upload'
-  | 'realtime_stock'
-  | 'brand_analytics'
-  | 'auto_stock_alert'
-  | 'monthly_report'
-  | 'yearly_report'
-  | 'supplier_management'
-  | 'one_click_order'
-  | 'ai_forecast'
-  | 'role_management'
-  | 'audit_log'
-  | 'email_support'
-  | 'priority_support'
-  | 'integrations';
-
-// ── 인테그레이션 타입 ─────────────────────────────────────────────
-export type IntegrationProvider = 'notion' | 'slack' | 'solapi';
-
-export interface HospitalIntegration {
-  id: string;
-  hospital_id: string;
-  provider: IntegrationProvider;
-  config: string;       // ENCv2: 암호화된 JSON blob
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface NotionConfig {
-  api_token: string;
-  database_id: string;
-}
-
-export interface SlackConfig {
-  webhook_url: string;
-}
-
-export interface SolapiConfig {
-  api_key: string;
-  api_secret: string;
-}
-
-export type IntegrationConfig = NotionConfig | SlackConfig | SolapiConfig;
-
-/** 플랜별 제한 */
-export interface PlanLimits {
-  maxItems: number;
-  maxUsers: number;
-  maxBaseStockEdits: number;
-  retentionMonths: number;
-  features: PlanFeature[];
-}
-
-/** 플랜 가격 정보 */
-export interface PlanPricing {
-  monthlyPrice: number;
-  yearlyPrice: number;
-}
-
-/** 병원 플랜 상태 (프론트엔드 사용) */
-export interface HospitalPlanState {
-  plan: PlanType;
-  expiresAt: string | null;
-  billingCycle: BillingCycle | null;
-  trialStartedAt: string | null;
-  trialUsed: boolean;
-  isTrialActive: boolean;
-  trialDaysRemaining: number;
-  daysUntilExpiry: number;
-  /** T1: 수술기록 보관 만료까지 남은 일수 (planService 확장 시 채워짐) */
-  retentionDaysLeft?: number;
-  /** T3: 이번 달 업로드 한도 초과 여부 (planService 확장 시 채워짐) */
-  uploadLimitExceeded?: boolean;
-}
-
-/** 플랜별 제한 상수 */
-export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
-  free: {
-    maxItems: 100,
-    maxUsers: 1,
-    maxBaseStockEdits: 3,
-    retentionMonths: 3,
-    features: ['dashboard_basic', 'excel_upload', 'realtime_stock', 'brand_analytics'],
-  },
-  basic: {
-    maxItems: 200,
-    maxUsers: 3,
-    maxBaseStockEdits: 5,
-    retentionMonths: 6,
-    features: ['dashboard_basic', 'excel_upload', 'realtime_stock', 'brand_analytics'],
-  },
-  plus: {
-    maxItems: 500,
-    maxUsers: 5,
-    maxBaseStockEdits: 10,
-    retentionMonths: 12,
-    features: [
-      'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'auto_stock_alert', 'monthly_report', 'role_management',
-      'email_support', 'integrations',
-    ],
-  },
-  business: {
-    maxItems: Infinity,
-    maxUsers: Infinity,
-    maxBaseStockEdits: Infinity,
-    retentionMonths: 24,
-    features: [
-      'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'auto_stock_alert', 'monthly_report', 'yearly_report',
-      'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
-      'email_support', 'priority_support', 'integrations',
-    ],
-  },
-  ultimate: {
-    maxItems: Infinity,
-    maxUsers: Infinity,
-    maxBaseStockEdits: Infinity,
-    retentionMonths: 999,
-    features: [
-      'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'auto_stock_alert', 'monthly_report', 'yearly_report',
-      'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
-      'audit_log', 'email_support', 'priority_support', 'integrations',
-    ],
-  },
-};
-
-/** 플랜별 가격 */
-export const PLAN_PRICING: Record<PlanType, PlanPricing> = {
-  free: { monthlyPrice: 0, yearlyPrice: 0 },
-  basic: { monthlyPrice: 29000, yearlyPrice: 23000 },
-  plus: { monthlyPrice: 69000, yearlyPrice: 55000 },
-  business: { monthlyPrice: 129000, yearlyPrice: 103000 },
-  ultimate: { monthlyPrice: 0, yearlyPrice: 0 },
-};
-
-/** 플랜 표시 이름 */
-export const PLAN_NAMES: Record<PlanType, string> = {
-  free: 'Free',
-  basic: 'Basic',
-  plus: 'Plus',
-  business: 'Business',
-  ultimate: 'Ultimate',
-};
-
-/** 플랜 축약 이름 (관리자 목록/배지용) */
-export const PLAN_SHORT_NAMES: Record<PlanType, string> = {
-  free: 'Free',
-  basic: 'Base',
-  plus: 'Plus',
-  business: 'Bizs',
-  ultimate: 'Maxs',
-};
-
-/** 플랜 순서 (업그레이드 비교용) */
-export const PLAN_ORDER: Record<PlanType, number> = {
-  free: 0,
-  basic: 1,
-  plus: 2,
-  business: 3,
-  ultimate: 4,
-};
-
-/** 체험 기본 기간 (일) — 베타 신청분 28일은 utils/trialPolicy.ts에서 계산 */
-export const TRIAL_DAYS = 14;
-
-// ============================================
 // Supabase Database Types
 // ============================================
 
@@ -650,105 +477,6 @@ export interface DbOrderItem {
   quantity: number;
 }
 
-// ============================================
-// Return Request Types
-// ============================================
-
-export type ReturnReason = 'excess_stock' | 'defective' | 'exchange';
-export type ReturnStatus = 'requested' | 'picked_up' | 'completed' | 'rejected';
-
-export interface CreateReturnParams {
-  manufacturer: string;
-  reason: ReturnReason;
-  manager: string;
-  memo: string;
-  items: { brand: string; size: string; quantity: number }[];
-}
-
-export const RETURN_REASON_LABELS: Record<ReturnReason, string> = {
-  excess_stock: '초과재고',
-  defective:    '제품하자',
-  exchange:     '수술중교환',
-};
-
-export const RETURN_STATUS_LABELS: Record<ReturnStatus, string> = {
-  requested: '반품 요청',
-  picked_up: '수거 완료',
-  completed: '반품 완료',
-  rejected:  '반품 거절',
-};
-
-export interface ReturnRequestItem {
-  id: string;
-  returnRequestId: string;
-  brand: string;
-  size: string;
-  quantity: number;
-}
-
-export interface ReturnRequest {
-  id: string;
-  hospitalId: string;
-  manufacturer: string;
-  reason: ReturnReason;
-  status: ReturnStatus;
-  requestedDate: string;
-  completedDate?: string | null;
-  manager: string;
-  confirmedBy?: string | null;
-  memo?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  items: ReturnRequestItem[];
-}
-
-/** Supabase return_requests 테이블 Row */
-export interface DbReturnRequest {
-  id: string;
-  hospital_id: string;
-  manufacturer: string;
-  reason: ReturnReason;
-  status: ReturnStatus;
-  requested_date: string;
-  completed_date: string | null;
-  manager: string;
-  confirmed_by: string | null;
-  memo: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Supabase return_request_items 테이블 Row */
-export interface DbReturnRequestItem {
-  id: string;
-  return_request_id: string;
-  brand: string;
-  size: string;
-  quantity: number;
-}
-
-export type ReturnMutationResult =
-  | { ok: true }
-  | { ok: false; reason: 'conflict' | 'not_found' | 'error'; currentStatus?: ReturnStatus };
-
-/** Supabase billing_history 테이블 Row */
-export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
-
-export interface DbBillingHistory {
-  id: string;
-  hospital_id: string;
-  plan: PlanType;
-  billing_cycle: BillingCycle | null;
-  amount: number;
-  payment_method: string;
-  payment_status: PaymentStatus;
-  payment_ref: string | null;
-  description: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 /** Supabase data_reset_requests 테이블 Row */
 export type ResetRequestStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled' | 'rejected';
 
@@ -764,65 +492,6 @@ export interface DbResetRequest {
   completed_at: string | null;
   cancelled_at: string | null;
   created_at: string;
-}
-
-// ============================================
-// FAIL 자동 감지 (재식립) 타입
-// ============================================
-
-/** FailCandidate를 구성하는 단일 수술기록 정보 */
-export interface FailCandidateRecord {
-  id: string;
-  date: string | null;
-  manufacturer: string;
-  brand: string;
-  size: string;
-  tooth_number: string;
-  patient_info: string | null;
-}
-
-/** 재식립으로 감지된 FAIL 후보 */
-export interface FailCandidate {
-  originalRecord: FailCandidateRecord;   // 원래 식립 기록
-  reimplantRecord: FailCandidateRecord;  // 재식립 기록 (더 최신)
-  matchedTooth: string;                  // 겹친 치아번호
-  patientInfoHash: string;
-  patientMasked?: string;                // 복호화+마스킹 된 환자명 (표시용)
-}
-
-/** Supabase detected_fails 테이블 Row */
-export interface DetectedFail {
-  id: string;
-  hospital_id: string;
-  original_record_id: string;
-  reimplant_record_id: string;
-  patient_info_hash: string;
-  tooth_number: string;
-  original_date: string | null;
-  reimplant_date: string | null;
-  original_manufacturer: string | null;
-  original_brand: string | null;
-  original_size: string | null;
-  reimplant_manufacturer: string | null;
-  reimplant_brand: string | null;
-  reimplant_size: string | null;
-  status: 'pending' | 'confirmed' | 'dismissed';
-  confirmed_by: string | null;
-  confirmed_at: string | null;
-  created_at: string;
-}
-
-/** Supabase public_notices 테이블 Row */
-export interface DbNotice {
-  id: string;
-  title: string;
-  content: string;
-  category: NoticeCategory;
-  is_important: boolean;
-  author: string;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 /** 서비스 에러 */
@@ -872,4 +541,17 @@ export interface Notice {
   author: string;
   isImportant?: boolean;
   category?: NoticeCategory;
+}
+
+/** Supabase public_notices 테이블 Row */
+export interface DbNotice {
+  id: string;
+  title: string;
+  content: string;
+  category: NoticeCategory;
+  is_important: boolean;
+  author: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }

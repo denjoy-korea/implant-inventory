@@ -5,12 +5,32 @@
  * 클라이언트에서 paymentKey/orderId/amount를 받아 TossPayments confirm API를 호출하고,
  * 성공 시 process_payment_callback RPC로 플랜을 활성화한다.
  *
- * 보안 모델: TossPayments API 자체 검증 (paymentKey는 실제 결제 완료 후에만 발급)
+ * 보안 모델:
+ * - billing_history.amount는 클라이언트가 작성한 값 → 신뢰 불가
+ * - plan + billing_cycle로 서버에서 정가를 독립 계산하여 amount 검증
+ * - TossPayments API 자체 검증 (paymentKey는 실제 결제 완료 후에만 발급)
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+/** 서버사이드 정가 테이블 (types.ts PLAN_PRICING와 동기화 필요) */
+const PLAN_BASE_PRICES: Record<string, Record<string, number>> = {
+  basic:    { monthly: 29000,  yearly: 23000  },
+  plus:     { monthly: 69000,  yearly: 55000  },
+  business: { monthly: 129000, yearly: 103000 },
+};
+
+/** VAT 포함 정가 계산 (tossPaymentService.calcTotalAmount와 동일 로직) */
+function calcCanonicalAmount(plan: string, billingCycle: string): number | null {
+  const prices = PLAN_BASE_PRICES[plan];
+  if (!prices) return null;
+  const basePrice = billingCycle === "yearly"
+    ? prices.yearly * 12
+    : prices.monthly;
+  return basePrice + Math.round(basePrice * 0.1);
+}
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
 
@@ -72,7 +92,7 @@ Deno.serve(async (req: Request) => {
   // billing_history 레코드 검증 (orderId = billing_history.id)
   const { data: billing, error: billingError } = await adminClient
     .from("billing_history")
-    .select("hospital_id, payment_status, amount")
+    .select("hospital_id, payment_status, plan, billing_cycle")
     .eq("id", orderId.trim())
     .single();
 
@@ -88,11 +108,20 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Billing is not pending", status }, 409);
   }
 
-  // 금액 검증: billing_history의 amount와 TossPayments amount 일치 여부
-  const storedAmount = (billing as { amount: number }).amount;
-  if (storedAmount !== amountNum) {
+  // 금액 검증: plan + billing_cycle로 서버에서 정가를 독립 계산
+  // billing_history.amount는 클라이언트 작성값이므로 신뢰하지 않음
+  const billingPlan = (billing as { plan: string }).plan;
+  const billingCycleVal = (billing as { billing_cycle: string }).billing_cycle;
+  const canonicalAmount = calcCanonicalAmount(billingPlan, billingCycleVal);
+
+  if (canonicalAmount === null) {
+    console.error("[toss-payment-confirm] Unknown plan or billing_cycle:", billingPlan, billingCycleVal);
+    return jsonResponse({ error: "Invalid plan configuration" }, 400);
+  }
+  if (canonicalAmount !== amountNum) {
+    console.error("[toss-payment-confirm] Amount mismatch:", { canonicalAmount, received: amountNum, plan: billingPlan, billingCycle: billingCycleVal });
     return jsonResponse(
-      { error: "Amount mismatch", expected: storedAmount, received: amountNum },
+      { error: "Amount mismatch", expected: canonicalAmount, received: amountNum },
       400,
     );
   }

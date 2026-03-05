@@ -103,13 +103,13 @@ export const planService = {
 
   /** 특정 기능에 필요한 최소 플랜 반환 */
   getRequiredPlan(feature: PlanFeature): PlanType {
-    const plans: PlanType[] = ['free', 'basic', 'plus', 'business'];
+    const plans: PlanType[] = ['free', 'basic', 'plus', 'business', 'ultimate'];
     for (const plan of plans) {
       if (PLAN_LIMITS[plan].features.includes(feature)) {
         return plan;
       }
     }
-    return 'business';
+    return 'ultimate';
   },
 
   /** 품목 수 제한에 필요한 최소 플랜 반환 */
