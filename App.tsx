@@ -20,45 +20,43 @@ const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboar
 const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
 const DirectPaymentModal = lazy(() => import('./components/DirectPaymentModal'));
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
-import { ExcelData, ExcelRow, User, DashboardTab, UploadType, InventoryItem, ExcelSheet, Order, OrderStatus, Hospital, PlanType, BillingCycle, PLAN_LIMITS, SurgeryUnregisteredItem, DbOrder, DbOrderItem, BillingProgram, canAccessTab, ReturnRequest, ReturnReason, ReturnStatus, ReturnMutationResult, DbReturnRequest, DbReturnRequestItem, FailCandidate } from './types';
+import { ExcelData, User, DashboardTab, InventoryItem, ExcelSheet, Hospital, PlanType, BillingCycle, PLAN_LIMITS, BillingProgram, canAccessTab, FailCandidate } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
-import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from './services/sizeNormalizer';
+import { getSizeMatchKey, toCanonicalSize } from './services/sizeNormalizer';
 import { authService } from './services/authService';
 import { inventoryService } from './services/inventoryService';
 import { surgeryService } from './services/surgeryService';
-import { orderService } from './services/orderService';
-import { returnService } from './services/returnService';
 import { hospitalService } from './services/hospitalService';
-import { hospitalSettingsService, StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from './services/hospitalSettingsService';
+import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from './services/hospitalSettingsService';
 import { planService } from './services/planService';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
-import { dbToExcelRowBatch, dbToOrder, dbToReturnRequest, fixIbsImplant } from './services/mappers';
+import { fixIbsImplant } from './services/mappers';
 import { supabase } from './services/supabaseClient';
 import { operationLogService } from './services/operationLogService';
-import { failDetectionService } from './services/failDetectionService';
 import { onboardingService } from './services/onboardingService';
-import { normalizeSurgery, normalizeInventory } from './services/normalizationService';
+import { normalizeSurgery } from './services/normalizationService';
 import { isExchangePrefix } from './services/appUtils';
-import { ReceiptUpdate } from './components/ReceiptConfirmationModal';
 import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
-import { DAYS_PER_MONTH, LOW_STOCK_RATIO } from './constants';
-import { buildHash, parseHash, VIEW_HASH, TAB_HASH, HASH_TO_VIEW, HASH_TO_TAB } from './appRouting';
 import { reviewService, ReviewType } from './services/reviewService';
 import { pageViewService } from './services/pageViewService';
 import { useInventoryCompare } from './hooks/useInventoryCompare';
 import { useFixtureEditControls } from './hooks/useFixtureEditControls';
 import { useUIState } from './hooks/useUIState';
 import { useOnboarding } from './hooks/useOnboarding';
+import { useHashRouting } from './hooks/useHashRouting';
+import { useReturnHandlers } from './hooks/useReturnHandlers';
+import { useFileUpload } from './hooks/useFileUpload';
+import { useSurgeryUnregistered } from './hooks/useSurgeryUnregistered';
+import { useOrderHandlers } from './hooks/useOrderHandlers';
+import { useInventorySync } from './hooks/useInventorySync';
+import { FileUploadLoadingOverlay } from './components/FileUploadLoadingOverlay';
 import { getDashboardTabTitle } from './components/dashboard/dashboardTabTitle';
 import {
-  appendUnregisteredSample,
   buildBrandSizeFormatIndex,
-  buildUnregisteredSample,
   hasRegisteredBrandSize,
   isListBasedSurgeryInput,
   isManufacturerAliasMatch,
-  normalizeSizeTextStrict,
 } from './services/surgeryUnregisteredUtils';
 
 declare global {
@@ -67,56 +65,11 @@ declare global {
 }
 
 
-const SURGERY_UPLOAD_STEPS = [
-  '파일을 읽는 중...',
-  '수술기록 분석 중...',
-  '재고 마스터와 비교 중...',
-  '데이터 등록 중...',
-];
-const FIXTURE_UPLOAD_STEPS = [
-  '파일을 읽는 중...',
-  '재료 목록 파싱 중...',
-  '데이터 처리 중...',
-  '잠시만 기다려 주세요...',
-];
-
-function FileUploadLoadingOverlay({ type }: { type: UploadType | null }) {
-  const steps = type === 'surgery' ? SURGERY_UPLOAD_STEPS : FIXTURE_UPLOAD_STEPS;
-  const [stepIndex, setStepIndex] = React.useState(0);
-  const [visible, setVisible] = React.useState(true);
-
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setStepIndex(i => (i + 1) % steps.length);
-        setVisible(true);
-      }, 300);
-    }, 700);
-    return () => clearInterval(interval);
-  }, [steps.length]);
-
-  return (
-    <div className="fixed inset-0 z-[340] bg-white/70 backdrop-blur-sm flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4 bg-white rounded-3xl shadow-2xl border border-slate-100 px-12 py-9">
-        <div className="w-11 h-11 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-        <p
-          className="text-sm text-slate-600 font-medium text-center min-w-[9rem] transition-all duration-300"
-          style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(5px)' }}
-        >
-          {steps[stepIndex]}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
   const dashboardHeaderRef = useRef<HTMLElement>(null);
-  const uploadingTypeRef = useRef<UploadType | null>(null);
-
   const { toast: alertToast, showToast: showAlertToast } = useToast(3500);
 
   const {
@@ -258,6 +211,16 @@ const App: React.FC = () => {
   const isUltimatePlan = isSystemAdmin || state.planState?.plan === 'ultimate';
   const effectivePlan: PlanType = isUltimatePlan ? 'ultimate' : (state.planState?.plan ?? 'free');
   const isReadOnly = state.user?.status === 'readonly';
+
+  const { handleFileUpload, uploadingTypeRef } = useFileUpload({
+    hospitalBillingProgram: state.hospitalBillingProgram,
+    user: state.user,
+    surgeryMaster: state.surgeryMaster,
+    effectivePlan,
+    setState,
+    showAlertToast,
+    setPendingFailCandidates,
+  });
   const requiresBillingProgramSetup = (
     state.currentView === 'dashboard' &&
     !!state.user?.hospitalId &&
@@ -395,397 +358,10 @@ const App: React.FC = () => {
 
   // 세션 초기화, Realtime 구독은 useAppState 훅에서 처리
 
-  /* ── Hash Routing: State → URL ── */
-  const skipHashSync = useRef(false);
-  // 초기 로드 시 buildHash가 URL의 해시를 덮어쓰지 않도록 첫 번째 실행을 건너뜀
-  const isFirstHashSync = useRef(true);
+  useHashRouting(state, effectiveAccessRole, setState);
 
-  useEffect(() => {
-    if (state.isLoading) return;
-    if (isFirstHashSync.current) { isFirstHashSync.current = false; return; }
-    if (skipHashSync.current) { skipHashSync.current = false; return; }
-    const hash = buildHash(state.currentView, state.dashboardTab);
-    if (window.location.hash !== hash) {
-      window.history.pushState(null, '', hash);
-    }
-  }, [state.currentView, state.dashboardTab, state.isLoading]);
 
-  /* ── Hash Routing: URL → State (back/forward) ── */
-  useEffect(() => {
-    const onPopState = () => {
-      const { view, tab } = parseHash(window.location.hash);
-      if (view === 'dashboard' && !state.user) return;
-      if (view === 'admin_panel' && state.user?.role !== 'admin') return;
-      const guardedTab = (tab !== undefined && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
-        ? 'overview' : tab;
-      skipHashSync.current = true;
-      setState(prev => ({
-        ...prev,
-        currentView: view,
-        ...(guardedTab !== undefined ? { dashboardTab: guardedTab } : {}),
-      }));
-    };
-    window.addEventListener('popstate', onPopState);
-    window.addEventListener('hashchange', onPopState);
-    return () => {
-      window.removeEventListener('popstate', onPopState);
-      window.removeEventListener('hashchange', onPopState);
-    };
-  }, [effectiveAccessRole, state.user]);
 
-  /* ── Hash Routing: Initial load ── */
-  useEffect(() => {
-    if (state.isLoading) return;
-    const hash = window.location.hash;
-    if (hash && hash !== '#/' && hash !== '#' && hash !== '') {
-      const { view, tab } = parseHash(hash);
-      if (view === 'dashboard' && !state.user) {
-        // 비로그인 상태에서 대시보드 딥링크 접근 → 로그인 후 복원하기 위해 저장
-        sessionStorage.setItem('_pending_redirect_hash', hash);
-        return;
-      }
-      if (view === 'admin_panel' && state.user?.role !== 'admin') return;
-      // 권한 없는 탭으로 URL 직접 접근 시 overview로 fallback
-      const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
-        ? 'overview' : tab;
-      if (view !== state.currentView || (resolvedTab && resolvedTab !== state.dashboardTab)) {
-        skipHashSync.current = true;
-        setState(prev => ({ ...prev, currentView: view, ...(resolvedTab ? { dashboardTab: resolvedTab } : {}) }));
-      }
-    } else {
-      window.history.replaceState(null, '', buildHash(state.currentView, state.dashboardTab));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveAccessRole, state.isLoading]);
-
-  /* ── Hash Routing: 로그인 후 딥링크 복원 ── */
-  useEffect(() => {
-    if (!state.user || state.isLoading) return;
-    const pendingHash = sessionStorage.getItem('_pending_redirect_hash');
-    if (!pendingHash) return;
-    sessionStorage.removeItem('_pending_redirect_hash');
-    const { view, tab } = parseHash(pendingHash);
-    if (view !== 'dashboard') return;
-    const resolvedTab = (tab && !canAccessTab(tab, state.user.permissions, effectiveAccessRole))
-      ? 'overview' : tab;
-    skipHashSync.current = true;
-    setState(prev => ({ ...prev, currentView: view, ...(resolvedTab ? { dashboardTab: resolvedTab } : {}) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.user?.id, state.isLoading]);
-
-  // 문자열 정규화: 수술기록 매칭용 (normalizeSurgery), 재고 비교용 (normalizeInventory)
-  // → services/normalizationService.ts 에서 import
-  const normalize = normalizeSurgery;
-
-  const computeUsageByInventoryFromRecords = useCallback((records: Array<{
-    date: string | null;
-    classification: string;
-    manufacturer: string | null;
-    brand: string | null;
-    size: string | null;
-    quantity: number;
-    surgery_record: string | null;
-  }>, inventoryItems: InventoryItem[]) => {
-    type SurgeryEntry = { totalQty: number };
-    const surgeryMap = new Map<string, SurgeryEntry>();
-    const formatIndex = buildBrandSizeFormatIndex(inventoryItems);
-
-    records.forEach(row => {
-      const cls = String(row.classification || '');
-      if (cls !== '식립' && cls !== '수술중교환') return;
-      const record = String(row.surgery_record || '');
-      if (record.includes('[GBR Only]')) return;
-
-      const rawManufacturer = String(row.manufacturer || '');
-      const rawBrand = String(row.brand || '');
-      const rawSize = String(row.size || '');
-      if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
-
-      const rowM = normalize(rawManufacturer);
-      const rowB = normalize(rawBrand);
-      const rowS = getSizeMatchKey(rawSize, rawManufacturer);
-      const key = `${rowM}|${rowB}|${rowS}`;
-      const qtyValue = row.quantity !== undefined ? Number(row.quantity) : 0;
-      const validQty = isNaN(qtyValue) ? 0 : qtyValue;
-      const existing = surgeryMap.get(key);
-      if (existing) {
-        existing.totalQty += validQty;
-      } else {
-        surgeryMap.set(key, { totalQty: validQty });
-      }
-    });
-
-    const usageByInventoryId: Record<string, number> = {};
-    inventoryItems.forEach(item => {
-      const isCategory = isExchangePrefix(item.manufacturer) || item.manufacturer === '보험청구';
-      if (isCategory) return;
-
-      const targetM = normalize(item.manufacturer);
-      const targetB = normalize(item.brand);
-      const targetS = getSizeMatchKey(item.size, item.manufacturer);
-      let totalUsage = 0;
-
-      surgeryMap.forEach((entry, key) => {
-        const [rowM, rowB, rowS] = key.split('|');
-        if (
-          (rowM.includes(targetM) || targetM.includes(rowM) || rowM === targetM) &&
-          rowB === targetB &&
-          rowS === targetS
-        ) {
-          totalUsage += entry.totalQty;
-        }
-      });
-
-      usageByInventoryId[item.id] = totalUsage;
-    });
-
-    return usageByInventoryId;
-  }, [normalize]);
-
-  const syncInventoryWithUsageAndOrders = useCallback(() => {
-    const calcSettings = stockCalcSettingsRef.current;
-    setState(prev => {
-      const records = prev.surgeryMaster['수술기록지'] || [];
-      if (records.length === 0 && prev.inventory.length === 0) return prev;
-
-      // ── 1회 순회: 기간 계산 + 수술기록 집계 (O(records)) ──────────────────
-      let minTime = Infinity;
-      let maxTime = -Infinity;
-
-      // key: `${normM}|${normB}|${normS}` → { totalQty, dailyQty, normM }
-      type SurgeryEntry = { totalQty: number; dailyQty: Record<string, number>; normM: string };
-      const surgeryMap = new Map<string, SurgeryEntry>();
-      const formatIndex = buildBrandSizeFormatIndex(prev.inventory);
-
-      records.forEach(row => {
-        const dateStr = row['날짜'];
-        if (dateStr) {
-          const t = new Date(dateStr as string | number).getTime();
-          if (!isNaN(t)) {
-            if (t < minTime) minTime = t;
-            if (t > maxTime) maxTime = t;
-          }
-        }
-
-        const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
-        if (isTotalRow) return;
-
-        const cls = String(row['구분'] || '');
-        if (cls !== '식립' && cls !== '수술중교환') return;
-        const record = String(row['수술기록'] || '');
-        if (record.includes('[GBR Only]')) return;
-
-        const rawManufacturer = String(row['제조사'] || '');
-        const rawBrand = String(row['브랜드'] || '');
-        const rawSize = String(row['규격(SIZE)'] || '');
-        if (!isListBasedSurgeryInput(formatIndex, rawManufacturer, rawBrand, rawSize)) return;
-
-        const rowM = normalize(rawManufacturer);
-        const rowB = normalize(rawBrand);
-        const rowS = getSizeMatchKey(rawSize, rawManufacturer);
-        const key = `${rowM}|${rowB}|${rowS}`;
-
-        const qtyValue = row['갯수'] !== undefined ? Number(row['갯수']) : 0;
-        const validQty = isNaN(qtyValue) ? 0 : qtyValue;
-        const dateKey = String(dateStr || 'unknown');
-
-        const existing = surgeryMap.get(key);
-        if (existing) {
-          existing.totalQty += validQty;
-          existing.dailyQty[dateKey] = (existing.dailyQty[dateKey] || 0) + validQty;
-        } else {
-          surgeryMap.set(key, { totalQty: validQty, dailyQty: { [dateKey]: validQty }, normM: rowM });
-        }
-      });
-
-      const periodInMonths = (minTime === Infinity || maxTime === -Infinity || minTime === maxTime)
-        ? 1
-        : Math.max(1, (maxTime - minTime) / (1000 * 60 * 60 * 24 * DAYS_PER_MONTH));
-
-      // ── 1회 순회: 입고완료 주문 집계 (O(orders × items)) ──────────────────
-      // key: `${normM}|${normB}|${normS}` → totalReceived
-      const receivedMap = new Map<string, number>();
-      prev.orders.filter(o => o.status === 'received' && o.type !== 'return').forEach(order => {
-        const normOM = normalize(order.manufacturer);
-        order.items.forEach(orderItem => {
-          const normOB = normalize(orderItem.brand);
-          const normOS = getSizeMatchKey(orderItem.size, order.manufacturer);
-          const key = `${normOM}|${normOB}|${normOS}`;
-          receivedMap.set(key, (receivedMap.get(key) ?? 0) + Number(orderItem.quantity || 0));
-        });
-      });
-
-      // 지난달 prefix: 데이터 최신 날짜의 전달 기준
-      const _lastDataDate = maxTime !== -Infinity ? new Date(maxTime) : new Date();
-      const _ldMonth = _lastDataDate.getMonth(); // 0-indexed
-      const _prevMonthYear = _ldMonth === 0 ? _lastDataDate.getFullYear() - 1 : _lastDataDate.getFullYear();
-      const _prevMonth = _ldMonth === 0 ? 12 : _ldMonth; // 1-indexed
-      const lastMonthPrefix = `${_prevMonthYear}-${String(_prevMonth).padStart(2, '0')}`;
-
-      // ── inventory 매핑: lookup O(inventory × surgeryMap keys) → 실질 O(n) ──
-      const updatedInventory = prev.inventory.map(item => {
-        const isCategory = isExchangePrefix(item.manufacturer) || item.manufacturer === '보험청구';
-        if (isCategory) {
-          return {
-            ...item,
-            usageCount: 0,
-            currentStock: item.initialStock + (item.stockAdjustment ?? 0),
-            recommendedStock: 0,
-            monthlyAvgUsage: 0,
-            dailyMaxUsage: 0,
-            predictedDailyUsage: 0,
-            forecastConfidence: 0,
-          };
-        }
-
-        const targetM = normalize(item.manufacturer);
-        const targetB = normalize(item.brand);
-        const targetS = getSizeMatchKey(item.size, item.manufacturer);
-
-        let totalUsage = 0;
-        const mergedDailyQty: Record<string, number> = {};
-
-        // 제조사 포함관계 매칭 유지 (rowM.includes(targetM) || targetM.includes(rowM))
-        surgeryMap.forEach((entry, key) => {
-          const [rowM, rowB, rowS] = key.split('|');
-          if (
-            (rowM.includes(targetM) || targetM.includes(rowM) || rowM === targetM) &&
-            rowB === targetB &&
-            rowS === targetS
-          ) {
-            totalUsage += entry.totalQty;
-            for (const [day, qty] of Object.entries(entry.dailyQty)) {
-              mergedDailyQty[day] = (mergedDailyQty[day] || 0) + qty;
-            }
-          }
-        });
-
-        const dailyMax = Object.values(mergedDailyQty).length > 0 ? Math.max(...Object.values(mergedDailyQty)) : 0;
-        const monthlyAvg = Number((totalUsage / periodInMonths).toFixed(1));
-        const lastMonthUsage = Object.entries(mergedDailyQty)
-          .filter(([day]) => day.startsWith(lastMonthPrefix))
-          .reduce((sum, [, qty]) => sum + qty, 0);
-
-        const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-        const datedEntries = Object.entries(mergedDailyQty)
-          .map(([day, qty]) => ({ day, qty: Number(qty) || 0, time: new Date(day).getTime() }))
-          .filter(({ day, time }) => !!day && day !== 'unknown' && Number.isFinite(time))
-          .sort((a, b) => a.time - b.time);
-
-        const dailyQtyByDate = new Map<string, number>();
-        datedEntries.forEach(entry => {
-          const key = entry.day.slice(0, 10);
-          dailyQtyByDate.set(key, (dailyQtyByDate.get(key) ?? 0) + entry.qty);
-        });
-
-        const toDateKey = (date: Date) => {
-          const y = date.getFullYear();
-          const m = String(date.getMonth() + 1).padStart(2, '0');
-          const d = String(date.getDate()).padStart(2, '0');
-          return `${y}-${m}-${d}`;
-        };
-
-        // "활동일 평균"이 아닌 "캘린더 평균" 기준으로 계산 (과대추정 방지)
-        const getWindowAvg = (days: number, offsetDays = 0) => {
-          if (days <= 0) return 0;
-          let total = 0;
-          for (let i = offsetDays; i < offsetDays + days; i += 1) {
-            const date = new Date(_lastDataDate);
-            date.setDate(date.getDate() - i);
-            total += dailyQtyByDate.get(toDateKey(date)) ?? 0;
-          }
-          return total / days;
-        };
-
-        const recent14Avg = getWindowAvg(14, 0);
-        const recent30Avg = getWindowAvg(30, 0);
-        const previous30Avg = getWindowAvg(30, 30);
-        const monthlyDailyAvg = monthlyAvg / DAYS_PER_MONTH;
-
-        const trendRatio = previous30Avg > 0
-          ? recent30Avg / previous30Avg
-          : recent30Avg > 0
-            ? 1.05
-            : 1;
-        const trendFactor = clamp(trendRatio, calcSettings.trendFloor, calcSettings.trendCeiling);
-
-        const volatilityBase = Math.max(recent30Avg, monthlyDailyAvg, 0.2);
-        const volatilityRatio = dailyMax > 0 ? dailyMax / volatilityBase : 1;
-        const volatilityFactor = clamp(1 + Math.max(0, volatilityRatio - 1) * 0.05, 1, 1.15);
-
-        const baseForecastDaily = recent14Avg > 0
-          ? (recent14Avg * 0.6) + (recent30Avg * 0.3) + (monthlyDailyAvg * 0.1)
-          : recent30Avg > 0
-            ? (recent30Avg * 0.7) + (monthlyDailyAvg * 0.3)
-            : monthlyDailyAvg;
-
-        const fallbackDaily = totalUsage > 0 ? Math.max(monthlyDailyAvg, 1 / DAYS_PER_MONTH) : 0;
-        const predictedDailyUsage = Number(
-          Math.max(0, (baseForecastDaily || fallbackDaily) * trendFactor * volatilityFactor).toFixed(2)
-        );
-
-        const sampleDensityScore = clamp(datedEntries.length / 30, 0, 1);
-        const trendStabilityScore = previous30Avg > 0 && recent30Avg > 0
-          ? 1 - clamp(Math.abs(recent30Avg - previous30Avg) / Math.max(previous30Avg, 0.1), 0, 1)
-          : 0.6;
-        const forecastConfidence = Number(
-          clamp(0.35 + (sampleDensityScore * 0.45) + (trendStabilityScore * 0.2), 0.35, 0.95).toFixed(2)
-        );
-
-        const exactKey = `${targetM}|${targetB}|${targetS}`;
-        const totalReceived = receivedMap.get(exactKey) ?? 0;
-
-        const currentStock = item.initialStock + (item.stockAdjustment ?? 0) + totalReceived - totalUsage;
-        // 권장량은 보수적으로 유지: 예측값은 긴급도 전용으로만 사용
-        const demandBase = Math.max(monthlyAvg, lastMonthUsage);
-        const recommended = Math.max(Math.ceil(demandBase), dailyMax * calcSettings.safetyMultiplier, 1);
-
-        // 마지막 사용일: mergedDailyQty의 날짜 키 중 최신값
-        const lastUsedDate = totalUsage > 0 && datedEntries.length > 0
-          ? datedEntries[datedEntries.length - 1].day
-          : null;
-
-        return {
-          ...item,
-          usageCount: totalUsage,
-          currentStock,
-          recommendedStock: recommended,
-          monthlyAvgUsage: monthlyAvg,
-          dailyMaxUsage: dailyMax,
-          predictedDailyUsage,
-          forecastConfidence,
-          lastMonthUsage,
-          lastUsedDate,
-        };
-      });
-      return { ...prev, inventory: updatedInventory };
-    });
-  }, [normalize]);
-
-  useEffect(() => {
-    syncInventoryWithUsageAndOrders();
-  }, [state.surgeryMaster, state.orders, state.inventory.length, syncInventoryWithUsageAndOrders]);
-
-  const refreshLatestSurgeryUsage = useCallback(async (): Promise<Record<string, number> | null> => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return null;
-
-    try {
-      const retentionMonths = PLAN_LIMITS[effectivePlan]?.retentionMonths ?? 24;
-      const effectiveMonths = Math.min(retentionMonths, 24);
-      const fromDateObj = new Date();
-      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
-      const fromDate = fromDateObj.toISOString().split('T')[0];
-
-      const latestRecords = await surgeryService.getSurgeryUsageRecords({ fromDate });
-      const usageMap = computeUsageByInventoryFromRecords(latestRecords, state.inventory);
-      return usageMap;
-    } catch (error) {
-      console.error('[App] 최신 수술기록 재조회 실패:', error);
-      showAlertToast('최신 수술기록 조회에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      return null;
-    }
-  }, [computeUsageByInventoryFromRecords, effectivePlan, showAlertToast, state.inventory, state.user?.hospitalId]);
 
   const resolveManualSurgeryInput = useCallback(async (params: {
     recordIds: string[];
@@ -1013,882 +589,87 @@ const App: React.FC = () => {
     }
   }, [setState, showAlertToast, state.inventory, state.user?.hospitalId]);
 
-  const handleFileUpload = async (file: File, type: UploadType, sizeCorrections?: Map<string, string>): Promise<boolean> => {
-    uploadingTypeRef.current = type;
-    setState(prev => ({ ...prev, isLoading: true }));
-    try {
-      const billingProgram = state.hospitalBillingProgram ?? 'dentweb';
-      if (billingProgram !== 'dentweb') {
-        showAlertToast('현재 선택한 청구프로그램의 업로드 로직은 준비 중입니다. 덴트웹 설정 후 이용해 주세요.', 'info');
-        setState(prev => ({ ...prev, isLoading: false }));
-        return false;
-      }
 
-      // 수술기록 업로드 빈도 제한 체크
-      if (type === 'surgery' && state.user?.hospitalId) {
-        const lastUpload = await surgeryService.getLastUploadDate(state.user.hospitalId);
-        const uploadCheck = planService.canUploadSurgery(effectivePlan, lastUpload);
-        if (!uploadCheck.allowed && uploadCheck.nextAvailableDate) {
-          const nextDate = uploadCheck.nextAvailableDate;
-          const formatted = `${nextDate.getFullYear()}년 ${nextDate.getMonth() + 1}월 ${nextDate.getDate()}일`;
-          const planLabel = effectivePlan === 'free' ? '무료 플랜은 월 1회' : '베이직 플랜은 주 1회';
-          showAlertToast(`${planLabel} 수술기록 업로드가 가능합니다. 다음 업로드 가능일: ${formatted}`, 'error');
-          setState(prev => ({ ...prev, isLoading: false }));
-          return false;
-        }
-      }
 
-      const { parseExcelFile } = await import('./services/excelService');
-      const parsed = await parseExcelFile(file);
-      if (type === 'surgery') {
-        const targetSheetName = '수술기록지';
-        const newSurgeryMaster = { ...state.surgeryMaster };
 
-        if (parsed.sheets[targetSheetName]) {
-          const originalSheet = parsed.sheets[targetSheetName];
-          const cleanedRows: ExcelRow[] = originalSheet.rows.filter(row => {
-            const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
-            const contentCount = Object.values(row).filter(val => val !== null && val !== undefined && String(val).trim() !== "").length;
-            return !isTotalRow && contentCount > 1;
-          }).map(row => {
-            const desc = String(row['수술기록'] || row['수술내용'] || row['픽스쳐'] || row['규격'] || row['품명'] || "");
-            const toothStr = String(row['치아번호'] || "").trim();
-
-            let quantity = 0;
-            if (toothStr !== "") {
-              quantity = toothStr.includes(',') ? toothStr.split(',').length : 1;
-            } else if (desc !== "") {
-              quantity = 1;
-            }
-
-            let classification = "식립";
-            let manufacturer = "";
-            let brand = "";
-            let size = "";
-            let boneQuality = "";
-            let initialFixation = "";
-
-            if (desc.includes('[GBR Only]')) classification = "골이식만";
-            else if (desc.includes('수술중교환_') || desc.includes('수술중FAIL_')) classification = "수술중교환";
-            else if (desc.includes('보험임플란트')) classification = "청구";
-
-            if (classification === "골이식만") {
-              const mMatch = desc.match(/\[(.*?)\]/);
-              manufacturer = mMatch ? mMatch[1] : "GBR Only";
-              const bMatch = desc.match(/\]\s*(G.*?\))/);
-              brand = bMatch ? bMatch[1] : "";
-            }
-            else if (desc.includes('-')) {
-              const mainParts = desc.split('-').map(p => p.trim());
-              let rawM = mainParts[0];
-              manufacturer = rawM.replace('수술중교환_', '').replace('수술중FAIL_', '').replace('보험임플란트', '').trim();
-              if (manufacturer === "" && mainParts.length > 1) {
-                manufacturer = mainParts[1];
-              }
-
-              const detailsStr = mainParts.slice(1).join('-');
-              const slashSegments = detailsStr.split('/').map(s => s.trim());
-              const brandSizeStr = slashSegments[0] || "";
-              const sizeIndicatorMatch = brandSizeStr.match(/([DdLlMm]\:|[Φφ]|(?:\s|^)[DdLlMm]\s|(?:\s|^)\d)/);
-
-              if (sizeIndicatorMatch && sizeIndicatorMatch.index !== undefined) {
-                brand = brandSizeStr.substring(0, sizeIndicatorMatch.index).trim();
-                size = brandSizeStr.substring(sizeIndicatorMatch.index).trim();
-              } else {
-                const fallbackMatch = brandSizeStr.match(/^([a-zA-Z\s\d-]+(?:\s[IVX]+)?)/);
-                brand = fallbackMatch ? fallbackMatch[1].trim() : brandSizeStr;
-                if (fallbackMatch) size = brandSizeStr.substring(fallbackMatch[0].length).trim();
-              }
-
-              if (manufacturer === "" || manufacturer === "보험임플란트") {
-                manufacturer = brand;
-              }
-
-              // 골질/초기고정 파싱 (슬래시 구분)
-              for (let i = 1; i < slashSegments.length; i++) {
-                const seg = slashSegments[i];
-                if (seg.startsWith('골질')) boneQuality = seg.replace('골질', '').trim();
-                else if (seg.startsWith('초기고정')) initialFixation = seg.replace('초기고정', '').trim();
-              }
-            } else {
-              manufacturer = desc.replace('보험임플란트', '').replace('수술중교환_', '').replace('수술중FAIL_', '').trim();
-            }
-
-            const fixedMfr = fixIbsImplant(manufacturer, brand);
-            return {
-              ...row,
-              '구분': classification,
-              '갯수': quantity,
-              '제조사': fixedMfr.manufacturer,
-              '브랜드': fixedMfr.brand,
-              '규격(SIZE)': isIbsImplantManufacturer(fixedMfr.manufacturer) ? size : toCanonicalSize(size, fixedMfr.manufacturer),
-              '골질': row['골질'] || boneQuality,
-              '초기고정': row['초기고정'] || initialFixation,
-            };
-          });
-
-          // Supabase에 수술기록 저장 (중복 자동 skip) — DB 결과 기반으로 UI 상태 업데이트
-          if (state.user?.hospitalId) {
-            const { records: savedRecords, inserted, skipped } = await surgeryService.bulkInsertFromExcel(cleanedRows, state.user.hospitalId);
-
-            if (skipped > 0 && inserted === 0) {
-              // 전부 중복 → UI에 아무것도 추가하지 않고 알림만
-              showAlertToast(`이미 저장된 데이터입니다. (${skipped}건 중복 감지, 새로 저장된 건 없음)`, 'info');
-              setState(prev => ({ ...prev, isLoading: false }));
-              return true;
-            }
-
-            if (inserted > 0) {
-              // DB에 실제 저장된 레코드만 UI에 반영
-              const savedRows = await dbToExcelRowBatch(savedRecords);
-              newSurgeryMaster[targetSheetName] = [
-                ...(newSurgeryMaster[targetSheetName] || []),
-                ...savedRows,
-              ];
-              setState(prev => ({
-                ...prev,
-                isLoading: false,
-                surgeryFileName: file.name,
-                surgeryMaster: newSurgeryMaster,
-                dashboardTab: 'surgery_database',
-              }));
-              operationLogService.logOperation(
-                'surgery_upload',
-                `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
-              );
-              // FAIL 자동 감지 (재식립)
-              try {
-                const failCandidates = await failDetectionService.detectReimplantationFails(
-                  savedRecords,
-                  state.user.hospitalId,
-                );
-                if (failCandidates.length > 0) {
-                  setPendingFailCandidates(failCandidates);
-                }
-              } catch {
-                // 감지 실패는 업로드 성공에 영향 없음
-              }
-              return true;
-            }
-            setState(prev => ({ ...prev, isLoading: false }));
-            return false;
-          } else {
-            // 비로그인 상태: DB 저장 없이 로컬 상태만 (레거시 동작)
-            newSurgeryMaster[targetSheetName] = [...(newSurgeryMaster[targetSheetName] || []), ...cleanedRows];
-            setState(prev => ({ ...prev, isLoading: false, surgeryFileName: file.name, surgeryMaster: newSurgeryMaster, dashboardTab: 'surgery_database' }));
-            return true;
-          }
-        } else {
-          showAlertToast("'수술기록지' 시트를 찾을 수 없습니다.", 'error');
-          setState(prev => ({ ...prev, isLoading: false }));
-          return false;
-        }
-      } else {
-        // 픽스쳐 데이터: IBS Implant 제조사/브랜드 교정 후 저장
-        const fixedSheets = { ...parsed.sheets };
-        Object.keys(fixedSheets).forEach(name => {
-          fixedSheets[name] = {
-            ...fixedSheets[name],
-            rows: fixedSheets[name].rows.map(row => {
-              const fixed = fixIbsImplant(
-                String(row['제조사'] || row['Manufacturer'] || ''),
-                String(row['브랜드'] || row['Brand'] || '')
-              );
-              const rawSize = String(
-                row['규격(SIZE)'] ||
-                row['규격'] ||
-                row['사이즈'] ||
-                row['Size'] ||
-                row['size'] ||
-                ''
-              );
-              return {
-                ...row,
-                '제조사': fixed.manufacturer,
-                '브랜드': fixed.brand,
-                '규격(SIZE)': sizeCorrections?.get(rawSize.trim()) ?? (isIbsImplantManufacturer(fixed.manufacturer) ? rawSize : toCanonicalSize(rawSize, fixed.manufacturer)),
-              };
-            }),
-          };
-        });
-        const fixedParsed = { ...parsed, sheets: fixedSheets };
-        const initialIndices: Record<string, Set<number>> = {};
-        Object.keys(fixedParsed.sheets).forEach(name => {
-          initialIndices[name] = new Set(fixedParsed.sheets[name].rows.map((_, i) => i));
-        });
-        setState(prev => ({ ...prev, isLoading: false, fixtureData: fixedParsed, fixtureFileName: file.name, selectedFixtureIndices: initialIndices, dashboardTab: 'fixture_edit' }));
-        operationLogService.logOperation('raw_data_upload', `픽스쳐 데이터 업로드 (${file.name})`);
-        return true;
-      }
-    } catch (error) {
-      showAlertToast('엑셀 파일 처리에 실패했습니다.', 'error');
-      setState(prev => ({ ...prev, isLoading: false }));
-      return false;
-    } finally {
-      uploadingTypeRef.current = null;
-    }
-  };
-
-  const refreshOrdersFromServer = useCallback(async () => {
-    if (!state.user?.hospitalId) return false;
-
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .eq('hospital_id', state.user.hospitalId)
-      .order('created_at', { ascending: false });
-
-    if (error || !data) {
-      console.error('[App] 주문 목록 재동기화 실패:', error);
-      return false;
-    }
-
-    const mappedOrders = (data as (DbOrder & { order_items: DbOrderItem[] })[]).map(dbToOrder);
-    setState(prev => ({ ...prev, orders: mappedOrders }));
-    return true;
-  }, [setState, state.user?.hospitalId]);
-
-  const handleUpdateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
-    const currentOrder = state.orders.find(o => o.id === orderId);
-    if (!currentOrder) {
-      showAlertToast('주문을 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'error');
-      return;
-    }
-
-    const nextReceivedDate = status === 'received'
-      ? new Date().toISOString().split('T')[0]
-      : undefined;
-    const confirmedBy = status === 'received' ? (state.user?.name || undefined) : undefined;
-
-    setState(prev => ({
-      ...prev,
-      orders: prev.orders.map(o =>
-        o.id === orderId
-          ? { ...o, status, receivedDate: nextReceivedDate, confirmedBy }
-          : o
-      )
-    }));
-
-    const result = await orderService.updateStatus(orderId, status, {
-      expectedCurrentStatus: currentOrder.status,
-      receivedDate: nextReceivedDate,
-      confirmedBy,
-    });
-
-    if (result.ok) {
-      operationLogService.logOperation('order_status_update', `주문 상태 변경: ${status}`, { orderId, status });
-      return;
-    }
-
-    setState(prev => ({
-      ...prev,
-      orders: prev.orders.map(o =>
-        o.id === orderId
-          ? { ...o, status: currentOrder.status, receivedDate: currentOrder.receivedDate }
-          : o
-      )
-    }));
-
-    if (result.reason === 'conflict') {
-      const latestStatusText = result.currentStatus === 'received' ? '입고완료' : '입고대기';
-      showAlertToast(`다른 사용자가 이미 ${latestStatusText}로 변경했습니다. 최신 주문 목록을 다시 불러옵니다.`, 'info');
-      const synced = await refreshOrdersFromServer();
-      if (!synced) {
-        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      }
-      return;
-    }
-
-    if (result.reason === 'not_found') {
-      showAlertToast('주문이 이미 삭제되어 상태를 변경할 수 없습니다. 최신 주문 목록을 다시 불러옵니다.', 'info');
-      const synced = await refreshOrdersFromServer();
-      if (!synced) {
-        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      }
-      return;
-    }
-
-    showAlertToast('주문 상태 변경에 실패했습니다.', 'error');
-  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
-
-  const handleDeleteOrder = useCallback(async (orderId: string) => {
-    const currentOrder = state.orders.find(o => o.id === orderId);
-    if (!currentOrder) {
-      showAlertToast('주문을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.', 'info');
-      return;
-    }
-
-    const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-
-    setState(prev => ({
-      ...prev,
-      orders: prev.orders.filter(o => o.id !== orderId),
-    }));
-
-    const result = await orderService.deleteOrder(orderId, {
-      expectedCurrentStatus: currentOrder.status,
-    });
-
-    if (result.ok) {
-      operationLogService.logOperation('order_delete', '주문 삭제', { orderId });
-      // 반품 주문 삭제 시 차감했던 재고 복원
-      if (currentOrder.type === 'return') {
-        for (const orderItem of currentOrder.items) {
-          const qty = Number(orderItem.quantity || 0);
-          if (qty <= 0) continue;
-          const sizeKey = getSizeMatchKey(orderItem.size, currentOrder.manufacturer);
-          const invItem = state.inventory.find(inv =>
-            simpleNorm(inv.manufacturer) === simpleNorm(currentOrder.manufacturer) &&
-            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
-            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-          );
-          if (invItem) {
-            await inventoryService.adjustStock(invItem.id, qty);
-            setState(prev => ({
-              ...prev,
-              inventory: prev.inventory.map(i =>
-                i.id === invItem.id
-                  ? { ...i, currentStock: i.currentStock + qty, stockAdjustment: i.stockAdjustment + qty }
-                  : i
-              ),
-            }));
-          }
-        }
-      }
-      return;
-    }
-
-    if (result.reason === 'not_found') {
-      showAlertToast('주문이 이미 삭제되어 목록에서 제거되었습니다.', 'info');
-      const synced = await refreshOrdersFromServer();
-      if (!synced) {
-        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      }
-      return;
-    }
-
-    setState(prev => {
-      if (prev.orders.some(o => o.id === currentOrder.id)) return prev;
-      return { ...prev, orders: [currentOrder, ...prev.orders] };
-    });
-
-    if (result.reason === 'conflict') {
-      const latestStatusText = result.currentStatus === 'received' ? '입고완료' : '입고대기';
-      showAlertToast(`다른 사용자가 주문 상태를 ${latestStatusText}로 변경하여 삭제가 취소되었습니다. 최신 주문 목록을 다시 불러옵니다.`, 'info');
-      const synced = await refreshOrdersFromServer();
-      if (!synced) {
-        showAlertToast('주문 목록 동기화에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      }
-      return;
-    }
-
-    showAlertToast('주문 삭제에 실패했습니다.', 'error');
-  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
-
-  const handleCancelOrder = useCallback(async (orderId: string, reason: string) => {
-    const currentOrder = state.orders.find(o => o.id === orderId);
-    if (!currentOrder) {
-      showAlertToast('주문을 찾을 수 없습니다.', 'info');
-      return;
-    }
-
-    // 낙관적 업데이트
-    setState(prev => ({
-      ...prev,
-      orders: prev.orders.map(o =>
-        o.id === orderId ? { ...o, status: 'cancelled', cancelledReason: reason || undefined } : o
-      ),
-    }));
-
-    const result = await orderService.cancelOrder(orderId, reason);
-
-    if (result.ok) {
-      showAlertToast('발주가 취소되었습니다.', 'success');
-      // 반품 주문 취소 시 차감했던 재고 복원
-      if (currentOrder.type === 'return') {
-        const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-        for (const orderItem of currentOrder.items) {
-          const qty = Number(orderItem.quantity || 0);
-          if (qty <= 0) continue;
-          const sizeKey = getSizeMatchKey(orderItem.size, currentOrder.manufacturer);
-          const invItem = state.inventory.find(inv =>
-            simpleNorm(inv.manufacturer) === simpleNorm(currentOrder.manufacturer) &&
-            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
-            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-          );
-          if (invItem) {
-            await inventoryService.adjustStock(invItem.id, qty);
-            setState(prev => ({
-              ...prev,
-              inventory: prev.inventory.map(i =>
-                i.id === invItem.id
-                  ? { ...i, currentStock: i.currentStock + qty, stockAdjustment: i.stockAdjustment + qty }
-                  : i
-              ),
-            }));
-          }
-        }
-      }
-      return;
-    }
-
-    // 롤백
-    setState(prev => ({
-      ...prev,
-      orders: prev.orders.map(o =>
-        o.id === orderId ? { ...o, status: currentOrder.status, cancelledReason: currentOrder.cancelledReason } : o
-      ),
-    }));
-
-    if (result.reason === 'conflict') {
-      showAlertToast('이미 상태가 변경된 발주입니다. 최신 목록을 다시 불러옵니다.', 'info');
-      await refreshOrdersFromServer();
-      return;
-    }
-    showAlertToast('발주 취소에 실패했습니다.', 'error');
-  }, [refreshOrdersFromServer, setState, showAlertToast, state.orders]);
-
-  // ═══════════════════════════════════════════════════════════════
-  // 반품 관리 (Return Requests)
-  // ═══════════════════════════════════════════════════════════════
-
-  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
-  // ref로 항상 최신 배열을 참조 — async callback의 stale closure 방지
-  const returnRequestsRef = useRef<ReturnRequest[]>([]);
-  useEffect(() => { returnRequestsRef.current = returnRequests; }, [returnRequests]);
 
   // 권장재고 산출 설정 — ref로 최신 값 유지 (stale closure 방지)
   const stockCalcSettingsRef = useRef<StockCalcSettings>(DEFAULT_STOCK_CALC_SETTINGS);
 
-  // hospitalId 변경 시 설정 로드 → ref 갱신 → 재계산
-  useEffect(() => {
+  // ═══════════════════════════════════════════════════════════════
+  // 재고 동기화 (Inventory Sync) → hooks/useInventorySync.ts
+  // ═══════════════════════════════════════════════════════════════
+  const { syncInventoryWithUsageAndOrders, computeUsageByInventoryFromRecords } = useInventorySync(
+    state.surgeryMaster,
+    state.orders,
+    state.inventory.length,
+    setState,
+    stockCalcSettingsRef,
+  );
+
+  const refreshLatestSurgeryUsage = useCallback(async (): Promise<Record<string, number> | null> => {
     const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return;
-    hospitalSettingsService.get(hospitalId).then(s => {
-      if (s.stockCalcSettings) {
-        stockCalcSettingsRef.current = s.stockCalcSettings;
-        syncInventoryWithUsageAndOrders();
-      }
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.user?.hospitalId]);
+    if (!hospitalId) return null;
 
-  const loadReturnRequests = useCallback(async () => {
-    const raw = await returnService.getReturnRequests();
-    const mapped = raw.map(r => dbToReturnRequest(r));
-    setReturnRequests(mapped);
-  }, []);
+    try {
+      const retentionMonths = PLAN_LIMITS[effectivePlan]?.retentionMonths ?? 24;
+      const effectiveMonths = Math.min(retentionMonths, 24);
+      const fromDateObj = new Date();
+      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
+      const fromDate = fromDateObj.toISOString().split('T')[0];
 
-  // 초기 로드 및 병원 변경 시 재로드
-  useEffect(() => {
-    if (state.user?.hospitalId) {
-      void loadReturnRequests();
+      const latestRecords = await surgeryService.getSurgeryUsageRecords({ fromDate });
+      const usageMap = computeUsageByInventoryFromRecords(latestRecords, state.inventory);
+      return usageMap;
+    } catch (error) {
+      console.error('[App] 최신 수술기록 재조회 실패:', error);
+      showAlertToast('최신 수술기록 조회에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      return null;
     }
-  }, [state.user?.hospitalId, loadReturnRequests]);
+  }, [computeUsageByInventoryFromRecords, effectivePlan, showAlertToast, state.inventory, state.user?.hospitalId]);
 
-  // Realtime 구독
-  useEffect(() => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return;
+  // ═══════════════════════════════════════════════════════════════
+  // 반품 관리 (Return Requests) → hooks/useReturnHandlers.ts
+  // ═══════════════════════════════════════════════════════════════
+  const {
+    returnRequests,
+    handleCreateReturn,
+    handleUpdateReturnStatus,
+    handleCompleteReturn,
+    handleDeleteReturn,
+    handleStockCalcSettingsChange,
+  } = useReturnHandlers({
+    hospitalId: state.user?.hospitalId,
+    inventory: state.inventory,
+    user: state.user,
+    setState,
+    stockCalcSettingsRef,
+    syncInventoryWithUsageAndOrders,
+  });
 
-    const channel = returnService.subscribeToChanges(hospitalId, () => {
-      void loadReturnRequests();
-    });
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [state.user?.hospitalId, loadReturnRequests]);
-
-  const handleCreateReturn = useCallback(async (params: {
-    manufacturer: string;
-    reason: ReturnReason;
-    manager: string;
-    memo: string;
-    items: { brand: string; size: string; quantity: number }[];
-  }) => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return;
-
-    const result = await returnService.createReturnRequest(
-      {
-        hospital_id: hospitalId,
-        manufacturer: params.manufacturer,
-        reason: params.reason,
-        status: 'requested',
-        requested_date: new Date().toISOString().split('T')[0],
-        completed_date: null,
-        manager: params.manager,
-        confirmed_by: null,
-        memo: params.memo || null,
-      },
-      params.items
-    );
-
-    if (result.ok) {
-      await loadReturnRequests();
-      // 반품 신청 즉시 재고 차감 (보관소로 이동)
-      for (const item of params.items) {
-        const sizeKey = getSizeMatchKey(item.size, params.manufacturer);
-        const invItem = state.inventory.find(inv =>
-          inv.manufacturer === params.manufacturer &&
-          inv.brand === item.brand &&
-          getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-        );
-        if (invItem) {
-          await inventoryService.adjustStock(invItem.id, -item.quantity);
-          setState(prev => ({
-            ...prev,
-            inventory: prev.inventory.map(i =>
-              i.id === invItem.id
-                ? { ...i, currentStock: i.currentStock - item.quantity, stockAdjustment: i.stockAdjustment - item.quantity }
-                : i
-            ),
-          }));
-        }
-      }
-    } else {
-      throw new Error('반품 신청 실패');
-    }
-  }, [state.user?.hospitalId, state.inventory, loadReturnRequests]);
-
-  const handleUpdateReturnStatus = useCallback(async (
-    returnId: string,
-    status: ReturnStatus,
-    currentStatus: ReturnStatus
-  ): Promise<ReturnMutationResult> => {
-    const confirmedBy = status === 'completed' ? (state.user?.name || undefined) : undefined;
-    // 낙관적 업데이트
-    setReturnRequests(prev =>
-      prev.map(r => r.id === returnId ? { ...r, status, ...(confirmedBy ? { confirmedBy } : {}) } : r)
-    );
-
-    const result = await returnService.updateStatus(returnId, status, currentStatus, confirmedBy);
-
-    if (!result.ok) {
-      // 롤백
-      setReturnRequests(prev =>
-        prev.map(r => r.id === returnId ? { ...r, status: currentStatus } : r)
-      );
-      if (result.reason === 'conflict') {
-        await loadReturnRequests();
-      }
-      return result;
-    }
-
-    // 재고 조정: 반품 거절 시 복구, 거절 철회(rejected→requested) 시 재차감
-    // ref로 최신 배열을 참조 (낙관적 업데이트 이후 stale closure 방지)
-    const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
-    if (returnReq) {
-      const needsRestore = status === 'rejected';
-      const needsDeduct = status === 'requested' && currentStatus === 'rejected';
-      if (needsRestore || needsDeduct) {
-        const delta = needsRestore ? 1 : -1;
-        for (const item of returnReq.items) {
-          const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
-          const invItem = state.inventory.find(inv =>
-            inv.manufacturer === returnReq.manufacturer &&
-            inv.brand === item.brand &&
-            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-          );
-          if (invItem) {
-            await inventoryService.adjustStock(invItem.id, delta * item.quantity);
-            setState(prev => ({
-              ...prev,
-              inventory: prev.inventory.map(i =>
-                i.id === invItem.id
-                  ? { ...i, currentStock: i.currentStock + delta * item.quantity, stockAdjustment: i.stockAdjustment + delta * item.quantity }
-                  : i
-              ),
-            }));
-          }
-        }
-      }
-    }
-
-    return result;
-  }, [loadReturnRequests, returnRequests, state.inventory]);
-
-  const handleCompleteReturn = useCallback(async (returnId: string): Promise<ReturnMutationResult> => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return { ok: false, reason: 'error' };
-
-    // 낙관적 업데이트
-    setReturnRequests(prev =>
-      prev.map(r => r.id === returnId ? {
-        ...r,
-        status: 'completed' as ReturnStatus,
-        completedDate: new Date().toISOString().split('T')[0],
-      } : r)
-    );
-
-    const result = await returnService.completeReturn(returnId, hospitalId);
-
-    if (!result.ok) {
-      // 롤백 (재고는 신청 시점에 이미 차감됐으므로 완료 실패 시 재고 변동 없음)
-      await loadReturnRequests();
-    }
-
-    return result;
-  }, [state.user, loadReturnRequests]);
-
-  const handleDeleteReturn = useCallback(async (returnId: string) => {
-    // ref로 최신 배열을 참조 — 낙관적 제거 전에 항목 확보 (stale closure 방지)
-    const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
-
-    setReturnRequests(prev => prev.filter(r => r.id !== returnId));
-
-    // 현재 실제 status를 서버에 전달 (hardcoded 'requested' 제거)
-    const result = await returnService.deleteReturnRequest(returnId, returnReq?.status ?? 'requested');
-
-    if (!result.ok) {
-      await loadReturnRequests();
-      throw new Error('반품 삭제 실패');
-    }
-
-    // 삭제 성공 시 재고 복구 — rejected/completed 는 이미 복구됐거나 실제 반출됐으므로 제외
-    if (returnReq && (returnReq.status === 'requested' || returnReq.status === 'picked_up')) {
-      for (const item of returnReq.items) {
-        const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
-        const invItem = state.inventory.find(inv =>
-          inv.manufacturer === returnReq.manufacturer &&
-          inv.brand === item.brand &&
-          getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-        );
-        if (invItem) {
-          await inventoryService.adjustStock(invItem.id, item.quantity);
-          setState(prev => ({
-            ...prev,
-            inventory: prev.inventory.map(i =>
-              i.id === invItem.id
-                ? { ...i, currentStock: i.currentStock + item.quantity, stockAdjustment: i.stockAdjustment + item.quantity }
-                : i
-            ),
-          }));
-        }
-      }
-    }
-  }, [loadReturnRequests, returnRequests, state.inventory]);
-
-  const handleStockCalcSettingsChange = useCallback(async (settings: StockCalcSettings) => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return;
-    stockCalcSettingsRef.current = settings;
-    syncInventoryWithUsageAndOrders();
-    const current = await hospitalSettingsService.get(hospitalId);
-    await hospitalSettingsService.set(hospitalId, { ...current, stockCalcSettings: settings });
-  }, [state.user?.hospitalId, syncInventoryWithUsageAndOrders]);
+  // ═══════════════════════════════════════════════════════════════
+  // 발주 관리 (Order Handlers) → hooks/useOrderHandlers.ts
+  // ═══════════════════════════════════════════════════════════════
+  const {
+    handleAddOrder,
+    handleUpdateOrderStatus,
+    handleDeleteOrder,
+    handleCancelOrder,
+    handleConfirmReceipt,
+  } = useOrderHandlers({
+    hospitalId: state.user?.hospitalId,
+    orders: state.orders,
+    inventory: state.inventory,
+    surgeryMaster: state.surgeryMaster,
+    user: state.user,
+    setState,
+    showAlertToast,
+    handleCreateReturn,
+  });
 
   const handleOpenDirectPayment = useCallback((plan: PlanType, billing: BillingCycle = 'monthly') => {
     setDirectPayment({ plan, billing });
   }, []);
-
-  const handleAddOrder = useCallback(async (order: Order) => {
-    // Pre-calculate fail record IDs for Supabase update
-    let failRecordIds: string[] = [];
-    if (order.type === 'fail_exchange') {
-      const rows = state.surgeryMaster['수술기록지'] || [];
-      const totalToProcess = order.items.reduce((sum, item) => sum + item.quantity, 0);
-      const targetM = normalize(order.manufacturer);
-      failRecordIds = rows
-        .filter(row => row['구분'] === '수술중교환' && normalize(String(row['제조사'] ?? '')) === targetM)
-        .sort((a, b) => String(a['날짜'] ?? '').localeCompare(String(b['날짜'] ?? '')))
-        .slice(0, totalToProcess)
-        .filter(r => r._id)
-        .map(r => r._id as string);
-    }
-
-    const applyOrderToState = (nextOrder: Order, markFailAsExchanged: boolean) => {
-      setState(prev => {
-        let nextSurgeryMaster = { ...prev.surgeryMaster };
-        if (nextOrder.type === 'fail_exchange' && markFailAsExchanged) {
-          const sheetName = '수술기록지';
-          const rows = [...(nextSurgeryMaster[sheetName] || [])];
-          const totalToProcess = nextOrder.items.reduce((sum, item) => sum + item.quantity, 0);
-          const targetM = normalize(nextOrder.manufacturer);
-          const failIndices = rows
-            .map((row, idx) => ({ row, idx }))
-            .filter(({ row }) => row['구분'] === '수술중교환' && normalize(String(row['제조사'] ?? '')) === targetM)
-            .sort((a, b) => String(a.row['날짜'] ?? '').localeCompare(String(b.row['날짜'] ?? '')))
-            .map(item => item.idx);
-          const indicesToUpdate = failIndices.slice(0, totalToProcess);
-          indicesToUpdate.forEach(idx => {
-            rows[idx] = { ...rows[idx], '구분': '교환완료' };
-          });
-          nextSurgeryMaster[sheetName] = rows;
-        }
-        // Realtime이 먼저 추가했을 경우 중복 방지
-        const alreadyExists = prev.orders.some(o => o.id === nextOrder.id);
-        return {
-          ...prev,
-          orders: alreadyExists ? prev.orders : [nextOrder, ...prev.orders],
-          surgeryMaster: nextSurgeryMaster,
-          // fail_exchange: FailManager 화면에 교환 이력 표시 → 탭 이동 없음
-          // return: 품목 최적화 모달에서 처리 → 탭 이동 없음 (모달 유지)
-          // replenishment: order_management 탭으로 이동
-          ...(nextOrder.type === 'replenishment' ? { dashboardTab: 'order_management' as const } : {}),
-        };
-      });
-    };
-
-    // 비로그인/로컬 모드: 기존 동작 유지
-    if (!state.user?.hospitalId) {
-      applyOrderToState(order, order.type === 'fail_exchange');
-      return;
-    }
-
-    // 서버 모드: 저장 성공 이후에만 상태 반영 (일관성 우선)
-    try {
-      const created = await orderService.createOrder(
-        {
-          hospital_id: state.user.hospitalId,
-          type: order.type,
-          manufacturer: order.manufacturer,
-          date: order.date,
-          manager: order.manager,
-          status: order.status,
-          received_date: order.receivedDate || null,
-          confirmed_by: order.confirmedBy || null,
-          memo: order.memo || null,
-          cancelled_reason: order.cancelledReason || null,
-        },
-        order.items.map(i => ({ brand: i.brand, size: i.size, quantity: i.quantity }))
-      );
-
-      if (!created) {
-        showAlertToast('주문 저장에 실패했습니다. 다시 시도해주세요.', 'error');
-        return;
-      }
-
-      let failUpdateSucceeded = true;
-      if (order.type === 'fail_exchange' && failRecordIds.length > 0) {
-        failUpdateSucceeded = await surgeryService.markFailExchanged(failRecordIds);
-      }
-
-      const savedOrder = dbToOrder(created);
-      applyOrderToState(savedOrder, order.type === 'fail_exchange' && failUpdateSucceeded);
-
-
-      operationLogService.logOperation(
-        'order_create',
-        `${order.type === 'fail_exchange' ? '교환' : '보충'} 주문 생성 (${order.manufacturer}, ${order.items.length}건)`,
-        { type: order.type, manufacturer: order.manufacturer }
-      );
-
-      if (order.type === 'fail_exchange' && failRecordIds.length > 0 && !failUpdateSucceeded) {
-        showAlertToast('주문은 저장되었지만 교환 상태 반영에 실패했습니다. 잠시 후 다시 확인해주세요.', 'error');
-      }
-    } catch (error) {
-      console.error('[App] 주문 생성 실패:', error);
-      showAlertToast('주문 생성 중 오류가 발생했습니다.', 'error');
-    }
-  }, [state.user?.hospitalId, state.surgeryMaster, showAlertToast]);
-
-  const handleConfirmReceipt = useCallback(async (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => {
-    // 1. 수량 업데이트 및 재발주 처리
-    let reorderCount = 0;
-    for (const update of updates) {
-      const qtyOk = await orderService.updateOrderItemQuantity(update.orderId, update.item.brand, update.item.size, update.newQuantity);
-      if (!qtyOk) {
-        showAlertToast('수량 업데이트에 실패했습니다. 목록을 새로고침해 주세요.', 'error');
-        return;
-      }
-      // 로컬 state 동기화 (Realtime은 status만 업데이트하므로 items.quantity는 직접 반영)
-      setState(prev => ({
-        ...prev,
-        orders: prev.orders.map(o =>
-          o.id === update.orderId
-            ? { ...o, items: o.items.map(i => i.brand === update.item.brand && i.size === update.item.size ? { ...i, quantity: update.newQuantity } : i) }
-            : o
-        ),
-      }));
-
-      // memo 처리는 현재 주문 목록 단위로만 설계되어 있어 아이템 수준에서는 제외.
-
-      if (update.autoReorderDeficit && update.originalQuantity > update.newQuantity) {
-        const deficit = update.originalQuantity - update.newQuantity;
-        const orderInfo = state.orders.find(o => o.id === update.orderId);
-        if (orderInfo) {
-          await handleAddOrder({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString().split('T')[0],
-            status: 'ordered',
-            type: 'replenishment',
-            manager: state.user?.name || '관리자',
-            manufacturer: orderInfo.manufacturer,
-            items: [{ brand: update.item.brand, size: update.item.size, quantity: deficit }]
-          });
-          reorderCount++;
-        }
-      }
-
-      if (update.wrongDeliveryReturn) {
-        const orderInfo = state.orders.find(o => o.id === update.orderId);
-        if (orderInfo) {
-          await handleCreateReturn({
-            manufacturer: orderInfo.manufacturer,
-            reason: 'exchange',
-            manager: state.user?.name || '관리자',
-            memo: `원 발주: ${update.item.size} -> 오배송: ${update.wrongDeliveryReturn.receivedSize}`,
-            items: [{ brand: update.item.brand, size: update.wrongDeliveryReturn.receivedSize, quantity: update.wrongDeliveryReturn.quantity }]
-          });
-        }
-      }
-    }
-
-    // 2. 전체 주문을 입고/반품 완료로 갱신
-    for (const id of orderIdsToReceive) {
-      await handleUpdateOrderStatus(id, 'received');
-    }
-
-    // 3. 반품 완료 주문의 재고 차감 처리
-    const returnOrderIds = orderIdsToReceive.filter(id => {
-      const order = state.orders.find(o => o.id === id);
-      return order && order.type === 'return';
-    });
-    if (returnOrderIds.length > 0) {
-      const simpleNorm = (s: string) => String(s || '').trim().toLowerCase().replace(/[\s\-\_\.\(\)]/g, '');
-      for (const orderId of returnOrderIds) {
-        const order = state.orders.find(o => o.id === orderId);
-        if (!order) continue;
-        for (const orderItem of order.items) {
-          // 수량 업데이트가 있었다면 그 값을, 없었다면 원래 수량 사용
-          const matchedUpdate = updates.find(u => u.orderId === orderId && u.item.brand === orderItem.brand && u.item.size === orderItem.size);
-          const qtyToDeduct = matchedUpdate ? matchedUpdate.newQuantity : orderItem.quantity;
-          if (qtyToDeduct <= 0) continue;
-
-          const sizeKey = getSizeMatchKey(orderItem.size, order.manufacturer);
-          const invItem = state.inventory.find(inv =>
-            simpleNorm(inv.manufacturer) === simpleNorm(order.manufacturer) &&
-            simpleNorm(inv.brand) === simpleNorm(orderItem.brand) &&
-            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
-          );
-          if (invItem) {
-            const adjusted = await inventoryService.adjustStock(invItem.id, -qtyToDeduct);
-            if (adjusted) {
-              // 로컬 state 동기화
-              setState(prev => ({
-                ...prev,
-                inventory: prev.inventory.map(item =>
-                  item.id === invItem.id
-                    ? { ...item, currentStock: Math.max(0, item.currentStock - qtyToDeduct), stockAdjustment: item.stockAdjustment - qtyToDeduct }
-                    : item
-                ),
-              }));
-            }
-          }
-        }
-      }
-    }
-
-    const isReturnOrder = returnOrderIds.length > 0;
-    const msg = isReturnOrder
-      ? `반품 처리가 완료되었습니다. (${returnOrderIds.length}건 반품, 재고 차감 완료)`
-      : updates.length > 0
-        ? `상세 입고 처리가 완료되었습니다. (수정 ${updates.length}건${reorderCount > 0 ? `, 자동 재발주 ${reorderCount}건` : ''})`
-        : '전체 입고 처리가 완료되었습니다.';
-    showAlertToast(msg, 'success');
-  }, [handleAddOrder, handleUpdateOrderStatus, handleCreateReturn, state.orders, state.inventory, state.user?.name, showAlertToast]);
 
   const {
     enabledManufacturers,
@@ -2049,73 +830,7 @@ const App: React.FC = () => {
     return { sheets: { '수술기록지': { name: '수술기록지', columns: sortedColumns, rows: masterRows } }, activeSheetName: '수술기록지' } as ExcelData;
   }, [state.surgeryMaster]);
 
-  const surgeryUnregisteredItems = useMemo<SurgeryUnregisteredItem[]>(() => {
-    const rows = state.surgeryMaster['수술기록지'] || [];
-    if (rows.length === 0) return [];
-
-    const formatIndex = buildBrandSizeFormatIndex(state.inventory);
-
-    const missingMap = new Map<string, SurgeryUnregisteredItem>();
-
-    rows.forEach((row) => {
-      const isTotalRow = Object.values(row).some(val => String(val).includes('합계'));
-      if (isTotalRow) return;
-
-      const cls = String(row['구분'] || '').trim();
-      if (cls !== '식립' && cls !== '수술중교환') return;
-
-      const surgeryRecord = String(row['수술기록'] || '');
-      if (surgeryRecord.includes('[GBR Only]')) return;
-      if (surgeryRecord.includes('[일괄등록]')) return;
-
-      const manufacturer = String(row['제조사'] || '').trim();
-      const brand = String(row['브랜드'] || '').trim();
-      const size = String(row['규격(SIZE)'] || '').trim();
-
-      if (!manufacturer && !brand && !size) return;
-      if (isExchangePrefix(manufacturer)) return;
-      if (manufacturer === '보험청구' || brand === '보험임플란트') return;
-
-      const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;
-      const qty = Number.isFinite(qtyRaw) ? qtyRaw : 1;
-      const sample = buildUnregisteredSample(row);
-
-      const normM = normalizeSurgery(manufacturer);
-      const normB = normalizeSurgery(brand);
-      const normS = getSizeMatchKey(size, manufacturer);
-      const hasRegisteredCombo = hasRegisteredBrandSize(formatIndex, manufacturer, brand, size);
-      const isListBased = isListBasedSurgeryInput(formatIndex, manufacturer, brand, size);
-      if (isListBased) return;
-
-      const itemKey = hasRegisteredCombo
-        ? `${normM}|${normB}|${normS}|manual:${normalizeSizeTextStrict(size)}`
-        : `${normM}|${normB}|${normS}`;
-      const existing = missingMap.get(itemKey);
-      const rowId = String(row._id || '').trim();
-      if (existing) {
-        existing.usageCount += qty;
-        appendUnregisteredSample(existing, sample);
-        if (rowId) {
-          const currentIds = existing.recordIds ?? [];
-          if (!currentIds.includes(rowId)) {
-            existing.recordIds = [...currentIds, rowId];
-          }
-        }
-      } else {
-        missingMap.set(itemKey, {
-          manufacturer: manufacturer || '-',
-          brand: brand || '-',
-          size: size || '-',
-          usageCount: qty,
-          reason: hasRegisteredCombo ? 'non_list_input' : 'not_in_inventory',
-          samples: [sample],
-          recordIds: rowId ? [rowId] : [],
-        });
-      }
-    });
-
-    return Array.from(missingMap.values()).sort((a, b) => b.usageCount - a.usageCount);
-  }, [state.surgeryMaster, state.inventory]);
+  const surgeryUnregisteredItems = useSurgeryUnregistered(state.surgeryMaster, state.inventory);
 
   // 초기 세션 확인 중 로딩 화면
   if (state.isLoading && !state.user) {

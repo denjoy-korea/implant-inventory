@@ -34,19 +34,19 @@ test('order service uses status-based CAS for concurrent order deletion', () => 
 });
 
 test('app handles order conflict responses and re-syncs order list', () => {
-  const app = read('App.tsx');
+  const hook = read('hooks/useOrderHandlers.ts');
 
-  assert.match(app, /const refreshOrdersFromServer = useCallback\(async \(\) => \{/);
+  assert.match(hook, /const refreshOrdersFromServer = useCallback\(async \(\) => \{/);
   assert.match(
-    app,
+    hook,
     /orderService\.updateStatus\(orderId,\s*status,\s*\{[\s\S]*?expectedCurrentStatus:\s*currentOrder\.status,[\s\S]*?receivedDate:\s*nextReceivedDate,[\s\S]*?\}\)/s,
   );
   assert.match(
-    app,
+    hook,
     /orderService\.deleteOrder\(orderId,\s*\{\s*expectedCurrentStatus:\s*currentOrder\.status,\s*\}\)/s,
   );
-  assert.match(app, /if \(result\.reason === 'conflict'\)[\s\S]*refreshOrdersFromServer\(\)/s);
-  assert.match(app, /if \(result\.reason === 'not_found'\)[\s\S]*refreshOrdersFromServer\(\)/s);
+  assert.match(hook, /if \(result\.reason === 'conflict'\)[\s\S]*refreshOrdersFromServer\(\)/s);
+  assert.match(hook, /if \(result\.reason === 'not_found'\)[\s\S]*refreshOrdersFromServer\(\)/s);
 });
 
 test('mobile critical operations stay wired in dashboard routes', () => {
