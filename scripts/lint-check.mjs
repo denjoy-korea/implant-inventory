@@ -195,14 +195,15 @@ function checkMaintenanceServiceWiring() {
 }
 
 function checkPlanLimitConsistency() {
+  // PLAN_LIMITS may be defined in types/plan.ts and re-exported from types.ts
   const typesTs = read('types.ts');
-  if (!typesTs) return;
+  const planTs = read('types/plan.ts');
+  if (!typesTs && !planTs) return;
 
-  const freePlanMaxItems50 = /free:\s*\{[\s\S]*?maxItems:\s*50[\s\S]*?\}/m.test(
-    typesTs,
-  );
+  const combined = (typesTs || '') + (planTs || '');
+  const freePlanMaxItems50 = /free:\s*\{[\s\S]*?maxItems:\s*50[\s\S]*?\}/m.test(combined);
   if (!freePlanMaxItems50) {
-    failures.push('types.ts: PLAN_LIMITS.free.maxItems must be 50');
+    failures.push('types.ts or types/plan.ts: PLAN_LIMITS.free.maxItems must be 50');
   }
 }
 
@@ -227,12 +228,34 @@ function checkTypeSafetyGuardrails() {
   }
 }
 
+function checkBannedEnvPatterns() {
+  // 암호화 키는 VITE_ 클라이언트 번들 금지 — Supabase Edge Function secret만 허용
+  const bannedInReadme = [
+    { pattern: /VITE_PATIENT_DATA_KEY/, label: 'VITE_PATIENT_DATA_KEY (암호화 키는 클라이언트 번들 금지 — Supabase secret 사용)' },
+  ];
+
+  const readmeContent = read('README.md');
+  for (const { pattern, label } of bannedInReadme) {
+    if (pattern.test(readmeContent)) {
+      failures.push(`README.md: banned env pattern detected — ${label}`);
+    }
+  }
+
+  // .env.example에도 VITE_PATIENT_DATA_KEY 실제 값 설정 항목이 없어야 함
+  const envExampleContent = read('.env.example');
+  const activeVitePatientKey = /^VITE_PATIENT_DATA_KEY\s*=/m;
+  if (activeVitePatientKey.test(envExampleContent)) {
+    failures.push('.env.example: VITE_PATIENT_DATA_KEY must not be set (use Supabase secret PATIENT_DATA_KEY instead)');
+  }
+}
+
 checkDangerouslySetInnerHTML();
 checkInnerHtmlAssignments();
 checkSecurityMigrationGuards();
 checkPlanLimitConsistency();
 checkMaintenanceServiceWiring();
 checkTypeSafetyGuardrails();
+checkBannedEnvPatterns();
 
 if (failures.length > 0) {
   console.error('Custom lint failed with the following issues:');
