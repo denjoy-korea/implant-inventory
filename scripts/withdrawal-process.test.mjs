@@ -15,6 +15,12 @@ function read(relPath) {
   return readFileSync(fullPath, 'utf8');
 }
 
+function safeRead(relPath) {
+  const fullPath = path.join(REPO_ROOT, relPath);
+  if (!existsSync(fullPath)) return '';
+  return readFileSync(fullPath, 'utf8');
+}
+
 // ──────────────────────────────────────────────
 // 1. Migration SQL 검증
 // ──────────────────────────────────────────────
@@ -153,17 +159,32 @@ test('[UI] 탈퇴 경고 문구: 개인정보 즉시 파기 안내', () => {
 
 test('[UI] 법적 고지: PII 즉시 파기 안내', () => {
   const src = read('components/UserProfile.tsx');
-  assert.match(src, /이름·연락처·환자정보는 탈퇴 즉시 파기됩니다/);
+  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  assert.ok(
+    /이름·연락처·환자정보는 탈퇴 즉시 파기됩니다/.test(src) ||
+    /이름·연락처·환자정보는 탈퇴 즉시 파기됩니다/.test(modal),
+    'PII 파기 안내가 UserProfile 또는 WithdrawModal에 있어야 합니다'
+  );
 });
 
 test('[UI] 법적 고지: 결제기록 5년 보관 안내', () => {
   const src = read('components/UserProfile.tsx');
-  assert.match(src, /결제 기록은 전자상거래법에 따라 5년간 보관됩니다/);
+  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  assert.ok(
+    /결제 기록은 전자상거래법에 따라 5년간 보관됩니다/.test(src) ||
+    /결제 기록은 전자상거래법에 따라 5년간 보관됩니다/.test(modal),
+    '결제기록 5년 보관 안내가 UserProfile 또는 WithdrawModal에 있어야 합니다'
+  );
 });
 
 test('[UI] 법적 고지: 데이터 복구 불가 안내', () => {
   const src = read('components/UserProfile.tsx');
-  assert.match(src, /탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다/);
+  const modal = safeRead('components/profile/WithdrawModal.tsx');
+  assert.ok(
+    /탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다/.test(src) ||
+    /탈퇴 후 동일 이메일로 재가입 시 이전 데이터 복구가 불가합니다/.test(modal),
+    '데이터 복구 불가 안내가 UserProfile 또는 WithdrawModal에 있어야 합니다'
+  );
 });
 
 // ──────────────────────────────────────────────

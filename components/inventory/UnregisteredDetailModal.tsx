@@ -4,79 +4,18 @@ import { InventoryItem, SurgeryUnregisteredItem } from '../../types';
 import { fixIbsImplant } from '../../services/mappers';
 import { getSizeMatchKey, toCanonicalSize, parseSize } from '../../services/sizeNormalizer';
 import { normalizeSurgery } from '../../services/normalizationService';
-import { manufacturerAliasKey } from '../../services/appUtils';
 import DentwebGuideModal from './DentwebGuideModal';
 import ManualFixModal, { ManualFixCheckResult } from './ManualFixModal';
-
-type SizePattern =
-  | 'phi'
-  | 'oslash-mm'
-  | 'oslash-l'
-  | 'cuff-phi'
-  | 'dl-cuff'
-  | 'numeric-code'
-  | 'bare-numeric'
-  | 'other'
-  | 'empty';
-
-const SIZE_PATTERN_LABELS: Record<SizePattern, string> = {
-  phi: 'Φ x 형',
-  'oslash-mm': 'Ø x mm형',
-  'oslash-l': 'Ø / L형',
-  'cuff-phi': 'Cuff+Φ형',
-  'dl-cuff': 'D:L: 형',
-  'numeric-code': '숫자코드',
-  'bare-numeric': 'N x N형',
-  other: '기타',
-  empty: '빈 값',
-};
+import {
+  SizePattern,
+  SIZE_PATTERN_LABELS,
+  detectSizePattern,
+  pickDominantPattern,
+  isSameManufacturerAlias,
+  buildInventoryDuplicateKeyLocal,
+} from '../../services/unregisteredMatchingUtils';
 
 const BULK_REGISTER_CONCURRENCY = 6;
-
-function detectSizePattern(size: string): SizePattern {
-  const s = size.trim();
-  if (!s) return 'empty';
-  if (/^C\d+\s*[Φφ]/i.test(s)) return 'cuff-phi';
-  if (/[Φφ]\s*\d/.test(s)) return 'phi';
-  if (/[Øø]\s*\d.*\/\s*L/i.test(s)) return 'oslash-l';
-  if (/[Øø]\s*\d.*mm/i.test(s)) return 'oslash-mm';
-  if (/D[:\s]*\d.*L[:\s]*\d/i.test(s)) return 'dl-cuff';
-  if (/^\d{4,6}[a-zA-Z]*$/.test(s)) return 'numeric-code';
-  if (/\d+\.?\d*\s*[×xX*]\s*\d/.test(s)) return 'bare-numeric';
-  return 'other';
-}
-
-function pickDominantPattern(patterns: SizePattern[]): SizePattern {
-  const counts = new Map<SizePattern, number>();
-  patterns.forEach(pattern => {
-    counts.set(pattern, (counts.get(pattern) ?? 0) + 1);
-  });
-  return Array.from(counts.entries())
-    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]?.[0] ?? 'other';
-}
-
-function isSameManufacturerAlias(a: string, b: string): boolean {
-  const aa = manufacturerAliasKey(a);
-  const bb = manufacturerAliasKey(b);
-  if (!aa || !bb) return false;
-  return aa === bb || aa.includes(bb) || bb.includes(aa);
-}
-
-function buildInventoryDuplicateKeyLocal(
-  manufacturer: string,
-  brand: string,
-  size: string
-): string {
-  const fixed = fixIbsImplant(String(manufacturer || '').trim(), String(brand || '').trim());
-  const canonicalSize = toCanonicalSize(String(size || '').trim(), fixed.manufacturer);
-  const compactManufacturer = fixed.manufacturer.toLowerCase().replace(/\s+/g, '');
-  const manufacturerKey = compactManufacturer.startsWith('수술중fail')
-    ? `fail:${normalizeSurgery(fixed.manufacturer)}`
-    : normalizeSurgery(fixed.manufacturer).replace(/implant/g, '');
-  const brandKey = normalizeSurgery(fixed.brand);
-  const sizeKey = getSizeMatchKey(canonicalSize, fixed.manufacturer);
-  return `${manufacturerKey}|${brandKey}|${sizeKey}`;
-}
 
 interface UnregisteredReviewItem extends SurgeryUnregisteredItem {
   rowKey: string;

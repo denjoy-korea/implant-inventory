@@ -66,7 +66,10 @@ test('rich HTML sinks are sanitized', () => {
 });
 
 test('phase2 SQL migration keeps critical permission guards', () => {
-  const sql = read('supabase/022_security_integrity_phase2.sql');
+  const primary = path.join(REPO_ROOT, 'supabase/022_security_integrity_phase2.sql');
+  const archive = path.join(REPO_ROOT, 'supabase/_archive/022_security_integrity_phase2.sql');
+  assert.ok(existsSync(primary) || existsSync(archive), 'Expected 022_security_integrity_phase2.sql in supabase/ or supabase/_archive/');
+  const sql = readFileSync(existsSync(primary) ? primary : archive, 'utf8');
 
   assert.match(
     sql,
