@@ -32,6 +32,7 @@
 | modal-accessibility (R-12~R-15) | 2026-03-05 | 100% | 16 items, 16 PASS. R-12: window.alert 0 remaining (toast replaced). R-13: window.confirm 0 remaining (ConfirmModal in 6 files + SystemAdminDashboard render). R-14: 9 role="button" all have onKeyDown. R-15: outline:2px solid, no outline:none, no ring. |
 | crypto-security-hardening | 2026-03-05 | 73.5%->99.8% | v2: 9 PASS, 0 PARTIAL, 0 FAIL, 2 ACCEPTED DEVIATION. Fixed: H-2 legacy TTL, H-3 startup log, H-5 DB conditional update. C-2/C-3 remain accepted deviations. |
 | codebase-optimization | 2026-03-05 | 88%->92.1% | v2: QW 5/5 PASS, ME 5P+1PARTIAL+1ACCEPTED+1UNKNOWN. App.tsx 2765->999 (under 1K threshold). Files>1K: 18->7 (beat ME target 8). 32 hooks (was 9). Phase 3 excluded (Week 3+). Archival eligible. |
+| valuation-narrowing | 2026-03-05 | 83.3% | 15 items (WS3:6, WS4:3, WS5:6). WS4 100% (3/3). 1 FAIL: FR-W3-01 quality-check-template.md missing. 3 PARTIAL: FR-W3-02 28-day snapshots in progress, FR-W5-01-sub mrr-summary blocked, FR-W5-complete investor redaction pending. Design folder names diverge from impl (01-commercial->01-contracts etc). |
 
 ### Key File Paths
 - Types: `/types.ts` (root level), `/types/plan.ts` (plan types extracted)
