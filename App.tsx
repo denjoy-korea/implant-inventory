@@ -22,7 +22,6 @@ import AccountSuspendedScreen from './components/AccountSuspendedScreen';
 import { ExcelData, DashboardTab, InventoryItem, PlanType, BillingCycle, PLAN_LIMITS, BillingProgram, canAccessTab, FailCandidate } from './types';
 // excelService는 xlsx(~500 kB)를 포함하므로 이벤트 시점에 동적 import
 import { authService } from './services/authService';
-import { surgeryService } from './services/surgeryService';
 import { hospitalService } from './services/hospitalService';
 import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from './services/hospitalSettingsService';
 import { planService } from './services/planService';
@@ -47,6 +46,7 @@ import { useInventorySync } from './hooks/useInventorySync';
 import { useSurgeryManualFix } from './hooks/useSurgeryManualFix';
 import { useBaseStockBatch } from './hooks/useBaseStockBatch';
 import { useInviteFlow } from './hooks/useInviteFlow';
+import { useRefreshSurgeryUsage } from './hooks/useRefreshSurgeryUsage';
 import { FileUploadLoadingOverlay } from './components/FileUploadLoadingOverlay';
 import { getDashboardTabTitle } from './components/dashboard/dashboardTabTitle';
 
@@ -321,26 +321,13 @@ const App: React.FC = () => {
     stockCalcSettingsRef,
   );
 
-  const refreshLatestSurgeryUsage = useCallback(async (): Promise<Record<string, number> | null> => {
-    const hospitalId = state.user?.hospitalId;
-    if (!hospitalId) return null;
-
-    try {
-      const retentionMonths = PLAN_LIMITS[effectivePlan]?.retentionMonths ?? 24;
-      const effectiveMonths = Math.min(retentionMonths, 24);
-      const fromDateObj = new Date();
-      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
-      const fromDate = fromDateObj.toISOString().split('T')[0];
-
-      const latestRecords = await surgeryService.getSurgeryUsageRecords({ fromDate });
-      const usageMap = computeUsageByInventoryFromRecords(latestRecords, state.inventory);
-      return usageMap;
-    } catch (error) {
-      console.error('[App] 최신 수술기록 재조회 실패:', error);
-      showAlertToast('최신 수술기록 조회에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
-      return null;
-    }
-  }, [computeUsageByInventoryFromRecords, effectivePlan, showAlertToast, state.inventory, state.user?.hospitalId]);
+  const { refreshLatestSurgeryUsage } = useRefreshSurgeryUsage(
+    state.user?.hospitalId,
+    effectivePlan,
+    state.inventory,
+    computeUsageByInventoryFromRecords,
+    showAlertToast,
+  );
 
   // ═══════════════════════════════════════════════════════════════
   // 반품 관리 (Return Requests) → hooks/useReturnHandlers.ts

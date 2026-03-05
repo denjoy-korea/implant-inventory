@@ -305,6 +305,26 @@ export function useFixtureEditControls({
     });
   }, [setState]);
 
+  const handleUpdateCell = useCallback((index: number, column: string, value: boolean | string | number, type: 'fixture' | 'surgery', sheetName?: string) => {
+    if (type === 'fixture' && column === '사용안함') {
+      markDirtyAfterSave();
+    }
+    setState(prev => {
+      if (type === 'surgery' && sheetName) {
+        const newMasterRows = [...(prev.surgeryMaster[sheetName] || [])];
+        newMasterRows[index] = { ...newMasterRows[index], [column]: value };
+        return { ...prev, surgeryMaster: { ...prev.surgeryMaster, [sheetName]: newMasterRows } };
+      }
+      const currentData = prev.fixtureData;
+      if (!currentData) return prev;
+      const activeSheet = currentData.sheets[currentData.activeSheetName];
+      const newRows = [...activeSheet.rows];
+      newRows[index] = { ...newRows[index], [column]: value };
+      const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
+      return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
+    });
+  }, [markDirtyAfterSave, setState]);
+
   return {
     enabledManufacturers,
     hasSavedPoint,
@@ -321,5 +341,6 @@ export function useFixtureEditControls({
     handleSaveSettings,
     handleExpandFailClaim,
     markDirtyAfterSave,
+    handleUpdateCell,
   };
 }
