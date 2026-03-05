@@ -52,6 +52,25 @@ const probes = [
   { name: 'xlsx-generate', body: { activeSheet: { name: 'Sheet1', columns: [], rows: [] }, selectedIndices: [] } },
 ];
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function classifyUnreachableDetail(detail) {
+  const lowered = detail.toLowerCase();
+  if (lowered.includes('could not resolve') || lowered.includes('enotfound') || lowered.includes('getaddrinfo') || lowered.includes('dns')) {
+    return 'dns';
+  }
+  if (lowered.includes('timed out') || lowered.includes('etimedout') || lowered.includes('timeout') || lowered.includes('abort')) {
+    return 'timeout';
+  }
+  if (lowered.includes('econnrefused') || lowered.includes('connection refused') || lowered.includes('refused')) {
+    return 'connection_refused';
+  }
+  if (lowered.includes('certificate') || lowered.includes('tls') || lowered.includes('ssl')) {
+    return 'tls';
+  }
+  return 'network';
+}
+
 async function probeFunctionOnce(name, body) {
   const endpoint = `${baseUrl}/functions/v1/${name}`;
   try {
@@ -82,7 +101,13 @@ async function probeFunctionOnce(name, body) {
     return { ok: true, name, status };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return { ok: false, name, reason: 'unreachable', detail };
+    return {
+      ok: false,
+      name,
+      reason: 'unreachable',
+      detail,
+      unreachableType: classifyUnreachableDetail(detail),
+    };
   }
 }
 
@@ -91,9 +116,24 @@ async function probeFunction(name, body) {
   // 504 cold-start: 5초 대기 후 1회 재시도
   if (result.reason === 'cold_start') {
     console.warn(`[edge-check] WARN: ${name} cold-start timeout (504), retrying in 5s...`);
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await wait(5000);
     return probeFunctionOnce(name, body);
   }
+
+  // 네트워크 단절/일시 장애: 2초 대기 후 1회 재시도
+  if (result.reason === 'unreachable') {
+    console.warn(`[edge-check] WARN: ${name} unreachable[${result.unreachableType}] on first attempt, retrying in 2s...`);
+    await wait(2000);
+    const retryResult = await probeFunctionOnce(name, body);
+    if (retryResult.ok) {
+      return { ...retryResult, recoveredFrom: 'unreachable' };
+    }
+    if (retryResult.reason === 'unreachable') {
+      return { ...retryResult, retried: true };
+    }
+    return retryResult;
+  }
+
   return result;
 }
 
@@ -105,12 +145,17 @@ for (const probe of probes) {
 let failed = false;
 for (const result of results) {
   if (result.ok) {
-    console.log(`[edge-check] OK: ${result.name} (HTTP ${result.status})`);
+    if (result.recoveredFrom === 'unreachable') {
+      console.log(`[edge-check] OK: ${result.name} (HTTP ${result.status}, recovered after unreachable retry)`);
+    } else {
+      console.log(`[edge-check] OK: ${result.name} (HTTP ${result.status})`);
+    }
     continue;
   }
 
   if (result.reason === 'unreachable') {
-    const msg = `[edge-check] WARN: ${result.name} unreachable (${result.detail})`;
+    const retryText = result.retried ? 'after retry' : 'without retry';
+    const msg = `[edge-check] WARN: ${result.name} unreachable[${result.unreachableType}] ${retryText} (${result.detail})`;
     if (failOnUnreachable) {
       console.error(msg);
       failed = true;

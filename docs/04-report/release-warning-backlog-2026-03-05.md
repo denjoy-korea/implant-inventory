@@ -8,12 +8,12 @@
 
 ## 백로그
 
-| ID | 경고 | 영향 | 우선순위 | 담당 | 기한 | 조치 계획 |
-| --- | --- | --- | --- | --- | --- | --- |
-| WB-01 | `smoke:auto`에서 `xlsx-parse`, `xlsx-generate` unreachable WARN 간헐 발생 | 배포/네트워크 상태 판단 노이즈 증가 | P2 | CI/Build Owner (맹준호) | 2026-03-06 | edge-check 재시도(백오프) 1회 추가, 로그에 네트워크/권한 구분 코드 표기 |
-| WB-02 | Vite `Circular chunk: vendor -> react-vendor -> vendor` 경고 | 청크 분리 효율 저하 가능성 | P2 | Frontend Owner (맹준호) | 2026-03-07 | `build.rollupOptions.output.manualChunks` 재정렬 설계안 작성 |
-| WB-03 | `supabaseClient.ts`/`cryptoUtils.ts` 정적+동적 import 혼재 경고 | 코드 스플릿 최적화 제한 | P2 | Frontend Owner (맹준호) | 2026-03-07 | 동적 import 경로 정리 또는 정적 import 통일 여부 결정 |
-| WB-04 | `exceljs-vendor` 청크 500kB 초과 경고 | 초기 로드/캐시 효율 저하 가능성 | P1 | Frontend Owner (맹준호) | 2026-03-08 | 엑셀 기능 경로 lazy-load 강제 및 청크 분리 검증 |
+| ID | 경고 | 영향 | 우선순위 | 담당 | 기한 | 상태 | 조치 계획 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WB-01 | `smoke:auto`에서 `xlsx-parse`, `xlsx-generate` unreachable WARN 간헐 발생 | 배포/네트워크 상태 판단 노이즈 증가 | P2 | CI/Build Owner (맹준호) | 2026-03-06 | DONE (2026-03-05) | `scripts/check-edge-functions.mjs`에 unreachable 재시도(2초, 1회) + `dns/timeout/connection_refused/tls/network` 분류 로그 추가 |
+| WB-02 | Vite `Circular chunk: vendor -> react-vendor -> vendor` 경고 | 청크 분리 효율 저하 가능성 | P2 | Frontend Owner (맹준호) | 2026-03-07 | OPEN | `build.rollupOptions.output.manualChunks` 재정렬 설계안 작성 |
+| WB-03 | `supabaseClient.ts`/`cryptoUtils.ts` 정적+동적 import 혼재 경고 | 코드 스플릿 최적화 제한 | P2 | Frontend Owner (맹준호) | 2026-03-07 | OPEN | 동적 import 경로 정리 또는 정적 import 통일 여부 결정 |
+| WB-04 | `exceljs-vendor` 청크 500kB 초과 경고 | 초기 로드/캐시 효율 저하 가능성 | P1 | Frontend Owner (맹준호) | 2026-03-08 | OPEN | 엑셀 기능 경로 lazy-load 강제 및 청크 분리 검증 |
 
 ## 완료 기준
 
