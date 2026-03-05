@@ -31,6 +31,9 @@ const PAGE_LABELS: Record<string, string> = {
 };
 const labelPage = (page: string) => PAGE_LABELS[page] ?? page;
 const labelPair = (pair: string) => pair.split(' → ').map(labelPage).join(' → ');
+// UTC → KST(+9) 날짜 문자열 변환 (toISOString() 직접 사용 시 UTC 기준이라 KST 자정 전후 왜곡 발생)
+const toKSTDate = (d: Date | string) =>
+  new Date(new Date(d).getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
 const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
   trafficData,
@@ -40,11 +43,11 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
   onResetTrafficData,
 }) => {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const weekAgo = new Date(now.getTime() - 6 * 86400_000).toISOString().slice(0, 10);
+  const todayStr = toKSTDate(now);
+  const weekAgo = toKSTDate(new Date(now.getTime() - 6 * 86400_000));
   const missingSessionRows = trafficData.filter((row) => !row.session_id).length;
-  const todayViews = trafficData.filter((row) => row.created_at.slice(0, 10) === todayStr).length;
-  const weekViews = trafficData.filter((row) => row.created_at.slice(0, 10) >= weekAgo).length;
+  const todayViews = trafficData.filter((row) => toKSTDate(row.created_at) === todayStr).length;
+  const weekViews = trafficData.filter((row) => toKSTDate(row.created_at) >= weekAgo).length;
 
   const allSessions = new Set(trafficData.map((row) => row.session_id).filter(Boolean));
   const convertedSessions = new Set(trafficData.filter((row) => row.user_id).map((row) => row.session_id).filter(Boolean));
@@ -54,14 +57,14 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
 
   const dayMap: Record<string, { views: number; converted: number }> = {};
   trafficData.forEach((row) => {
-    const date = row.created_at.slice(0, 10);
+    const date = toKSTDate(row.created_at);
     if (!dayMap[date]) dayMap[date] = { views: 0, converted: 0 };
     dayMap[date].views++;
     if (row.user_id) dayMap[date].converted++;
   });
   const days: { date: string; views: number; converted: number }[] = [];
   for (let i = trafficRange - 1; i >= 0; i--) {
-    const date = new Date(now.getTime() - i * 86400_000).toISOString().slice(0, 10);
+    const date = toKSTDate(new Date(now.getTime() - i * 86400_000));
     days.push({ date, views: dayMap[date]?.views ?? 0, converted: dayMap[date]?.converted ?? 0 });
   }
   const maxDay = Math.max(...days.map((day) => day.views), 1);
@@ -183,6 +186,17 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
 
   const toPct = (numerator: number, denominator: number) => (denominator > 0 ? Math.round((numerator / denominator) * 100) : 0);
 
+  // Eligible sessions 기반 stageSets (funnel-kpi-utils.mjs와 동일 로직)
+  const stageSets: Set<string>[] = [
+    new Set(trafficData.filter(r => r.event_type === 'landing_view' || r.page === 'landing').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'pricing_view' || r.page === 'pricing').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'auth_start').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'auth_complete').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'analyze_start').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'analyze_complete').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+    new Set(trafficData.filter(r => r.event_type === 'contact_submit' || r.event_type === 'waitlist_submit').map(r => r.session_id).filter((s): s is string => Boolean(s))),
+  ];
+
   const eventRows = [...trafficData].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const firstSeenBySession = new Map<string, number>();
   const authCompletedBySession = new Map<string, number>();
@@ -295,8 +309,12 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
         </div>
         <div className="space-y-2.5 mb-5">
           {eventFunnel.map((stage, index) => {
-            const prevCount = index > 0 ? eventFunnel[index - 1].count : stage.count;
-            const stepCvr = index > 0 ? toPct(stage.count, prevCount) : 100;
+            const eligibleSet = index > 0 ? stageSets[index - 1] : stageSets[0];
+            const stageSet = stageSets[index];
+            const progressedCount = index > 0
+              ? [...stageSet].filter(sid => eligibleSet.has(sid)).length
+              : stageSet.size;
+            const stepCvr = index > 0 ? toPct(progressedCount, eligibleSet.size) : 100;
             return (
               <div key={stage.key} className="flex items-center gap-3">
                 <span className="w-40 text-xs font-bold text-slate-600 shrink-0">{stage.label}</span>
@@ -316,7 +334,7 @@ const SystemAdminTrafficTab: React.FC<SystemAdminTrafficTabProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[10px] text-slate-500 mb-1">Pricing→Auth Start</p>
-            <p className="text-lg font-black text-slate-800">{toPct(authStartSessions, pricingViewSessions)}%</p>
+            <p className="text-lg font-black text-slate-800">{toPct([...stageSets[2]].filter(sid => stageSets[1].has(sid)).length, stageSets[1].size)}%</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[10px] text-slate-500 mb-1">Time-to-Auth (평균)</p>
