@@ -100,18 +100,28 @@ test('mobile critical operations stay wired in dashboard routes', () => {
 test('analyze page shows upload requirement checklist and disabled reasons', () => {
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
+  const analyzeUploadStep = read('components/analyze/AnalyzeUploadStep.tsx');
+  const analyzeProcessingStep = read('components/analyze/AnalyzeProcessingStep.tsx');
 
-  // Refactor: requirement/disable rules are computed in useAnalyzePage hook.
+  // Refactor: requirement/disable rules are computed in useAnalyzePage hook,
+  // and upload/progress UI are extracted components.
   assert.match(analyzeHook, /const uploadRequirements:[\s\S]*엑셀 형식\(\.xlsx\/\.xls\) 확인/s);
   assert.match(analyzeHook, /const analyzeDisabledReasons = \[/);
-  assert.match(analyze, /분석 시작 전 체크/);
-  assert.match(analyze, /analyzeDisabledReasons\.join\(/);
-  assert.match(analyze, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
+  assert.match(analyze, /import AnalyzeUploadStep from '\.\/analyze\/AnalyzeUploadStep';/);
+  assert.match(analyze, /import AnalyzeProcessingStep from '\.\/analyze\/AnalyzeProcessingStep';/);
+  assert.match(analyze, /if \(step === 'upload'\)[\s\S]*<AnalyzeUploadStep/s);
+  assert.match(analyze, /if \(step === 'processing'\)[\s\S]*<AnalyzeProcessingStep progress=\{progress\} processingMsg=\{processingMsg\} \/>/s);
+  assert.match(analyzeUploadStep, /분석 시작 전 체크/);
+  assert.match(analyzeUploadStep, /분석 시작을 위해 \{analyzeDisabledReasons\.join\(' \/ '\)\}/);
+  assert.match(analyzeProcessingStep, /데이터를 분석하고 있습니다/);
+  assert.match(analyzeProcessingStep, /Math\.round\(progress\)/);
+  assert.match(analyzeUploadStep, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
 });
 
 test('analyze page classifies analyze\/lead errors and exposes retry CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
+  const analyzeReportStep = read('components/analyze/AnalyzeReportStep.tsx');
   const analyzeHelpers = read('components/analyze/analyzeHelpers.ts');
 
   assert.match(analyzeHelpers, /export function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
@@ -119,23 +129,28 @@ test('analyze page classifies analyze\/lead errors and exposes retry CTA', () =>
   // Refactor: error classification import/usage moved to useAnalyzePage hook.
   assert.match(analyzeHook, /import[\s\S]*classifyAnalyzeError[\s\S]*from '\.\.\/components\/analyze\/analyzeHelpers'/s);
   assert.match(analyzeHook, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
-  assert.match(analyze, /다시 전송/);
-  assert.match(analyze, /onClick=\{handleLeadSubmit\}/);
+  assert.match(analyze, /import AnalyzeReportStep from '\.\/analyze\/AnalyzeReportStep';/);
+  assert.match(analyzeReportStep, /다시 전송/);
+  assert.match(analyzeReportStep, /onClick=\{handleLeadSubmit\}/);
 });
 
 test('analyze page strengthens success confidence with ETA and next action CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
+  const analyzeReportStep = read('components/analyze/AnalyzeReportStep.tsx');
 
-  assert.match(analyze, /const leadSuccessCta = wantDetailedAnalysis[\s\S]*ctaLabel: '상담 일정 잡기'[\s\S]*ctaLabel: '무료로 시작하기'/s);
-  assert.match(analyze, /먼저 확인할 핵심 인사이트/);
-  assert.match(analyze, /접수 완료: \{leadSuccessCta\.title\}/);
-  assert.match(analyze, /처리 예상시간: \{leadSuccessCta\.eta\}/);
-  assert.match(analyze, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
+  assert.match(analyze, /import AnalyzeReportStep from '\.\/analyze\/AnalyzeReportStep';/);
+  assert.match(analyzeReportStep, /const leadSuccessCta = wantDetailedAnalysis[\s\S]*ctaLabel: '상담 일정 잡기'[\s\S]*ctaLabel: '무료로 시작하기'/s);
+  assert.match(analyzeReportStep, /먼저 확인할 핵심 인사이트/);
+  assert.match(analyzeReportStep, /접수 완료: \{leadSuccessCta\.title\}/);
+  assert.match(analyzeReportStep, /처리 예상시간: \{leadSuccessCta\.eta\}/);
+  assert.match(analyzeReportStep, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
 });
 
 test('funnel instrumentation uses standardized events and page-aware tracking', () => {
   const pageView = read('services/pageViewService.ts');
   const pricing = read('components/PricingPage.tsx');
+  const pricingHook = read('hooks/usePricingPage.ts');
+  const pricingModule = pricing + pricingHook;
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
   const contact = read('components/ContactPage.tsx');
@@ -148,7 +163,8 @@ test('funnel instrumentation uses standardized events and page-aware tracking', 
   assert.match(pageView, /markConverted\(userId: string, accountId\?: string \| null\)/);
   assert.match(appState, /pageViewService\.markConverted\(user\.id, user\.hospitalId \|\| null\)/);
 
-  assert.match(pricing, /trackEvent\(\s*'pricing_plan_select'/);
+  // Refactor-safe: pricing event may move between page and hook.
+  assert.match(pricingModule, /trackEvent\(\s*'pricing_plan_select'/);
   assert.match(authHook, /trackEvent\('auth_start'/);
   assert.match(authHook, /trackEvent\('auth_complete'/);
   // Refactor: analyze tracking events are emitted in useAnalyzePage hook.
@@ -188,6 +204,27 @@ test('app shell guard states and settings routes stay wired', () => {
   assert.match(tabs, /dashboardTab === 'audit_log'[\s\S]*<AuditLogViewer[\s\S]*hospitalId=\{user\.hospitalId\}/s);
 
   assert.match(app, /<MobileDashboardNav[\s\S]*userPermissions=\{state\.user\?\.permissions\}[\s\S]*effectiveAccessRole=\{effectiveAccessRole\}/s);
+});
+
+test('settings hub wires extracted vendor management modal component', () => {
+  const settings = read('components/SettingsHub.tsx');
+  const vendorModal = read('components/settings/VendorManagementModal.tsx');
+
+  assert.match(settings, /import VendorManagementModal from '\.\/settings\/VendorManagementModal';/);
+  assert.match(settings, /\{showVendorModal && \(\s*<VendorManagementModal[\s\S]*onClose=\{\(\) => setShowVendorModal\(false\)\}/s);
+  assert.match(settings, /onStartEdit=\{startEditVendor\}/);
+  assert.match(settings, /onCancelEdit=\{cancelEditVendor\}/);
+  assert.match(settings, /onSave=\{handleSaveVendor\}/);
+  assert.match(settings, /onDelete=\{handleDeleteVendor\}/);
+  assert.doesNotMatch(settings, /function formatPhoneNumber\(value: string\)/);
+
+  assert.match(vendorModal, /import ModalShell from '\.\.\/shared\/ModalShell';/);
+  assert.match(vendorModal, /const handleClose = \(\) => \{\s*onClose\(\);\s*onCancelEdit\(\);\s*\};/s);
+  assert.match(vendorModal, /<ModalShell[\s\S]*isOpen=\{true\}[\s\S]*onClose=\{handleClose\}/s);
+  assert.match(vendorModal, /onClick=\{handleClose\}/);
+  assert.match(vendorModal, /aria-label="거래처 관리 모달 닫기"/);
+  assert.match(vendorModal, /function formatPhoneNumber\(value: string\): string/);
+  assert.match(vendorModal, /onChange=\{e => setEditPhone\(formatPhoneNumber\(e\.target\.value\)\)\}/);
 });
 
 test('landing/value pages share unified trial copy policy', () => {

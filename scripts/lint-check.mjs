@@ -207,6 +207,76 @@ function checkPlanLimitConsistency() {
   }
 }
 
+function checkDataroomPricingConsistency() {
+  const planTs = read('types/plan.ts');
+  const billingDoc = read('docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-2026-03.md');
+  if (!planTs || !billingDoc) return;
+
+  if (!/연간 월환산/.test(billingDoc)) {
+    failures.push('docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-2026-03.md: missing "연간 월환산" header');
+  }
+
+  if (/\|\s*Pro\s*\|/.test(billingDoc) || /\|\s*Enterprise\s*\|/.test(billingDoc)) {
+    failures.push('docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-2026-03.md: deprecated plan labels (Pro/Enterprise) must not appear');
+  }
+
+  const extractClientPrice = (plan, cycle) => {
+    const re = new RegExp(`${plan}:\\s*\\{[^}]*${cycle}Price:\\s*(\\d+)`);
+    const m = planTs.match(re);
+    return m ? Number.parseInt(m[1], 10) : null;
+  };
+  const formatKrw = (value) => value.toLocaleString('ko-KR');
+
+  for (const [plan, label] of [['basic', 'Basic'], ['plus', 'Plus'], ['business', 'Business']]) {
+    const monthly = extractClientPrice(plan, 'monthly');
+    const yearly = extractClientPrice(plan, 'yearly');
+    if (monthly === null || yearly === null) {
+      failures.push(`types/plan.ts: missing PLAN_PRICING for ${plan}`);
+      continue;
+    }
+
+    const yearlyTotal = yearly * 12;
+    const rowPattern = new RegExp(
+      `\\|\\s*${label}\\s*\\|\\s*${formatKrw(monthly)}원\\s*\\|\\s*${formatKrw(yearly)}원\\s*\\|\\s*${formatKrw(yearlyTotal)}원\\s*\\|`,
+    );
+    if (!rowPattern.test(billingDoc)) {
+      failures.push(
+        `docs/05-dataroom/02-billing-reconciliation/billing-reconciliation-2026-03.md: ${label} row must match PLAN_PRICING (${formatKrw(monthly)} / ${formatKrw(yearly)} / ${formatKrw(yearlyTotal)})`,
+      );
+    }
+  }
+}
+
+function checkLegacyPlanLabelsInActiveSurface() {
+  const targets = [
+    'index.html',
+    'components',
+    'docs/05-dataroom',
+  ];
+  const legacyPattern = /\b(Pro|Enterprise)\b/;
+
+  const scanFiles = [];
+  for (const target of targets) {
+    const fullPath = path.join(REPO_ROOT, target);
+    if (!existsSync(fullPath)) continue;
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      scanFiles.push(
+        ...walk(fullPath).filter((filePath) => /\.(md|html|ts|tsx)$/.test(filePath)),
+      );
+      continue;
+    }
+    scanFiles.push(fullPath);
+  }
+
+  for (const filePath of scanFiles) {
+    const content = readFileSync(filePath, 'utf8');
+    if (legacyPattern.test(content)) {
+      failures.push(`${rel(filePath)}: legacy plan labels (Pro/Enterprise) must not appear in active surfaces`);
+    }
+  }
+}
+
 function checkTypeSafetyGuardrails() {
   const sourceFiles = walk(REPO_ROOT).filter((filePath) => {
     return /\.(ts|tsx)$/.test(filePath);
@@ -253,6 +323,8 @@ checkDangerouslySetInnerHTML();
 checkInnerHtmlAssignments();
 checkSecurityMigrationGuards();
 checkPlanLimitConsistency();
+checkDataroomPricingConsistency();
+checkLegacyPlanLabelsInActiveSurface();
 checkMaintenanceServiceWiring();
 checkTypeSafetyGuardrails();
 checkBannedEnvPatterns();
