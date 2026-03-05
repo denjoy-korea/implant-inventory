@@ -10,3 +10,5 @@
 | funnel-cvr-fix | 100% | 2026-03-05 | [funnel-cvr-fix/](./funnel-cvr-fix/) |
 | modal-accessibility | 100% | 2026-03-05 | [modal-accessibility/](./modal-accessibility/) |
 | performance-bundle | 90% | 2026-03-05 | [performance-bundle/](./performance-bundle/) |
+| hospital-integrations | 100% | 2026-03-05 | [hospital-integrations/](./hospital-integrations/) |
+| crypto-security-hardening | 99.8% | 2026-03-05 | [crypto-security-hardening/](./crypto-security-hardening/) |

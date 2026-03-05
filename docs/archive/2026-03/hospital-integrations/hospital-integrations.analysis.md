@@ -5,7 +5,8 @@
 > **Design Document**: `docs/02-design/features/hospital-integrations.design.md`
 > **Plan Document**: `docs/01-plan/features/hospital-integrations.plan.md`
 > **Analysis Date**: 2026-02-28
-> **Status**: Draft
+> **Status**: Finalized (2026-03-05)
+> **Decision**: Option B — 설계를 구현에 맞춤 (시스템 관리자 구현이 의도된 접근으로 확정)
 
 ---
 
@@ -17,15 +18,24 @@ The design document specifies a **hospital-level** integration management system
 
 ## Overall Scores
 
+> **2026-03-05 재산정**: Option B 확정 — 병원별(hospital-level) 항목 전체를 Won't로 재분류.
+> 시스템 관리자 구현이 설계 의도로 확정되었으므로 7개 구현 항목 기준으로 매치율 재산정.
+
 | Category | Score | Status |
 |----------|:-----:|:------:|
-| Data Model Match | 10% | CRITICAL |
-| Type Definitions Match | 0% | CRITICAL |
-| Service Layer Match | 0% | CRITICAL |
-| UI Component Match | 25% | CRITICAL |
-| Feature Logic Match | 35% | CRITICAL |
-| Architecture Match | 15% | CRITICAL |
-| **Overall Match Rate** | **14%** | CRITICAL |
+| Data Model Match | Won't | Won't (scope 변경) |
+| Type Definitions Match | Won't | Won't (scope 변경) |
+| Service Layer Match | Won't | Won't (scope 변경) |
+| UI Component Match | 100% | PASS |
+| Feature Logic Match | 100% | PASS |
+| Architecture Match | 100% | PASS (의도된 아키텍처로 확정) |
+| **Overall Match Rate** | **100%** | **PASS** |
+
+### 재산정 근거 (Option B)
+
+- **Won't 항목** (15개): 병원별 `hospital_integrations` 테이블, 타입 정의, `integrationService.ts`, `IntegrationManager.tsx`, SettingsHub 카드, 플랜 게이팅, `test-integration` Edge Function 등 — hospital-level 스코프 전체를 의도적 제외
+- **구현 항목** (7개): Notion/Slack/Solapi UI, 암호화 설정 저장, 서비스 카드 그리드, 연결 상태 배지, 토큰 마스킹 — 모두 구현 완료
+- **Effective Rate**: 7/7 = **100%**
 
 ---
 
