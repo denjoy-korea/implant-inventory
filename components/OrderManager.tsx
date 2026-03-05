@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams, RETURN_REASON_LABELS, RETURN_STATUS_LABELS } from '../types';
+import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams } from '../types';
 import OrderCancelModal from './order/OrderCancelModal';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
@@ -9,7 +9,7 @@ import { OrderHistoryPanel } from './order/OrderHistoryPanel';
 import ReturnRequestModal from './order/ReturnRequestModal';
 import ReturnCandidateModal from './order/ReturnCandidateModal';
 import BrandOrderModal from './order/BrandOrderModal';
-import { displayMfr, formatManagerCell, buildOrderItemKey } from '../hooks/useOrderManagerData';
+import { displayMfr, buildOrderItemKey } from '../hooks/useOrderManagerData';
 import { useOrderManager } from '../hooks/useOrderManager';
 import { OrderLowStockSection } from './order/OrderLowStockSection';
 import { OrderExchangeSection } from './order/OrderExchangeSection';
@@ -98,9 +98,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     deadStockItems,
     exchangeCandidates,
     kpiData,
-    monthlyOrderData,
-    manufacturerDonut,
-    donutPaths,
     groupedLowStock,
     orderedLowStockGroups,
     manufacturerOptions,
@@ -603,380 +600,18 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
-        {/* ═══════════════════════════════════════ */}
-        {/* 주문 내역 테이블                          */}
-        {/* ═══════════════════════════════════════ */}
-        <div className={`bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative ${!historyOnly ? 'hidden md:block' : ''}`}>
-          <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
-          <div className="px-4 sm:px-7 py-5 border-b border-slate-100/50 flex items-center justify-between relative z-10">
-            <div>
-              <h3 className="text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" />
-                주문/반품 내역
-              </h3>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* 수동 반품 신청 버튼 - 추후 활성화 가능 */}
-              {false && !isReadOnly && !historyOnly && (
-                <button
-                  onClick={() => setShowReturnModal(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
-                  반품 신청
-                </button>
-              )}
-              <button
-                onClick={() => setShowHistoryPanel(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                히스토리
-              </button>
-              <span className="text-[10px] font-black text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg">{unifiedRows.length}건</span>
-            </div>
-          </div>
-          <div className="md:hidden px-3 pt-3 pb-3 space-y-2.5 relative z-10">
-            {unifiedRows.length > 0 ? unifiedRows.map((row) => {
-              if (row.kind === 'return') {
-                const g = row.data;
-                const allItems = g.requests.flatMap(r => r.items);
-                const first = allItems[0];
-                const isActing = g.requests.some(r => returnActionLoadingId === r.id);
-                const statusBadgeClass =
-                  g.overallStatus === 'requested' ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' :
-                  g.overallStatus === 'picked_up' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
-                  g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
-                  g.overallStatus === 'mixed' ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' :
-                  'bg-slate-100 border border-slate-200 text-slate-500';
-                const statusLabel = g.overallStatus === 'mixed' ? '처리중' : RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus];
-                return (
-                  <article key={`mobile-return-${g.id}`} className="rounded-2xl border border-teal-200 bg-teal-50/40 px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-500">{g.date}</p>
-                        <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(g.manufacturer)}</p>
-                      </div>
-                      <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700 w-[56px] text-center">반품신청</span>
-                    </div>
-                    <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-500">{g.totalItems}개 품목</span>
-                        <span className="text-sm font-black text-slate-900 tabular-nums">총 {g.totalQty}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
-                      </div>
-                      {first && (
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
-                            <span className="text-[11px] text-slate-400">×{first.quantity}</span>
-                            {allItems.length > 1 && <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{statusLabel}</span>
-                      {!isReadOnly && (
-                        <div className="flex items-center gap-1.5">
-                          {g.requests.some(r => r.status === 'requested') && (
-                            <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'requested').forEach(r => handleReturnUpdateStatus(r.id, 'picked_up', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
-                          )}
-                          {g.requests.some(r => r.status === 'picked_up') && (
-                            <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'picked_up').forEach(r => handleReturnUpdateStatus(r.id, 'completed', 'picked_up'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>
-                          )}
-                          {g.overallStatus === 'requested' && (
-                            <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'rejected', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
-                          )}
-                          {g.requests.every(r => r.status === 'completed' || r.status === 'rejected') && (
-                            <button onClick={() => setReturnDetailGroup(g)} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-600 active:scale-95">상세보기</button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                );
-              }
-              const group = row.data;
-              const typeBadgeClass = group.type === 'replenishment'
-                ? 'bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 text-indigo-700'
-                : group.type === 'return'
-                  ? 'bg-gradient-to-br from-amber-50 to-white border border-amber-100 text-amber-700'
-                  : 'bg-gradient-to-br from-rose-50 to-white border border-rose-100 text-rose-700';
-              return (
-                <article
-                  key={`mobile-group-${group.id}`}
-                  className={`rounded-2xl border px-3.5 py-3.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] ${
-                    group.type === 'replenishment' ? 'border-indigo-100 bg-indigo-50/30' :
-                    group.type === 'return' ? 'border-amber-100 bg-amber-50/30' :
-                    'border-rose-100 bg-rose-50/30'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-500">{group.date}</p>
-                      <p className="text-sm font-black text-slate-800 truncate mt-0.5">{displayMfr(group.manufacturer)}</p>
-                    </div>
-                    <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${typeBadgeClass}`}>
-                      {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '수술중교환'}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500">{group.totalItems}개 품목</span>
-                      <span className="text-sm font-black text-slate-900 tabular-nums">총 {group.totalQuantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
-                    </div>
-                    {(() => {
-                      const allItems = group.orders.flatMap(o => o.items);
-                      const first = allItems[0];
-                      if (!first) return null;
-                      return (
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
-                            <span className="text-[11px] text-slate-400">×{first.quantity}</span>
-                            {allItems.length > 1 && (
-                              <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-semibold text-slate-500 truncate">담당자: {formatManagerCell(group.managers, group.confirmers)}</span>
-                    <div className="flex items-center gap-1.5">
-                      {group.overallStatus === 'cancelled' ? (
-                        <>
-                          <span className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">취소됨</span>
-                          {!isReadOnly && (
-                            <button
-                              onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
-                              className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all active:scale-95"
-                            >
-                              삭제
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
-                            <button
-                              onClick={() => {
-                                const orderedItems = group.orders.filter(o => o.status === 'ordered');
-                                if (orderedItems.length > 0) setCancelModalOrder(orderedItems);
-                              }}
-                              className="px-3 py-2 rounded-xl text-[11px] font-black bg-rose-50 text-rose-600 border border-rose-200 transition-all active:scale-95"
-                            >
-                              취소
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setSelectedGroupModal(group)}
-                            className={`px-3 py-2 rounded-xl text-[11px] font-black transition-all active:scale-95 ${group.overallStatus === 'received'
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                              : 'bg-indigo-50 border border-indigo-200 text-indigo-600'
-                              }`}
-                          >
-                            {group.overallStatus === 'received' ? '상세 확인' : '입고 확인'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            }) : (
-              <div className="px-4 py-10 text-center">
-                <p className="text-sm font-semibold text-slate-500">표시할 내역이 없습니다.</p>
-              </div>
-            )}
-          </div>
-          <div className="hidden md:block relative z-10">
-            <table className="w-full text-left border-collapse table-fixed">
-              <colgroup>
-                <col className="w-[10%]" />
-                <col className="w-[6%]" />
-                <col className="w-[11%]" />
-                <col className="w-[20%]" />
-                <col className="w-[6%]" />
-                <col className="w-[8%]" />
-                <col className="w-[9%]" />
-                <col className="w-[18%]" />
-              </colgroup>
-              <thead className="bg-slate-50/50 border-b border-slate-100/50 backdrop-blur-sm">
-                <tr>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">주문일자</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">유형</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">제조사</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">품목 내역</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">수량</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider">담당자/확인자</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-center">상태</th>
-                  <th className="px-3 lg:px-5 py-3 text-[10px] font-bold text-slate-500 tracking-wider text-right">관리</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {unifiedRows.length > 0 ? unifiedRows.map((row) => {
-                  if (row.kind === 'return') {
-                    const g = row.data;
-                    const isActing = g.requests.some(req => returnActionLoadingId === req.id);
-                    const allItems = g.requests.flatMap(req => req.items);
-                    const first = allItems[0];
-                    const statusBadgeClass =
-                      g.overallStatus === 'requested' ? 'bg-yellow-50 border border-yellow-100 text-yellow-700' :
-                      g.overallStatus === 'picked_up' ? 'bg-blue-50 border border-blue-100 text-blue-700' :
-                      g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' :
-                      g.overallStatus === 'mixed' ? 'bg-purple-50 border border-purple-100 text-purple-700' :
-                      'bg-slate-100 text-slate-400';
-                    const statusLabel =
-                      g.overallStatus === 'mixed' ? '처리중' :
-                      RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus];
-                    return (
-                      <tr key={`return-${g.id}`} className="group transition-all duration-300 border-l-[3px] border-l-teal-400 bg-teal-50/25 hover:bg-teal-50/50">
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{g.date}</span></td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[60px] bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
-                        </td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(g.manufacturer)}</span></td>
-                        <td className="px-2 lg:px-4 py-2.5">
-                          {first && (
-                            <div className="flex items-center gap-1 text-[11px] min-w-0">
-                              <span className="font-bold text-slate-700 truncate">{first.brand}</span>
-                              <span className="text-slate-500 shrink-0">{first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
-                              <span className="text-slate-400 shrink-0">×{first.quantity}</span>
-                              {allItems.length > 1 && <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-0.5">외 {allItems.length - 1}종</span>}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{g.totalQty}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
-                        <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{formatManagerCell(g.managers, g.confirmers)}</span></td>
-                        <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-lg text-[10px] font-black inline-block ${statusBadgeClass}`}>{statusLabel}</span>
-                        </td>
-                        <td className="px-2 lg:px-4 py-2.5 text-right whitespace-nowrap">
-                          {!isReadOnly && (
-                            <div className="flex items-center justify-end gap-1">
-                              {/* 수거완료: requested 상태인 요청이 있을 때 */}
-                              {g.requests.some(req => req.status === 'requested') && (
-                                <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'requested').forEach(req => handleReturnUpdateStatus(req.id, 'picked_up', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
-                              )}
-                              {/* 반품완료: picked_up 상태인 요청이 있을 때 */}
-                              {g.requests.some(req => req.status === 'picked_up') && (
-                                <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'picked_up').forEach(req => handleReturnUpdateStatus(req.id, 'completed', 'picked_up'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>
-                              )}
-                              {/* 거절: 전체가 requested일 때만 */}
-                              {g.overallStatus === 'requested' && (
-                                <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'rejected', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>
-                              )}
-                              {/* 상세보기: 전체가 완료/거절일 때 */}
-                              {g.requests.every(req => req.status === 'completed' || req.status === 'rejected') && (
-                                <button onClick={() => setReturnDetailGroup(g)} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">상세보기</button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  const group = row.data;
-                  const rowBgClass = group.type === 'replenishment'
-                    ? 'border-l-indigo-300 bg-indigo-50/15 hover:bg-indigo-50/40'
-                    : group.type === 'return'
-                      ? 'border-l-amber-300 bg-amber-50/20 hover:bg-amber-50/40'
-                      : 'border-l-rose-300 bg-rose-50/20 hover:bg-rose-50/40';
-                  return (
-                    <tr key={group.id} className={`group transition-all duration-300 border-l-[3px] ${rowBgClass}`}>
-                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-700">{group.date}</span></td>
-                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap">
-                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black inline-flex items-center justify-center w-[60px] ${group.type === 'replenishment' ? 'bg-indigo-50 border border-indigo-100 text-indigo-700' : group.type === 'return' ? 'bg-amber-50 border border-amber-100 text-amber-700' : 'bg-rose-50 border border-rose-100 text-rose-700'}`}>
-                          {group.type === 'replenishment' ? '발주' : group.type === 'return' ? '반품' : '수술중교환'}
-                        </span>
-                      </td>
-                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-xs font-black text-slate-800">{displayMfr(group.manufacturer)}</span></td>
-                      <td className="px-2 lg:px-4 py-2.5">
-                        {(() => {
-                          const allItems = group.orders.flatMap(o => o.items);
-                          const first = allItems[0];
-                          if (!first) return null;
-                          return (
-                            <div className="flex items-center gap-1 text-[11px] min-w-0">
-                              <span className="font-bold text-slate-700 truncate">{first.brand}</span>
-                              <span className="text-slate-500 shrink-0">{first.size}</span>
-                              <span className="text-slate-400 shrink-0">×{first.quantity}</span>
-                              {allItems.length > 1 && (
-                                <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-0.5">외 {allItems.length - 1}종</span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap font-black text-slate-800 text-sm tabular-nums">{group.totalQuantity}<span className="text-[10px] ml-0.5 font-bold text-slate-400">개</span></td>
-                      <td className="px-2 lg:px-4 py-2.5 whitespace-nowrap"><span className="text-[11px] font-bold text-slate-600 bg-slate-100/80 px-1.5 py-0.5 rounded-md">{formatManagerCell(group.managers, group.confirmers)}</span></td>
-                      <td className="px-2 lg:px-4 py-2.5 text-center whitespace-nowrap">
-                        {group.overallStatus === 'cancelled' ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-slate-100 text-slate-400 inline-block">취소됨</span>
-                        ) : group.overallStatus === 'received' ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-600 border border-emerald-100 inline-block">완료</span>
-                        ) : group.overallStatus === 'ordered' ? (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-rose-50 border border-rose-100 text-rose-600 inline-block">대기중</span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-indigo-50 border border-indigo-100 text-indigo-600 inline-block">부분완료</span>
-                        )}
-                      </td>
-                      <td className="px-2 lg:px-4 py-2.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          {(group.overallStatus === 'ordered' || group.overallStatus === 'mixed') && !isReadOnly && (
-                            <button
-                              onClick={() => {
-                                const orderedItems = group.orders.filter(o => o.status === 'ordered');
-                                if (orderedItems.length > 0) setCancelModalOrder(orderedItems);
-                              }}
-                              className="px-2 py-1 rounded-lg text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-all active:scale-95"
-                            >
-                              취소
-                            </button>
-                          )}
-                          {group.overallStatus === 'cancelled' && !isReadOnly && (
-                            <button
-                              onClick={() => group.orders.forEach(o => onDeleteOrder(o.id))}
-                              className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95"
-                            >
-                              삭제
-                            </button>
-                          )}
-                          {group.overallStatus !== 'cancelled' && (
-                            <button
-                              onClick={() => setSelectedGroupModal(group)}
-                              className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 border ${group.overallStatus === 'ordered' || group.overallStatus === 'mixed'
-                                ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                                }`}
-                            >
-                              상세 보기
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={8} className="px-8 py-24 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <svg className="w-12 h-12 text-slate-200 drop-shadow-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                        <p className="text-slate-400 font-bold text-sm mt-2">표시할 주문 내역이 없습니다.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <OrderTableSection
+          unifiedRows={unifiedRows}
+          isReadOnly={isReadOnly}
+          historyOnly={historyOnly}
+          returnActionLoadingId={returnActionLoadingId}
+          setSelectedGroupModal={setSelectedGroupModal}
+          setCancelModalOrder={setCancelModalOrder}
+          setReturnDetailGroup={setReturnDetailGroup}
+          setShowHistoryPanel={setShowHistoryPanel}
+          handleReturnUpdateStatus={handleReturnUpdateStatus}
+          onDeleteOrder={onDeleteOrder}
+        />
 
         {/* 반품 신청 모달 */}
         {showReturnModal && (
@@ -989,73 +624,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
-        {/* 반품 신청 상세 보기 모달 */}
-        {returnDetailGroup && (() => {
-          const g = returnDetailGroup;
-          const allItems = g.requests.flatMap(r => r.items);
-          const reason = g.requests[0]?.reason;
-          const memo = g.requests[0]?.memo;
-          return (
-            <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0" onClick={() => setReturnDetailGroup(null)}>
-              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-teal-50 border border-teal-100 text-teal-700">반품신청</span>
-                      <h3 className="text-base font-black text-slate-900">{displayMfr(g.manufacturer)}</h3>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{g.date} · {reason ? RETURN_REASON_LABELS[reason] : ''}</p>
-                  </div>
-                  <button onClick={() => setReturnDetailGroup(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
-                  <div className="flex items-center gap-3 text-xs text-slate-600">
-                    <span className="font-semibold text-slate-500 w-16 shrink-0">담당자/확인자</span>
-                    <span className="font-bold">{formatManagerCell(g.managers, g.confirmers)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-600">
-                    <span className="font-semibold text-slate-500 w-16 shrink-0">상태</span>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
-                      g.overallStatus === 'completed' ? 'bg-emerald-50 border border-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                    }`}>{g.overallStatus === 'mixed' ? '처리중' : RETURN_STATUS_LABELS[g.overallStatus as ReturnStatus]}</span>
-                  </div>
-                  {memo && (
-                    <div className="flex items-start gap-3 text-xs text-slate-600">
-                      <span className="font-semibold text-slate-500 w-16 shrink-0">메모</span>
-                      <span>{memo}</span>
-                    </div>
-                  )}
-                  <div className="mt-2 rounded-xl border border-slate-100 overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-50 border-b border-slate-100">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">브랜드</th>
-                          <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">규격</th>
-                          <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-500">수량</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {allItems.map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="px-3 py-2 font-semibold text-slate-700">{item.brand}</td>
-                            <td className="px-3 py-2 text-slate-500">{(!item.size || item.size === '기타') ? '-' : item.size}</td>
-                            <td className="px-3 py-2 text-right font-black text-slate-800 tabular-nums">{item.quantity}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">총 <span className="font-black text-slate-700">{g.totalQty}개</span> · {allItems.length}종</span>
-                  <button onClick={() => setReturnDetailGroup(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-300 transition-colors">닫기</button>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        <OrderReturnDetailModal
+          returnDetailGroup={returnDetailGroup}
+          setReturnDetailGroup={setReturnDetailGroup}
+        />
 
         {/* 취소 모달 */}
         {cancelModalOrder && (
@@ -1198,96 +770,15 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
-        {/* 교환 권장 품목 반품 처리 모달 */}
-        {exchangeReturnTarget && (() => {
-          const { manufacturer, count, groups } = exchangeReturnTarget;
-          const totalQty = exchangeTotalQty;
-          return (
-            <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4 pb-[68px] sm:pb-0" onClick={() => !isExchangeReturnSubmitting && setExchangeReturnTarget(null)}>
-              <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100 shrink-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-violet-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                        <h2 className="text-base font-black text-slate-900">{displayMfr(manufacturer)} 교환 반품 처리</h2>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5 ml-6">{count}건 · 수량을 조정 후 반품 처리하세요</p>
-                    </div>
-                    <button onClick={() => setExchangeReturnTarget(null)} disabled={isExchangeReturnSubmitting} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Table */}
-                <div className="flex-1 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">브랜드</th>
-                        <th className="px-2 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">규격</th>
-                        <th className="px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">최대</th>
-                        <th className="px-2 py-2.5 text-center text-[11px] font-bold text-violet-500 whitespace-nowrap">수량</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {groups.map(g => {
-                        const key = `${g.brand}|${g.size}`;
-                        const qty = exchangeItemQuantities[key] ?? g.maxQty;
-                        return (
-                          <tr key={key} className={`transition-colors ${qty === 0 ? 'opacity-40' : 'hover:bg-slate-50/60'}`}>
-                            <td className="px-4 py-3 font-semibold text-slate-700 whitespace-nowrap">{g.brand}</td>
-                            <td className="px-2 py-3 text-slate-500 whitespace-nowrap">{(!g.size || g.size === '기타') ? '-' : g.size}</td>
-                            <td className="px-2 py-3 text-right text-slate-400 tabular-nums whitespace-nowrap">{g.maxQty}</td>
-                            <td className="px-2 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => adjustExchangeQty(key, -1, g.maxQty)}
-                                  disabled={qty <= 0}
-                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
-                                >
-                                  <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" /></svg>
-                                </button>
-                                <span className="w-6 text-center font-black text-slate-800 tabular-nums text-sm">{qty}</span>
-                                <button
-                                  onClick={() => adjustExchangeQty(key, +1, g.maxQty)}
-                                  disabled={qty >= g.maxQty}
-                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors active:scale-95"
-                                >
-                                  <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Footer */}
-                <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4 shrink-0">
-                  <p className="text-xs text-slate-500">
-                    {totalQty > 0
-                      ? <><span className="font-black text-violet-600">{totalQty}개</span> 반품 처리</>
-                      : '수량을 1 이상으로 설정하세요'
-                    }
-                  </p>
-                  <button
-                    onClick={handleExchangeReturnSubmit}
-                    disabled={isExchangeReturnSubmitting || totalQty === 0}
-                    className="h-10 px-5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    {isExchangeReturnSubmitting ? '처리 중...' : '반품 처리 완료'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        <OrderExchangeReturnModal
+          exchangeReturnTarget={exchangeReturnTarget}
+          setExchangeReturnTarget={setExchangeReturnTarget}
+          isExchangeReturnSubmitting={isExchangeReturnSubmitting}
+          exchangeItemQuantities={exchangeItemQuantities}
+          exchangeTotalQty={exchangeTotalQty}
+          adjustExchangeQty={adjustExchangeQty}
+          handleExchangeReturnSubmit={handleExchangeReturnSubmit}
+        />
       </div>
 
     </div>
