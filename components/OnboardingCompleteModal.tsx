@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import ModalShell from './shared/ModalShell';
 
 interface ConfettiPiece {
   x: number;
@@ -170,10 +171,9 @@ export default function OnboardingCompleteModal({ onClose, hospitalName, userNam
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[600] flex items-center justify-center">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-10" />
-      <div className="relative z-20 bg-white rounded-3xl shadow-2xl px-8 py-10 max-w-sm w-full mx-4 text-center">
+    <>
+    <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none" style={{ zIndex: 601 }} />
+    <ModalShell isOpen={true} onClose={onClose} title="초기 설정 완료" titleId="onboarding-complete-title" zIndex={600} backdropClassName="flex items-center justify-center backdrop-blur-sm" maxWidth="max-w-sm" className="mx-4 text-center px-8 py-10">
         {/* 아이콘 */}
         <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
           <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -182,7 +182,7 @@ export default function OnboardingCompleteModal({ onClose, hospitalName, userNam
           </svg>
         </div>
 
-        <h2 className="text-2xl font-black text-slate-900 mb-1">준비 완료!</h2>
+        <h2 id="onboarding-complete-title" className="text-2xl font-black text-slate-900 mb-1">준비 완료!</h2>
         <p className="text-sm font-semibold text-indigo-600 mb-5 leading-snug px-2">
           {headline}
         </p>
@@ -208,7 +208,7 @@ export default function OnboardingCompleteModal({ onClose, hospitalName, userNam
         >
           대시보드 시작하기
         </button>
-      </div>
-    </div>
+    </ModalShell>
+    </>
   );
 }

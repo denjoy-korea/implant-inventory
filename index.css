@@ -92,8 +92,8 @@ body {
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: none;
-  ring: 2px;
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: 0;
   border-color: rgb(99 102 241);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }

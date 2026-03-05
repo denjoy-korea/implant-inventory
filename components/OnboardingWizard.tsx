@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import ModalShell from './shared/ModalShell';
 import { onboardingService } from '../services/onboardingService';
 import { InventoryItem } from '../types';
 import Step1Welcome from './onboarding/Step1Welcome';
@@ -92,8 +93,7 @@ export default function OnboardingWizard({
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[600px]">
+    <ModalShell isOpen={true} onClose={() => {}} title="DenJOY 초기 설정" zIndex={300} closeable={false} backdropClassName="flex items-center justify-center p-4 backdrop-blur-sm" maxWidth="max-w-2xl" className="flex flex-col h-[600px]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
           {step === 1 ? (
@@ -166,7 +166,6 @@ export default function OnboardingWizard({
             />
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
