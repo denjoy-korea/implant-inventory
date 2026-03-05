@@ -571,7 +571,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
       <ModalShell isOpen={true} onClose={onClose} title="수술기록 미등록 품목 상세" titleId="unregistered-detail-title" zIndex={200} maxWidth="max-w-4xl" className="max-h-[82vh] flex flex-col">
           <div className="px-6 py-5 bg-amber-500 text-white flex items-start justify-between gap-4 shrink-0">
             <div>
-              <h3 className="text-lg font-black flex items-center gap-2">
+              <h3 id="unregistered-detail-title" className="text-lg font-black flex items-center gap-2">
                 수술기록 미등록 품목 상세
                 <span className="relative group/modal-why inline-flex items-center">
                   <svg className="w-4 h-4 text-white/70 cursor-help flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
