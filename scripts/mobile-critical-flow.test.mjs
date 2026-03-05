@@ -159,6 +159,28 @@ test('analyze page strengthens success confidence with ETA and next action CTA',
   assert.match(analyzeReportLeadSuccessCard, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
 });
 
+test('analyze report matching and usage sections keep extracted component contracts', () => {
+  const matchingSection = read('components/analyze/report/AnalyzeReportMatchingSection.tsx');
+  const usageSection = read('components/analyze/report/AnalyzeReportUsageSection.tsx');
+  const matchingStats = read('components/analyze/report/matching/matchingStats.ts');
+  const usageStats = read('components/analyze/report/usage/usageStats.ts');
+
+  assert.match(matchingSection, /import AnalyzeMatchingHeader from '\.\/matching\/AnalyzeMatchingHeader';/);
+  assert.match(matchingSection, /import AnalyzeMatchingManufacturerChart from '\.\/matching\/AnalyzeMatchingManufacturerChart';/);
+  assert.match(matchingSection, /import AnalyzeMatchingPerfectState from '\.\/matching\/AnalyzeMatchingPerfectState';/);
+  assert.match(matchingSection, /import AnalyzeMatchingSummaryCards from '\.\/matching\/AnalyzeMatchingSummaryCards';/);
+  assert.match(matchingSection, /buildMatchingStats\(unmatchedItems\)/);
+
+  assert.match(usageSection, /import AnalyzeUsageHeader from '\.\/usage\/AnalyzeUsageHeader';/);
+  assert.match(usageSection, /import AnalyzeUsageKpiCards from '\.\/usage\/AnalyzeUsageKpiCards';/);
+  assert.match(usageSection, /import AnalyzeUsageTopUsedCard from '\.\/usage\/AnalyzeUsageTopUsedCard';/);
+  assert.match(usageSection, /import AnalyzeUsageManufacturerCard from '\.\/usage\/AnalyzeUsageManufacturerCard';/);
+  assert.match(usageSection, /buildUsageSummaryMetrics\(usagePatterns\)/);
+
+  assert.match(matchingStats, /export function buildMatchingStats/);
+  assert.match(usageStats, /export function buildUsageSummaryMetrics/);
+});
+
 test('funnel instrumentation uses standardized events and page-aware tracking', () => {
   const pageView = read('services/pageViewService.ts');
   const pricing = read('components/PricingPage.tsx');
