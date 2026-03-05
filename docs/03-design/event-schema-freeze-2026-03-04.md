@@ -1,6 +1,6 @@
 # 이벤트 스키마 동결 (Event Schema Freeze)
 
-> **Status**: Frozen — 2026-03-04
+> **Status**: Frozen — 2026-03-05 (refactor-safe sync)
 > **담당**: Growth Lead / Data Analyst
 > **목적**: 퍼널 집계 정합성 확보. 이 문서의 이벤트 목록·필드 구조를 변경하려면 반드시 리뷰 후 버전 업데이트 필요.
 
@@ -63,33 +63,33 @@
 
 | event_type | page | 발생 위치 |
 |-----------|------|---------|
-| `landing_view` | landing | App.tsx:330 |
-| `pricing_view` | pricing | App.tsx:330 |
-| `analyze_view` | analyze | App.tsx:330 |
-| `contact_view` | contact | App.tsx:330 |
-| `value_view` | value | App.tsx:330 |
-| `login_view` | login | App.tsx:330 |
-| `signup_view` | signup | App.tsx:330 |
+| `landing_view` | landing | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `pricing_view` | pricing | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `analyze_view` | analyze | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `contact_view` | contact | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `value_view` | value | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `login_view` | login | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
+| `signup_view` | signup | `hooks/useAppLogic.tsx` (`pageViewService.track`) |
 
 ### 3.2 인증 이벤트
 
 | event_type | 설명 | event_data 추가 필드 | 발생 파일 |
 |-----------|------|-------------------|---------|
-| `auth_start` | 회원가입/로그인 시도 시작 | - | AuthForm.tsx |
-| `auth_email_sent` | 매직링크/OTP 이메일 발송 | - | AuthForm.tsx |
-| `auth_complete` | 인증 성공 | - | AuthForm.tsx |
-| `auth_mfa_required` | MFA 인증 필요 | - | AuthForm.tsx |
-| `auth_error` | 인증 오류 | - | AuthForm.tsx |
+| `auth_start` | 회원가입/로그인 시도 시작 | - | `hooks/useAuthForm.ts` |
+| `auth_email_sent` | 매직링크/OTP 이메일 발송 | - | `hooks/useAuthForm.ts` |
+| `auth_complete` | 인증 성공 | - | `hooks/useAuthForm.ts` |
+| `auth_mfa_required` | MFA 인증 필요 | - | `hooks/useAuthForm.ts` |
+| `auth_error` | 인증 오류 | - | `hooks/useAuthForm.ts` |
 
 ### 3.3 분석 이벤트
 
 | event_type | 설명 | event_data 추가 필드 | 발생 파일 |
 |-----------|------|-------------------|---------|
-| `analyze_start` | 파일 업로드 후 분석 시작 | - | AnalyzePage.tsx |
-| `analyze_complete` | 분석 완료 | - | AnalyzePage.tsx |
-| `analyze_error` | 분석 오류 | - | AnalyzePage.tsx |
-| `analyze_lead_submit_start` | 리드 정보 제출 시작 | - | AnalyzePage.tsx |
-| `analyze_lead_submit` | 리드 정보 제출 완료 | - | AnalyzePage.tsx |
+| `analyze_start` | 파일 업로드 후 분석 시작 | - | `hooks/useAnalyzePage.ts` |
+| `analyze_complete` | 분석 완료 | - | `hooks/useAnalyzePage.ts` |
+| `analyze_error` | 분석 오류 | - | `hooks/useAnalyzePage.ts` |
+| `analyze_lead_submit_start` | 리드 정보 제출 시작 | - | `hooks/useAnalyzePage.ts` |
+| `analyze_lead_submit` | 리드 정보 제출 완료 | - | `hooks/useAnalyzePage.ts` |
 
 ### 3.4 요금제/결제 이벤트
 
@@ -177,6 +177,7 @@ engaged = pricing_view OR auth_start OR contact_submit OR waitlist_submit OR ana
 
 | 버전 | 날짜 | 변경 내용 | 승인자 |
 |------|------|---------|------|
+| v1.1 | 2026-03-05 | Auth/Analyze 추적 로직 리팩터링 경로(`hooks/useAuthForm.ts`, `hooks/useAnalyzePage.ts`) 반영, 페이지뷰 발생 경로를 `hooks/useAppLogic.tsx` 기준으로 정합화 | Growth Lead |
 | v1.0 | 2026-03-04 | 초기 동결 | Growth Lead |
 
 > **변경 규칙**: 이벤트 추가/삭제/필드 변경 시 이 문서 업데이트 필수. 집계 로직 변경 시 `funnel-kpi-regression.test.mjs` 동시 업데이트.

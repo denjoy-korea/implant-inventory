@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { decryptPatientInfo } from './cryptoUtils';
 
 export interface AnalysisLead {
   id: string;
@@ -104,7 +105,6 @@ export const operationLogService = {
 
         if (!profile?.hospital_id) return;
 
-        const { decryptPatientInfo } = await import('./cryptoUtils');
         const userName = await decryptPatientInfo(profile.name || '');
 
         await supabase.from('operation_logs').insert({

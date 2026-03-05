@@ -11,6 +11,8 @@
  * - decryptPatientInfoBatch : JWT 필수, 복수 암호문 한 번에 복호화
  */
 
+import { supabase } from './supabaseClient';
+
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) ?? '';
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? '';
 const CRYPTO_SERVICE_URL = `${SUPABASE_URL}/functions/v1/crypto-service`;
@@ -27,7 +29,6 @@ let _refreshingPromise: Promise<string | null> | null = null;
  */
 async function getValidToken(): Promise<string | null> {
   try {
-    const { supabase } = await import('./supabaseClient');
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return null;
 
@@ -91,8 +92,7 @@ async function callCryptoService(
   //  refreshSession()으로 무조건 새 access_token을 발급받아 재시도)
   if (requireAuth && res.status === 401) {
     try {
-      const { supabase: sb } = await import('./supabaseClient');
-      const { data } = await sb.auth.refreshSession();
+      const { data } = await supabase.auth.refreshSession();
       const freshToken = data?.session?.access_token;
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;

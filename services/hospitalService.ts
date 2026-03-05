@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact, BillingProgram } from '../types';
 import { dbToHospital, decryptProfile } from './mappers';
-import { encryptPatientInfo } from './cryptoUtils';
+import { decryptPatientInfo, encryptPatientInfo } from './cryptoUtils';
 import { isExchangePrefix } from './appUtils';
 
 // C-4: hospitals.phone 평문 감지 헬퍼
@@ -282,7 +282,6 @@ export const hospitalService = {
       .single();
 
     if (profError || !profile?.email) return null;
-    const { decryptPatientInfo } = await import('./cryptoUtils');
     return decryptPatientInfo(profile.email);
   },
 
