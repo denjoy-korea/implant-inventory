@@ -62,6 +62,14 @@ Session Tracking:
 
 **Commit**: f8771e6 fix(tests): update verify:premerge tests for AuthForm/OrderManager refactoring
 
+**Hotfix Follow-up (2026-03-05, same day)**
+- `verify:premerge` 5 failures recovered as contract-mismatch fixes (no product behavior change)
+- Updated:
+  - `scripts/legal-ux-hardening.test.mjs`
+  - `scripts/mobile-critical-flow.test.mjs`
+- Added execution report: `docs/04-report/premerge-refactor-contract-recovery-2026-03-05.md`
+- Re-validated gate: `npm run verify:premerge` PASS
+
 ---
 
 ### WS5: Dataroom Evidence Collection (83.3% — 5/6 items)

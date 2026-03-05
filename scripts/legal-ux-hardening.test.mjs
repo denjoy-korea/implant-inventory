@@ -207,6 +207,7 @@ test('mobile bottom nav offset is applied to public toasts', () => {
   const contact = read('components/ContactPage.tsx');
   const notices = read('components/NoticeBoard.tsx');
   const app = read('App.tsx');
+  const appLogic = read('hooks/useAppLogic.tsx');
   const overlays = read('components/app/AppGlobalOverlays.tsx');
 
   assert.match(pricing, /bottom-\[calc\(env\(safe-area-inset-bottom\)\+5\.5rem\)\] xl:bottom-6/);
@@ -218,6 +219,9 @@ test('mobile bottom nav offset is applied to public toasts', () => {
   assert.match(overlays, /'calc\(5\.5rem \+ env\(safe-area-inset-bottom\)\)'/);
   assert.match(overlays, /style=\{toastBottomOffset \? \{ bottom: toastBottomOffset \} : undefined\}/);
 
-  assert.match(app, /const showMobilePublicNav = isPublicBottomNavView && isNarrowViewport;/);
-  assert.match(app, /showMobilePublicNav=\{showMobilePublicNav\}/);
+  // Refactor: showMobilePublicNav derivation moved to useAppLogic hook and passed via overlay props bundle.
+  assert.match(appLogic, /const showMobilePublicNav = isPublicBottomNavView && isNarrowViewport;/);
+  assert.match(appLogic, /showMobilePublicNav,/);
+  assert.match(app, /<AppGlobalOverlays/);
+  assert.match(app, /\{\.\.\.globalOverlayPartialProps\}/);
 });

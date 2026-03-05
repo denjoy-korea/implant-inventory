@@ -50,3 +50,13 @@
 1. 컴파일/테스트 실패 2건 해결: `맹준호` (백업 `denjoy`)
 2. 트라이얼 14/28일 정책 기준서 확정: `denjoy` 승인, `맹준호` 구현
 3. 데이터룸 구조 + 증빙 수집 목록 배포: `denjoy` (백업 `맹준호`)
+
+## 5) 2026-03-05 premerge 복구 TF 협업 실행 (추가)
+
+| 태스크 | A | R | C | I | 상태 | 증빙 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 실패 5건 triage (기능 결함 vs 계약 불일치) | 맹준호 | 맹준호 | denjoy | denjoy | DONE | `docs/04-report/premerge-refactor-contract-recovery-2026-03-05.md` |
+| App Shell 계약 정렬 (`showMobilePublicNav`) | 맹준호 | 맹준호 | denjoy | denjoy | DONE | `scripts/legal-ux-hardening.test.mjs` |
+| Analyze 훅 이동 계약 정렬 (`useAnalyzePage`) | 맹준호 | 맹준호 | denjoy | denjoy | DONE | `scripts/mobile-critical-flow.test.mjs` |
+| 게이트 재검증 (`verify:premerge`) | 맹준호 | 맹준호 | denjoy | denjoy | DONE | 실행 로그 (2026-03-05) |
+| 재발방지 규칙 반영 (운영 문서 업데이트) | 맹준호 | 맹준호 | denjoy | denjoy | DONE | 본 문서 + 복구 TF 로그 |

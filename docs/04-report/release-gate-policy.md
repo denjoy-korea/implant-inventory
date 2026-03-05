@@ -71,4 +71,16 @@ npm run verify:release      # smoke:edge:strict + verify:premerge
 | 날짜 | 변경 | 이유 |
 |------|------|------|
 | 2026-03-05 | `smoke:auto` 도입, `verify:premerge` 교체 | `smoke:ops`가 항상 exit(0) → 형식적 게이트 해소 |
+| 2026-03-05 | 리팩터링 계약 가드레일 추가 (`App/useAppLogic`, `AnalyzePage/useAnalyzePage`) | 로직 이동 시 정규식 계약 불일치 재발 방지 |
 | 이전 | `smoke:ops` (체크리스트 출력만) | 실효성 없음 |
+
+---
+
+## 6. 리팩터링 계약 가드레일 (운영 규칙)
+
+테스트 계약의 목적은 "행위 보장"이다. 구현 파일 위치는 리팩터링으로 이동될 수 있으므로 아래 기준으로 검증한다.
+
+1. 이벤트 계측 계약: 단일 컴포넌트 고정이 아니라 컴포넌트 + 관련 훅 범위를 함께 검증한다.
+2. 앱 셸 파생 상태 계약: `App.tsx`에서 직접 계산되지 않아도 `useAppLogic` 등 소유 훅에서 계산되면 통과로 본다.
+3. 콜백 wiring 계약: 최종 렌더 트리에서 전달 보장이 확인되면 중간 번들(`workspaceProps`) 경유를 허용한다.
+4. 실패 분류 규칙: `verify:premerge` 실패 시 24시간 내 `기능 결함 / 계약 불일치`를 분류해 tracker에 기록한다.

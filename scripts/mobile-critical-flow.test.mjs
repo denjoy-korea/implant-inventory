@@ -51,6 +51,7 @@ test('app handles order conflict responses and re-syncs order list', () => {
 
 test('mobile critical operations stay wired in dashboard routes', () => {
   const app = read('App.tsx');
+  const appLogic = read('hooks/useAppLogic.tsx');
   const workspace = read('components/app/DashboardWorkspaceSection.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');
   const audit = read('components/InventoryAudit.tsx');
@@ -58,10 +59,12 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   const order = read('components/OrderManager.tsx');
   const orderTable = read('components/order/OrderTableSection.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
+  const appOrderWiring = app + appLogic;
 
-  assert.match(app, /onAddOrder:\s*handleAddOrder,/);
-  assert.match(app, /onDeleteOrder:\s*handleDeleteOrder,/);
-  assert.match(app, /onCreateReturn:\s*handleCreateReturn,/);
+  // Refactor: order callbacks can be bundled in useAppLogic workspaceProps.
+  assert.match(appOrderWiring, /onAddOrder:\s*handleAddOrder,/);
+  assert.match(appOrderWiring, /onDeleteOrder:\s*handleDeleteOrder,/);
+  assert.match(appOrderWiring, /onCreateReturn:\s*handleCreateReturn,/);
   assert.match(workspace, /onQuickOrder=\{\(item\) => onAddOrder\(buildQuickOrder\(item\)\)\}/);
   assert.match(workspace, /onDeleteOrder=\{onDeleteOrder\}/);
   assert.match(workspace, /onCreateReturn=\{onCreateReturn\}/);
@@ -96,9 +99,11 @@ test('mobile critical operations stay wired in dashboard routes', () => {
 
 test('analyze page shows upload requirement checklist and disabled reasons', () => {
   const analyze = read('components/AnalyzePage.tsx');
+  const analyzeHook = read('hooks/useAnalyzePage.ts');
 
-  assert.match(analyze, /const uploadRequirements:[\s\S]*엑셀 형식\(\.xlsx\/\.xls\) 확인/s);
-  assert.match(analyze, /const analyzeDisabledReasons = \[/);
+  // Refactor: requirement/disable rules are computed in useAnalyzePage hook.
+  assert.match(analyzeHook, /const uploadRequirements:[\s\S]*엑셀 형식\(\.xlsx\/\.xls\) 확인/s);
+  assert.match(analyzeHook, /const analyzeDisabledReasons = \[/);
   assert.match(analyze, /분석 시작 전 체크/);
   assert.match(analyze, /analyzeDisabledReasons\.join\(/);
   assert.match(analyze, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
@@ -106,12 +111,14 @@ test('analyze page shows upload requirement checklist and disabled reasons', () 
 
 test('analyze page classifies analyze\/lead errors and exposes retry CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
+  const analyzeHook = read('hooks/useAnalyzePage.ts');
   const analyzeHelpers = read('components/analyze/analyzeHelpers.ts');
 
   assert.match(analyzeHelpers, /export function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
   assert.match(analyzeHelpers, /export function classifyLeadSubmitError\(error: unknown\)[\s\S]*서버 오류:[\s\S]*입력 오류:[\s\S]*네트워크 오류:/s);
-  assert.match(analyze, /import[\s\S]*classifyAnalyzeError[\s\S]*from '\.\/analyze\/analyzeHelpers'/s);
-  assert.match(analyze, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
+  // Refactor: error classification import/usage moved to useAnalyzePage hook.
+  assert.match(analyzeHook, /import[\s\S]*classifyAnalyzeError[\s\S]*from '\.\.\/components\/analyze\/analyzeHelpers'/s);
+  assert.match(analyzeHook, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
   assert.match(analyze, /다시 전송/);
   assert.match(analyze, /onClick=\{handleLeadSubmit\}/);
 });
@@ -130,6 +137,7 @@ test('funnel instrumentation uses standardized events and page-aware tracking', 
   const pageView = read('services/pageViewService.ts');
   const pricing = read('components/PricingPage.tsx');
   const analyze = read('components/AnalyzePage.tsx');
+  const analyzeHook = read('hooks/useAnalyzePage.ts');
   const contact = read('components/ContactPage.tsx');
   const appState = read('hooks/useAppState.ts');
   // auth tracking moved to useAuthForm hook during AuthForm refactoring
@@ -143,8 +151,9 @@ test('funnel instrumentation uses standardized events and page-aware tracking', 
   assert.match(pricing, /trackEvent\(\s*'pricing_plan_select'/);
   assert.match(authHook, /trackEvent\('auth_start'/);
   assert.match(authHook, /trackEvent\('auth_complete'/);
-  assert.match(analyze, /trackEvent\(\s*'analyze_start'/);
-  assert.match(analyze, /trackEvent\(\s*'analyze_complete'/);
+  // Refactor: analyze tracking events are emitted in useAnalyzePage hook.
+  assert.match(analyze + analyzeHook, /trackEvent\(\s*'analyze_start'/);
+  assert.match(analyze + analyzeHook, /trackEvent\(\s*'analyze_complete'/);
   assert.match(contact, /trackEvent\('contact_submit'/);
 });
 
