@@ -28,3 +28,4 @@
 | order-return-unification-phase3-1 | 95.7% | 2026-03-05 | [order-return-unification-phase3-1/](./order-return-unification-phase3-1/) |
 | notion-integration | 95% | 2026-03-05 | [notion-integration/](./notion-integration/) |
 | useInventoryCompare-extraction | — | 2026-03-05 | [useInventoryCompare-extraction/](./useInventoryCompare-extraction/) |
+| traffic-tracking | 96.5% | 2026-03-05 | [traffic-tracking/](./traffic-tracking/) |
