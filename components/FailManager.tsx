@@ -4,9 +4,9 @@ import type { ExcelRow, InventoryItem, Order as FailOrder, ReturnRequest, Return
 import FailBulkSetupModal from './FailBulkSetupModal';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
+import FailMonthlyTrendChartCard from './fail/FailMonthlyTrendChartCard';
 import FailReturnModal from './fail/FailReturnModal';
-import { DONUT_COLORS } from './surgery-dashboard/shared';
-import { useFailManager, CHART_PAD, CHART_AREA_H } from '../hooks/useFailManager';
+import { useFailManager } from '../hooks/useFailManager';
 import ConfirmModal from './ConfirmModal';
 
 // ============================================================
@@ -501,198 +501,23 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ROW 2 — Desktop */}
           <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
             {/* LEFT: 월별 추세 차트 */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-sm font-black text-slate-800 tracking-tight">월별 교환 추세</h3>
-                </div>
-                <div className="flex items-center gap-3">
-                  {manufacturers.map((m, i) => (
-                    <div key={m} className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-                      <span className="text-[10px] font-bold text-slate-400">{m}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {allMonthlyFailData.length > 0 ? (() => {
-                const filterStart = allMonths[periodStartIdx] || allMonths[0] || '';
-                const filterEnd = allMonths[periodEndIdx] || allMonths[allMonths.length - 1] || '';
-                const inRange = (month: string) => month >= filterStart && month <= filterEnd;
-                const nMfr = manufacturers.length || 1;
-                const MONTH_W = Math.max(48, Math.min(68, Math.floor(680 / visibleMonthlyData.length)));
-                const GROUP_W = MONTH_W - 10;
-                const BAR_GAP = 2;
-                const BAR_W = Math.max(6, Math.floor((GROUP_W - BAR_GAP * (nMfr - 1)) / nMfr));
-                const SVG_W = CHART_PAD.l + visibleMonthlyData.length * MONTH_W + CHART_PAD.r;
-                const SVG_H = CHART_PAD.t + CHART_AREA_H + CHART_PAD.b;
-                // 툴팁 크기
-                const TW = 148;
-                const T_ROW_H = 20;
-                const T_PAD = 10;
-                const TH = T_PAD + 14 + nMfr * T_ROW_H + T_PAD;
-
-                return (
-                  <div
-                    className="overflow-x-auto -mx-1 px-1"
-                    onTouchStart={(e) => {
-                      chartTouchStartX.current = e.touches[0].clientX;
-                      chartTouchStartY.current = e.touches[0].clientY;
-                    }}
-                    onTouchMove={(e) => {
-                      const deltaX = chartTouchStartX.current - e.touches[0].clientX;
-                      const deltaY = chartTouchStartY.current - e.touches[0].clientY;
-                      if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                        e.preventDefault();
-                      }
-                    }}
-                    onTouchEnd={(e) => {
-                      const deltaX = chartTouchStartX.current - e.changedTouches[0].clientX;
-                      const deltaY = chartTouchStartY.current - e.changedTouches[0].clientY;
-                      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 40) {
-                        if (deltaX > 0) {
-                          // swipe left: shift forward (show later months)
-                          setChartMonthOffset(prev => Math.min(prev + 1, maxOffset));
-                        } else {
-                          // swipe right: shift backward (show earlier months)
-                          setChartMonthOffset(prev => Math.max(prev - 1, 0));
-                        }
-                      }
-                      setHoveredChartIdx(null);
-                    }}
-                  >
-                    <svg
-                      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-                      className="w-full"
-                      style={{ minWidth: Math.max(320, SVG_W) }}
-                      preserveAspectRatio="xMinYMid meet"
-                      onMouseLeave={() => setHoveredChartIdx(null)}
-                    >
-                      {/* Horizontal grid lines + Y labels */}
-                      {chartTicks.map(tick => {
-                        const y = CHART_PAD.t + CHART_AREA_H - (tick / chartYMax) * CHART_AREA_H;
-                        return (
-                          <g key={tick}>
-                            <line x1={CHART_PAD.l} y1={y} x2={SVG_W - CHART_PAD.r} y2={y} stroke="#f1f5f9" strokeWidth="1" />
-                            <text x={CHART_PAD.l - 4} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="600">{tick}</text>
-                          </g>
-                        );
-                      })}
-                      {/* Baseline */}
-                      <line x1={CHART_PAD.l} y1={CHART_PAD.t + CHART_AREA_H} x2={SVG_W - CHART_PAD.r} y2={CHART_PAD.t + CHART_AREA_H} stroke="#e2e8f0" strokeWidth="1.5" />
-
-                      {/* Grouped bars per month */}
-                      {visibleMonthlyData.map((d, i) => {
-                        const barGroupW = BAR_W * nMfr + BAR_GAP * (nMfr - 1);
-                        const groupX = CHART_PAD.l + i * MONTH_W + (MONTH_W - barGroupW) / 2;
-                        const groupCenterX = CHART_PAD.l + i * MONTH_W + MONTH_W / 2;
-                        const isHov = hoveredChartIdx === i;
-                        return (
-                          <g key={d.month}>
-                            {/* Hover background */}
-                            {isHov && (
-                              <rect
-                                x={CHART_PAD.l + i * MONTH_W + 1}
-                                y={CHART_PAD.t}
-                                width={MONTH_W - 2}
-                                height={CHART_AREA_H}
-                                rx="4"
-                                fill="#f1f5f9"
-                              />
-                            )}
-                            {/* Bars */}
-                            {manufacturers.map((m, mi) => {
-                              const val = filteredMonthlyMap[d.month]?.[m] ?? 0;
-                              const barH = chartYMax > 0 ? (val / chartYMax) * CHART_AREA_H : 0;
-                              const bx = groupX + mi * (BAR_W + BAR_GAP);
-                              const by = CHART_PAD.t + CHART_AREA_H - barH;
-                              return (
-                                <rect
-                                  key={m}
-                                  x={bx} y={by}
-                                  width={BAR_W} height={Math.max(0, barH)}
-                                  rx="3"
-                                  fill={DONUT_COLORS[mi % DONUT_COLORS.length]}
-                                  opacity={isHov ? 1 : 0.82}
-                                />
-                              );
-                            })}
-                            {/* X-axis label */}
-                            <text
-                              x={groupCenterX}
-                              y={CHART_PAD.t + CHART_AREA_H + 14}
-                              textAnchor="middle"
-                              fontSize="8"
-                              fill={isHov ? '#1e293b' : inRange(d.month) ? '#94a3b8' : '#e2e8f0'}
-                              fontWeight={isHov ? '800' : '600'}
-                            >
-                              {d.month.slice(2)}
-                            </text>
-                            {/* Invisible hover capture rect */}
-                            <rect
-                              x={CHART_PAD.l + i * MONTH_W}
-                              y={CHART_PAD.t}
-                              width={MONTH_W}
-                              height={CHART_AREA_H + CHART_PAD.b}
-                              fill="transparent"
-                              onMouseEnter={() => setHoveredChartIdx(i)}
-                              onTouchStart={(e) => { e.preventDefault(); setHoveredChartIdx(i); }}
-                              className="cursor-crosshair"
-                            />
-                          </g>
-                        );
-                      })}
-
-                      {/* Tooltip overlay */}
-                      {hoveredChartIdx !== null && (() => {
-                        const d = visibleMonthlyData[hoveredChartIdx];
-                        const groupCenterX = CHART_PAD.l + hoveredChartIdx * MONTH_W + MONTH_W / 2;
-                        let TX = groupCenterX - TW / 2;
-                        TX = Math.max(CHART_PAD.l, Math.min(SVG_W - CHART_PAD.r - TW, TX));
-                        const TY = CHART_PAD.t + 8;
-                        return (
-                          <g className="pointer-events-none">
-                            {/* Dashed center line */}
-                            <line
-                              x1={groupCenterX} y1={CHART_PAD.t}
-                              x2={groupCenterX} y2={CHART_PAD.t + CHART_AREA_H}
-                              stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,3"
-                            />
-                            {/* Tooltip box shadow (fake) */}
-                            <rect x={TX + 2} y={TY + 3} width={TW} height={TH} rx="8" fill="#0f172a" opacity="0.15" />
-                            {/* Tooltip box */}
-                            <rect x={TX} y={TY} width={TW} height={TH} rx="8" fill="#1e293b" />
-                            {/* Month header */}
-                            <text
-                              x={TX + TW / 2} y={TY + T_PAD + 8}
-                              textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="700"
-                            >
-                              {d.month}
-                            </text>
-                            {/* Data rows */}
-                            {manufacturers.map((m, mi) => {
-                              const val = filteredMonthlyMap[d.month]?.[m] ?? 0;
-                              const ry = TY + T_PAD + 16 + mi * T_ROW_H;
-                              return (
-                                <g key={m}>
-                                  <rect x={TX + T_PAD} y={ry + 2} width="8" height="8" rx="2" fill={DONUT_COLORS[mi % DONUT_COLORS.length]} />
-                                  <text x={TX + T_PAD + 13} y={ry + 9} fontSize="10" fill="#e2e8f0" fontWeight="600">{m}</text>
-                                  <text x={TX + TW - T_PAD} y={ry + 9} textAnchor="end" fontSize="10" fill="white" fontWeight="800">{val}건</text>
-                                </g>
-                              );
-                            })}
-                          </g>
-                        );
-                      })()}
-                    </svg>
-                  </div>
-                );
-              })() : (
-                <div className="py-16 text-center">
-                  <p className="text-sm text-slate-400 font-medium">차트 데이터 없음</p>
-                </div>
-              )}
-            </div>
+            <FailMonthlyTrendChartCard
+              manufacturers={manufacturers}
+              allMonthlyFailData={allMonthlyFailData}
+              allMonths={allMonths}
+              periodStartIdx={periodStartIdx}
+              periodEndIdx={periodEndIdx}
+              visibleMonthlyData={visibleMonthlyData}
+              filteredMonthlyMap={filteredMonthlyMap}
+              hoveredChartIdx={hoveredChartIdx}
+              setHoveredChartIdx={setHoveredChartIdx}
+              chartTouchStartX={chartTouchStartX}
+              chartTouchStartY={chartTouchStartY}
+              setChartMonthOffset={setChartMonthOffset}
+              maxOffset={maxOffset}
+              chartYMax={chartYMax}
+              chartTicks={chartTicks}
+            />
 
             {/* RIGHT: TOP FAIL 규격 랭킹 */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
