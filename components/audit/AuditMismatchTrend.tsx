@@ -57,7 +57,7 @@ const AuditMismatchTrend: React.FC<Props> = ({ data }) => {
         <p className="text-sm font-black text-slate-900">불일치 추이</p>
         <p className="text-[11px] font-semibold text-slate-400">최근 {data.length}회 실사</p>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 120 }} role="img" aria-label="회차별 불일치 건수 추이">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[120px]" role="img" aria-label="회차별 불일치 건수 추이">
         {/* Y axis labels */}
         {yLabels.map(({ val, y }) => (
           <text key={y} x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={9} fill="#94a3b8" fontFamily="monospace">{val}</text>

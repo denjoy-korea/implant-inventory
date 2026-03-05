@@ -14,6 +14,9 @@ import { useOrderManager } from '../hooks/useOrderManager';
 import { OrderLowStockSection } from './order/OrderLowStockSection';
 import { OrderExchangeSection } from './order/OrderExchangeSection';
 import { OrderReturnSection } from './order/OrderReturnSection';
+import { OrderTableSection } from './order/OrderTableSection';
+import { OrderReturnDetailModal } from './order/OrderReturnDetailModal';
+import { OrderExchangeReturnModal } from './order/OrderExchangeReturnModal';
 export type { GroupedOrder, GroupedReturnRequest, UnifiedRow } from '../hooks/useOrderManager';
 
 interface OrderManagerProps {
@@ -137,13 +140,8 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     { key: 'return', label: '반품' },
   ];
 
-  const chartW = 600;
-  const chartH = 160;
-  const barPad = 4;
-  const maxBarVal = Math.max(...monthlyOrderData.map(d => d.total), 1);
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-500" style={{ animationDuration: '0s' }}>
+    <div className="space-y-6 animate-in fade-in duration-500 [animation-duration:0s]">
       <div className="space-y-6">
         {!historyOnly && (<>
         {/* ═══════════════════════════════════════ */}
@@ -581,156 +579,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           setShowOptimizeModal={setShowOptimizeModal}
         />
 
-        {/* ═══════════════════════════════════════ */}
-        {/* 주문 분석 차트 — hidden */}
-        {false && orders.length > 0 && (
-          <>
-            <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <h3 className="text-sm font-black text-slate-800">모바일 주문 요약</h3>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400">최근 월 주문량</p>
-                  <p className="text-base font-black text-slate-800 tabular-nums">
-                    {(monthlyOrderData[monthlyOrderData.length - 1]?.total ?? 0).toLocaleString()}개
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400">입고 대기</p>
-                  <p className="text-base font-black text-rose-600 tabular-nums">{stats.pendingCount}건</p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 col-span-2">
-                  <p className="text-[10px] font-bold text-slate-400">주요 제조사</p>
-                  <p className="text-sm font-black text-slate-800 truncate">
-                    {manufacturerDonut[0]?.name ? `${displayMfr(manufacturerDonut[0].name)} (${manufacturerDonut[0].percent}%)` : '데이터 없음'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden md:grid grid-cols-1 xl:grid-cols-[2.5fr_1fr] gap-4 sm:gap-6">
-              {/* LEFT: 월별 추세 */}
-              <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 sm:mb-6 relative z-10">
-                  <div>
-                    <h3 className="text-base font-black text-slate-800 tracking-tight">월별 주문 추세</h3>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-white/50 backdrop-blur-sm px-2.5 sm:px-3 py-1.5 rounded-xl border border-white shadow-sm">
-                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">발주</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-sm" /><span className="text-[10px] font-bold text-slate-500">교환</span></div>
-                  </div>
-                </div>
-                {monthlyOrderData.length > 0 ? (
-                  <div className="overflow-x-auto relative z-10">
-                    <svg viewBox={`0 0 ${Math.max(chartW, monthlyOrderData.length * 60)} ${chartH + 30}`} className="w-full min-w-[340px] sm:min-w-[400px]" preserveAspectRatio="xMinYMid meet">
-                      <defs>
-                        <linearGradient id="barIndigoGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#818cf8" />
-                          <stop offset="100%" stopColor="#4f46e5" />
-                        </linearGradient>
-                        <linearGradient id="barRoseGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#fb7185" />
-                          <stop offset="100%" stopColor="#e11d48" />
-                        </linearGradient>
-                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                          <feGaussianBlur stdDeviation="3" result="blur" />
-                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                        </filter>
-                      </defs>
-                      {/* 도트 가이드라인 */}
-                      {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-                        const y = chartH - pct * chartH;
-                        return <line key={pct} x1="40" y1={y} x2={Math.max(chartW, monthlyOrderData.length * 60)} y2={y} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="2 4" opacity="0.6" />;
-                      })}
-                      {[0, 0.5, 1].map(pct => {
-                        const val = Math.round(maxBarVal * pct);
-                        const y = chartH - pct * chartH;
-                        return <text key={pct} x="35" y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="700">{val}</text>;
-                      })}
-                      {monthlyOrderData.map((d, i) => {
-                        const barWidth = Math.max(20, Math.min(40, (Math.max(chartW, monthlyOrderData.length * 60) - 60) / monthlyOrderData.length - barPad));
-                        const x = 50 + i * (barWidth + barPad);
-
-                        // Add 15% top padding room in the visual representation so labels above bars aren't clipped
-                        const visualChartH = chartH * 0.85;
-                        const hRep = (d.replenishment / maxBarVal) * visualChartH;
-                        const hFail = (d.fail_exchange / maxBarVal) * visualChartH;
-                        const startY = chartH - hRep - hFail;
-
-                        return (
-                          <g key={d.month} className="group cursor-pointer">
-                            {/* 툴팁 효과를 뒷받침할 배경 하이라이트 */}
-                            <rect x={x - barPad / 2} y={0} width={barWidth + barPad} height={chartH} fill="#f8fafc" opacity="0" className="group-hover:opacity-100 transition-opacity" rx="4" />
-
-                            {hFail > 0 && <rect x={x} y={startY} width={barWidth} height={hFail} rx="4" fill="url(#barRoseGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
-                            {hRep > 0 && <rect x={x} y={chartH - hRep} width={barWidth} height={hRep} rx="4" fill="url(#barIndigoGrad)" className="transition-all duration-300 drop-shadow-sm group-hover:drop-shadow-md" />}
-
-                            {/* 교환 수량 (hFail >= 14 이면 바 내부 중앙, 작으면 바 위) */}
-                            {hFail > 0 && hFail >= 14 ? (
-                              <text x={x + barWidth / 2} y={startY + (hFail / 2) + 3} textAnchor="middle" fontSize="9" fill="#ffffff" fontWeight="800" className="pointer-events-none drop-shadow-sm">{d.fail_exchange}</text>
-                            ) : hFail > 0 ? (
-                              <text x={x + barWidth / 2} y={startY - 6} textAnchor="middle" fontSize="9" fill="#e11d48" fontWeight="800" className="pointer-events-none">{d.fail_exchange}</text>
-                            ) : null}
-
-                            {/* 발주 수량 (hRep >= 14 이면 바 내부 상단) */}
-                            {hRep > 0 && hRep >= 14 ? (
-                              <text x={x + barWidth / 2} y={chartH - hRep + 14} textAnchor="middle" fontSize="9" fill="#ffffff" fontWeight="800" className="pointer-events-none drop-shadow-sm opacity-90">{d.replenishment}</text>
-                            ) : hRep > 0 && hFail === 0 ? (
-                              <text x={x + barWidth / 2} y={chartH - hRep - 6} textAnchor="middle" fontSize="9" fill="#4f46e5" fontWeight="800" className="pointer-events-none">{d.replenishment}</text>
-                            ) : null}
-
-                            <text x={x + barWidth / 2} y={chartH + 18} textAnchor="middle" fontSize="9" fill="#64748b" fontWeight="800" className="transition-colors group-hover:fill-indigo-600">{d.month.slice(2)}</text>
-                            {/* Hover Quantity Text - Total */}
-                            <text x={x + barWidth / 2} y={startY - (hFail > 0 && hFail < 14 ? 18 : 8)} textAnchor="middle" fontSize="10" fill="#1e293b" fontWeight="900" opacity="0" className="group-hover:opacity-100 transition-opacity drop-shadow-sm bg-white/50 backdrop-blur-sm px-1 rounded">{d.total}개</text>
-                          </g>
-                        );
-                      })}
-                    </svg>
-                  </div>
-                ) : (
-                  <div className="py-16 text-center"><p className="text-sm text-slate-400 font-medium">차트 데이터 없음</p></div>
-                )}
-              </div>
-              {/* RIGHT: 제조사 도넛 */}
-              <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 relative overflow-hidden flex flex-col">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50/50 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3 opacity-60"></div>
-                <div>
-                  <h3 className="text-base font-black text-slate-800 tracking-tight">제조사별 주문 비율</h3>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 mt-4 sm:mt-6 flex-1 relative z-10">
-                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 shrink-0">
-                    <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-sm">
-                      <defs>
-                        <filter id="donutShadow" x="-10%" y="-10%" width="120%" height="120%">
-                          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1" />
-                        </filter>
-                      </defs>
-                      {donutPaths.map((seg, i) => (
-                        <path key={i} d={seg.path} fill={seg.color} stroke="#ffffff" strokeWidth="2.5" className="transition-all duration-300 hover:opacity-80 cursor-pointer" filter="url(#donutShadow)" />
-                      ))}
-                      <circle cx="60" cy="60" r="34" fill="white" className="drop-shadow-sm" />
-                      <text x="60" y="56" textAnchor="middle" fontSize="18" fontWeight="900" fill="#0f172a">{orders.length}</text>
-                      <text x="60" y="73" textAnchor="middle" fontSize="8" fontWeight="800" fill="#64748b" letterSpacing="0.15em">ORDERS</text>
-                    </svg>
-                  </div>
-                  <div className="w-full flex-1 space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {manufacturerDonut.map(seg => (
-                      <div key={seg.name} className="flex items-center justify-between group p-1.5 -mx-1.5 rounded-lg hover:bg-slate-50/80 transition-colors">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: seg.color }} />
-                          <span className="text-[12px] sm:text-[13px] font-black text-slate-700">{displayMfr(seg.name)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[12px] sm:text-[13px] font-bold text-slate-400 tabular-nums">{seg.percent}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
         </>)}
 
         {/* ═══════════════════════════════════════ */}

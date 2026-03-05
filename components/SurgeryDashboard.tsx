@@ -378,7 +378,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   // =====================================================
 
   return (
-    <div className="space-y-6 pb-16" style={{ animationDuration: '0s' }}>
+    <div className="space-y-6 pb-16 [animation-duration:0s]">
       {/* Header + KPI (non-sticky, scrolls normally) */}
       <div className="space-y-4">
         {/* A. Header Strip */}

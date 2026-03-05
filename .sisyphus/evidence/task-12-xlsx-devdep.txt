@@ -1,0 +1,52 @@
+TASK 12: Move xlsx to devDependency and Update Test Script Glob
+================================================================
+
+CHANGES MADE:
+1. Moved "xlsx": "^0.18.5" from dependencies to devDependencies
+2. Updated "test" script from "node --test scripts/security-regression.test.mjs" to "node --test scripts/*.test.mjs"
+
+VERIFICATION RESULTS:
+====================
+
+1. npm install
+   Status: ✓ PASS
+   Output: up to date, audited 105 packages in 657ms
+
+2. npm run test
+   Status: ✓ PASS (29 tests)
+   Output:
+   ✔ tests 29
+   ✔ pass 29
+   ✔ fail 0
+   Duration: 62.07625ms
+   
+   Tests executed:
+   - security-regression.test.mjs: 16 tests
+   - unit.test.mjs: 13 tests
+   Total: 29 tests passing
+
+3. npm run build
+   Status: ✓ PASS (exit 0)
+   Output: ✓ built in 1.25s
+   Modules transformed: 160
+   
+4. npm audit --omit=dev
+   Status: ✓ PASS
+   Output: found 0 vulnerabilities
+   (xlsx vulnerability no longer in production dependencies)
+
+PACKAGE.JSON CHANGES:
+====================
+dependencies:
+  - Removed: "xlsx": "^0.18.5"
+  
+devDependencies:
+  + Added: "xlsx": "^0.18.5"
+
+scripts:
+  - Changed: "test": "node --test scripts/*.test.mjs"
+
+COMMIT READY:
+=============
+Files modified: package.json, package-lock.json
+Commit message: chore: move xlsx to devDependency and update test script glob

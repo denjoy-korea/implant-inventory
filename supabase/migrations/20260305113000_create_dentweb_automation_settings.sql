@@ -15,11 +15,21 @@ CREATE TABLE IF NOT EXISTS public.dentweb_automation_settings (
 CREATE INDEX IF NOT EXISTS idx_dentweb_auto_settings_updated_at
   ON public.dentweb_automation_settings(updated_at DESC);
 
+CREATE OR REPLACE FUNCTION public.set_dentweb_automation_settings_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$;
+
 DROP TRIGGER IF EXISTS dentweb_automation_settings_updated_at ON public.dentweb_automation_settings;
 CREATE TRIGGER dentweb_automation_settings_updated_at
   BEFORE UPDATE ON public.dentweb_automation_settings
   FOR EACH ROW
-  EXECUTE FUNCTION public.update_updated_at_column();
+  EXECUTE FUNCTION public.set_dentweb_automation_settings_updated_at();
 
 ALTER TABLE public.dentweb_automation_settings ENABLE ROW LEVEL SECURITY;
 

@@ -1,0 +1,73 @@
+app:
+  window_title_regex: ".*덴트웹.*"
+  wait_timeout_sec: 20
+  poll_interval_sec: 0.5
+  startup_guard_hour: 22
+  post_action_sleep_sec: 0.5
+  excel_filename_prefix: "implant_stats"
+  on_row_count_unknown: "abort"
+
+paths:
+  output_dir: "./exports"
+  state_file: "./state/run_state.json"
+  log_dir: "./logs"
+
+upload:
+  # SaaS URL/토큰 설정 전까지 false 유지
+  enabled: false
+  # Example (Supabase Edge Function):
+  # https://<project-ref>.supabase.co/functions/v1/dentweb-upload
+  url: "https://qhoyaonrkagdngglrcas.supabase.co/functions/v1/dentweb-upload"
+  timeout_sec: 60
+  verify_ssl: true
+  token_env: "DENTWEB_UPLOAD_TOKEN"
+  token_prefix: "Bearer "
+  file_field_name: "file"
+  headers:
+    X-Clinic-Id: "clinic-001"
+  form_fields:
+    # Required only for token mode. JWT(에이전트 로그인) 모드에서는 생략 가능
+    hospital_id: "00000000-0000-0000-0000-000000000000"
+    source: "dentweb"
+    report_type: "implant_surgery_daily"
+
+selectors:
+  menu_management_stats:
+    candidates:
+      - {title: "경영/통계", control_type: "Button"}
+
+  submenu_implant_stats:
+    candidates:
+      - {title: "임플란트 수술 통계", control_type: "TreeItem"}
+      - {title: "임플란트 수술 통계", control_type: "ListItem"}
+
+  period_specific_radio:
+    candidates:
+      - {title: "특정기간", control_type: "RadioButton"}
+
+  from_date_input:
+    candidates:
+      - {control_type: "Edit", found_index: 0}
+
+  to_date_input:
+    candidates:
+      - {control_type: "Edit", found_index: 1}
+
+  search_button:
+    candidates:
+      - {title: "검색", control_type: "Button"}
+
+  result_grid:
+    candidates:
+      - {control_type: "Table"}
+      - {control_type: "DataGrid"}
+
+  excel_save_button:
+    candidates:
+      - {title: "엑셀저장", control_type: "Button"}
+      - {title: "엑셀 저장", control_type: "Button"}
+
+no_data_dialog_keywords:
+  - "조회된 데이터가 없습니다"
+  - "데이터가 없습니다"
+  - "조회 결과가 없습니다"

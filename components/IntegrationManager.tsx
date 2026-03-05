@@ -190,7 +190,7 @@ const IntegrationManager: React.FC<IntegrationManagerProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
@@ -347,7 +347,7 @@ const IntegrationManager: React.FC<IntegrationManagerProps> = ({
 
       {/* 연결 해제 확인 모달 */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <h3 className="text-base font-black text-slate-800 mb-2">연결 해제</h3>
             <p className="text-sm text-slate-500 mb-6">

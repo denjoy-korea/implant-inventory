@@ -233,7 +233,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                         <svg className="w-16 h-16 animate-spin text-indigo-200" viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                         </svg>
-                        <svg className="w-16 h-16 animate-spin text-indigo-500 absolute" style={{ animationDuration: '0.7s' }} viewBox="0 0 24 24" fill="none">
+                        <svg className="w-16 h-16 animate-spin text-indigo-500 absolute [animation-duration:0.7s]" viewBox="0 0 24 24" fill="none">
                             <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                         </svg>
                     </div>

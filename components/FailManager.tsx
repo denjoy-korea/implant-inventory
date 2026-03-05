@@ -638,7 +638,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                               fill="transparent"
                               onMouseEnter={() => setHoveredChartIdx(i)}
                               onTouchStart={(e) => { e.preventDefault(); setHoveredChartIdx(i); }}
-                              style={{ cursor: 'crosshair' }}
+                              className="cursor-crosshair"
                             />
                           </g>
                         );
@@ -652,7 +652,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                         TX = Math.max(CHART_PAD.l, Math.min(SVG_W - CHART_PAD.r - TW, TX));
                         const TY = CHART_PAD.t + 8;
                         return (
-                          <g style={{ pointerEvents: 'none' }}>
+                          <g className="pointer-events-none">
                             {/* Dashed center line */}
                             <line
                               x1={groupCenterX} y1={CHART_PAD.t}

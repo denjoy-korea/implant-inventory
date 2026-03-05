@@ -31,6 +31,7 @@
 | funnel-cvr-fix | 2026-03-05 | 100% | 8 items, 8 PASS. Design doc Section 2-B corrected (auth_start: eligibleCount=3, progressedCount=2, stepCvr=67). Zero gaps remain. |
 | modal-accessibility (R-12~R-15) | 2026-03-05 | 100% | 16 items, 16 PASS. R-12: window.alert 0 remaining (toast replaced). R-13: window.confirm 0 remaining (ConfirmModal in 6 files + SystemAdminDashboard render). R-14: 9 role="button" all have onKeyDown. R-15: outline:2px solid, no outline:none, no ring. |
 | crypto-security-hardening | 2026-03-05 | 73.5%->99.8% | v2: 9 PASS, 0 PARTIAL, 0 FAIL, 2 ACCEPTED DEVIATION. Fixed: H-2 legacy TTL, H-3 startup log, H-5 DB conditional update. C-2/C-3 remain accepted deviations. |
+| codebase-optimization | 2026-03-05 | 88%->92.1% | v2: QW 5/5 PASS, ME 5P+1PARTIAL+1ACCEPTED+1UNKNOWN. App.tsx 2765->999 (under 1K threshold). Files>1K: 18->7 (beat ME target 8). 32 hooks (was 9). Phase 3 excluded (Week 3+). Archival eligible. |
 
 ### Key File Paths
 - Types: `/types.ts` (root level), `/types/plan.ts` (plan types extracted)

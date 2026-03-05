@@ -1,0 +1,2 @@
+1:export const extractLengthFromSize = (size: string | number | null | undefined): string => {
+export const extractLengthFromSize = (size: string | number | null | undefined): string => {

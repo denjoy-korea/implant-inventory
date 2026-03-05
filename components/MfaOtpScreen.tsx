@@ -182,7 +182,7 @@ const MfaOtpScreen: React.FC<MfaOtpScreenProps> = ({ email, onVerified, onCancel
                 />
                 <div className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-colors ${
                   trustDevice ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300 group-hover:border-slate-400'
-                }`} style={{ width: '18px', height: '18px' }}>
+                }`}>
                   {trustDevice && (
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
