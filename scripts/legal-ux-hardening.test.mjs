@@ -66,7 +66,6 @@ test('public pages consistently expose legal links via shared footer', () => {
     'components/ValuePage.tsx',
     'components/PricingPage.tsx',
     'components/ContactPage.tsx',
-    'components/AnalyzePage.tsx',
     'components/ReviewsPage.tsx',
   ];
 
@@ -74,6 +73,16 @@ test('public pages consistently expose legal links via shared footer', () => {
     const src = read(page);
     assert.match(src, /<PublicInfoFooter\s+showLegalLinks\s*\/>/, `${page} should render shared legal footer`);
   }
+
+  // AnalyzePage was split into step components; legal footer lives in upload/report steps.
+  const analyze = read('components/AnalyzePage.tsx');
+  const analyzeUploadStep = read('components/analyze/AnalyzeUploadStep.tsx');
+  const analyzeReportStep = read('components/analyze/AnalyzeReportStep.tsx');
+
+  assert.match(analyze, /AnalyzeUploadStep/);
+  assert.match(analyze, /AnalyzeReportStep/);
+  assert.match(analyzeUploadStep, /<PublicInfoFooter\s+showLegalLinks\s*\/>/);
+  assert.match(analyzeReportStep, /<PublicInfoFooter\s+showLegalLinks\s*\/>/);
 });
 
 test('legal modal includes required SaaS subscription clauses', () => {

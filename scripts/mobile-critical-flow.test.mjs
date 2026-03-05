@@ -101,6 +101,8 @@ test('analyze page shows upload requirement checklist and disabled reasons', () 
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
   const analyzeUploadStep = read('components/analyze/AnalyzeUploadStep.tsx');
+  const analyzeUploadChecklistSection = read('components/analyze/upload/AnalyzeUploadChecklistSection.tsx');
+  const analyzeUploadActionSection = read('components/analyze/upload/AnalyzeUploadActionSection.tsx');
   const analyzeProcessingStep = read('components/analyze/AnalyzeProcessingStep.tsx');
 
   // Refactor: requirement/disable rules are computed in useAnalyzePage hook,
@@ -111,17 +113,21 @@ test('analyze page shows upload requirement checklist and disabled reasons', () 
   assert.match(analyze, /import AnalyzeProcessingStep from '\.\/analyze\/AnalyzeProcessingStep';/);
   assert.match(analyze, /if \(step === 'upload'\)[\s\S]*<AnalyzeUploadStep/s);
   assert.match(analyze, /if \(step === 'processing'\)[\s\S]*<AnalyzeProcessingStep progress=\{progress\} processingMsg=\{processingMsg\} \/>/s);
-  assert.match(analyzeUploadStep, /분석 시작 전 체크/);
-  assert.match(analyzeUploadStep, /분석 시작을 위해 \{analyzeDisabledReasons\.join\(' \/ '\)\}/);
+  assert.match(analyzeUploadStep, /import AnalyzeUploadChecklistSection from '\.\/upload\/AnalyzeUploadChecklistSection';/);
+  assert.match(analyzeUploadStep, /import AnalyzeUploadActionSection from '\.\/upload\/AnalyzeUploadActionSection';/);
+  assert.match(analyzeUploadChecklistSection, /분석 시작 전 체크/);
+  assert.match(analyzeUploadActionSection, /분석 시작을 위해 \{analyzeDisabledReasons\.join\(' \/ '\)\}/);
   assert.match(analyzeProcessingStep, /데이터를 분석하고 있습니다/);
   assert.match(analyzeProcessingStep, /Math\.round\(progress\)/);
-  assert.match(analyzeUploadStep, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
+  assert.match(analyzeUploadActionSection, /업로드 준비 완료\. 분석을 시작할 수 있습니다\./);
 });
 
 test('analyze page classifies analyze\/lead errors and exposes retry CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
   const analyzeReportStep = read('components/analyze/AnalyzeReportStep.tsx');
+  const analyzeReportLeadSection = read('components/analyze/report/AnalyzeReportLeadSection.tsx');
+  const analyzeReportLeadFormCard = read('components/analyze/report/lead/AnalyzeReportLeadFormCard.tsx');
   const analyzeHelpers = read('components/analyze/analyzeHelpers.ts');
 
   assert.match(analyzeHelpers, /export function classifyAnalyzeError\(error: unknown\)[\s\S]*형식 오류:[\s\S]*데이터 오류:[\s\S]*네트워크 오류:/s);
@@ -130,20 +136,27 @@ test('analyze page classifies analyze\/lead errors and exposes retry CTA', () =>
   assert.match(analyzeHook, /import[\s\S]*classifyAnalyzeError[\s\S]*from '\.\.\/components\/analyze\/analyzeHelpers'/s);
   assert.match(analyzeHook, /setLeadSubmitError\(classifyLeadSubmitError\(err\)\)/);
   assert.match(analyze, /import AnalyzeReportStep from '\.\/analyze\/AnalyzeReportStep';/);
-  assert.match(analyzeReportStep, /다시 전송/);
-  assert.match(analyzeReportStep, /onClick=\{handleLeadSubmit\}/);
+  assert.match(analyzeReportStep, /import AnalyzeReportLeadSection from '\.\/report\/AnalyzeReportLeadSection';/);
+  // Refactor: retry CTA moved from section to form card component.
+  assert.match(analyzeReportLeadFormCard, /다시 전송/);
+  assert.match(analyzeReportLeadFormCard, /onClick=\{handleLeadSubmit\}/);
+  assert.match(analyzeReportLeadSection, /leadSubmitError=/);
 });
 
 test('analyze page strengthens success confidence with ETA and next action CTA', () => {
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeReportStep = read('components/analyze/AnalyzeReportStep.tsx');
+  const analyzeReportLeadSection = read('components/analyze/report/AnalyzeReportLeadSection.tsx');
+  const analyzeReportLeadInsightsCard = read('components/analyze/report/lead/AnalyzeReportLeadInsightsCard.tsx');
+  const analyzeReportLeadSuccessCard = read('components/analyze/report/lead/AnalyzeReportLeadSuccessCard.tsx');
 
   assert.match(analyze, /import AnalyzeReportStep from '\.\/analyze\/AnalyzeReportStep';/);
-  assert.match(analyzeReportStep, /const leadSuccessCta = wantDetailedAnalysis[\s\S]*ctaLabel: '상담 일정 잡기'[\s\S]*ctaLabel: '무료로 시작하기'/s);
-  assert.match(analyzeReportStep, /먼저 확인할 핵심 인사이트/);
-  assert.match(analyzeReportStep, /접수 완료: \{leadSuccessCta\.title\}/);
-  assert.match(analyzeReportStep, /처리 예상시간: \{leadSuccessCta\.eta\}/);
-  assert.match(analyzeReportStep, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
+  assert.match(analyzeReportStep, /import AnalyzeReportLeadSection from '\.\/report\/AnalyzeReportLeadSection';/);
+  assert.match(analyzeReportLeadSection, /const leadSuccessCta(?:: LeadSuccessCta)? = wantDetailedAnalysis[\s\S]*ctaLabel: '상담 일정 잡기'[\s\S]*ctaLabel: '무료로 시작하기'/s);
+  assert.match(analyzeReportLeadInsightsCard, /먼저 확인할 핵심 인사이트/);
+  assert.match(analyzeReportLeadSuccessCard, /접수 완료: \{leadSuccessCta\.title\}/);
+  assert.match(analyzeReportLeadSuccessCard, /처리 예상시간: \{leadSuccessCta\.eta\}/);
+  assert.match(analyzeReportLeadSuccessCard, /다음 단계: \{leadSuccessCta\.ctaLabel\}/);
 });
 
 test('funnel instrumentation uses standardized events and page-aware tracking', () => {
