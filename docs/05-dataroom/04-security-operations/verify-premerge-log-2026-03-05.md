@@ -1,4 +1,4 @@
-# verify:premerge 3회 연속 Green — 2026-03-05
+# verify:premerge 실행 로그 (3회 연속 + TF-03 추가 2회) — 2026-03-05
 
 ## 결과 요약
 
@@ -7,8 +7,21 @@
 | Run 1 | 105 | 105 | 0 | ✅ built |
 | Run 2 | 105 | 105 | 0 | ✅ built |
 | Run 3 | 105 | 105 | 0 | ✅ built |
+| Run 4 (TF-03) | 105 | 105 | 0 | ✅ built (3.58s) |
+| Run 5 (TF-03) | 105 | 105 | 0 | ✅ built (4.20s) |
 
-**판정: WS4-02 완료 — verify:premerge 3회 연속 Green**
+**판정: WS4-02 + TF-03 완료 — verify:premerge 추가 2회 포함 전체 GREEN**
+
+### TF-03 증빙 요약 (추가 2회)
+
+- Run 4 로그: `/tmp/verify_premerge_tf03_run1.log`
+  - `Smoke Auto: 1 passed, 0 failed`
+  - `tests 105 / pass 105 / fail 0`
+  - `built in 3.58s`
+- Run 5 로그: `/tmp/verify_premerge_tf03_run2.log`
+  - `Smoke Auto: 1 passed, 0 failed`
+  - `tests 105 / pass 105 / fail 0`
+  - `built in 4.20s`
 
 ---
 

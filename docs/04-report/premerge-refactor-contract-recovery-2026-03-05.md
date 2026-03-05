@@ -59,13 +59,13 @@ npm run verify:premerge
 3. `verify:premerge` 실패 시 24시간 내 분류표(기능 결함 vs 계약 불일치)를 작성하고 tracker에 남긴다.
 4. CI 경고는 실패 조건과 분리 관리한다. (예: build chunk warning은 백로그)
 
-## 6) 다음 72시간 실행 항목
+## 6) 72시간 실행 항목 상태 (업데이트: 2026-03-05)
 
 | ID | 항목 | 담당 | 완료 기준 | 기한 |
 | --- | --- | --- | --- | --- |
-| TF-01 | 계약 테스트 가이드 반영 검토 (10개 핵심 테스트) | Contract Test Owner | 단일 파일 고정 검증 0건 | 2026-03-06 |
-| TF-02 | smoke/build warning 백로그 등록 | CI/Build Owner | 우선순위/담당/기한 기록 | 2026-03-06 |
-| TF-03 | premerge 일일 실행 로그 2회 추가 | Gate Owner | 연속 실행 로그 누적 | 2026-03-07 |
+| TF-01 | 계약 테스트 가이드 반영 검토 (10개 핵심 테스트) | Contract Test Owner | 단일 파일 고정 검증 0건 (`docs/04-report/contract-test-audit-2026-03-05.md`) | DONE (2026-03-05) |
+| TF-02 | smoke/build warning 백로그 등록 | CI/Build Owner | 우선순위/담당/기한 기록 (`docs/04-report/release-warning-backlog-2026-03-05.md`) | DONE (2026-03-05) |
+| TF-03 | premerge 일일 실행 로그 2회 추가 | Gate Owner | 추가 2회 실행 통과 로그 반영 (`docs/05-dataroom/04-security-operations/verify-premerge-log-2026-03-05.md`) | DONE (2026-03-05) |
 
 ## 7) 증빙
 

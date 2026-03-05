@@ -69,6 +69,10 @@ Session Tracking:
   - `scripts/mobile-critical-flow.test.mjs`
 - Added execution report: `docs/04-report/premerge-refactor-contract-recovery-2026-03-05.md`
 - Re-validated gate: `npm run verify:premerge` PASS
+- TF follow-up done:
+  - Contract audit (10 key tests): `docs/04-report/contract-test-audit-2026-03-05.md`
+  - Warning backlog registration: `docs/04-report/release-warning-backlog-2026-03-05.md`
+  - Additional 2 gate runs evidence: `docs/05-dataroom/04-security-operations/verify-premerge-log-2026-03-05.md`
 
 ---
 
