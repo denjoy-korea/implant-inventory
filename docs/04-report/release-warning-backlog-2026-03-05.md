@@ -14,6 +14,7 @@
 | WB-02 | Vite `Circular chunk: vendor -> react-vendor -> vendor` 경고 | 청크 분리 효율 저하 가능성 | P2 | Frontend Owner (맹준호) | 2026-03-07 | DONE (2026-03-05) | `vite.config.ts` manualChunks 재정렬(fallback vendor 제거) + `npm run build` 재검증 (`docs/04-report/release-warning-remediation-2026-03-05.md`) |
 | WB-03 | `supabaseClient.ts`/`cryptoUtils.ts` 정적+동적 import 혼재 경고 | 코드 스플릿 최적화 제한 | P2 | Frontend Owner (맹준호) | 2026-03-07 | DONE (2026-03-05) | `services/cryptoUtils.ts`, `services/hospitalService.ts`, `services/operationLogService.ts` import 계약 통일 + build 경고 소거 확인 (`docs/04-report/release-warning-remediation-2026-03-05.md`) |
 | WB-04 | `exceljs-vendor` 청크 500kB 초과 경고 | 초기 로드/캐시 효율 저하 가능성 | P1 | Frontend Owner (맹준호) | 2026-03-08 | DONE (2026-03-05) | 엑셀 전용 지연 로드 청크 기준으로 `chunkSizeWarningLimit` 조정 + 빌드 경고 재검증 (`docs/04-report/release-warning-remediation-2026-03-05.md`) |
+| WB-05 | 간헐 `didn't resolve at build time` 경고 | 빌드 로그 신뢰도 저하 | P2 | Frontend Owner (맹준호) | 2026-03-05 | DONE (2026-03-05) | `noise.svg` 임의 URL 클래스 정리 + `verify:premerge` 3회 재검증 미재현 (`docs/04-report/release-build-resolve-confirmation-2026-03-05.md`) |
 
 ## 완료 기준
 

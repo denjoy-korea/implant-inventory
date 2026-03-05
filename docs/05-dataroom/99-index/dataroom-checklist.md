@@ -22,6 +22,7 @@
 - [x] 주요 보안 이슈 대응 로그 첨부 (`done` 2026-03-04 — `incident-history_v1.md`)
 - [x] 보안 운영 주간 업데이트 기록 (`done` 2026-03-05 — `04-security-operations/2026-03-05_security-operations-weekly-update_v1.md`)
 - [x] 보안 운영 증빙 최신화 패키지 작성 (`done` 2026-03-05 — `04-security-operations/2026-03-05_security-operations-evidence-refresh_v1.md`)
+- [x] 간헐 build resolve 경고 재검증 및 종결 (`done` 2026-03-05 — `docs/04-report/release-build-resolve-confirmation-2026-03-05.md`)
 
 ## 4) 06 투자자 공유 패키지
 - [x] 비식별(redaction) 작업 체크리스트 작성 (`done` 2026-03-05 — `06-investor-pack/redacted/redaction-prep-checklist-2026-03-05.md`)

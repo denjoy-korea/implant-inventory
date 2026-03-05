@@ -24,6 +24,7 @@
 - verify:release Green: `docs/05-dataroom/04-security-operations/verify-release-log-2026-03-05.md` ✅
 - 보안 운영 주간 업데이트: `docs/05-dataroom/04-security-operations/2026-03-05_security-operations-weekly-update_v1.md` ✅
 - 보안 운영 증빙 최신화 패키지: `docs/05-dataroom/04-security-operations/2026-03-05_security-operations-evidence-refresh_v1.md` ✅
+- 빌드 경고 재검증 확정: `docs/04-report/release-build-resolve-confirmation-2026-03-05.md` ✅
 - 이전 보안 운영 증빙:
   - `docs/05-dataroom/04-security-operations/2026-03-04_security_verify-release-run_v1.md`
   - `docs/05-dataroom/04-security-operations/2026-03-04_security_rls-policy-index_v1.md`

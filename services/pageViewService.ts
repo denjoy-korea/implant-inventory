@@ -20,6 +20,18 @@ const PUBLIC_PAGES = new Set([
 ]);
 
 type EventData = Record<string, unknown>;
+type PageViewRecentRow = {
+  page: string;
+  session_id: string | null;
+  user_id: string | null;
+  referrer: string | null;
+  event_type: string | null;
+  event_data: Record<string, unknown> | null;
+  created_at: string;
+};
+
+const PAGE_VIEW_FETCH_PAGE_SIZE = 1000;
+const PAGE_VIEW_FETCH_MAX_ROWS = 50000;
 
 function getClientContext(): EventData {
   try {
@@ -92,16 +104,28 @@ export const pageViewService = {
     if (error) throw error;
   },
 
-  /** 관리자용: 최근 N일 데이터 조회 (최대 50,000행) */
-  async getRecent(days = 90): Promise<{ page: string; session_id: string | null; user_id: string | null; referrer: string | null; event_type: string | null; event_data: Record<string, unknown> | null; created_at: string }[]> {
+  /** 관리자용: 최근 N일 데이터 조회 (최대 50,000행, 1000행 단위 페이지네이션) */
+  async getRecent(days = 90): Promise<PageViewRecentRow[]> {
     const since = new Date(Date.now() - days * 86400_000).toISOString();
-    const { data, error } = await supabase
-      .from('page_views')
-      .select('page, session_id, user_id, referrer, event_type, event_data, created_at')
-      .gte('created_at', since)
-      .order('created_at', { ascending: false })
-      .limit(50000);
-    if (error) throw error;
-    return (data ?? []) as { page: string; session_id: string | null; user_id: string | null; referrer: string | null; event_type: string | null; event_data: Record<string, unknown> | null; created_at: string }[];
+    const until = new Date().toISOString();
+    const rows: PageViewRecentRow[] = [];
+
+    for (let from = 0; from < PAGE_VIEW_FETCH_MAX_ROWS; from += PAGE_VIEW_FETCH_PAGE_SIZE) {
+      const to = Math.min(from + PAGE_VIEW_FETCH_PAGE_SIZE - 1, PAGE_VIEW_FETCH_MAX_ROWS - 1);
+      const { data, error } = await supabase
+        .from('page_views')
+        .select('page, session_id, user_id, referrer, event_type, event_data, created_at')
+        .gte('created_at', since)
+        .lt('created_at', until)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (error) throw error;
+
+      const chunk = (data ?? []) as PageViewRecentRow[];
+      rows.push(...chunk);
+      if (chunk.length < PAGE_VIEW_FETCH_PAGE_SIZE) break;
+    }
+
+    return rows;
   },
 };

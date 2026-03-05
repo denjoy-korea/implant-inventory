@@ -32,6 +32,24 @@ export default defineConfig(() => {
       // 번들 경고 임계값을 실사용 경로 기준으로 조정한다.
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        onwarn(warning, warn) {
+          const message = warning?.message ?? '';
+          if (message.includes("didn't resolve at build time")) {
+            const loc = warning.loc
+              ? `${warning.loc.file ?? 'unknown'}:${warning.loc.line ?? 0}:${warning.loc.column ?? 0}`
+              : 'unknown';
+            console.warn(
+              [
+                '[build-resolve-trace]',
+                `code=${warning.code ?? 'unknown'}`,
+                `id=${(warning as { id?: string }).id ?? 'unknown'}`,
+                `importer=${(warning as { importer?: string }).importer ?? 'unknown'}`,
+                `loc=${loc}`,
+              ].join(' ')
+            );
+          }
+          warn(warning);
+        },
         output: {
           manualChunks: (id) => {
             if (!id.includes('node_modules')) return undefined;

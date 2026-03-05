@@ -68,7 +68,7 @@ md+ (3-col):
                 md:row-span-2 flex flex-col">
   {/* 배경 장식 */}
   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[2rem] -mr-8 -mt-8" />
-  <div className="absolute inset-0 bg-[url('...')] opacity-10" />
+  <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10" />
 
   <div className="relative z-10 flex flex-col flex-1">
     {/* 아이콘 (기존 유지) */}
