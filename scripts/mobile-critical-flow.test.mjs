@@ -203,3 +203,13 @@ test('operational smoke checklist stays available as npm script', () => {
   assert.match(smokeScript, /Operational Smoke Checklist/);
   assert.match(smokeScript, /Rule: run this checklist before\/after App shell changes\./);
 });
+
+test('smoke:auto gate script exists and is wired into verify:premerge', () => {
+  const pkg = read('package.json');
+  const smokeAuto = read('scripts/smoke-auto.mjs');
+
+  assert.match(pkg, /"smoke:auto"\s*:\s*"node scripts\/smoke-auto\.mjs"/);
+  assert.match(pkg, /"verify:premerge".*smoke:auto/);
+  assert.match(smokeAuto, /check-edge-functions\.mjs/);
+  assert.match(smokeAuto, /process\.exit\(1\)/);
+});
