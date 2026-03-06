@@ -82,8 +82,8 @@ async function callCryptoService(
 
   const body = JSON.stringify({ op, ...payload });
 
-  // 배치 작업은 데이터가 많아 응답 시간이 길 수 있으므로 타임아웃을 넉넉하게
-  const defaultTimeout = op === 'decrypt_batch' ? 20_000 : 8_000;
+  // 배치: 12초, 단건: 8초 — initSession 20초 내에 실패+재시도가 완료되도록
+  const defaultTimeout = op === 'decrypt_batch' ? 12_000 : 8_000;
 
   const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = defaultTimeout) => {
     const controller = new AbortController();
@@ -100,7 +100,12 @@ async function callCryptoService(
   try {
     res = await fetchWithTimeout(headers);
   } catch (err) {
-    // 타임아웃 또는 네트워크 오류 시 토큰 재확인 후 1회 재시도
+    // AbortError(타임아웃)는 재시도해도 소용없음 — 게이트웨이 자체가 불안정
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      console.warn(`[cryptoUtils] ${op} 타임아웃, 재시도 생략`);
+      throw err;
+    }
+    // 네트워크 오류 시 토큰 재확인 후 1회 재시도
     console.warn(`[cryptoUtils] ${op} 첫 시도 실패, 재시도:`, err);
     if (requireAuth) {
       const freshToken = await getValidToken();
@@ -109,10 +114,10 @@ async function callCryptoService(
     res = await fetchWithTimeout(headers);
   }
 
-  // 502/503/504 게이트웨이 오류 시 1회 재시도
+  // 502/503/504 게이트웨이 오류 시 1회 재시도 (짧은 타임아웃)
   if (res.status >= 502 && res.status <= 504) {
     console.warn(`[cryptoUtils] ${op} 게이트웨이 오류 ${res.status}, 재시도`);
-    res = await fetchWithTimeout(headers);
+    res = await fetchWithTimeout(headers, 5_000);
   }
 
   // 401 수신 시: 서버 측 인증 거부 → 세션 강제 갱신 후 1회 재시도

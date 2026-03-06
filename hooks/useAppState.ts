@@ -133,7 +133,14 @@ export function useAppState(onNotify?: NotifyFn) {
       }
 
       const inventory = inventoryData.map(dbToInventoryItem);
-      const surgeryRows = await dbToExcelRowBatch(surgeryData);
+      // 수술기록 복호화 실패 시에도 대시보드 진입 허용 (빈 배열로 fallback)
+      let surgeryRows: ExcelRow[];
+      try {
+        surgeryRows = await dbToExcelRowBatch(surgeryData);
+      } catch (e) {
+        console.warn('[useAppState] 수술기록 복호화 실패, 빈 배열로 대체:', e);
+        surgeryRows = [];
+      }
       const orders = ordersData.map(dbToOrder);
 
       // 기존 레코드 중 patient_info_hash 없는 것 백필 (028 마이그레이션 이후 1회성)
