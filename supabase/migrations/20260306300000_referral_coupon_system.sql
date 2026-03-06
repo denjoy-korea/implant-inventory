@@ -162,17 +162,8 @@ BEGIN
       trial_used     = TRUE
     WHERE id = v_billing.hospital_id;
 
-    -- Coupon redemption
-    IF v_billing.coupon_id IS NOT NULL AND v_billing.discount_amount > 0 THEN
-      PERFORM redeem_coupon(
-        v_billing.coupon_id,
-        (SELECT user_id FROM user_coupons WHERE id = v_billing.coupon_id),
-        v_billing.hospital_id,
-        p_billing_id,
-        v_billing.billing_cycle,
-        COALESCE(v_billing.original_amount, v_billing.amount + v_billing.discount_amount)
-      );
-    END IF;
+    -- NOTE: coupon redemption은 toss-payment-confirm Edge Function에서 처리.
+    -- 여기서 중복 호출하면 used_count 이중 차감 및 coupon_redemptions 중복 발생.
 
     -- Referral reward: 이 병원이 referral 코드로 가입했다면, 초대자에게 보상 쿠폰 지급
     -- 첫 유료 결제 시에만 (이전 completed billing이 없는 경우)
@@ -438,3 +429,8 @@ $$;
 
 GRANT EXECUTE ON FUNCTION link_referral_hospital(text, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION link_referral_hospital(text, uuid) TO service_role;
+
+-- 10) coupon_redemptions: (coupon_id, billing_id) UNIQUE 제약 — 이중 redeem 방어
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coupon_redemptions_coupon_billing
+  ON public.coupon_redemptions(coupon_id, billing_id)
+  WHERE billing_id IS NOT NULL;
