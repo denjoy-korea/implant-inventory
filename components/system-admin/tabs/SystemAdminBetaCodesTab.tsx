@@ -12,12 +12,14 @@ const CODE_TYPE_LABELS: Record<CodeType, string> = {
   beta: '베타코드',
   partner: '제휴코드',
   promo: '프로모코드',
+  referral: '초대코드',
 };
 
 const CODE_TYPE_COLORS: Record<CodeType, string> = {
   beta: 'bg-blue-50 text-blue-700 border-blue-200',
   partner: 'bg-violet-50 text-violet-700 border-violet-200',
   promo: 'bg-orange-50 text-orange-700 border-orange-200',
+  referral: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
 function formatDateTime(value: string | null): string {

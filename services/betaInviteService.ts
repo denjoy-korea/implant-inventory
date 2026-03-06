@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
-export type CodeType = 'beta' | 'partner' | 'promo';
+export type CodeType = 'beta' | 'partner' | 'promo' | 'referral';
 
 export interface BetaInviteCodeRow {
   id: string;
@@ -72,10 +72,27 @@ export function generateCode(codeType: CodeType, channel?: string): string {
     }
     case 'promo':
       return `PROMO-${seg()}-${seg()}`;
+    case 'referral':
+      return `INVITE-${seg()}-${seg()}`;
     case 'beta':
     default:
       return generateBetaInviteCode();
   }
+}
+
+export interface ReferralInfo {
+  code: string | null;
+  referred_count: number;
+  rewards: {
+    id: string;
+    discount_type: 'percentage' | 'fixed_amount';
+    discount_value: number;
+    status: string;
+    issued_at: string;
+    expires_at: string | null;
+    used_count: number;
+    max_uses: number;
+  }[];
 }
 
 export const betaInviteService = {
@@ -220,5 +237,42 @@ export const betaInviteService = {
     if (error) {
       throw new Error('코드 삭제에 실패했습니다.');
     }
+  },
+
+  /** 내 초대 코드 생성 (이미 있으면 기존 코드 반환) */
+  async createMyReferralCode(): Promise<string> {
+    const { data, error } = await supabase.rpc('create_my_referral_code');
+    if (error) {
+      if (error.message?.includes('PAID_PLAN_REQUIRED')) {
+        throw new Error('유료 플랜 사용자만 초대 코드를 생성할 수 있습니다.');
+      }
+      throw new Error('초대 코드 생성에 실패했습니다.');
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return row?.code || '';
+  },
+
+  /** 내 초대 현황 조회 */
+  async getMyReferralInfo(): Promise<ReferralInfo> {
+    const { data, error } = await supabase.rpc('get_my_referral_info');
+    if (error) {
+      return { code: null, referred_count: 0, rewards: [] };
+    }
+    const info = data as ReferralInfo;
+    return {
+      code: info?.code || null,
+      referred_count: info?.referred_count || 0,
+      rewards: info?.rewards || [],
+    };
+  },
+
+  /** 가입 후 referral 코드에 병원 ID 연결 */
+  async linkReferralHospital(code: string, hospitalId: string): Promise<boolean> {
+    const { data, error } = await supabase.rpc('link_referral_hospital', {
+      p_code: code,
+      p_hospital_id: hospitalId,
+    });
+    if (error) return false;
+    return !!data;
   },
 };

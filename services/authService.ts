@@ -4,6 +4,7 @@ import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 import { decryptProfile } from './mappers';
 import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
+import { betaInviteService } from './betaInviteService';
 
 /** 평문 여부 확인 (ENCv2/ENC v1 접두사 없으면 평문) */
 const isPlain = (v: string | null | undefined): boolean =>
@@ -209,6 +210,9 @@ export const authService = {
       if (trialPlan && trialPlan !== 'free') {
         pendingSetup.trialPlan = trialPlan;
       }
+      if (normalizedBetaInviteCode) {
+        pendingSetup.betaInviteCode = normalizedBetaInviteCode;
+      }
       localStorage.setItem('_pending_hospital_setup', JSON.stringify(pendingSetup));
 
       // 슬랙 가입 알림 (fire-and-forget) — H-7: PII 마스킹 후 전송
@@ -303,6 +307,11 @@ export const authService = {
         });
       }
 
+      // 3-2. Referral 코드로 가입한 경우 referred_hospital_id 연결
+      if (normalizedBetaInviteCode) {
+        betaInviteService.linkReferralHospital(normalizedBetaInviteCode, hospital.id).catch(() => {});
+      }
+
       // 4. 사업자등록증 업로드 (선택)
       if (bizFile) {
         const fileExt = bizFile.name.split('.').pop();
@@ -361,6 +370,11 @@ export const authService = {
           phoneHash: profileUpdates.phone_hash as string | undefined,
           nameHash: trialNameHash,
         });
+      }
+
+      // Referral 코드로 가입한 경우 referred_hospital_id 연결
+      if (normalizedBetaInviteCode) {
+        betaInviteService.linkReferralHospital(normalizedBetaInviteCode, workspace.id).catch(() => {});
       }
     }
 
@@ -690,7 +704,7 @@ export const authService = {
     localStorage.removeItem('_pending_hospital_setup');
     localStorage.removeItem('_pending_trial_plan'); // 이중 트라이얼 방지
 
-    const { role, hospitalName, name, email: cfmEmail, phone, trialPlan } = pendingSetup;
+    const { role, hospitalName, name, email: cfmEmail, phone, trialPlan, betaInviteCode: cfmBetaCode } = pendingSetup;
 
     // 전화번호 암호화 + 핑거프린트 해시 계산
     const profileUpdates: Record<string, string | null> = {};
@@ -742,6 +756,9 @@ export const authService = {
             nameHash: cfmNameHash,
           });
         }
+        if (cfmBetaCode) {
+          betaInviteService.linkReferralHospital(cfmBetaCode, hospital.id).catch(() => {});
+        }
         return hospital.id;
       }
 
@@ -765,6 +782,9 @@ export const authService = {
             phoneHash: cfmPhoneHash,
             nameHash: cfmNameHash,
           });
+        }
+        if (cfmBetaCode) {
+          betaInviteService.linkReferralHospital(cfmBetaCode, workspace.id).catch(() => {});
         }
         return workspace.id;
       }

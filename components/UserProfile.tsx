@@ -12,6 +12,7 @@ import ReviewsTab from './profile/ReviewsTab';
 import WithdrawFlowModal from './profile/WithdrawFlowModal';
 import UserPlanPickerPanel from './profile/UserPlanPickerPanel';
 import SocialIdentityLinkSection from './profile/SocialIdentityLinkSection';
+import ReferralSection from './profile/ReferralSection';
 
 interface UserProfileProps {
     user: User;
@@ -615,6 +616,13 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                         결제 수단
                                     </button>
                                 </div>
+                            )}
+
+                            {!isStaff && !isSystemAdmin && (
+                                <ReferralSection
+                                    hospitalId={user.hospitalId || ''}
+                                    plan={planState?.plan || 'free'}
+                                />
                             )}
                         </div>
                     )}

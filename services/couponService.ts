@@ -23,7 +23,7 @@ export interface UserCoupon {
   hospital_id: string;
   template_id: string;
   source_code_id: string | null;
-  source_type: 'partner' | 'promo' | 'admin';
+  source_type: 'partner' | 'promo' | 'admin' | 'referral_reward';
   discount_type: 'percentage' | 'fixed_amount';
   discount_value: number;
   max_uses: number;

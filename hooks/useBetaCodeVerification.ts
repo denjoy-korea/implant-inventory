@@ -61,7 +61,9 @@ export function useBetaCodeVerification(deps: UseBetaCodeVerificationDeps) {
     showToast(
       result.codeType === 'partner'
         ? '제휴 코드 확인 완료! 가입 시 할인 혜택이 자동 적용됩니다.'
-        : '코드 확인이 완료되었습니다.',
+        : result.codeType === 'referral'
+          ? '초대 코드 확인 완료! 가입을 진행해주세요.'
+          : '코드 확인이 완료되었습니다.',
       'success',
     );
   };
