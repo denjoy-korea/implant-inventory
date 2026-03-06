@@ -87,14 +87,32 @@ function checkInnerHtmlAssignments() {
   }
 }
 
+function readWithArchiveFallback(relPath) {
+  const content = readSilent(relPath);
+  if (content) return content;
+  // Try _archive/ fallback (files may be moved during cleanup)
+  const parts = relPath.split('/');
+  if (parts.length >= 2) {
+    const archivePath = parts.slice(0, -1).join('/') + '/_archive/' + parts[parts.length - 1];
+    return readSilent(archivePath);
+  }
+  return '';
+}
+
+function readSilent(relPath) {
+  const fullPath = path.join(REPO_ROOT, relPath);
+  if (!existsSync(fullPath)) return '';
+  return readFileSync(fullPath, 'utf8');
+}
+
 function checkSecurityMigrationGuards() {
-  const sql = read('supabase/022_security_integrity_phase2.sql');
+  const sql = readWithArchiveFallback('supabase/022_security_integrity_phase2.sql');
   if (!sql) return;
-  const sqlHotfix024 = read('supabase/024_fix_create_order_with_items_ambiguity.sql');
+  const sqlHotfix024 = readWithArchiveFallback('supabase/024_fix_create_order_with_items_ambiguity.sql');
   if (!sqlHotfix024) return;
-  const sqlVerify025 = read('supabase/025_verify_create_order_hotfix.sql');
+  const sqlVerify025 = readWithArchiveFallback('supabase/025_verify_create_order_hotfix.sql');
   if (!sqlVerify025) return;
-  const sqlReport026 = read('supabase/026_patient_info_encryption_report.sql');
+  const sqlReport026 = readWithArchiveFallback('supabase/026_patient_info_encryption_report.sql');
   if (!sqlReport026) return;
 
   const requiredPatterns = [
