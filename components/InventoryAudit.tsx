@@ -2,6 +2,9 @@ import React from 'react';
 import { InventoryItem, PlanType } from '../types';
 import AuditReportDashboard from './audit/AuditReportDashboard';
 import AuditHistoryModal from './audit/AuditHistoryModal';
+import AuditSummaryModal from './audit/AuditSummaryModal';
+import AuditPlanGate from './audit/AuditPlanGate';
+import AuditMismatchBanner from './audit/AuditMismatchBanner';
 import { useInventoryAudit } from '../hooks/useInventoryAudit';
 import { planService } from '../services/planService';
 
@@ -57,19 +60,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
   // PC: 리포트 대시보드 (audit_history 권한 필요), 모바일: 기존 실사 입력 UI
   if (!isMobileViewport) {
     if (!planService.canAccess(plan ?? 'free', 'audit_history')) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center p-8">
-          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center">
-            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-base font-bold text-slate-800">실사 이력 분석은 Plus 플랜부터</p>
-            <p className="text-sm text-slate-500 mt-1">누적 실사 데이터와 재고 이력을 분석하려면 플랜을 업그레이드하세요.</p>
-          </div>
-        </div>
-      );
+      return <AuditPlanGate />;
     }
     return <AuditReportDashboard auditHistory={auditHistory} isLoading={isHistoryLoading} />;
   }
@@ -182,31 +173,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
         </div>
 
 
-        {/* 불일치 Alert 배너 */}
-        {totalMismatched > 0 && (
-          <div className="flex bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-rose-700 flex items-center gap-2">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                불일치 {totalMismatched}건 발견 — 실사 완료 후 재고에 자동 반영됩니다.
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {mismatchItems.slice(0, 6).map(({ id, result, item }) => {
-                  const diff = (result.actualCount ?? 0) - item.currentStock;
-                  return (
-                    <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg">
-                      {item.brand} {item.size}
-                      <span className="text-rose-500 font-black">{diff > 0 ? `+${diff}` : diff}개</span>
-                    </span>
-                  );
-                })}
-                {mismatchItems.length > 6 && (
-                  <span className="inline-flex items-center px-2.5 py-1 bg-rose-100 text-rose-500 text-[11px] font-bold rounded-lg">+{mismatchItems.length - 6}건</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <AuditMismatchBanner totalMismatched={totalMismatched} mismatchItems={mismatchItems} />
 
         {/* 검색 + 제조사 필터 (모바일 숨김) */}
         <div className="hidden md:flex flex-col sm:flex-row gap-2">
@@ -795,104 +762,16 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
           onToggleExpand={toggleExpand}
         />
 
-        {/* 실사 결과 모달 */}
-        {showAuditSummary && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleAuditClose}>
-            <div
-              ref={summaryModalRef}
-              className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="audit-summary-title"
-              aria-describedby="audit-summary-desc"
-            >
-              <div className="p-8 bg-indigo-600 text-white flex justify-between items-center flex-shrink-0">
-                <div>
-                  <h3 id="audit-summary-title" className="text-xl font-black">재고실사 결과</h3>
-                  <p id="audit-summary-desc" className="text-indigo-200 text-xs mt-1">{new Date().toLocaleDateString('ko-KR')} 실사</p>
-                </div>
-                <button ref={summaryCloseButtonRef} onClick={handleAuditClose} aria-label="닫기" className="p-2 hover:bg-white/10 rounded-full transition-all">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <div className="p-4 sm:p-8 space-y-6 overflow-y-auto modal-scroll flex-1">
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <div className="bg-slate-50 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-slate-800">{auditedCount}</p>
-                    <p className="text-[10px] font-bold text-slate-400 mt-1">전체 실사</p>
-                  </div>
-                  <div className="bg-emerald-50 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-emerald-600">{auditedCount - mismatchItems.length}</p>
-                    <p className="text-[10px] font-bold text-emerald-500 mt-1">일치</p>
-                  </div>
-                  <div className="bg-rose-50 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-rose-600">{mismatchItems.length}</p>
-                    <p className="text-[10px] font-bold text-rose-500 mt-1">불일치</p>
-                  </div>
-                </div>
-
-                {mismatchItems.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                      불일치 내역
-                    </h4>
-                    <div className="space-y-2">
-                      {mismatchItems.map(({ id, result, item }) => {
-                        const diff = (result.actualCount ?? 0) - item.currentStock;
-                        return (
-                          <div key={id} className="flex items-center justify-between bg-rose-50/50 border border-rose-100 rounded-xl px-4 py-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700 truncate">{item.brand} {item.size}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{item.manufacturer}</p>
-                            </div>
-                            <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-                              <div className="text-right">
-                                <span className="text-[10px] text-slate-400">시스템</span>
-                                <p className="text-xs font-black text-slate-600">{item.currentStock}</p>
-                              </div>
-                              <svg className="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                              <div className="text-right">
-                                <span className="text-[10px] text-slate-400">실제</span>
-                                <p className="text-xs font-black text-rose-600">{result.actualCount}</p>
-                              </div>
-                              <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${diff < 0 ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
-                                {diff > 0 ? '+' : ''}{diff}
-                              </span>
-                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded">{result.reason}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {mismatchItems.length === 0 && (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-emerald-600 font-bold">모든 품목이 일치합니다.</p>
-                  </div>
-                )}
-              </div>
-              <div className="px-8 pb-8 flex-shrink-0 flex gap-3">
-                <button
-                  onClick={handleAuditClose}
-                  className="flex-1 py-3 bg-white text-slate-600 text-sm font-bold rounded-2xl border border-slate-200 hover:bg-slate-50 transition-all"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleApply}
-                  disabled={isApplying}
-                  className="flex-1 py-3 bg-indigo-600 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isApplying ? '적용 중...' : mismatchItems.length > 0 ? `불일치 ${mismatchItems.length}건 적용` : '확인'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <AuditSummaryModal
+          show={showAuditSummary}
+          summaryModalRef={summaryModalRef}
+          summaryCloseButtonRef={summaryCloseButtonRef}
+          auditedCount={auditedCount}
+          mismatchItems={mismatchItems}
+          isApplying={isApplying}
+          onClose={handleAuditClose}
+          onApply={handleApply}
+        />
       </div>
 
       {toast && (

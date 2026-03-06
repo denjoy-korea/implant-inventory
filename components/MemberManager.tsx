@@ -11,6 +11,10 @@ import { operationLogService } from '../services/operationLogService';
 import { getErrorMessage } from '../utils/errors';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
+import ReadonlyMemberWarningBanner from './member/ReadonlyMemberWarningBanner';
+import InviteLinkModal from './member/InviteLinkModal';
+import InvitedMembersSection from './member/InvitedMembersSection';
+import PendingApprovalsSection from './member/PendingApprovalsSection';
 
 interface MemberManagerProps {
     currentUser: User;
@@ -435,144 +439,23 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-8">
 
-                    {/* Readonly Members Warning Banner */}
-                    {readonlyMembers.length > 0 && (
-                        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl px-6 py-4">
-                            <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                    </svg>
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-bold text-amber-800">
-                                        인원 초과로 {readonlyMembers.length}명이 읽기 전용 상태입니다
-                                    </p>
-                                    <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                                        현재 플랜({PLAN_NAMES[planState?.plan ?? 'free']})의 최대 인원을 초과하여 일부 구성원이 읽기 전용으로 전환되었습니다.
-                                        플랜을 업그레이드하거나 구성원을 정리하여 해결할 수 있습니다.
-                                    </p>
-                                </div>
-                                {onGoToPricing && (
-                                    <button
-                                        onClick={onGoToPricing}
-                                        className="flex-shrink-0 bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-                                    >
-                                        업그레이드
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    <ReadonlyMemberWarningBanner
+                        readonlyCount={readonlyMembers.length}
+                        currentPlanName={PLAN_NAMES[planState?.plan ?? 'free']}
+                        onUpgrade={onGoToPricing}
+                    />
 
-                    {/* Invited Members (이메일 초대 대기 중) */}
-                    {invitedMembers.length > 0 && (
-                        <div className="mb-10 animate-in fade-in slide-in-from-top-4">
-                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                                초대 이메일 발송 완료 <span className="text-indigo-500">{invitedMembers.length}</span>
-                                <span className="text-xs font-normal text-slate-400 ml-1">— 아직 가입 대기 중</span>
-                            </h3>
-                            <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl overflow-hidden">
-                                <table className="w-full">
-                                    <tbody className="divide-y divide-indigo-100/50">
-                                        {invitedMembers.map(inv => (
-                                            <tr key={inv.id} className="hover:bg-indigo-100/20">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-xs flex-shrink-0">
-                                                            {inv.name.charAt(0)}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-slate-700 text-sm">{inv.name}</div>
-                                                            <div className="text-xs text-slate-400">{inv.email}</div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 hidden sm:table-cell">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        {inv.clinic_role && (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
-                                                                {CLINIC_ROLE_LABELS[inv.clinic_role]}
-                                                            </span>
-                                                        )}
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
-                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                            </svg>
-                                                            초대 발송됨
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        {/* 재발송 */}
-                                                        <button
-                                                            onClick={() => handleResendInvitation(inv)}
-                                                            title="재발송"
-                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 transition-colors"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                            </svg>
-                                                        </button>
-                                                        {/* 삭제 */}
-                                                        <button
-                                                            onClick={() => handleDeleteInvitation(inv.id, inv.name)}
-                                                            title="초대 삭제"
-                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
+                    <InvitedMembersSection
+                        invitedMembers={invitedMembers}
+                        onResendInvitation={handleResendInvitation}
+                        onDeleteInvitation={handleDeleteInvitation}
+                    />
 
-                    {/* Pending Approvals */}
-                    {pendingMembers.length > 0 && (
-                        <div className="mb-10 animate-in fade-in slide-in-from-top-4">
-                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                                가입 승인 대기 <span className="text-amber-600">{pendingMembers.length}</span>
-                            </h3>
-                            <div className="bg-amber-50 border border-amber-100 rounded-2xl overflow-hidden">
-                                <table className="w-full">
-                                    <tbody className="divide-y divide-amber-100/50">
-                                        {pendingMembers.map(member => (
-                                            <tr key={member.email} className="hover:bg-amber-100/30">
-                                                <td className="px-6 py-4">
-                                                    <div className="font-bold text-slate-800">{member.name}</div>
-                                                    <div className="text-xs text-slate-500">{member.email}</div>
-                                                </td>
-                                                <td className="px-6 py-4 text-right space-x-2">
-                                                    <button
-                                                        onClick={() => handleApprove(member._id)}
-                                                        className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                                                    >
-                                                        승인
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleReject(member._id)}
-                                                        className="px-4 py-2 bg-white text-slate-600 border border-slate-200 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-                                                    >
-                                                        거절
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
+                    <PendingApprovalsSection
+                        pendingMembers={pendingMembers}
+                        onApprove={handleApprove}
+                        onReject={handleReject}
+                    />
 
                     <div className="flex justify-between items-end mb-6">
                         <div>
@@ -819,39 +702,14 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
                 onCancel={() => setConfirmModal(null)}
             />
         )}
-        {inviteUrlModal && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setInviteUrlModal(null)}>
-                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-900">초대 이메일 발송 완료</h3>
-                            <p className="text-sm text-slate-500">{inviteUrlModal.name}님 ({inviteUrlModal.email})</p>
-                        </div>
-                    </div>
-                    <p className="text-sm text-slate-600 mb-4">초대 이메일이 발송되었습니다. 아래 링크를 직접 공유할 수도 있습니다.</p>
-                    <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2 mb-5">
-                        <p className="flex-1 text-xs text-slate-500 truncate">{inviteUrlModal.url}</p>
-                        <button
-                            onClick={() => { navigator.clipboard.writeText(inviteUrlModal.url); showToast('링크가 복사되었습니다.', 'success'); }}
-                            className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors"
-                        >
-                            복사
-                        </button>
-                    </div>
-                    <button
-                        onClick={() => setInviteUrlModal(null)}
-                        className="w-full h-11 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors"
-                    >
-                        확인
-                    </button>
-                </div>
-            </div>
-        )}
+        <InviteLinkModal
+            invite={inviteUrlModal}
+            onClose={() => setInviteUrlModal(null)}
+            onCopy={(url) => {
+                navigator.clipboard.writeText(url);
+                showToast('링크가 복사되었습니다.', 'success');
+            }}
+        />
         {toast && (
             <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[130] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white'}`}>
                 {toast.message}

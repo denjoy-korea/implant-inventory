@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BillingCycle, PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
 import LegalModal from '../shared/LegalModal';
 import ModalShell from '../shared/ModalShell';
+import type { UserCoupon, DiscountPreview } from '../../services/couponService';
 
 type PaymentMethod = 'card' | 'transfer';
 type ReceiptType = 'cash_receipt' | 'tax_invoice';
@@ -25,6 +26,11 @@ interface PricingPaymentModalProps {
   requestError?: string | null;
   onRequestConsultation?: () => void;
   onRecommendAlternativePlan?: () => void;
+  /** 쿠폰 관련 (선택) */
+  availableCoupons?: UserCoupon[];
+  selectedCouponId?: string | null;
+  onSelectCoupon?: (couponId: string | null) => void;
+  discountPreview?: DiscountPreview | null;
 }
 
 function formatPrice(price: number): string {
@@ -50,6 +56,10 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
   requestError,
   onRequestConsultation,
   onRecommendAlternativePlan,
+  availableCoupons,
+  selectedCouponId,
+  onSelectCoupon,
+  discountPreview,
 }) => {
   const [agreedToPaymentPolicy, setAgreedToPaymentPolicy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -114,9 +124,23 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 <span>부가세 (10%)</span>
                 <span>{formatPrice(vat)}원</span>
               </div>
+              {discountPreview && discountPreview.discount_amount > 0 && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-700">소계 (VAT 포함)</span>
+                    <span className="text-sm text-slate-500 line-through">{formatPrice(basePrice + vat)}원</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-violet-600 font-semibold">쿠폰 할인</span>
+                    <span className="text-sm font-bold text-violet-600">-{formatPrice(discountPreview.discount_amount)}원</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between items-center pt-1 border-t border-slate-100">
                 <span className="text-sm font-bold text-slate-700">합계 (VAT 포함)</span>
-                <span className="text-lg font-black text-indigo-600">{formatPrice(basePrice + vat)}원</span>
+                <span className="text-lg font-black text-indigo-600">
+                  {formatPrice(discountPreview ? discountPreview.final_amount : basePrice + vat)}원
+                </span>
               </div>
             </div>
             {isYearly && (
@@ -125,6 +149,25 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               </p>
             )}
           </div>
+
+          {/* 쿠폰 선택 */}
+          {availableCoupons && availableCoupons.length > 0 && onSelectCoupon && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-2">쿠폰 적용</label>
+              <select
+                value={selectedCouponId || ''}
+                onChange={(e) => onSelectCoupon(e.target.value || null)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              >
+                <option value="">쿠폰 미적용</option>
+                {availableCoupons.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.template?.name || '쿠폰'} ({c.discount_type === 'percentage' ? `${c.discount_value}%` : `${formatPrice(c.discount_value)}원`} 할인, 잔여 {c.max_uses - c.used_count}회)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {hospitalName && (
             <div>

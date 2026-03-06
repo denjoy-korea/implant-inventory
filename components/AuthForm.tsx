@@ -42,6 +42,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     resetEmailSent, setResetEmailSent,
     betaInviteCode, setBetaInviteCode,
     betaInviteVerified,
+    verifiedCodeType,
     betaInviteModalOpen, setBetaInviteModalOpen,
     betaInviteChecking,
     betaInviteError,
@@ -85,11 +86,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           <div className="w-full max-w-[520px] rounded-2xl bg-white border border-slate-200 shadow-xl p-7 sm:p-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 mb-4">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span className="text-xs font-bold text-amber-700">베타테스터 가입</span>
+              <span className="text-xs font-bold text-amber-700">사전 가입 기간</span>
             </div>
-            <h2 className="text-xl font-black text-slate-900 leading-tight">초대 코드 확인 후 회원가입이 가능합니다.</h2>
+            <h2 className="text-xl font-black text-slate-900 leading-tight">초대/제휴 코드 확인 후 회원가입이 가능합니다.</h2>
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              베타 기간({betaSignupPolicy.endDateText}까지)에는 운영팀에서 전달받은 초대 코드가 필요합니다.
+              사전 가입 기간({betaSignupPolicy.endDateText}까지)에는 운영팀에서 전달받은 초대 또는 제휴 코드가 필요합니다.
               <br />
               {betaSignupPolicy.openDateText}부터는 코드 없이 자유롭게 가입할 수 있습니다.
             </p>
@@ -100,7 +101,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
                 onClick={openBetaInviteModal}
                 className="w-full h-11 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
               >
-                베타테스터 코드 입력
+                초대/제휴 코드 입력
               </button>
               <button
                 type="button"
@@ -267,23 +268,28 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   };
 
   function renderBetaInviteModal() {
-    if (type !== 'signup' || !isBetaInviteRequired || !betaInviteModalOpen) return null;
+    if (type !== 'signup' || !betaInviteModalOpen) return null;
     return (
       <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setBetaInviteModalOpen(false)}>
         <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
-            <h3 className="text-base font-black text-slate-900">베타테스터 초대 코드 확인</h3>
+            <h3 className="text-base font-black text-slate-900">
+              {isBetaInviteRequired ? '초대/제휴 코드 확인' : '제휴/프로모 코드 입력'}
+            </h3>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              베타 기간({betaSignupPolicy.endDateText}까지)에는 운영팀에서 전달받은 초대 코드가 있어야 가입할 수 있습니다.<br />
-              {betaSignupPolicy.openDateText}부터는 코드 없이 자유롭게 가입 가능합니다.
+              {isBetaInviteRequired ? (
+                <>사전 가입 기간({betaSignupPolicy.endDateText}까지)에는 운영팀에서 전달받은 초대 또는 제휴 코드가 있어야 가입할 수 있습니다.<br />{betaSignupPolicy.openDateText}부터는 코드 없이 자유롭게 가입 가능합니다.</>
+              ) : (
+                <>제휴 채널이나 프로모션을 통해 받은 코드가 있으면 입력해주세요. 가입 시 할인 혜택이 자동 적용됩니다.</>
+              )}
             </p>
           </div>
           <form onSubmit={handleVerifyBetaInviteCode} className="px-5 py-4 space-y-3">
-            <label className="block text-xs font-bold text-slate-600">초대 코드</label>
+            <label className="block text-xs font-bold text-slate-600">초대/제휴 코드</label>
             <input
               value={betaInviteCode}
               onChange={(event) => setBetaInviteCode(event.target.value.toUpperCase())}
-              placeholder="예: BETA-ABCD-EF12"
+              placeholder="예: BETA-ABCD-EF12 또는 PARTNER-채널-코드"
               autoFocus
               className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold tracking-wide focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
@@ -439,6 +445,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           betaInviteCode={betaInviteCode}
           betaInviteEndDateText={betaSignupPolicy.endDateText}
           onOpenBetaInviteModal={openBetaInviteModal}
+          verifiedCodeType={verifiedCodeType}
           agreedToTerms={agreedToTerms}
           onAgreedToTermsChange={setAgreedToTerms}
           agreedToPrivacy={agreedToPrivacy}
@@ -490,6 +497,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         betaInviteCode={betaInviteCode}
         betaInviteEndDateText={betaSignupPolicy.endDateText}
         onOpenBetaInviteModal={openBetaInviteModal}
+        verifiedCodeType={verifiedCodeType}
         agreedToTerms={agreedToTerms}
         onAgreedToTermsChange={setAgreedToTerms}
         agreedToPrivacy={agreedToPrivacy}

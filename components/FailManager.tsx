@@ -6,6 +6,8 @@ import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
 import FailMonthlyTrendChartCard from './fail/FailMonthlyTrendChartCard';
 import FailReturnModal from './fail/FailReturnModal';
+import FailAllReturnConfirmModal from './fail/FailAllReturnConfirmModal';
+import FailOrderHistorySection from './fail/FailOrderHistorySection';
 import { useFailManager } from '../hooks/useFailManager';
 import ConfirmModal from './ConfirmModal';
 
@@ -571,59 +573,12 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             </div>
           </div>
 
-          {/* ========================================= */}
-          {/* ROW 3: 교환 주문 이력                       */}
-          {/* ========================================= */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                  교환 주문 이력
-                </h3>
-              </div>
-              <span className="text-[10px] font-bold text-slate-500">{activeOrders.length}건</span>
-            </div>
-            {activeOrders.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
-                {activeOrders.map(order => (
-                  <div key={order.id} className="p-4 rounded-xl border border-slate-100 shadow-sm space-y-3 hover:border-indigo-100 transition-all">
-                    <div className="flex justify-between items-start">
-                      <p className="text-xs font-black text-slate-800">{order.date} 주문</p>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter ${order.status === 'ordered' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                        {order.status === 'ordered' ? '발주중' : '입고완료'}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-[11px] font-bold">
-                          <span className="text-slate-500">{item.brand} {item.size === '기타' || item.size === '-' ? '규격정보없음' : item.size}</span>
-                          <span className="text-slate-800 tabular-nums">{item.quantity}개</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-500">담당: {order.manager}</span>
-                      {!isReadOnly && onDeleteOrder && (
-                        <button
-                          onClick={() => setConfirmDeleteOrderId(order.id)}
-                          className="text-[10px] font-bold text-slate-400 hover:text-rose-500 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors"
-                        >
-                          삭제
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 text-center">
-                <svg className="w-12 h-12 text-slate-100 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                <p className="text-sm text-slate-500 font-medium">아직 교환 주문 이력이 없습니다.</p>
-                <p className="text-[11px] text-slate-300 mt-1">'반품 신청' 버튼으로 첫 반품을 등록하세요.</p>
-              </div>
-            )}
-          </div>
+          <FailOrderHistorySection
+            activeOrders={activeOrders}
+            isReadOnly={isReadOnly}
+            onDeleteOrder={onDeleteOrder}
+            onRequestDelete={setConfirmDeleteOrderId}
+          />
         </div>
       ) : (
         <div className="py-40 text-center bg-white rounded-[32px] border border-slate-200 shadow-sm">
@@ -632,80 +587,17 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         </div>
       )}
 
-      {/* ========================================= */}
-      {/* ALL RETURN CONFIRM MODAL                  */}
-      {/* ========================================= */}
-      {isAllReturnConfirmOpen && (
-        <div
-          className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 z-[200]"
-          onClick={() => !isAllReturnSubmitting && setIsAllReturnConfirmOpen(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="all-return-modal-title"
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 id="all-return-modal-title" className="text-base font-black text-slate-800">일괄 반품 처리</h2>
-                <p className="text-xs text-slate-500 mt-0.5">미처리 잔여 항목 전체를 제조사별로 반품 주문 등록합니다.</p>
-              </div>
-              <button
-                onClick={() => setIsAllReturnConfirmOpen(false)}
-                disabled={isAllReturnSubmitting}
-                className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            {/* 전자장부 안내 */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[11px] text-amber-800 font-semibold">
-              반품 처리 후 전자장부에서 주문 금액 변동을 확인하세요.
-            </div>
-
-            {/* 제조사별 미처리 목록 */}
-            <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품 처리 대상</p>
-              {manufacturers.map(mfr => {
-                const cnt = Math.max(0, (pendingByManufacturerMap[mfr] || 0) - (returnPendingByMfr[mfr] || 0));
-                if (cnt === 0) return null;
-                return (
-                  <div key={mfr} className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl">
-                    <span className="text-sm font-bold text-slate-700">{mfr}</span>
-                    <span className="text-sm font-black text-rose-600 tabular-nums">{cnt}건</span>
-                  </div>
-                );
-              })}
-              <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
-                <span className="text-sm font-black text-indigo-700">합계</span>
-                <span className="text-sm font-black text-indigo-700 tabular-nums">{globalPendingFails}건</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setIsAllReturnConfirmOpen(false)}
-                disabled={isAllReturnSubmitting}
-                className="flex-1 py-3 text-sm font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 rounded-2xl transition-all"
-              >
-                취소
-              </button>
-              <button
-                onClick={() => void handleAllReturnSubmit()}
-                disabled={isAllReturnSubmitting || pendingFailList.length === 0}
-                className="flex-1 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-2xl transition-all active:scale-[0.98]"
-              >
-                {isAllReturnSubmitting ? '처리 중...' : '반품 신청하기'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <FailAllReturnConfirmModal
+        isOpen={isAllReturnConfirmOpen}
+        isSubmitting={isAllReturnSubmitting}
+        manufacturers={manufacturers}
+        pendingByManufacturerMap={pendingByManufacturerMap}
+        returnPendingByMfr={returnPendingByMfr}
+        globalPendingFails={globalPendingFails}
+        pendingFailCount={pendingFailList.length}
+        onClose={() => setIsAllReturnConfirmOpen(false)}
+        onSubmit={() => void handleAllReturnSubmit()}
+      />
 
       {/* ========================================= */}
       {/* ORDER MODAL                               */}

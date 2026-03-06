@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { BillingCycle, PlanType, User } from '../types';
 import PricingPaymentModal from './pricing/PricingPaymentModal';
 import { tossPaymentService } from '../services/tossPaymentService';
+import { couponService, UserCoupon, DiscountPreview } from '../services/couponService';
 
 interface DirectPaymentModalProps {
   plan: PlanType | null;
@@ -25,6 +26,40 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
 
+  // 쿠폰 관련 상태
+  const [availableCoupons, setAvailableCoupons] = useState<UserCoupon[]>([]);
+  const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
+  const [discountPreview, setDiscountPreview] = useState<DiscountPreview | null>(null);
+
+  const loadCoupons = useCallback(async () => {
+    if (!user?.hospitalId) return;
+    try {
+      const coupons = await couponService.getAvailableCoupons(user.hospitalId);
+      setAvailableCoupons(coupons);
+    } catch {
+      // 쿠폰 조회 실패해도 결제는 진행 가능
+    }
+  }, [user?.hospitalId]);
+
+  useEffect(() => {
+    void loadCoupons();
+  }, [loadCoupons]);
+
+  // 쿠폰 선택 시 할인 미리보기 계산
+  useEffect(() => {
+    if (!selectedCouponId || !plan || plan === 'free') {
+      setDiscountPreview(null);
+      return;
+    }
+    const coupon = availableCoupons.find((c) => c.id === selectedCouponId);
+    if (!coupon) {
+      setDiscountPreview(null);
+      return;
+    }
+    const originalAmount = tossPaymentService.calcTotalAmount(plan, billing);
+    setDiscountPreview(couponService.previewDiscount(coupon, originalAmount));
+  }, [selectedCouponId, plan, billing, availableCoupons]);
+
   const handleSubmit = async () => {
     if (!plan || plan === 'free') return;
     if (!user?.hospitalId) return;
@@ -38,6 +73,8 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
         billingCycle: billing,
         customerName: contactName.trim(),
         paymentMethod,
+        couponId: selectedCouponId || undefined,
+        discountAmount: discountPreview?.discount_amount,
       });
       if (result.error && result.error !== 'user_cancel') {
         setRequestError(result.error);
@@ -67,6 +104,10 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       onPaymentMethodChange={setPaymentMethod}
       onReceiptTypeChange={setReceiptType}
       onSubmit={handleSubmit}
+      availableCoupons={availableCoupons}
+      selectedCouponId={selectedCouponId}
+      onSelectCoupon={setSelectedCouponId}
+      discountPreview={discountPreview}
     />
   );
 };
