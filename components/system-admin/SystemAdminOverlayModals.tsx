@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 import { ContactInquiry } from '../../services/contactService';
 import { PLAN_LIMITS, PLAN_SHORT_NAMES, BillingCycle, DbProfile, PlanType } from '../../types';
 import { DbHospitalRow, getTrialInfo } from './systemAdminDomain';
@@ -38,17 +39,23 @@ export const PlanAssignModal: React.FC<PlanAssignModalProps> = ({
   onRequestStartTrial,
   onRequestResetTrial,
 }) => {
-  if (!modal) return null;
-
-  const targetHospital = hospitals.find(hospital => hospital.id === modal.hospitalId) ?? null;
+  const targetHospital = modal ? (hospitals.find(hospital => hospital.id === modal.hospitalId) ?? null) : null;
   const trial = targetHospital ? getTrialInfo(targetHospital) : null;
   const isTrialBusy = !!targetHospital && trialSaving === targetHospital.id;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[150] flex items-center justify-center p-4" onClick={() => !planSaving && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+    <ModalShell
+      isOpen={!!modal}
+      onClose={onClose}
+      title="플랜 변경"
+      maxWidth="max-w-sm"
+      className="p-6"
+      closeable={!planSaving}
+      closeOnBackdrop={!planSaving}
+      zIndex={150}
+    >
         <h2 className="text-base font-bold text-slate-800 mb-1">플랜 변경</h2>
-        <p className="text-xs text-slate-500 mb-5">{modal.hospitalName}</p>
+        <p className="text-xs text-slate-500 mb-5">{modal?.hospitalName}</p>
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1.5">플랜</label>
@@ -145,8 +152,7 @@ export const PlanAssignModal: React.FC<PlanAssignModalProps> = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 
@@ -165,15 +171,20 @@ export const PlanHospitalsModal: React.FC<PlanHospitalsModalProps> = ({
   getHospitalMemberCount,
   getMasterName,
 }) => {
-  if (!modal) return null;
-  const planHospitals = hospitals.filter(hospital => hospital.plan === modal.plan);
+  const planHospitals = modal ? hospitals.filter(hospital => hospital.plan === modal.plan) : [];
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <ModalShell
+      isOpen={!!modal}
+      onClose={onClose}
+      title={modal ? `${modal.label} 플랜 병원` : '플랜 병원'}
+      maxWidth="max-w-lg"
+      className="max-h-[80vh] flex flex-col"
+      zIndex={150}
+    >
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h3 className="text-base font-bold text-slate-800">{modal.label} 플랜 병원</h3>
+            <h3 className="text-base font-bold text-slate-800">{modal?.label} 플랜 병원</h3>
             <p className="text-xs text-slate-400 mt-0.5">총 {planHospitals.length}개 병원</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400">
@@ -210,8 +221,7 @@ export const PlanHospitalsModal: React.FC<PlanHospitalsModalProps> = ({
             );
           })}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 
@@ -228,20 +238,24 @@ export const HospitalDetailModal: React.FC<HospitalDetailModalProps> = ({
   getHospitalMemberCount,
   getMasterName,
 }) => {
-  if (!hospital) return null;
-
-  const trial = getTrialInfo(hospital);
-  const current = getHospitalMemberCount(hospital.id);
-  const max = PLAN_LIMITS[hospital.plan as PlanType]?.maxUsers ?? 1;
+  const trial = hospital ? getTrialInfo(hospital) : null;
+  const current = hospital ? getHospitalMemberCount(hospital.id) : 0;
+  const max = hospital ? (PLAN_LIMITS[hospital.plan as PlanType]?.maxUsers ?? 1) : 1;
   const maxLabel = max === Infinity ? '∞' : String(max);
-  const used = hospital.base_stock_edit_count ?? 0;
-  const maxEdits = PLAN_LIMITS[hospital.plan as PlanType]?.maxBaseStockEdits ?? 0;
+  const used = hospital?.base_stock_edit_count ?? 0;
+  const maxEdits = hospital ? (PLAN_LIMITS[hospital.plan as PlanType]?.maxBaseStockEdits ?? 0) : 0;
   const maxEditsLabel = maxEdits === Infinity ? '∞' : String(maxEdits);
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-auto overflow-hidden" onClick={e => e.stopPropagation()}>
+    <ModalShell
+      isOpen={!!hospital}
+      onClose={onClose}
+      title="병원 상세"
+      maxWidth="max-w-sm"
+      zIndex={150}
+    >
+      {hospital && (
+        <>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
@@ -276,7 +290,7 @@ export const HospitalDetailModal: React.FC<HospitalDetailModalProps> = ({
             <div className="bg-slate-50 rounded-xl px-3 py-2.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">무료체험</p>
               <p className="text-xs font-bold text-slate-700">
-                {trial.status === 'unused' ? '미사용' : trial.status === 'active' ? `진행 중 (D-${trial.daysLeft})` : '종료'}
+                {trial?.status === 'unused' ? '미사용' : trial?.status === 'active' ? `진행 중 (D-${trial.daysLeft})` : '종료'}
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl px-3 py-2.5">
@@ -305,8 +319,9 @@ export const HospitalDetailModal: React.FC<HospitalDetailModalProps> = ({
             닫기
           </button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalShell>
   );
 };
 
@@ -329,17 +344,15 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
   getHospitalPlan,
   onDeleteUser,
 }) => {
-  if (!userDetail) return null;
-
-  const lastAccessAt = userDetail.last_active_at ?? userDetail.last_sign_in_at;
-  const hospitalPlan = getHospitalPlan(userDetail.hospital_id);
-  const hospitalName = getHospitalName(userDetail.hospital_id);
-  const planName = userDetail.role === 'admin'
+  const lastAccessAt = userDetail ? (userDetail.last_active_at ?? userDetail.last_sign_in_at) : null;
+  const hospitalPlan = userDetail ? getHospitalPlan(userDetail.hospital_id) : null;
+  const hospitalName = userDetail ? getHospitalName(userDetail.hospital_id) : '-';
+  const planName = !userDetail ? '-' : userDetail.role === 'admin'
     ? '-'
     : hospitalPlan
       ? (PLAN_SHORT_NAMES[hospitalPlan.plan as PlanType] || hospitalPlan.plan)
       : 'Free';
-  const roleLabel = userDetail.role === 'admin'
+  const roleLabel = !userDetail ? '-' : userDetail.role === 'admin'
     ? '운영자'
     : userDetail.role === 'master'
       ? '원장'
@@ -348,9 +361,15 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
         : '개인';
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-auto overflow-hidden" onClick={e => e.stopPropagation()}>
+    <ModalShell
+      isOpen={!!userDetail}
+      onClose={onClose}
+      title="회원 상세"
+      maxWidth="max-w-sm"
+      zIndex={150}
+    >
+      {userDetail && (
+        <>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${userDetail.role === 'admin' ? 'bg-rose-100 text-rose-600' : userDetail.role === 'master' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-600'}`}>
@@ -418,8 +437,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
             닫기
           </button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalShell>
   );
 };
 
@@ -440,11 +460,18 @@ export const InquiryReplyModal: React.FC<InquiryReplyModalProps> = ({
   onChangeReplyMessage,
   onSend,
 }) => {
-  if (!inquiry) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <ModalShell
+      isOpen={!!inquiry}
+      onClose={onClose}
+      title="이메일 답장"
+      maxWidth="max-w-lg"
+      className="flex flex-col"
+      closeable={!replySending}
+      closeOnBackdrop={!replySending}
+    >
+      {inquiry && (
+        <>
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
           <h3 className="text-base font-bold text-slate-800">이메일 답장</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
@@ -501,7 +528,8 @@ export const InquiryReplyModal: React.FC<InquiryReplyModalProps> = ({
             {replySending ? '발송 중...' : '발송'}
           </button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalShell>
   );
 };

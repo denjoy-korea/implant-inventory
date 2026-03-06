@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import ModalShell from '../shared/ModalShell';
 import { ExcelRow } from '../../types';
 
 const COLUMNS = ['날짜', '환자정보', '치아번호', '갯수', '수술기록', '구분', '제조사', '브랜드', '규격(SIZE)', '골질', '초기고정'] as const;
@@ -49,8 +50,6 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const saveColSettings = () => {
     localStorage.setItem(COL_SETTINGS_KEY, JSON.stringify({ visible: [...visibleCols], order: colOrder }));
@@ -129,48 +128,6 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   useEffect(() => { setPage(0); }, [search, filterCol, filterCls, dayFilter, sortCol, sortDir]);
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (e.key !== 'Tab') return;
-
-      const container = modalRef.current;
-      if (!container) return;
-
-      const focusable = Array.from(
-        container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')
-      ) as HTMLElement[];
-      const enabledFocusable = focusable.filter((el) => !el.hasAttribute('disabled'));
-
-      if (enabledFocusable.length === 0) return;
-
-      const first = enabledFocusable[0];
-      const last = enabledFocusable[enabledFocusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-
-      if (e.shiftKey) {
-        if (active === first || !container.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
 
   // 구분별 집계 (청구·골이식만은 갯수 0으로 처리)
   const summary = useMemo(() => {
@@ -186,16 +143,16 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
   }, [rows]);
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div
-        ref={modalRef}
-        className="bg-white w-full max-w-6xl h-[85vh] rounded-[24px] shadow-2xl flex flex-col overflow-hidden"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="surgery-data-viewer-title"
-        aria-describedby="surgery-data-viewer-desc"
-      >
+    <ModalShell
+      isOpen={true}
+      onClose={onClose}
+      title="수술기록 데이터 조회"
+      titleId="surgery-data-viewer-title"
+      describedBy="surgery-data-viewer-desc"
+      maxWidth="max-w-6xl"
+      className="h-[85vh] flex flex-col"
+      zIndex={300}
+    >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
           <div>
@@ -212,7 +169,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
             </div>
             <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{filtered.length}건의 레코드 (총 {rows.length}건)</p>
           </div>
-          <button ref={closeButtonRef} onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
+          <button onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
             <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -431,8 +388,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

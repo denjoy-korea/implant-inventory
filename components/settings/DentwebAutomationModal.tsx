@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 import { DentwebAutomationState } from '../../services/dentwebAutomationService';
 
 function formatDateTime(value: string | null): string {
@@ -59,11 +60,14 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
   tokenCopied,
   onCopyToken,
 }) => {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+    <ModalShell
+      isOpen={open}
+      onClose={onClose}
+      title="덴트웹 자동화"
+      maxWidth="max-w-lg"
+      className="p-6 max-h-[85vh] overflow-y-auto"
+    >
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
@@ -223,8 +227,7 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

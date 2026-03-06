@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import ModalShell from './shared/ModalShell';
 import { reviewService, ReviewType, ReviewRole, formatReviewDisplayName } from '../services/reviewService';
-import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ReviewPopupProps {
   userId: string;
@@ -73,17 +73,15 @@ export default function ReviewPopup({ userId, reviewType, initialLastName = '', 
     onClose();
   };
 
-  useEscapeKey(handleClose);
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="review-popup-title"
-        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell
+      isOpen={true}
+      onClose={handleClose}
+      title={meta.title}
+      titleId="review-popup-title"
+      maxWidth="max-w-md"
+      zIndex={200}
+    >
         {/* 헤더 */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
           <div className="flex items-start justify-between gap-3">
@@ -190,7 +188,6 @@ export default function ReviewPopup({ userId, reviewType, initialLastName = '', 
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
