@@ -220,10 +220,12 @@ const SystemAdminUsersTab: React.FC<SystemAdminUsersTabProps> = ({
                   {new Date(profile.created_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })}
                 </td>
                 <td className="hidden xl:table-cell px-3 py-3 text-slate-400 whitespace-nowrap tabular-nums">
-                  {profile.last_sign_in_at
-                    ? new Date(profile.last_sign_in_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })
-                    : <span className="text-slate-300">-</span>
-                  }
+                  {(() => {
+                    const lastAccessAt = profile.last_active_at ?? profile.last_sign_in_at;
+                    return lastAccessAt
+                      ? new Date(lastAccessAt).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' })
+                      : <span className="text-slate-300">-</span>;
+                  })()}
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
                   {profile.role !== 'admin' && profile.id !== currentUserId ? (

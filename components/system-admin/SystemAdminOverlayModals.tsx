@@ -331,6 +331,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
 }) => {
   if (!userDetail) return null;
 
+  const lastAccessAt = userDetail.last_active_at ?? userDetail.last_sign_in_at;
   const hospitalPlan = getHospitalPlan(userDetail.hospital_id);
   const hospitalName = getHospitalName(userDetail.hospital_id);
   const planName = userDetail.role === 'admin'
@@ -396,7 +397,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
             </div>
             <div className="bg-slate-50 rounded-xl px-3 py-2.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">마지막 접속</p>
-              <p className="text-xs font-bold text-slate-700">{userDetail.last_sign_in_at ? new Date(userDetail.last_sign_in_at).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' }) : '-'}</p>
+              <p className="text-xs font-bold text-slate-700">{lastAccessAt ? new Date(lastAccessAt).toLocaleDateString('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' }) : '-'}</p>
             </div>
           </div>
         </div>

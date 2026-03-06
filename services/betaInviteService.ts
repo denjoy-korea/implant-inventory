@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient';
 import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
+export type CodeType = 'beta' | 'partner' | 'promo';
+
 export interface BetaInviteCodeRow {
   id: string;
   code: string;
@@ -17,11 +19,15 @@ export interface BetaInviteCodeRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  code_type: CodeType;
+  channel: string | null;
+  coupon_template_id: string | null;
 }
 
 export interface BetaCodeVerifyResult {
   ok: boolean;
   message: string;
+  codeType?: CodeType;
 }
 
 interface CreateBetaCodeParams {
@@ -30,6 +36,9 @@ interface CreateBetaCodeParams {
   note?: string;
   expiresAt?: string | null;
   usageMode?: 'single' | 'unlimited';
+  codeType?: CodeType;
+  channel?: string;
+  couponTemplateId?: string;
 }
 
 interface UpdateBetaCodeMetaParams {
@@ -52,6 +61,21 @@ export function generateBetaInviteCode(): string {
   return `BETA-${buildRandomSegment(4)}-${buildRandomSegment(4)}`;
 }
 
+export function generateCode(codeType: CodeType, channel?: string): string {
+  const seg = () => buildRandomSegment(4);
+  switch (codeType) {
+    case 'partner': {
+      const ch = (channel || 'PRTN').substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      return `PARTNER-${ch || 'PRTN'}-${seg()}`;
+    }
+    case 'promo':
+      return `PROMO-${seg()}-${seg()}`;
+    case 'beta':
+    default:
+      return generateBetaInviteCode();
+  }
+}
+
 export const betaInviteService = {
   async verifyCode(rawCode: string): Promise<BetaCodeVerifyResult> {
     const code = normalizeBetaInviteCode(rawCode);
@@ -71,40 +95,53 @@ export const betaInviteService = {
     if (row && typeof row === 'object') {
       const ok = Boolean((row as { ok?: boolean }).ok);
       const message = String((row as { message?: string }).message || (ok ? '확인되었습니다.' : '유효하지 않은 코드입니다.'));
-      return { ok, message };
+      const codeType = ((row as { code_type?: string }).code_type || 'beta') as CodeType;
+      return { ok, message, codeType };
     }
 
     return { ok: false, message: '코드 검증 응답이 올바르지 않습니다.' };
   },
 
-  async listCodes(): Promise<BetaInviteCodeRow[]> {
-    const { data, error } = await supabase
+  async listCodes(codeType?: CodeType): Promise<BetaInviteCodeRow[]> {
+    let query = supabase
       .from('beta_invite_codes')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(500);
 
+    if (codeType) {
+      query = query.eq('code_type', codeType);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
-      throw new Error('베타 코드 목록을 불러오지 못했습니다.');
+      throw new Error('코드 목록을 불러오지 못했습니다.');
     }
     return (data || []) as BetaInviteCodeRow[];
   },
 
   async createCode(params: CreateBetaCodeParams): Promise<BetaInviteCodeRow> {
+    const codeType: CodeType = params.codeType || 'beta';
     const distributedTo = String(params.distributedTo || '').trim();
     const distributedContact = String(params.distributedContact || '').trim();
     const note = String(params.note || '').trim();
     const expiresAt = params.expiresAt ?? null;
     const usageMode: 'single' | 'unlimited' = params.usageMode === 'unlimited' ? 'unlimited' : 'single';
+    const channel = codeType === 'partner' ? (String(params.channel || '').trim() || null) : null;
+    const couponTemplateId = params.couponTemplateId || null;
     const { data: authData } = await supabase.auth.getUser();
     const createdBy = authData.user?.id || null;
 
     for (let i = 0; i < 6; i += 1) {
-      const code = generateBetaInviteCode();
+      const code = generateCode(codeType, channel || undefined);
       const { data, error } = await supabase
         .from('beta_invite_codes')
         .insert({
           code,
+          code_type: codeType,
+          channel,
+          coupon_template_id: couponTemplateId,
           distributed_to: distributedTo || null,
           distributed_contact: distributedContact || null,
           note: note || null,
@@ -123,10 +160,10 @@ export const betaInviteService = {
       if (pgCode === '23505') {
         continue;
       }
-      throw new Error('베타 코드 생성에 실패했습니다.');
+      throw new Error('코드 생성에 실패했습니다.');
     }
 
-    throw new Error('베타 코드 생성에 실패했습니다. 다시 시도해주세요.');
+    throw new Error('코드 생성에 실패했습니다. 다시 시도해주세요.');
   },
 
   async updateCodeMeta(id: string, params: UpdateBetaCodeMetaParams): Promise<BetaInviteCodeRow> {
