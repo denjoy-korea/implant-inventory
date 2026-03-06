@@ -323,6 +323,7 @@ Deno.serve(async (req: Request) => {
   // ══════════════════════════════════════════════════════════
 
   if (action === "get_state") {
+    // 사용자(JWT)와 에이전트(agent_token) 모두 허용
     return jsonResponse({ ok: true, state: sanitizeState(current) }, 200, corsHeaders);
   }
 
