@@ -6,6 +6,9 @@
 DROP POLICY IF EXISTS "Allow authenticated read on consultation_requests" ON public.consultation_requests;
 DROP POLICY IF EXISTS "Allow authenticated update on consultation_requests" ON public.consultation_requests;
 DROP POLICY IF EXISTS "Allow authenticated delete on consultation_requests" ON public.consultation_requests;
+DROP POLICY IF EXISTS "consultation_requests_admin_select" ON public.consultation_requests;
+DROP POLICY IF EXISTS "consultation_requests_admin_update" ON public.consultation_requests;
+DROP POLICY IF EXISTS "consultation_requests_admin_delete" ON public.consultation_requests;
 
 CREATE POLICY "consultation_requests_admin_select"
   ON public.consultation_requests FOR SELECT

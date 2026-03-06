@@ -45,6 +45,8 @@ $$;
 REVOKE ALL ON FUNCTION public.touch_last_active_at() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.touch_last_active_at() TO authenticated;
 
+DROP FUNCTION IF EXISTS public.get_all_profiles_with_last_login();
+
 CREATE OR REPLACE FUNCTION public.get_all_profiles_with_last_login()
 RETURNS TABLE (
   id uuid,
