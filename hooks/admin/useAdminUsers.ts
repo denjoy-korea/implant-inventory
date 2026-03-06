@@ -24,6 +24,11 @@ export type PageViewRow = {
     created_at: string;
 };
 
+type ProfileLastAccessRow = {
+    id: string;
+    last_access_at: string | null;
+};
+
 export function useAdminUsers(
     showToast: ShowToast,
     setConfirmModal: SetConfirmModal,
@@ -69,23 +74,41 @@ export function useAdminUsers(
 
     const loadData = async () => {
         setIsLoading(true);
-        const [profileRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
+        const [profileRes, lastAccessRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
             supabase.rpc('get_all_profiles_with_last_login'),
+            supabase.rpc('get_profiles_last_access_map'),
             supabase.from('hospitals').select('*'),
             resetService.getAllRequests(),
             supabase.from('admin_manuals').select('*').order('created_at', { ascending: false }),
             supabase.auth.getUser(),
         ]);
 
+        const lastAccessMap = new Map<string, string>();
+        if (lastAccessRes.data) {
+            for (const row of (lastAccessRes.data as ProfileLastAccessRow[])) {
+                if (row.last_access_at) lastAccessMap.set(row.id, row.last_access_at);
+            }
+        }
+
+        const mergeLastAccess = (rows: DbProfile[]): DbProfile[] => rows.map((row) => {
+            const lastAccessAt = lastAccessMap.get(row.id);
+            if (!lastAccessAt) return row;
+            return {
+                ...row,
+                last_active_at: row.last_active_at ?? lastAccessAt,
+                last_sign_in_at: row.last_sign_in_at ?? lastAccessAt,
+            };
+        });
+
         if (profileRes.error || !profileRes.data || (profileRes.data as DbProfile[]).length === 0) {
             const fallback = await supabase.rpc('get_all_profiles');
             if (fallback.data) {
                 const decrypted = await Promise.all((fallback.data as DbProfile[]).map(decryptProfile));
-                setProfiles(decrypted);
+                setProfiles(mergeLastAccess(decrypted));
             }
         } else {
             const decrypted = await Promise.all((profileRes.data as DbProfile[]).map(decryptProfile));
-            setProfiles(decrypted);
+            setProfiles(mergeLastAccess(decrypted));
         }
 
         if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
