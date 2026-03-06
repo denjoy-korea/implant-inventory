@@ -63,6 +63,10 @@ async function callCryptoService(
   payload: { text?: string; texts?: string[] },
   requireAuth = true,
 ): Promise<string | string[]> {
+  const isAbortError = (err: unknown): boolean =>
+    (err instanceof DOMException && err.name === 'AbortError')
+    || (err instanceof Error && err.name === 'AbortError');
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_ANON_KEY,
@@ -82,8 +86,14 @@ async function callCryptoService(
 
   const body = JSON.stringify({ op, ...payload });
 
-  // 단건 5초, 배치 10초 — initSession 20초 내에 프로필+수술기록 모두 실패 처리 가능
-  const defaultTimeout = op === 'decrypt_batch' ? 10_000 : 5_000;
+  // Edge Function cold start/대용량 복호화를 고려한 operation별 타임아웃
+  const timeoutByOp: Record<typeof op, number> = {
+    encrypt: 7_500,
+    decrypt: 8_000,
+    hash: 7_500,
+    decrypt_batch: 10_000,
+  };
+  const defaultTimeout = timeoutByOp[op];
 
   const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = defaultTimeout) => {
     const controller = new AbortController();
@@ -100,24 +110,28 @@ async function callCryptoService(
   try {
     res = await fetchWithTimeout(headers);
   } catch (err) {
-    // AbortError(타임아웃)는 재시도해도 소용없음 — 게이트웨이 자체가 불안정
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      console.warn(`[cryptoUtils] ${op} 타임아웃, 재시도 생략`);
-      throw err;
+    // AbortError(타임아웃): decrypt_batch는 재시도 시 총 대기시간만 증가하므로 즉시 실패 처리
+    if (isAbortError(err)) {
+      if (op === 'decrypt_batch') {
+        throw err;
+      }
+      console.warn(`[cryptoUtils] ${op} 타임아웃, 확장 타임아웃으로 1회 재시도`);
+      res = await fetchWithTimeout(headers, defaultTimeout + 3_000);
+    } else {
+      // 네트워크 오류 시 토큰 재확인 후 1회 재시도
+      console.warn(`[cryptoUtils] ${op} 첫 시도 실패, 재시도:`, err);
+      if (requireAuth) {
+        const freshToken = await getValidToken();
+        if (freshToken) headers['Authorization'] = `Bearer ${freshToken}`;
+      }
+      res = await fetchWithTimeout(headers);
     }
-    // 네트워크 오류 시 토큰 재확인 후 1회 재시도
-    console.warn(`[cryptoUtils] ${op} 첫 시도 실패, 재시도:`, err);
-    if (requireAuth) {
-      const freshToken = await getValidToken();
-      if (freshToken) headers['Authorization'] = `Bearer ${freshToken}`;
-    }
-    res = await fetchWithTimeout(headers);
   }
 
   // 502/503/504 게이트웨이 오류 시 1회 재시도 (짧은 타임아웃)
   if (res.status >= 502 && res.status <= 504) {
     console.warn(`[cryptoUtils] ${op} 게이트웨이 오류 ${res.status}, 재시도`);
-    res = await fetchWithTimeout(headers, 5_000);
+    res = await fetchWithTimeout(headers, Math.max(8_000, defaultTimeout));
   }
 
   // 401 수신 시: 서버 측 인증 거부 → 세션 강제 갱신 후 1회 재시도
@@ -148,6 +162,27 @@ async function callCryptoService(
     throw new Error(`[cryptoUtils] crypto-service (${op}): 응답에 result 필드 없음`);
   }
   return value;
+}
+
+/**
+ * Edge Function 런타임 워밍업 (콜드 스타트 방지).
+ * hash op는 인증 불요 → 앱 마운트 시 즉시 호출 가능.
+ * 반환된 Promise를 await하면 워밍업 완료 후 decrypt를 시작할 수 있다.
+ */
+let _warmupPromise: Promise<void> | null = null;
+
+export function warmupCryptoService(): Promise<void> {
+  if (!_warmupPromise) {
+    _warmupPromise = callCryptoService('hash', { text: 'warmup' }, false)
+      .then(() => {})
+      .catch(() => {});
+  }
+  return _warmupPromise;
+}
+
+/** decrypt 호출 전에 워밍업 완료를 기다리는 헬퍼. 이미 warm이면 즉시 반환. */
+export function waitForWarmup(): Promise<void> {
+  return _warmupPromise ?? Promise.resolve();
 }
 
 export async function encryptPatientInfo(text: string): Promise<string> {
@@ -190,14 +225,33 @@ export async function decryptPatientInfoBatch(
   // 모두 평문이면 Edge Function 호출 없이 즉시 반환
   if (!encryptedValues.length) return encryptedList;
 
-  // crypto-service 배치 한도(500) 초과 시 청킹 처리
-  const DECRYPT_BATCH_LIMIT = 500;
-  const decryptedValues: string[] = [];
-  for (let i = 0; i < encryptedValues.length; i += DECRYPT_BATCH_LIMIT) {
-    const chunk = encryptedValues.slice(i, i + DECRYPT_BATCH_LIMIT);
-    const chunkResult = await callCryptoService('decrypt_batch', { texts: chunk }, true) as string[];
-    decryptedValues.push(...chunkResult);
+  // 1회 payload가 너무 크면 timeout 확률이 높아져 200개 단위 + 동시성 2로 분산
+  const DECRYPT_BATCH_LIMIT = 200;
+  const DECRYPT_BATCH_CONCURRENCY = 2;
+  const chunkCount = Math.ceil(encryptedValues.length / DECRYPT_BATCH_LIMIT);
+  const chunkResults: string[][] = new Array(chunkCount);
+
+  for (let base = 0; base < chunkCount; base += DECRYPT_BATCH_CONCURRENCY) {
+    const workers: Promise<void>[] = [];
+    const end = Math.min(base + DECRYPT_BATCH_CONCURRENCY, chunkCount);
+    for (let chunkIndex = base; chunkIndex < end; chunkIndex++) {
+      const start = chunkIndex * DECRYPT_BATCH_LIMIT;
+      const chunk = encryptedValues.slice(start, start + DECRYPT_BATCH_LIMIT);
+      workers.push(
+        (async () => {
+          try {
+            const chunkResult = await callCryptoService('decrypt_batch', { texts: chunk }, true) as string[];
+            chunkResults[chunkIndex] = chunkResult;
+          } catch (e) {
+            // chunk 실패 시 전체 실패로 전파하지 않고 암호문 유지(하단 sanitize 단계에서 마스킹)
+            chunkResults[chunkIndex] = chunk;
+          }
+        })(),
+      );
+    }
+    await Promise.all(workers);
   }
+  const decryptedValues = chunkResults.flat();
 
   // W-1 fix: 서버 측 복호화 실패 시 ciphertext를 그대로 반환하는 경우 감지
   // decryptText()의 3단계 fallback이 모두 실패하면 원본 암호문을 반환 → 클라이언트에서 차단

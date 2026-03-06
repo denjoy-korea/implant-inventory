@@ -20,7 +20,8 @@ import { orderService } from '../services/orderService';
 import { hospitalService } from '../services/hospitalService';
 import { planService } from '../services/planService';
 import { resetService } from '../services/resetService';
-import { dbToInventoryItem, dbToExcelRow, dbToExcelRowBatch, dbToOrder, dbToUser } from '../services/mappers';
+import { dbToInventoryItem, dbToExcelRow, dbToExcelRowBatch, dbToExcelRowBatchMasked, dbToOrder, dbToUser } from '../services/mappers';
+import { warmupCryptoService, waitForWarmup } from '../services/cryptoUtils';
 import { supabase } from '../services/supabaseClient';
 import { pageViewService } from '../services/pageViewService';
 import { onboardingService } from '../services/onboardingService';
@@ -56,15 +57,27 @@ type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
 
 const SESSION_POLL_INTERVAL_MS = 60_000;
 const SESSION_TOKEN_KEY = 'dentweb_session_token';
-const LOAD_TIMEOUT_MS = 20_000; // 20초 초과 시 스피너 강제 해제
+const LOAD_TIMEOUT_MS = 45_000; // 대용량 초기 동기화(복호화 포함) 여유 시간 확보
 
 export function useAppState(onNotify?: NotifyFn) {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
   const notify = onNotify ?? ((msg: string, _type?: string) => console.warn('[useAppState] notify fallback:', msg));
   const sessionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hospitalLoadInFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const signedInInFlightRef = useRef<Promise<void> | null>(null);
+  const lastSignedInAtRef = useRef<number>(0);
+  // initSession이 세션 복원 + loadHospitalData 완료 시 true → SIGNED_IN 중복 실행 방지
+  const initSessionHandledRef = useRef(false);
 
   /** 병원 데이터 로드 (로그인 후 / 세션 복원 시) */
   const loadHospitalData = async (user: User) => {
+    const loadKey = `${user.id}:${user.hospitalId}:${user.status}:${user.role}`;
+    const inFlight = hospitalLoadInFlightRef.current;
+    if (inFlight && inFlight.key === loadKey) {
+      return inFlight.promise;
+    }
+
+    const promise = (async () => {
     // paused 상태: 서비스 접근 차단 화면으로 라우팅
     if (user.status === 'paused') {
       setState(prev => ({
@@ -115,7 +128,7 @@ export function useAppState(onNotify?: NotifyFn) {
         inventoryService.getInventory(),
         surgeryService.getSurgeryRecords({ fromDate }),
         orderService.getOrders(),
-        hospitalService.getMembers(user.hospitalId),
+        hospitalService.getActiveMemberCount(user.hospitalId),
         hospitalService.getHospitalById(user.hospitalId),
       ]);
       // 위에서 이미 조회한 planState 재사용 (중복 API 호출 방지)
@@ -133,14 +146,8 @@ export function useAppState(onNotify?: NotifyFn) {
       }
 
       const inventory = inventoryData.map(dbToInventoryItem);
-      // 수술기록 복호화 실패 시에도 대시보드 진입 허용 (빈 배열로 fallback)
-      let surgeryRows: ExcelRow[];
-      try {
-        surgeryRows = await dbToExcelRowBatch(surgeryData);
-      } catch (e) {
-        console.warn('[useAppState] 수술기록 복호화 실패, 빈 배열로 대체:', e);
-        surgeryRows = [];
-      }
+      // 초기 진입은 복호화 대기 없이 마스킹 데이터로 즉시 렌더
+      const surgeryRows = dbToExcelRowBatchMasked(surgeryData);
       const orders = ordersData.map(dbToOrder);
 
       // 기존 레코드 중 patient_info_hash 없는 것 백필 (028 마이그레이션 이후 1회성)
@@ -162,7 +169,7 @@ export function useAppState(onNotify?: NotifyFn) {
         surgeryMaster: wasReset ? {} as Record<string, ExcelRow[]> : { '수술기록지': surgeryRows },
         orders: wasReset ? [] : orders,
         planState,
-        memberCount: membersData.length,
+        memberCount: membersData,
         hospitalName: hospitalData?.name || '',
         hospitalMasterAdminId: hospitalData?.masterAdminId || '',
         hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
@@ -172,6 +179,27 @@ export function useAppState(onNotify?: NotifyFn) {
 
       if (wasReset) {
         notify('예약된 데이터 초기화가 완료되었습니다. 재고, 수술 기록, 주문 데이터가 모두 삭제되었습니다.', 'info');
+      }
+
+      // 백그라운드 복호화: 워밍업 완료 대기 → warm 상태에서 빠르게 처리
+      if (!wasReset && surgeryData.length > 0) {
+        void waitForWarmup()
+          .then(() => dbToExcelRowBatch(surgeryData))
+          .then((decryptedRows) => {
+            setState((prev) => {
+              if (prev.user?.id !== user.id || prev.user?.hospitalId !== user.hospitalId) return prev;
+              return {
+                ...prev,
+                surgeryMaster: {
+                  ...prev.surgeryMaster,
+                  '수술기록지': decryptedRows,
+                },
+              };
+            });
+          })
+          .catch((e) => {
+            console.warn('[useAppState] 수술기록 백그라운드 복호화 실패, 마스킹 유지:', e);
+          });
       }
     } catch (error) {
       console.error('[useAppState] Data loading failed:', error);
@@ -185,6 +213,16 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalBillingProgram: null,
         isLoading: false,
       }));
+    }
+    })();
+
+    hospitalLoadInFlightRef.current = { key: loadKey, promise };
+    try {
+      await promise;
+    } finally {
+      if (hospitalLoadInFlightRef.current?.promise === promise) {
+        hospitalLoadInFlightRef.current = null;
+      }
     }
   };
 
@@ -288,7 +326,7 @@ export function useAppState(onNotify?: NotifyFn) {
   /** 프로필 존재 확인 — 방출(kick)으로 계정 삭제된 경우 감지 */
   const checkProfileExists = async (): Promise<boolean> => {
     try {
-      const profile = await authService.getProfileById();
+      const profile = await authService.getProfileById(undefined, { decrypt: false });
       return profile !== null;
     } catch {
       return true; // 네트워크 오류 시 로그아웃하지 않음
@@ -334,7 +372,7 @@ export function useAppState(onNotify?: NotifyFn) {
   const waitForSignedInProfile = async () => {
     const maxAttempts = 8;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const profile = await authService.getProfileById();
+      const profile = await authService.getProfileById(undefined, { decrypt: false });
       if (!profile) {
         if (attempt < maxAttempts - 1) {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -355,6 +393,9 @@ export function useAppState(onNotify?: NotifyFn) {
 
   // 세션 초기화 및 Auth 상태 변경 구독
   useEffect(() => {
+    // Edge Function 콜드 스타트 방지: 인증 불요 hash 요청으로 런타임 워밍업
+    warmupCryptoService();
+
     const initSession = async () => {
       const timeoutId = setTimeout(() => {
         console.error('[useAppState] initSession timed out, forcing isLoading: false');
@@ -403,11 +444,11 @@ export function useAppState(onNotify?: NotifyFn) {
             }
           }
 
-          let profile = await authService.getProfileById();
+          let profile = await authService.getProfileById(undefined, { decrypt: false });
           // 프로필 조회 실패 시 500ms 후 1회 재시도 (RPC 일시 오류 대응)
           if (!profile) {
             await new Promise(r => setTimeout(r, 500));
-            profile = await authService.getProfileById();
+            profile = await authService.getProfileById(undefined, { decrypt: false });
           }
           if (profile) {
             // 기존 세션 복원 시 토큰 유효성 1회 검증
@@ -422,10 +463,13 @@ export function useAppState(onNotify?: NotifyFn) {
             if (profile.mfa_enabled) {
               const isTrusted = await authService.checkTrustedDevice();
               if (!isTrusted) {
+                let mfaPendingEmail = profile.email;
+                const decryptedForMfa = await authService.getProfileById(undefined, { decrypt: true }).catch(() => null);
+                if (decryptedForMfa?.email) mfaPendingEmail = decryptedForMfa.email;
                 setState(prev => ({
                   ...prev,
                   currentView: 'mfa_otp',
-                  mfaPendingEmail: profile.email,
+                  mfaPendingEmail,
                   isLoading: false,
                 }));
                 return;
@@ -433,6 +477,7 @@ export function useAppState(onNotify?: NotifyFn) {
             }
             const user = dbToUser(profile);
             await loadHospitalData(user);
+            initSessionHandledRef.current = true;
             startSessionPolling();
             // 소셜 연동 완료 후 복귀 시 프로필 모달 자동 오픈
             if (localStorage.getItem('_link_success_provider')) {
@@ -458,6 +503,9 @@ export function useAppState(onNotify?: NotifyFn) {
     // SIGNED_IN 처리는 반드시 fire-and-forget (void IIFE) 으로 실행해야 함.
     const { data: { subscription } } = authService.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        signedInInFlightRef.current = null;
+        hospitalLoadInFlightRef.current = null;
+        initSessionHandledRef.current = false;
         stopSessionPolling();
         setState(prev => ({
           ...prev,
@@ -477,7 +525,15 @@ export function useAppState(onNotify?: NotifyFn) {
       // 이메일 인증 링크 클릭 → 토큰 교환 → SIGNED_IN 이벤트로 자동 대시보드 진입
       // fire-and-forget: 콜백을 즉시 반환해 signInWithPassword 블로킹 방지
       if (event === 'SIGNED_IN') {
-        void (async () => {
+        // initSession이 이미 세션 복원 + loadHospitalData를 완료한 경우 중복 실행 방지
+        if (initSessionHandledRef.current) return;
+        const now = Date.now();
+        // 초기 세션 복원/토큰 갱신 과정에서 중복 SIGNED_IN 이벤트가 짧게 연속 발행할 수 있음
+        if (now - lastSignedInAtRef.current < 800) return;
+        lastSignedInAtRef.current = now;
+        if (signedInInFlightRef.current) return;
+
+        const task = (async () => {
           const profile = await waitForSignedInProfile();
           if (profile) {
             let user = dbToUser(profile);
@@ -485,10 +541,10 @@ export function useAppState(onNotify?: NotifyFn) {
             // 이메일 인증 완료 후 병원/워크스페이스 생성 (이메일 인증 ON 경로)
             // signUp()에서 authData.session이 없어 병원 생성을 건너뛴 경우 여기서 처리
             if (!user.hospitalId && localStorage.getItem('_pending_hospital_setup')) {
-              const hospitalId = await authService.createHospitalForEmailConfirmed(profile.id);
+                const hospitalId = await authService.createHospitalForEmailConfirmed(profile.id);
               if (hospitalId) {
                 // hospital_id가 업데이트된 최신 프로필 로드
-                const updatedProfile = await authService.getProfileById();
+                const updatedProfile = await authService.getProfileById(undefined, { decrypt: false });
                 if (updatedProfile) {
                   user = dbToUser(updatedProfile);
                 }
@@ -515,6 +571,13 @@ export function useAppState(onNotify?: NotifyFn) {
             startSessionPolling();
           }
         })();
+
+        signedInInFlightRef.current = task;
+        void task.finally(() => {
+          if (signedInInFlightRef.current === task) {
+            signedInInFlightRef.current = null;
+          }
+        });
       }
     });
 
