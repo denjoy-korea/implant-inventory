@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 Deno.serve(async (req: Request) => {
@@ -10,6 +11,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders = getCorsHeaders(req);
+
+    // Rate limit: 10 requests per minute per IP
+    const rateLimited = checkRateLimit(req, corsHeaders, 10, 60_000);
+    if (rateLimited) return rateLimited;
+
     const webhookUrl = await getSlackWebhookUrl("멤버알림");
     if (!webhookUrl) {
       return new Response(JSON.stringify({ success: false }), {

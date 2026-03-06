@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -16,6 +17,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders = getCorsHeaders(req);
+
+    // Rate limit: 10 requests per minute per IP
+    const rateLimited = checkRateLimit(req, corsHeaders, 10, 60_000);
+    if (rateLimited) return rateLimited;
+
     const webhookUrl = await getSlackWebhookUrl("멤버알림");
     if (!webhookUrl) {
       console.warn("[notify-signup] 멤버알림 채널 미등록 — 슬랙 관리 UI에서 채널을 추가하세요");

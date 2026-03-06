@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
@@ -275,6 +276,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders = getCorsHeaders(req);
+
+    // Rate limit: 5 requests per minute per IP
+    const rateLimited = checkRateLimit(req, corsHeaders, 5, 60_000);
+    if (rateLimited) return rateLimited;
+
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -283,6 +289,12 @@ Deno.serve(async (req: Request) => {
     const { email, grade, score, reportText, isDetailed, hospitalName, region, contact } = await req.json();
     if (!email || !reportText) {
       return new Response(JSON.stringify({ error: "email, reportText는 필수입니다." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Email format validation
+    const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(email)) {
+      return new Response(JSON.stringify({ error: "유효하지 않은 이메일 형식입니다." }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 1. DB 저장

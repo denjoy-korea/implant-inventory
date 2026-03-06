@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
 const TIME_SLOT_KO: Record<string, string> = {
@@ -80,6 +81,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const corsHeaders    = getCorsHeaders(req);
+
+    // Rate limit: 5 requests per minute per IP
+    const rateLimited = checkRateLimit(req, corsHeaders, 5, 60_000);
+    if (rateLimited) return rateLimited;
+
     const supabaseUrl    = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const patientDataKey = Deno.env.get("PATIENT_DATA_KEY");

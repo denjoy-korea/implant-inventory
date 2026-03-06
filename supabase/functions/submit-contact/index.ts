@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
 
@@ -47,6 +48,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  // Rate limit: 5 requests per minute per IP
+  const rateLimited = checkRateLimit(req, corsHeaders, 5, 60_000);
+  if (rateLimited) return rateLimited;
 
   const requestId = crypto.randomUUID();
 
