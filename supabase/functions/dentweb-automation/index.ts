@@ -87,28 +87,14 @@ type AgentContext = {
 
 type AuthContext = UserContext | AgentContext;
 
-function parseJwtPayload(token: string): Json | null {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = "=".repeat((4 - (base64.length % 4)) % 4);
-    const payload = atob(base64 + pad);
-    const parsed = JSON.parse(payload) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    return parsed as Json;
-  } catch {
-    return null;
-  }
-}
-
 async function resolveUserContext(
   admin: ReturnType<typeof createClient>,
   token: string,
 ): Promise<UserContext | null> {
-  const payload = parseJwtPayload(token);
-  const userId = String(payload?.sub ?? "").trim();
-  if (!userId) return null;
+  // JWT 서명 검증: Supabase auth.getUser()로 토큰 유효성 확인
+  const { data: authData, error: authError } = await admin.auth.getUser(token);
+  if (authError || !authData?.user) return null;
+  const userId = authData.user.id;
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")
@@ -370,7 +356,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "generate_token") {
-    if (ctx.type !== "user") {
+    if (ctx.type !== "user" || !ctx.isMaster) {
       return jsonResponse({ ok: false, error: "forbidden" }, 403, corsHeaders);
     }
 

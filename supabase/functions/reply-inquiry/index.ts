@@ -3,6 +3,15 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.1.0/mod.ts";
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     const corsHeaders = getCorsHeaders(req);
@@ -82,29 +91,29 @@ Deno.serve(async (req: Request) => {
       </td></tr>
       <tr><td style="padding:36px 40px;">
         <div style="font-size:20px;font-weight:700;color:#1e293b;margin-bottom:4px;font-family:Arial,sans-serif;">문의에 대한 답변입니다</div>
-        <div style="font-size:14px;color:#64748b;margin-bottom:28px;font-family:Arial,sans-serif;">${hospitalName} · ${contactName}님</div>
+        <div style="font-size:14px;color:#64748b;margin-bottom:28px;font-family:Arial,sans-serif;">${escapeHtml(hospitalName)} · ${escapeHtml(contactName)}님</div>
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
           <tr>
             <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#94a3b8;font-family:Arial,sans-serif;">병원명</td>
-            <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${hospitalName}</td>
+            <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${escapeHtml(hospitalName)}</td>
           </tr>
           <tr>
             <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#94a3b8;font-family:Arial,sans-serif;">담당자</td>
-            <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${contactName}</td>
+            <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${escapeHtml(contactName)}</td>
           </tr>
           <tr>
             <td style="padding:10px 0;font-size:14px;color:#94a3b8;font-family:Arial,sans-serif;">문의 유형</td>
-            <td style="padding:10px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${inquiryType}</td>
+            <td style="padding:10px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;font-family:Arial,sans-serif;">${escapeHtml(inquiryType)}</td>
           </tr>
         </table>
         <div style="background:#f0f0ff;border-left:4px solid #4f46e5;border-radius:8px;padding:20px;margin-bottom:24px;">
           <div style="font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;font-family:Arial,sans-serif;">답변 내용</div>
-          <div style="font-size:14px;color:#1e293b;line-height:1.7;white-space:pre-wrap;font-family:Arial,sans-serif;">${replyMessage}</div>
+          <div style="font-size:14px;color:#1e293b;line-height:1.7;white-space:pre-wrap;font-family:Arial,sans-serif;">${escapeHtml(replyMessage)}</div>
         </div>
         <div style="border-top:1px solid #f1f5f9;margin-bottom:20px;"></div>
         <div style="background:#f8fafc;border-radius:8px;padding:16px 20px;">
           <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;font-family:Arial,sans-serif;">원본 문의 내용</div>
-          <div style="font-size:13px;color:#64748b;line-height:1.7;white-space:pre-wrap;font-family:Arial,sans-serif;">${originalContent}</div>
+          <div style="font-size:13px;color:#64748b;line-height:1.7;white-space:pre-wrap;font-family:Arial,sans-serif;">${escapeHtml(originalContent)}</div>
         </div>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:20px 40px;font-size:12px;color:#94a3b8;line-height:1.8;font-family:Arial,sans-serif;">
