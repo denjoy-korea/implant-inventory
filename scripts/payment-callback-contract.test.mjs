@@ -35,7 +35,10 @@ test('plan service billing record also follows live mode flag', () => {
 
 test('toss-payment-confirm contract includes is_test_payment context', () => {
   const fn = read('supabase/functions/toss-payment-confirm/index.ts');
-  assert.match(fn, /select\("hospital_id, payment_status, plan, billing_cycle, is_test_payment"\)/);
+  assert.match(
+    fn,
+    /select\("hospital_id,\s*payment_status,\s*plan,\s*billing_cycle,\s*is_test_payment[^"]*"\)/,
+  );
   assert.match(fn, /is_test_payment:/);
   assert.match(fn, /rpc\("process_payment_callback"/);
 });
