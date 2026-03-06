@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 
 interface FailAllReturnConfirmModalProps {
   isOpen: boolean;
@@ -23,21 +24,17 @@ const FailAllReturnConfirmModal: React.FC<FailAllReturnConfirmModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 z-[200]"
-      onClick={() => !isSubmitting && onClose()}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="일괄 반품 처리"
+      titleId="all-return-modal-title"
+      maxWidth="max-w-md"
+      closeable={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
     >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-5"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="all-return-modal-title"
-      >
-        {/* Header */}
+      <div className="p-6 space-y-5">
         <div className="flex items-start justify-between">
           <div>
             <h2 id="all-return-modal-title" className="text-base font-black text-slate-800">일괄 반품 처리</h2>
@@ -54,12 +51,10 @@ const FailAllReturnConfirmModal: React.FC<FailAllReturnConfirmModalProps> = ({
           </button>
         </div>
 
-        {/* 전자장부 안내 */}
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[11px] text-amber-800 font-semibold">
           반품 처리 후 전자장부에서 주문 금액 변동을 확인하세요.
         </div>
 
-        {/* 제조사별 미처리 목록 */}
         <div className="space-y-2">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">반품 처리 대상</p>
           {manufacturers.map((manufacturer) => {
@@ -78,7 +73,6 @@ const FailAllReturnConfirmModal: React.FC<FailAllReturnConfirmModalProps> = ({
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button
             onClick={onClose}
@@ -96,7 +90,7 @@ const FailAllReturnConfirmModal: React.FC<FailAllReturnConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

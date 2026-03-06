@@ -52,7 +52,6 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     handleAuditClose,
     handleApply,
     getBrandDotColor,
-    summaryModalRef,
     summaryCloseButtonRef,
     auditHistory,
   } = useInventoryAudit({ inventory, hospitalId, userName, onApplied, onAuditSessionComplete, showHistory, onCloseHistory });
@@ -764,7 +763,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
 
         <AuditSummaryModal
           show={showAuditSummary}
-          summaryModalRef={summaryModalRef}
+
           summaryCloseButtonRef={summaryCloseButtonRef}
           auditedCount={auditedCount}
           mismatchItems={mismatchItems}

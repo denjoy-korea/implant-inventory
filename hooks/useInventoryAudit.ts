@@ -39,7 +39,6 @@ export function useInventoryAudit({
   const [expandedAuditKeys, setExpandedAuditKeys] = useState<Set<string>>(new Set());
   const { toast, showToast } = useToast();
   const [auditHistory, setAuditHistory] = useState<AuditHistoryItem[]>([]);
-  const summaryModalRef = useRef<HTMLDivElement>(null);
   const summaryCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
 
@@ -217,45 +216,7 @@ export function useInventoryAudit({
     if (showAuditSummary) summaryCloseButtonRef.current?.focus();
   }, [showAuditSummary]);
 
-  // AuditSummary 모달 포커스 트랩 + ESC (AuditHistoryModal은 ModalShell이 자체 처리)
-  useEffect(() => {
-    if (!showAuditSummary) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleAuditClose();
-        return;
-      }
-
-      if (e.key !== 'Tab') return;
-      const container = summaryModalRef.current;
-      if (!container) return;
-
-      const focusable = Array.from(
-        container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')
-      ) as HTMLElement[];
-      const enabledFocusable = focusable.filter((el) => !el.hasAttribute('disabled'));
-      if (enabledFocusable.length === 0) return;
-
-      const first = enabledFocusable[0];
-      const last = enabledFocusable[enabledFocusable.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-
-      if (e.shiftKey) {
-        if (active === first || !container.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleAuditClose, showAuditSummary]);
+  // AuditSummary 포커스 트랩 + ESC는 ModalShell이 자동 처리
 
   const handleApply = async () => {
     setIsApplying(true);
@@ -345,7 +306,6 @@ export function useInventoryAudit({
     handleAuditClose,
     handleApply,
     getBrandDotColor,
-    summaryModalRef,
     summaryCloseButtonRef,
   };
 }

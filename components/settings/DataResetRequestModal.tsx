@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalShell from '../shared/ModalShell';
 
 interface DataResetRequestModalProps {
   open: boolean;
@@ -17,11 +18,15 @@ const DataResetRequestModal: React.FC<DataResetRequestModalProps> = ({
   isSubmitting,
   onSubmit,
 }) => {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={(event) => event.stopPropagation()}>
+    <ModalShell
+      isOpen={open}
+      onClose={onClose}
+      title="데이터 초기화 요청"
+      role="alertdialog"
+      maxWidth="max-w-md"
+    >
+      <div className="p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -69,7 +74,7 @@ const DataResetRequestModal: React.FC<DataResetRequestModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 
