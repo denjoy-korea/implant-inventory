@@ -496,11 +496,11 @@ export function useAppState(onNotify?: NotifyFn) {
             }
             await loadHospitalData(user);
             // 소셜 로그인 시 세션 토큰 발급 (이메일 로그인은 signIn()에서 발급)
-            if (!localStorage.getItem(SESSION_TOKEN_KEY)) {
+            if (!sessionStorage.getItem(SESSION_TOKEN_KEY)) {
               try {
                 const token = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
                 await supabase.rpc('set_session_token', { p_token: token });
-                localStorage.setItem(SESSION_TOKEN_KEY, token);
+                sessionStorage.setItem(SESSION_TOKEN_KEY, token);
               } catch (e) {
                 console.warn('[useAppState] social login session token setup failed:', e);
               }

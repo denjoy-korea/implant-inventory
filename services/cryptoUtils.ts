@@ -81,26 +81,41 @@ async function callCryptoService(
   }
 
   const body = JSON.stringify({ op, ...payload });
-  let res = await fetch(CRYPTO_SERVICE_URL, {
-    method: 'POST',
-    headers,
-    body,
-  });
+
+  const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = 15_000) => {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(CRYPTO_SERVICE_URL, {
+      method: 'POST',
+      headers: hdrs,
+      body,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(tid));
+  };
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(headers);
+  } catch (err) {
+    // 타임아웃 또는 네트워크 오류 시 1회 재시도
+    console.warn(`[cryptoUtils] ${op} 첫 시도 실패, 재시도:`, err);
+    res = await fetchWithTimeout(headers);
+  }
+
+  // 502/503/504 게이트웨이 오류 시 1회 재시도
+  if (res.status >= 502 && res.status <= 504) {
+    console.warn(`[cryptoUtils] ${op} 게이트웨이 오류 ${res.status}, 재시도`);
+    res = await fetchWithTimeout(headers);
+  }
 
   // 401 수신 시: 서버 측 인증 거부 → 세션 강제 갱신 후 1회 재시도
-  // (클라이언트 기준 토큰이 유효해 보여도 서버가 거부할 수 있으므로
-  //  refreshSession()으로 무조건 새 access_token을 발급받아 재시도)
   if (requireAuth && res.status === 401) {
     try {
       const { data } = await supabase.auth.refreshSession();
       const freshToken = data?.session?.access_token;
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
-        res = await fetch(CRYPTO_SERVICE_URL, {
-          method: 'POST',
-          headers,
-          body,
-        });
+        res = await fetchWithTimeout(headers);
       }
     } catch {
       // refresh 실패 시 원래 응답으로 계속 진행
