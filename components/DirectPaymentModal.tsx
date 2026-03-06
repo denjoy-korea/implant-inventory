@@ -61,8 +61,8 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       setDiscountPreview(null);
       return;
     }
-    const originalAmount = tossPaymentService.calcTotalAmount(plan, billing);
-    setDiscountPreview(couponService.previewDiscount(coupon, originalAmount));
+    const baseAmount = tossPaymentService.calcBaseAmount(plan, billing);
+    setDiscountPreview(couponService.previewDiscount(coupon, baseAmount));
   }, [selectedCouponId, plan, billing, availableCoupons]);
 
   const handleSubmit = async () => {

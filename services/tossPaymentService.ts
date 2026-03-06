@@ -158,13 +158,20 @@ export interface TossConfirmResult {
 
 export const tossPaymentService = {
   /**
-   * VAT 포함 결제 금액 계산
+   * VAT 제외 기본 금액
    */
-  calcTotalAmount(plan: PlanType, billingCycle: BillingCycle): number {
-    const basePrice = billingCycle === 'yearly'
+  calcBaseAmount(plan: PlanType, billingCycle: BillingCycle): number {
+    return billingCycle === 'yearly'
       ? PLAN_PRICING[plan].yearlyPrice * 12
       : PLAN_PRICING[plan].monthlyPrice;
-    return basePrice + Math.round(basePrice * 0.1);
+  },
+
+  /**
+   * VAT 포함 결제 금액 계산 (쿠폰 미적용)
+   */
+  calcTotalAmount(plan: PlanType, billingCycle: BillingCycle): number {
+    const base = this.calcBaseAmount(plan, billingCycle);
+    return base + Math.round(base * 0.1);
   },
 
   /**
@@ -182,10 +189,12 @@ export const tossPaymentService = {
       return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의하세요.' };
     }
 
-    // 1. 금액 계산 (VAT 포함) + 쿠폰 할인 적용
+    // 1. 금액 계산: 기본가 → 쿠폰 할인 → VAT
+    const baseAmount = this.calcBaseAmount(plan, billingCycle);
+    const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, baseAmount) : 0;
+    const afterDiscount = baseAmount - appliedDiscount;
+    const totalAmount = afterDiscount + Math.round(afterDiscount * 0.1);
     const originalAmount = this.calcTotalAmount(plan, billingCycle);
-    const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, originalAmount) : 0;
-    const totalAmount = originalAmount - appliedDiscount;
     const isTestPayment = resolveIsTestPayment();
 
     if (totalAmount <= 0) {

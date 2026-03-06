@@ -22,14 +22,19 @@ const PLAN_BASE_PRICES: Record<string, Record<string, number>> = {
   business: { monthly: 129000, yearly: 103000 },
 };
 
-/** VAT 포함 정가 계산 (tossPaymentService.calcTotalAmount와 동일 로직) */
-function calcCanonicalAmount(plan: string, billingCycle: string): number | null {
+/** VAT 제외 기본 금액 */
+function calcBaseAmount(plan: string, billingCycle: string): number | null {
   const prices = PLAN_BASE_PRICES[plan];
   if (!prices) return null;
-  const basePrice = billingCycle === "yearly"
+  return billingCycle === "yearly"
     ? prices.yearly * 12
     : prices.monthly;
-  return basePrice + Math.round(basePrice * 0.1);
+}
+
+/** VAT 포함 최종 금액 (할인 후 기본가에 VAT 적용) */
+function calcAmountWithVat(base: number, discount: number): number {
+  const afterDiscount = base - discount;
+  return afterDiscount + Math.round(afterDiscount * 0.1);
 }
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
@@ -188,21 +193,20 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Billing is not pending", status }, 409);
   }
 
-  // 금액 검증: plan + billing_cycle로 서버에서 정가를 독립 계산
-  // billing_history.amount는 클라이언트 작성값이므로 신뢰하지 않음
+  // 금액 검증: plan + billing_cycle로 서버에서 기본가를 독립 계산
+  // 순서: 기본가 → 쿠폰 할인 → VAT
   const billingPlan = billing.plan;
   const billingCycleVal = billing.billing_cycle;
-  const canonicalAmount = calcCanonicalAmount(billingPlan, billingCycleVal);
+  const baseAmount = calcBaseAmount(billingPlan, billingCycleVal);
 
-  if (canonicalAmount === null) {
+  if (baseAmount === null) {
     console.error("[toss-payment-confirm] Unknown plan or billing_cycle:", billingPlan, billingCycleVal);
     return jsonResponse({ error: "Invalid plan configuration" }, 400);
   }
 
-  // 쿠폰 할인 서버사이드 재검증
+  // 쿠폰 할인 서버사이드 재검증 (VAT 전 기본가 기준)
   let serverDiscountAmount = 0;
   if (billing.coupon_id && billing.discount_amount > 0) {
-    // 쿠폰 유효성 확인: active 상태 + 사용 횟수 남음 + 미만료
     const { data: coupon } = await adminClient
       .from("user_coupons")
       .select("id, discount_type, discount_value, max_uses, used_count, status, expires_at")
@@ -213,19 +217,21 @@ Deno.serve(async (req: Request) => {
       const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > new Date();
       if (notExpired) {
         if (coupon.discount_type === "percentage") {
-          serverDiscountAmount = Math.floor(canonicalAmount * coupon.discount_value / 100);
+          serverDiscountAmount = Math.floor(baseAmount * coupon.discount_value / 100);
         } else {
-          serverDiscountAmount = Math.min(coupon.discount_value, canonicalAmount);
+          serverDiscountAmount = Math.min(coupon.discount_value, baseAmount);
         }
       }
     }
 
     // 서버 계산값으로 billing_history를 덮어쓰기 (클라이언트 값 불신)
-    if (serverDiscountAmount !== billing.discount_amount || billing.original_amount !== canonicalAmount) {
-      console.warn("[toss-payment-confirm] Overwriting billing discount with server values:", {
+    const serverTotalAmount = calcAmountWithVat(baseAmount, serverDiscountAmount);
+    if (serverDiscountAmount !== billing.discount_amount || billing.original_amount !== baseAmount) {
+      console.warn("[toss-payment-confirm] Overwriting billing with server values:", {
+        baseAmount,
         serverDiscount: serverDiscountAmount,
+        serverTotal: serverTotalAmount,
         billingDiscount: billing.discount_amount,
-        canonicalAmount,
         billingOriginalAmount: billing.original_amount,
         couponId: billing.coupon_id,
       });
@@ -233,23 +239,23 @@ Deno.serve(async (req: Request) => {
         .from("billing_history")
         .update({
           discount_amount: serverDiscountAmount,
-          original_amount: canonicalAmount,
-          amount: canonicalAmount - serverDiscountAmount,
+          original_amount: baseAmount,
+          amount: serverTotalAmount,
         })
         .eq("id", orderId.trim())
         .eq("payment_status", "pending");
 
       if (updateErr) {
-        console.error("[toss-payment-confirm] Failed to overwrite billing discount:", updateErr.message);
+        console.error("[toss-payment-confirm] Failed to overwrite billing:", updateErr.message);
         return jsonResponse({ error: "Failed to correct billing record" }, 500);
       }
     }
   }
 
-  const expectedAmount = canonicalAmount - serverDiscountAmount;
+  const expectedAmount = calcAmountWithVat(baseAmount, serverDiscountAmount);
   if (expectedAmount !== amountNum) {
     console.error("[toss-payment-confirm] Amount mismatch:", {
-      canonicalAmount,
+      baseAmount,
       discount: serverDiscountAmount,
       expected: expectedAmount,
       received: amountNum,

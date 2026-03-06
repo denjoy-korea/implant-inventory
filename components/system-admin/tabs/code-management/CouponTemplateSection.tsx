@@ -22,6 +22,19 @@ interface CouponTemplateSectionProps {
   onToggleTemplate: (tpl: CouponTemplate) => Promise<void>;
 }
 
+function getDefaultExpiryDate(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function calcDaysFromToday(dateStr: string): number {
+  const target = new Date(dateStr + 'T23:59:59');
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.max(1, Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
 const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
   templates,
   templatesLoading,
@@ -35,7 +48,8 @@ const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
   const [tplDiscountType, setTplDiscountType] = useState<'percentage' | 'fixed_amount'>('percentage');
   const [tplDiscountValue, setTplDiscountValue] = useState<number>(20);
   const [tplMaxUses, setTplMaxUses] = useState<number>(10);
-  const [tplValidDays, setTplValidDays] = useState<number | ''>('');
+  const [tplExpiryDate, setTplExpiryDate] = useState(getDefaultExpiryDate);
+  const [tplUnlimited, setTplUnlimited] = useState(false);
 
   const handleCreateTemplate = async () => {
     setCreatingTemplate(true);
@@ -46,7 +60,7 @@ const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
         discountType: tplDiscountType,
         discountValue: tplDiscountValue,
         maxUses: tplMaxUses,
-        validDays: tplValidDays === '' ? null : tplValidDays,
+        validDays: tplUnlimited ? null : calcDaysFromToday(tplExpiryDate),
       });
       setShowTemplateForm(false);
       setTplName('');
@@ -54,7 +68,8 @@ const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
       setTplDiscountType('percentage');
       setTplDiscountValue(20);
       setTplMaxUses(10);
-      setTplValidDays('');
+      setTplExpiryDate(getDefaultExpiryDate());
+      setTplUnlimited(false);
     } finally {
       setCreatingTemplate(false);
     }
@@ -127,15 +142,26 @@ const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">유효기간 (일, 비워두면 무제한)</label>
-              <input
-                type="number"
-                value={tplValidDays}
-                onChange={(e) => setTplValidDays(e.target.value === '' ? '' : Number(e.target.value))}
-                min={1}
-                placeholder="무제한"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-              />
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">유효기간</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={tplUnlimited ? '' : tplExpiryDate}
+                  onChange={(e) => { setTplExpiryDate(e.target.value); setTplUnlimited(false); }}
+                  min={new Date().toISOString().slice(0, 10)}
+                  disabled={tplUnlimited}
+                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400 disabled:bg-slate-100 disabled:text-slate-400"
+                />
+              </div>
+              <label className="inline-flex items-center gap-1.5 mt-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tplUnlimited}
+                  onChange={(e) => setTplUnlimited(e.target.checked)}
+                  className="rounded border-slate-300 text-violet-600 focus:ring-violet-400"
+                />
+                <span className="text-[11px] text-slate-500">무제한</span>
+              </label>
             </div>
           </div>
           <div className="flex justify-end">
@@ -182,7 +208,15 @@ const CouponTemplateSection: React.FC<CouponTemplateSectionProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-3 font-semibold">{tpl.max_uses}회</td>
-                  <td className="px-4 py-3">{tpl.valid_days ? `${tpl.valid_days}일` : '무제한'}</td>
+                  <td className="px-4 py-3">
+                    {tpl.valid_days
+                      ? (() => {
+                          const d = new Date(tpl.created_at);
+                          d.setDate(d.getDate() + tpl.valid_days);
+                          return `~${d.toLocaleDateString('ko-KR')} (${tpl.valid_days}일)`;
+                        })()
+                      : '무제한'}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${tpl.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                       {tpl.is_active ? '활성' : '비활성'}
