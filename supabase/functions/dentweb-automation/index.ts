@@ -152,6 +152,7 @@ type SettingsRow = {
   hospital_id: string;
   enabled: boolean;
   interval_minutes: number;
+  scheduled_time: string; // "HH:MM" (KST)
   manual_run_requested: boolean;
   manual_run_requested_at: string | null;
   last_run_at: string | null;
@@ -187,11 +188,25 @@ async function ensureSettingsRow(
 
 function isDueNow(row: SettingsRow): boolean {
   if (!row.enabled) return false;
-  if (!row.last_run_at) return true;
-  const last = new Date(row.last_run_at);
-  if (Number.isNaN(last.getTime())) return true;
-  const dueAt = new Date(last.getTime() + row.interval_minutes * 60_000);
-  return Date.now() >= dueAt.getTime();
+
+  // KST 기준 현재 시간
+  const nowKST = new Date(Date.now() + 9 * 3600_000);
+  const todayStr = nowKST.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const nowHHMM = nowKST.toISOString().slice(11, 16); // "HH:MM"
+
+  const scheduled = row.scheduled_time || "18:00";
+
+  // 아직 설정 시간이 안 됐으면 실행 안 함
+  if (nowHHMM < scheduled) return false;
+
+  // 오늘 이미 실행했으면 스킵
+  if (row.last_run_at) {
+    const lastKST = new Date(new Date(row.last_run_at).getTime() + 9 * 3600_000);
+    const lastDateStr = lastKST.toISOString().slice(0, 10);
+    if (lastDateStr === todayStr) return false;
+  }
+
+  return true;
 }
 
 function isStale(row: SettingsRow): boolean {
@@ -208,6 +223,7 @@ function sanitizeState(row: SettingsRow): Record<string, unknown> {
     hospital_id: row.hospital_id,
     enabled: row.enabled,
     interval_minutes: row.interval_minutes,
+    scheduled_time: row.scheduled_time || "18:00",
     manual_run_requested: row.manual_run_requested,
     manual_run_requested_at: row.manual_run_requested_at,
     last_run_at: row.last_run_at,
@@ -316,14 +332,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const enabled = toBool(body.enabled, current.enabled);
-    const interval = toInt(body.interval_minutes, current.interval_minutes);
-    if (interval < 5 || interval > 1440) {
-      return jsonResponse({ ok: false, error: "interval_minutes must be between 5 and 1440" }, 422, corsHeaders);
+    const scheduledTime = typeof body.scheduled_time === "string"
+      ? body.scheduled_time.trim()
+      : current.scheduled_time || "18:00";
+
+    if (!/^\d{2}:\d{2}$/.test(scheduledTime)) {
+      return jsonResponse({ ok: false, error: "scheduled_time must be HH:MM format" }, 422, corsHeaders);
+    }
+    const [h, m] = scheduledTime.split(":").map(Number);
+    if (h < 0 || h > 23 || m < 0 || m > 59) {
+      return jsonResponse({ ok: false, error: "invalid time" }, 422, corsHeaders);
     }
 
     const { data, error } = await admin
       .from("dentweb_automation_settings")
-      .update({ enabled, interval_minutes: interval })
+      .update({ enabled, scheduled_time: scheduledTime })
       .eq("hospital_id", ctx.hospitalId)
       .select("*")
       .maybeSingle();

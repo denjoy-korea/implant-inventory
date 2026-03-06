@@ -6,6 +6,7 @@ export interface DentwebAutomationState {
   hospitalId: string;
   enabled: boolean;
   intervalMinutes: number;
+  scheduledTime: string; // "HH:MM"
   manualRunRequested: boolean;
   manualRunRequestedAt: string | null;
   lastRunAt: string | null;
@@ -32,6 +33,7 @@ interface InvokeResponse {
     hospital_id: string;
     enabled: boolean;
     interval_minutes: number;
+    scheduled_time: string;
     manual_run_requested: boolean;
     manual_run_requested_at: string | null;
     last_run_at: string | null;
@@ -51,6 +53,7 @@ function toState(raw: NonNullable<InvokeResponse['state']>): DentwebAutomationSt
     hospitalId: raw.hospital_id,
     enabled: raw.enabled,
     intervalMinutes: raw.interval_minutes,
+    scheduledTime: raw.scheduled_time || '18:00',
     manualRunRequested: raw.manual_run_requested,
     manualRunRequestedAt: raw.manual_run_requested_at,
     lastRunAt: raw.last_run_at,
@@ -85,10 +88,10 @@ export const dentwebAutomationService = {
     return toState(res.state);
   },
 
-  async saveSettings(enabled: boolean, intervalMinutes: number): Promise<{ ok: boolean; state?: DentwebAutomationState; error?: string; message?: string }> {
+  async saveSettings(enabled: boolean, scheduledTime: string): Promise<{ ok: boolean; state?: DentwebAutomationState; error?: string; message?: string }> {
     const res = await invoke('save_settings', {
       enabled,
-      interval_minutes: intervalMinutes,
+      scheduled_time: scheduledTime,
     });
     if (!res.ok || !res.state) return { ok: false, error: res.error, message: res.message };
     return { ok: true, state: toState(res.state) };

@@ -24,11 +24,11 @@ interface DentwebAutomationModalProps {
   automationState: DentwebAutomationState | null;
   automationEnabled: boolean;
   onToggleAutomationEnabled: () => void;
-  automationInterval: string;
-  onAutomationIntervalChange: (value: string) => void;
+  automationScheduledTime: string;
+  onAutomationScheduledTimeChange: (value: string) => void;
   automationSaving: boolean;
   automationChanged: boolean;
-  automationIntervalValid: boolean;
+  automationTimeValid: boolean;
   onSaveAutomation: () => void | Promise<void>;
   automationRunning: boolean;
   onRequestAutomationRun: () => void | Promise<void>;
@@ -46,11 +46,11 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
   automationState,
   automationEnabled,
   onToggleAutomationEnabled,
-  automationInterval,
-  onAutomationIntervalChange,
+  automationScheduledTime,
+  onAutomationScheduledTimeChange,
   automationSaving,
   automationChanged,
-  automationIntervalValid,
+  automationTimeValid,
   onSaveAutomation,
   automationRunning,
   onRequestAutomationRun,
@@ -102,26 +102,23 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
               </button>
             </div>
 
-            {/* 실행 간격 */}
+            {/* 실행 시간 */}
             <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">실행 간격 (분)</label>
+              <label className="text-xs font-bold text-slate-600 block mb-1">실행 시간</label>
               <input
-                type="number"
-                min={5}
-                max={1440}
-                step={5}
-                value={automationInterval}
-                onChange={(event) => onAutomationIntervalChange(event.target.value)}
+                type="time"
+                value={automationScheduledTime}
+                onChange={(event) => onAutomationScheduledTimeChange(event.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
               />
-              <p className="text-[11px] text-slate-400 mt-1">5~1440분 범위에서 설정할 수 있습니다.</p>
+              <p className="text-[11px] text-slate-400 mt-1">매일 설정한 시간에 자동으로 실행됩니다.</p>
             </div>
 
             {/* 버튼 영역 */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => void onSaveAutomation()}
-                disabled={automationSaving || !automationChanged || !automationIntervalValid}
+                disabled={automationSaving || !automationChanged || !automationTimeValid}
                 className="px-3 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
               >
                 {automationSaving ? '저장 중...' : '설정 저장'}
@@ -182,17 +179,16 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 병원 PC에서 에이전트를 다운로드하여 실행하면, 토큰 입력 후 자동으로 덴트웹과 연동됩니다.
               </p>
-              <a
-                href="https://github.com/denjoy-korea/dentweb-agent/releases/latest/download/dentweb-agent.exe"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => window.open('https://github.com/denjoy-korea/dentweb-agent/releases/latest/download/dentweb-agent.exe', '_blank')}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 에이전트 다운로드 (Windows)
-              </a>
+              </button>
 
               {automationState?.hasAgentToken && (
                 <div className="space-y-2">
