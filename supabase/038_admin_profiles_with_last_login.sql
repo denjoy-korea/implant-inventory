@@ -13,6 +13,7 @@ RETURNS TABLE (
   permissions jsonb,
   created_at timestamptz,
   updated_at timestamptz,
+  last_active_at timestamptz,
   last_sign_in_at timestamptz
 )
 LANGUAGE plpgsql
@@ -40,6 +41,7 @@ BEGIN
     p.permissions,
     p.created_at,
     p.updated_at,
+    p.last_active_at,
     u.last_sign_in_at
   FROM profiles p
   LEFT JOIN auth.users u ON u.id = p.id

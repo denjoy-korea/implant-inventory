@@ -11,7 +11,7 @@ import { contactService } from '../services/contactService';
 import { pageViewService } from '../services/pageViewService';
 import { SIGNUP_PLANS } from '../components/auth/authSignupConfig';
 import { TRIAL_OFFER_LABEL } from '../utils/trialPolicy';
-import { betaInviteService } from '../services/betaInviteService';
+import { betaInviteService, CodeType } from '../services/betaInviteService';
 import { getBetaSignupPolicy, normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
 export interface InviteInfo {
@@ -114,6 +114,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
   const [resetEmailSent, setResetEmailSent] = useState(false);
   const [betaInviteCode, setBetaInviteCode] = useState('');
   const [betaInviteVerified, setBetaInviteVerified] = useState(false);
+  const [verifiedCodeType, setVerifiedCodeType] = useState<CodeType | null>(null);
   const [betaInviteModalOpen, setBetaInviteModalOpen] = useState(false);
   const [betaInviteChecking, setBetaInviteChecking] = useState(false);
   const [betaInviteError, setBetaInviteError] = useState('');
@@ -417,9 +418,15 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
 
     setBetaInviteCode(normalizedCode);
     setBetaInviteVerified(true);
+    setVerifiedCodeType(result.codeType || 'beta');
     setBetaInviteModalOpen(false);
     setBetaInviteError('');
-    showToast('베타테스터 코드 확인이 완료되었습니다.', 'success');
+    showToast(
+      result.codeType === 'partner'
+        ? '제휴 코드 확인 완료! 가입 시 할인 혜택이 자동 적용됩니다.'
+        : '코드 확인이 완료되었습니다.',
+      'success',
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -580,6 +587,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     resetEmailSent, setResetEmailSent,
     betaInviteCode, setBetaInviteCode,
     betaInviteVerified,
+    verifiedCodeType,
     betaInviteModalOpen, setBetaInviteModalOpen,
     betaInviteChecking,
     betaInviteError,

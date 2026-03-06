@@ -40,6 +40,9 @@ type BillingRow = {
   plan: string;
   billing_cycle: string;
   is_test_payment: boolean;
+  coupon_id: string | null;
+  original_amount: number | null;
+  discount_amount: number;
 };
 
 async function fetchBillingRowWithCompatibility(
@@ -48,7 +51,7 @@ async function fetchBillingRowWithCompatibility(
 ): Promise<{ billing: BillingRow | null; billingError: { message: string } | null }> {
   const primary = await adminClient
     .from("billing_history")
-    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment")
+    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment, coupon_id, original_amount, discount_amount")
     .eq("id", billingId)
     .single();
 
@@ -192,10 +195,54 @@ Deno.serve(async (req: Request) => {
     console.error("[toss-payment-confirm] Unknown plan or billing_cycle:", billingPlan, billingCycleVal);
     return jsonResponse({ error: "Invalid plan configuration" }, 400);
   }
-  if (canonicalAmount !== amountNum) {
-    console.error("[toss-payment-confirm] Amount mismatch:", { canonicalAmount, received: amountNum, plan: billingPlan, billingCycle: billingCycleVal });
+
+  // 쿠폰 할인 서버사이드 재검증
+  let serverDiscountAmount = 0;
+  if (billing.coupon_id && billing.discount_amount > 0) {
+    // 쿠폰 유효성 확인: active 상태 + 사용 횟수 남음 + 미만료
+    const { data: coupon } = await adminClient
+      .from("user_coupons")
+      .select("id, discount_type, discount_value, max_uses, used_count, status, expires_at")
+      .eq("id", billing.coupon_id)
+      .single();
+
+    if (coupon && coupon.status === "active" && coupon.used_count < coupon.max_uses) {
+      const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > new Date();
+      if (notExpired) {
+        if (coupon.discount_type === "percentage") {
+          serverDiscountAmount = Math.floor(canonicalAmount * coupon.discount_value / 100);
+        } else {
+          serverDiscountAmount = Math.min(coupon.discount_value, canonicalAmount);
+        }
+      }
+    }
+
+    // 클라이언트가 보낸 할인과 서버 계산이 다르면 거부
+    if (serverDiscountAmount !== billing.discount_amount) {
+      console.error("[toss-payment-confirm] Discount mismatch:", {
+        serverDiscount: serverDiscountAmount,
+        billingDiscount: billing.discount_amount,
+        couponId: billing.coupon_id,
+      });
+      return jsonResponse(
+        { error: "Discount amount mismatch", expected: serverDiscountAmount, received: billing.discount_amount },
+        400,
+      );
+    }
+  }
+
+  const expectedAmount = canonicalAmount - serverDiscountAmount;
+  if (expectedAmount !== amountNum) {
+    console.error("[toss-payment-confirm] Amount mismatch:", {
+      canonicalAmount,
+      discount: serverDiscountAmount,
+      expected: expectedAmount,
+      received: amountNum,
+      plan: billingPlan,
+      billingCycle: billingCycleVal,
+    });
     return jsonResponse(
-      { error: "Amount mismatch", expected: canonicalAmount, received: amountNum },
+      { error: "Amount mismatch", expected: expectedAmount, received: amountNum },
       400,
     );
   }

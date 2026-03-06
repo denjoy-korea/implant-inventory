@@ -903,6 +903,14 @@ export const authService = {
     return { success: true };
   },
 
+  /** 현재 사용자 활동 시각 갱신 (하루 1회 쓰기 스로틀은 DB 함수에서 처리) */
+  async touchLastActiveAt(): Promise<void> {
+    const { error } = await supabase.rpc('touch_last_active_at');
+    if (error && import.meta.env.DEV) {
+      console.warn('[authService] touchLastActiveAt failed:', error.message);
+    }
+  },
+
   /** 현재 사용자의 마지막 로그인 시각 (auth.users.last_sign_in_at) */
   async getLastSignInAt(): Promise<string | null> {
     const { data: { user } } = await supabase.auth.getUser();

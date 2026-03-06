@@ -49,25 +49,35 @@ function isMissingIsTestPaymentColumnError(error: unknown): boolean {
   return message.includes('is_test_payment');
 }
 
-async function createBillingRecordWithCompatibility(params: {
+async function createBillingRecordWithCoupon(params: {
   hospitalId: string;
   plan: PlanType;
   billingCycle: BillingCycle;
   totalAmount: number;
   paymentMethod: 'card' | 'transfer';
   isTestPayment: boolean;
+  couponId: string | null;
+  originalAmount: number | null;
+  discountAmount: number;
 }): Promise<{ billingId: string | null; error: unknown }> {
+  const insertPayload: Record<string, unknown> = {
+    hospital_id: params.hospitalId,
+    plan: params.plan,
+    billing_cycle: params.billingCycle,
+    amount: params.totalAmount,
+    is_test_payment: params.isTestPayment,
+    payment_status: 'pending',
+    payment_method: params.paymentMethod,
+  };
+  if (params.couponId) {
+    insertPayload.coupon_id = params.couponId;
+    insertPayload.original_amount = params.originalAmount;
+    insertPayload.discount_amount = params.discountAmount;
+  }
+
   const primary = await supabase
     .from('billing_history')
-    .insert({
-      hospital_id: params.hospitalId,
-      plan: params.plan,
-      billing_cycle: params.billingCycle,
-      amount: params.totalAmount,
-      is_test_payment: params.isTestPayment,
-      payment_status: 'pending',
-      payment_method: params.paymentMethod,
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
 
@@ -97,7 +107,7 @@ async function createBillingRecordWithCompatibility(params: {
     return { billingId: null, error: fallback.error };
   }
 
-  console.warn('[tossPaymentService] billing_history is_test_payment column missing; fallback insert executed.');
+  console.warn('[tossPaymentService] billing_history column missing; fallback insert executed.');
   return { billingId: fallback.data.id as string, error: null };
 }
 
@@ -137,6 +147,10 @@ export interface TossPaymentRequest {
   billingCycle: BillingCycle;
   customerName: string;
   paymentMethod: 'card' | 'transfer';
+  /** 적용할 쿠폰 ID (선택) */
+  couponId?: string;
+  /** 쿠폰 할인 금액 (클라이언트 미리보기 값, 서버에서 재검증) */
+  discountAmount?: number;
 }
 
 export interface TossPaymentResult {
@@ -168,25 +182,34 @@ export const tossPaymentService = {
    * (취소/오류 시 error를 반환)
    */
   async requestPayment(request: TossPaymentRequest): Promise<TossPaymentResult> {
-    const { hospitalId, plan, billingCycle, customerName, paymentMethod } = request;
+    const { hospitalId, plan, billingCycle, customerName, paymentMethod, couponId, discountAmount } = request;
     const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY as string | undefined;
 
     if (!clientKey) {
       return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의하세요.' };
     }
 
-    // 1. 금액 계산 (VAT 포함)
-    const totalAmount = this.calcTotalAmount(plan, billingCycle);
+    // 1. 금액 계산 (VAT 포함) + 쿠폰 할인 적용
+    const originalAmount = this.calcTotalAmount(plan, billingCycle);
+    const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, originalAmount) : 0;
+    const totalAmount = originalAmount - appliedDiscount;
     const isTestPayment = resolveIsTestPayment();
 
+    if (totalAmount <= 0) {
+      return { error: '결제 금액이 0원 이하입니다. 쿠폰 적용을 확인해주세요.' };
+    }
+
     // 2. billing_history 레코드 생성
-    const { billingId, error: dbError } = await createBillingRecordWithCompatibility({
+    const { billingId, error: dbError } = await createBillingRecordWithCoupon({
       hospitalId,
       plan,
       billingCycle,
       totalAmount,
       paymentMethod,
       isTestPayment,
+      couponId: couponId || null,
+      originalAmount: couponId ? originalAmount : null,
+      discountAmount: appliedDiscount,
     });
 
     if (dbError || !billingId) {

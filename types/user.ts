@@ -99,6 +99,7 @@ export interface DbProfile {
   permissions: MemberPermissions | null;
   created_at: string;
   updated_at: string;
+  last_active_at?: string | null;
   last_sign_in_at?: string | null;
   session_token?: string | null;
   mfa_enabled?: boolean;
