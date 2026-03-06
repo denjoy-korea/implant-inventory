@@ -1,4 +1,4 @@
-import React, { lazy, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import FeatureGate from '../FeatureGate';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import {
@@ -17,13 +17,14 @@ import {
   User,
 } from '../../types';
 import { ReceiptUpdate } from '../ReceiptConfirmationModal';
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 
-const InventoryAudit = lazy(() => import('../InventoryAudit'));
-const SurgeryDashboard = lazy(() => import('../SurgeryDashboard'));
-const FailManager = lazy(() => import('../FailManager'));
-const OrderManager = lazy(() => import('../OrderManager'));
-const SettingsHub = lazy(() => import('../SettingsHub'));
-const AuditLogViewer = lazy(() => import('../AuditLogViewer'));
+const InventoryAudit = lazyWithRetry(() => import('../InventoryAudit'));
+const SurgeryDashboard = lazyWithRetry(() => import('../SurgeryDashboard'));
+const FailManager = lazyWithRetry(() => import('../FailManager'));
+const OrderManager = lazyWithRetry(() => import('../OrderManager'));
+const SettingsHub = lazyWithRetry(() => import('../SettingsHub'));
+const AuditLogViewer = lazyWithRetry(() => import('../AuditLogViewer'));
 
 interface DashboardOperationalTabsProps {
   dashboardTab: DashboardTab;

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useRef } from 'react';
+import React, { Suspense, useRef } from 'react';
 import { useAppState } from './hooks/useAppState';
 import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -15,14 +15,15 @@ import AppGlobalOverlays from './components/app/AppGlobalOverlays';
 import DashboardHeader from './components/app/DashboardHeader';
 import AccountSuspendedScreen from './components/AccountSuspendedScreen';
 import { FileUploadLoadingOverlay } from './components/FileUploadLoadingOverlay';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
 /* ── Lazy imports ── */
-const FailDetectionModal = lazy(() => import('./components/fail/FailDetectionModal'));
-const DashboardGuardedContent = lazy(() => import('./components/app/DashboardGuardedContent'));
-const AppPublicRouteSection = lazy(() => import('./components/app/AppPublicRouteSection'));
-const SystemAdminDashboard = lazy(() => import('./components/SystemAdminDashboard'));
-const AppUserOverlayStack = lazy(() => import('./components/app/AppUserOverlayStack'));
-const DirectPaymentModal = lazy(() => import('./components/DirectPaymentModal'));
+const FailDetectionModal = lazyWithRetry(() => import('./components/fail/FailDetectionModal'));
+const DashboardGuardedContent = lazyWithRetry(() => import('./components/app/DashboardGuardedContent'));
+const AppPublicRouteSection = lazyWithRetry(() => import('./components/app/AppPublicRouteSection'));
+const SystemAdminDashboard = lazyWithRetry(() => import('./components/SystemAdminDashboard'));
+const AppUserOverlayStack = lazyWithRetry(() => import('./components/app/AppUserOverlayStack'));
+const DirectPaymentModal = lazyWithRetry(() => import('./components/DirectPaymentModal'));
 
 declare global {
   // eslint-disable-next-line no-var

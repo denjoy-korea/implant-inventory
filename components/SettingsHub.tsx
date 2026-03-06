@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardTab, PlanType, PlanFeature, PLAN_NAMES, DbResetRequest, DEFAULT_WORK_DAYS, VendorContact, MemberPermissions } from '../types';
 import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from '../services/hospitalSettingsService';
 import StockCalcSettingsModal from './settings/StockCalcSettingsModal';
@@ -15,7 +15,8 @@ import DataResetRequestModal from './settings/DataResetRequestModal';
 import DentwebAutomationModal from './settings/DentwebAutomationModal';
 import WorkDaysSettingsSection from './settings/WorkDaysSettingsSection';
 import DataResetDangerSection from './settings/DataResetDangerSection';
-const IntegrationManager = lazy(() => import('./IntegrationManager'));
+import { lazyWithRetry } from '../utils/lazyWithRetry';
+const IntegrationManager = lazyWithRetry(() => import('./IntegrationManager'));
 
 interface SettingsHubProps {
   onNavigate: (tab: DashboardTab) => void;
@@ -85,7 +86,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [showAutomationModal, setShowAutomationModal] = useState(false);
   const [automationState, setAutomationState] = useState<DentwebAutomationState | null>(null);
   const [automationEnabled, setAutomationEnabled] = useState(false);
-  const [automationInterval, setAutomationInterval] = useState('60');
+  const [automationScheduledTime, setAutomationScheduledTime] = useState('18:00');
   const [automationLoading, setAutomationLoading] = useState(false);
   const [automationSaving, setAutomationSaving] = useState(false);
   const [automationRunning, setAutomationRunning] = useState(false);
@@ -136,7 +137,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         if (!state) return;
         setAutomationState(state);
         setAutomationEnabled(state.enabled);
-        setAutomationInterval(String(state.intervalMinutes));
+        setAutomationScheduledTime(state.scheduledTime || '18:00');
       })
       .finally(() => setAutomationLoading(false));
   }, [hospitalId, canAccessIntegrations]);
@@ -273,21 +274,18 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     });
   };
 
-  const automationIntervalNum = Number(automationInterval);
-  const automationIntervalValid = Number.isFinite(automationIntervalNum)
-    && automationIntervalNum >= 5
-    && automationIntervalNum <= 1440;
+  const automationTimeValid = /^\d{2}:\d{2}$/.test(automationScheduledTime);
   const automationChanged = automationState
-    ? (automationEnabled !== automationState.enabled || automationIntervalNum !== automationState.intervalMinutes)
+    ? (automationEnabled !== automationState.enabled || automationScheduledTime !== (automationState.scheduledTime || '18:00'))
     : false;
 
   const handleSaveAutomation = async () => {
-    if (!automationIntervalValid) {
-      showToast('실행 간격은 5~1440분 사이로 입력해주세요.', 'error');
+    if (!automationTimeValid) {
+      showToast('실행 시간을 올바르게 설정해주세요.', 'error');
       return;
     }
     setAutomationSaving(true);
-    const res = await dentwebAutomationService.saveSettings(automationEnabled, automationIntervalNum);
+    const res = await dentwebAutomationService.saveSettings(automationEnabled, automationScheduledTime);
     if (!res.ok || !res.state) {
       showToast('자동화 설정 저장에 실패했습니다.', 'error');
       setAutomationSaving(false);
@@ -295,7 +293,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     }
     setAutomationState(res.state);
     setAutomationEnabled(res.state.enabled);
-    setAutomationInterval(String(res.state.intervalMinutes));
+    setAutomationScheduledTime(res.state.scheduledTime || '18:00');
     showToast('자동화 설정이 저장되었습니다.', 'success');
     setAutomationSaving(false);
   };
@@ -677,11 +675,11 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       automationState={automationState}
       automationEnabled={automationEnabled}
       onToggleAutomationEnabled={() => setAutomationEnabled((prev) => !prev)}
-      automationInterval={automationInterval}
-      onAutomationIntervalChange={setAutomationInterval}
+      automationScheduledTime={automationScheduledTime}
+      onAutomationScheduledTimeChange={setAutomationScheduledTime}
       automationSaving={automationSaving}
       automationChanged={automationChanged}
-      automationIntervalValid={automationIntervalValid}
+      automationTimeValid={automationTimeValid}
       onSaveAutomation={handleSaveAutomation}
       automationRunning={automationRunning}
       onRequestAutomationRun={handleRequestAutomationRun}

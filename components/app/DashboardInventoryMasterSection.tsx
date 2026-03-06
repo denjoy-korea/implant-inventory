@@ -1,5 +1,6 @@
-import React, { lazy } from 'react';
-const InventoryManager = lazy(() => import('../InventoryManager'));
+import React from 'react';
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
+const InventoryManager = lazyWithRetry(() => import('../InventoryManager'));
 import {
   AppState,
   ExcelData,

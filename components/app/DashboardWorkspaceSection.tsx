@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
@@ -7,12 +7,13 @@ import PlanLimitToast, { LimitType } from '../PlanLimitToast';
 import ReadOnlyBanner from '../ReadOnlyBanner';
 import FeatureGate from '../FeatureGate';
 import RawDataUploadGuide from '../RawDataUploadGuide';
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 /* Lazy-loaded tab components — loaded only when user navigates to the tab */
-const MemberManager = lazy(() => import('../MemberManager'));
-const DashboardFixtureEditSection = lazy(() => import('./DashboardFixtureEditSection'));
-const DashboardOverview = lazy(() => import('../DashboardOverview'));
-const DashboardInventoryMasterSection = lazy(() => import('./DashboardInventoryMasterSection'));
-const DashboardOperationalTabs = lazy(() => import('../dashboard/DashboardOperationalTabs'));
+const MemberManager = lazyWithRetry(() => import('../MemberManager'));
+const DashboardFixtureEditSection = lazyWithRetry(() => import('./DashboardFixtureEditSection'));
+const DashboardOverview = lazyWithRetry(() => import('../DashboardOverview'));
+const DashboardInventoryMasterSection = lazyWithRetry(() => import('./DashboardInventoryMasterSection'));
+const DashboardOperationalTabs = lazyWithRetry(() => import('../dashboard/DashboardOperationalTabs'));
 import { ReceiptUpdate } from '../ReceiptConfirmationModal';
 
 interface FixtureEditBindings {

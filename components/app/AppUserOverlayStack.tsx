@@ -1,13 +1,14 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { BillingCycle, CLINIC_ROLE_LABELS, HospitalPlanState, InventoryItem, PlanType, User } from '../../types';
 import { ReviewType, ReviewRole } from '../../services/reviewService';
 import ErrorBoundary from '../ErrorBoundary';
 import OnboardingToast from '../onboarding/OnboardingToast';
 import OnboardingCompleteModal from '../OnboardingCompleteModal';
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 
-const OnboardingWizard = lazy(() => import('../OnboardingWizard'));
-const UserProfile = lazy(() => import('../UserProfile'));
-const ReviewPopup = lazy(() => import('../ReviewPopup'));
+const OnboardingWizard = lazyWithRetry(() => import('../OnboardingWizard'));
+const UserProfile = lazyWithRetry(() => import('../UserProfile'));
+const ReviewPopup = lazyWithRetry(() => import('../ReviewPopup'));
 
 interface AppUserOverlayStackProps {
   user: User | null;

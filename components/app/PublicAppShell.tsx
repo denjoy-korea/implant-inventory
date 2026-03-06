@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
@@ -17,18 +17,19 @@ import {
 import { ToastType } from '../../hooks/useToast';
 import { tossPaymentService } from '../../services/tossPaymentService';
 import { planService } from '../../services/planService';
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 
-const LandingPage = lazy(() => import('../LandingPage'));
-const AuthForm = lazy(() => import('../AuthForm'));
-const PricingPage = lazy(() => import('../PricingPage'));
-const ContactPage = lazy(() => import('../ContactPage'));
-const ValuePage = lazy(() => import('../ValuePage'));
-const AnalyzePage = lazy(() => import('../AnalyzePage'));
-const NoticeBoard = lazy(() => import('../NoticeBoard'));
-const AdminPanel = lazy(() => import('../AdminPanel'));
-const MfaOtpScreen = lazy(() => import('../MfaOtpScreen'));
-const ReviewsPage = lazy(() => import('../ReviewsPage'));
-const ConsultationPage = lazy(() => import('../ConsultationPage'));
+const LandingPage = lazyWithRetry(() => import('../LandingPage'));
+const AuthForm = lazyWithRetry(() => import('../AuthForm'));
+const PricingPage = lazyWithRetry(() => import('../PricingPage'));
+const ContactPage = lazyWithRetry(() => import('../ContactPage'));
+const ValuePage = lazyWithRetry(() => import('../ValuePage'));
+const AnalyzePage = lazyWithRetry(() => import('../AnalyzePage'));
+const NoticeBoard = lazyWithRetry(() => import('../NoticeBoard'));
+const AdminPanel = lazyWithRetry(() => import('../AdminPanel'));
+const MfaOtpScreen = lazyWithRetry(() => import('../MfaOtpScreen'));
+const ReviewsPage = lazyWithRetry(() => import('../ReviewsPage'));
+const ConsultationPage = lazyWithRetry(() => import('../ConsultationPage'));
 
 interface InviteInfo {
   token: string;
