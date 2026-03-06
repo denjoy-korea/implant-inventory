@@ -49,10 +49,11 @@ function sanitizeEncryptedProfileField(
 /** profiles PII 필드(name·email·phone) 복호화 — 평문(ENCv2 접두사 없음)은 그대로 반환 */
 export async function decryptProfile(db: DbProfile): Promise<DbProfile> {
   try {
-    const [emailRaw, nameRaw, phoneRaw] = await decryptPatientInfoBatch([
-      db.email,
-      db.name,
-      db.phone ?? '',
+    // 개별 decrypt 호출 (병렬) — 배치보다 빠른 실패 (5초 타임아웃)
+    const [emailRaw, nameRaw, phoneRaw] = await Promise.all([
+      decryptPatientInfo(db.email),
+      decryptPatientInfo(db.name),
+      decryptPatientInfo(db.phone ?? ''),
     ]);
     const email = sanitizeEncryptedProfileField('email', emailRaw);
     const name = sanitizeEncryptedProfileField('name', nameRaw);

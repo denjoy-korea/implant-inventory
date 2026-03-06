@@ -82,8 +82,8 @@ async function callCryptoService(
 
   const body = JSON.stringify({ op, ...payload });
 
-  // 배치: 12초, 단건: 8초 — initSession 20초 내에 실패+재시도가 완료되도록
-  const defaultTimeout = op === 'decrypt_batch' ? 12_000 : 8_000;
+  // 단건 5초, 배치 10초 — initSession 20초 내에 프로필+수술기록 모두 실패 처리 가능
+  const defaultTimeout = op === 'decrypt_batch' ? 10_000 : 5_000;
 
   const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = defaultTimeout) => {
     const controller = new AbortController();
