@@ -171,7 +171,7 @@ export const tossPaymentService = {
    */
   calcTotalAmount(plan: PlanType, billingCycle: BillingCycle): number {
     const base = this.calcBaseAmount(plan, billingCycle);
-    return base + Math.round(base * 0.1);
+    return Math.floor((base + Math.round(base * 0.1)) / 1000) * 1000;
   },
 
   /**
@@ -193,7 +193,7 @@ export const tossPaymentService = {
     const baseAmount = this.calcBaseAmount(plan, billingCycle);
     const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, baseAmount) : 0;
     const afterDiscount = baseAmount - appliedDiscount;
-    const totalAmount = afterDiscount + Math.round(afterDiscount * 0.1);
+    const totalAmount = Math.floor((afterDiscount + Math.round(afterDiscount * 0.1)) / 1000) * 1000;
     const originalAmount = this.calcTotalAmount(plan, billingCycle);
     const isTestPayment = resolveIsTestPayment();
 

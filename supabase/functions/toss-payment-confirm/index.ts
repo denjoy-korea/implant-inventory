@@ -31,10 +31,10 @@ function calcBaseAmount(plan: string, billingCycle: string): number | null {
     : prices.monthly;
 }
 
-/** VAT 포함 최종 금액 (할인 후 기본가에 VAT 적용) */
+/** VAT 포함 최종 금액 (할인 후 기본가에 VAT 적용, 천원 단위 절사) */
 function calcAmountWithVat(base: number, discount: number): number {
   const afterDiscount = base - discount;
-  return afterDiscount + Math.round(afterDiscount * 0.1);
+  return Math.floor((afterDiscount + Math.round(afterDiscount * 0.1)) / 1000) * 1000;
 }
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
@@ -205,21 +205,55 @@ Deno.serve(async (req: Request) => {
   }
 
   // 쿠폰 할인 서버사이드 재검증 (VAT 전 기본가 기준)
+  // 검증 항목: 소유권(user_id, hospital_id), 플랜 적용 범위, 유효성, redeem_coupon RPC
   let serverDiscountAmount = 0;
   if (billing.coupon_id && billing.discount_amount > 0) {
+    // 1. 쿠폰 조회 + 소유권 검증 (user_id, hospital_id 일치 필수)
     const { data: coupon } = await adminClient
       .from("user_coupons")
-      .select("id, discount_type, discount_value, max_uses, used_count, status, expires_at")
+      .select("id, user_id, hospital_id, template_id, discount_type, discount_value, max_uses, used_count, status, expires_at")
       .eq("id", billing.coupon_id)
       .single();
 
-    if (coupon && coupon.status === "active" && coupon.used_count < coupon.max_uses) {
-      const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > new Date();
-      if (notExpired) {
-        if (coupon.discount_type === "percentage") {
-          serverDiscountAmount = Math.floor(baseAmount * coupon.discount_value / 100);
-        } else {
-          serverDiscountAmount = Math.min(coupon.discount_value, baseAmount);
+    if (!coupon) {
+      console.warn("[toss-payment-confirm] Coupon not found, ignoring discount:", billing.coupon_id);
+    } else if (coupon.user_id !== user.id || coupon.hospital_id !== billing.hospital_id) {
+      // 소유권 불일치: 타인의 쿠폰 도용 시도 차단
+      console.error("[toss-payment-confirm] Coupon ownership mismatch:", {
+        couponUserId: coupon.user_id, requestUserId: user.id,
+        couponHospitalId: coupon.hospital_id, billingHospitalId: billing.hospital_id,
+      });
+      return jsonResponse({ error: "Coupon does not belong to this user/hospital" }, 403);
+    } else {
+      // 2. applicable_plans 검증 (템플릿에 제한이 있으면 플랜 일치 필수)
+      let planEligible = true;
+      if (coupon.template_id) {
+        const { data: template } = await adminClient
+          .from("coupon_templates")
+          .select("applicable_plans")
+          .eq("id", coupon.template_id)
+          .single();
+        if (template?.applicable_plans?.length > 0 && !template.applicable_plans.includes(billingPlan)) {
+          console.error("[toss-payment-confirm] Coupon not applicable to plan:", {
+            couponId: billing.coupon_id, plan: billingPlan, applicablePlans: template.applicable_plans,
+          });
+          planEligible = false;
+        }
+      }
+
+      if (!planEligible) {
+        return jsonResponse({ error: "Coupon is not applicable to this plan" }, 400);
+      }
+
+      // 3. 유효성 검증 (status, usage, expiry)
+      if (coupon.status === "active" && coupon.used_count < coupon.max_uses) {
+        const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > new Date();
+        if (notExpired) {
+          if (coupon.discount_type === "percentage") {
+            serverDiscountAmount = Math.floor(baseAmount * coupon.discount_value / 100);
+          } else {
+            serverDiscountAmount = Math.min(coupon.discount_value, baseAmount);
+          }
         }
       }
     }
@@ -303,7 +337,32 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: message, code }, tossResponse.status >= 400 ? tossResponse.status : 400);
   }
 
-  // 결제 승인 성공 → process_payment_callback RPC 호출
+  // 결제 승인 성공 → 쿠폰 사용 처리 (atomic redeem)
+  if (billing.coupon_id && serverDiscountAmount > 0) {
+    const { data: redeemResult, error: redeemError } = await adminClient.rpc("redeem_coupon", {
+      p_coupon_id: billing.coupon_id,
+      p_user_id: user.id,
+      p_hospital_id: billing.hospital_id,
+      p_billing_id: orderId.trim(),
+      p_billing_cycle: billingCycleVal,
+      p_original_amount: baseAmount,
+    });
+
+    if (redeemError) {
+      console.error("[toss-payment-confirm] redeem_coupon RPC failed:", redeemError.message);
+      // 결제는 이미 승인됨 — 쿠폰 처리 실패를 로그하되 결제 흐름은 계속 진행
+      // (운영팀이 수동으로 쿠폰 사용 처리 필요)
+    } else {
+      const result = redeemResult as { ok?: boolean; error?: string } | null;
+      if (result && !result.ok) {
+        console.warn("[toss-payment-confirm] redeem_coupon rejected:", result.error, {
+          couponId: billing.coupon_id, userId: user.id,
+        });
+      }
+    }
+  }
+
+  // process_payment_callback RPC 호출
   const paymentRef = typeof tossData.paymentKey === "string"
     ? tossData.paymentKey
     : paymentKey.trim();
