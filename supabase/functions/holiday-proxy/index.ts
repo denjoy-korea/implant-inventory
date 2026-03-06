@@ -11,6 +11,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 const BASE_URL =
   "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo";
@@ -48,6 +49,10 @@ async function fetchMonth(apiKey: string, year: number, month: number): Promise<
     });
 }
 
+// In-memory cache: holidays rarely change, cache per year/month for 24h
+const cache = new Map<string, { dates: string[]; expiresAt: number }>();
+const CACHE_TTL = 24 * 60 * 60_000; // 24 hours
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -55,6 +60,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Rate limit: 10 requests per minute per IP
+  const rateLimited = checkRateLimit(req, corsHeaders, 10, 60_000);
+  if (rateLimited) return rateLimited;
 
   try {
     const apiKey = Deno.env.get("HOLIDAY_API_KEY");
@@ -84,6 +93,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const cacheKey = monthStr ? `${year}-${monthStr}` : `${year}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return new Response(
+        JSON.stringify({ dates: cached.dates }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+        }
+      );
+    }
+
     let dates: string[];
 
     if (monthStr) {
@@ -104,11 +125,14 @@ Deno.serve(async (req: Request) => {
       dates = [...new Set(monthResults.flat())].sort();
     }
 
+    // Cache for 24h
+    cache.set(cacheKey, { dates, expiresAt: Date.now() + CACHE_TTL });
+
     return new Response(
       JSON.stringify({ dates }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
       }
     );
   } catch (err) {
