@@ -1,7 +1,10 @@
--- 038: 운영자 전용 프로필 + 마지막 로그인 시간 조회 함수
--- auth.users.last_sign_in_at JOIN을 포함한 새 RPC
+-- Fix admin user list RPC signature compatibility for PostgREST schema cache
+-- Keep original output shape and expose activity-based value via last_sign_in_at
+-- (COALESCE(last_active_at, auth.users.last_sign_in_at)).
 
-CREATE OR REPLACE FUNCTION get_all_profiles_with_last_login()
+DROP FUNCTION IF EXISTS public.get_all_profiles_with_last_login();
+
+CREATE OR REPLACE FUNCTION public.get_all_profiles_with_last_login()
 RETURNS TABLE (
   id uuid,
   email text,
@@ -47,5 +50,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION get_all_profiles_with_last_login() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION get_all_profiles_with_last_login() TO authenticated;
+REVOKE ALL ON FUNCTION public.get_all_profiles_with_last_login() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_all_profiles_with_last_login() TO authenticated;
