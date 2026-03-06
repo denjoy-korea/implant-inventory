@@ -82,7 +82,10 @@ async function callCryptoService(
 
   const body = JSON.stringify({ op, ...payload });
 
-  const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = 8_000) => {
+  // 배치 작업은 데이터가 많아 응답 시간이 길 수 있으므로 타임아웃을 넉넉하게
+  const defaultTimeout = op === 'decrypt_batch' ? 20_000 : 8_000;
+
+  const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = defaultTimeout) => {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(CRYPTO_SERVICE_URL, {
@@ -97,8 +100,12 @@ async function callCryptoService(
   try {
     res = await fetchWithTimeout(headers);
   } catch (err) {
-    // 타임아웃 또는 네트워크 오류 시 1회 재시도
+    // 타임아웃 또는 네트워크 오류 시 토큰 재확인 후 1회 재시도
     console.warn(`[cryptoUtils] ${op} 첫 시도 실패, 재시도:`, err);
+    if (requireAuth) {
+      const freshToken = await getValidToken();
+      if (freshToken) headers['Authorization'] = `Bearer ${freshToken}`;
+    }
     res = await fetchWithTimeout(headers);
   }
 
