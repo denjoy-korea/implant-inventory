@@ -82,7 +82,7 @@ async function callCryptoService(
 
   const body = JSON.stringify({ op, ...payload });
 
-  const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = 15_000) => {
+  const fetchWithTimeout = (hdrs: Record<string, string>, timeoutMs = 8_000) => {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(CRYPTO_SERVICE_URL, {
