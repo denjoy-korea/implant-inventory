@@ -36,7 +36,7 @@ BEGIN
   SELECT * INTO v_billing
   FROM billing_history
   WHERE id = p_billing_id
-  LIMIT 1;
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN FALSE;

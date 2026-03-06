@@ -270,7 +270,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
   function renderBetaInviteModal() {
     if (type !== 'signup' || !betaInviteModalOpen) return null;
     return (
-      <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setBetaInviteModalOpen(false)}>
+      <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => !isBetaInviteRequired && setBetaInviteModalOpen(false)}>
         <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
             <h3 className="text-base font-black text-slate-900">

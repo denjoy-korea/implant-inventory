@@ -9,6 +9,7 @@
 
 import { supabase } from './supabaseClient';
 import { PlanType, BillingCycle, PLAN_PRICING, PLAN_NAMES } from '../types';
+import { resolveIsTestPayment, isMissingIsTestPaymentColumnError } from '../utils/paymentCompat';
 
 declare global {
   interface Window {
@@ -35,19 +36,6 @@ const TOSS_SDK_URL = 'https://js.tosspayments.com/v1/payment';
 
 let sdkLoadPromise: Promise<void> | null = null;
 
-function resolveIsTestPayment(): boolean {
-  // 실결제 전환 전에는 기본값(true) 유지. 전환 시 VITE_PAYMENT_LIVE_MODE=true로 반전.
-  const liveMode = String(import.meta.env.VITE_PAYMENT_LIVE_MODE ?? '').trim().toLowerCase();
-  return liveMode !== 'true';
-}
-
-function isMissingIsTestPaymentColumnError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const message = 'message' in error && typeof error.message === 'string'
-    ? error.message
-    : '';
-  return message.includes('is_test_payment');
-}
 
 async function createBillingRecordWithCoupon(params: {
   hospitalId: string;
@@ -89,14 +77,19 @@ async function createBillingRecordWithCoupon(params: {
     return { billingId: null, error: primary.error };
   }
 
-  // Backward compatibility: migration 미적용 환경에서는 컬럼 없이 insert
+  // Backward compatibility: migration 미적용 환경
+  if (params.couponId) {
+    console.error('[tossPaymentService] coupon requested but billing_history lacks coupon columns; rejecting to prevent full-price charge.');
+    return { billingId: null, error: new Error('쿠폰 적용에 필요한 DB 업데이트가 아직 완료되지 않았습니다. 관리자에게 문의하세요.') };
+  }
+  const fallbackAmount = params.originalAmount ?? params.totalAmount;
   const fallback = await supabase
     .from('billing_history')
     .insert({
       hospital_id: params.hospitalId,
       plan: params.plan,
       billing_cycle: params.billingCycle,
-      amount: params.totalAmount,
+      amount: fallbackAmount,
       payment_status: 'pending',
       payment_method: params.paymentMethod,
     })

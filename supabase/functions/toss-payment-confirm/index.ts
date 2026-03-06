@@ -77,8 +77,11 @@ async function fetchBillingRowWithCompatibility(
 
   return {
     billing: {
-      ...(fallback.data as Omit<BillingRow, "is_test_payment">),
+      ...(fallback.data as Omit<BillingRow, "is_test_payment" | "coupon_id" | "original_amount" | "discount_amount">),
       is_test_payment: true,
+      coupon_id: null,
+      original_amount: null,
+      discount_amount: 0,
     },
     billingError: null,
   };
@@ -217,17 +220,29 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 클라이언트가 보낸 할인과 서버 계산이 다르면 거부
-    if (serverDiscountAmount !== billing.discount_amount) {
-      console.error("[toss-payment-confirm] Discount mismatch:", {
+    // 서버 계산값으로 billing_history를 덮어쓰기 (클라이언트 값 불신)
+    if (serverDiscountAmount !== billing.discount_amount || billing.original_amount !== canonicalAmount) {
+      console.warn("[toss-payment-confirm] Overwriting billing discount with server values:", {
         serverDiscount: serverDiscountAmount,
         billingDiscount: billing.discount_amount,
+        canonicalAmount,
+        billingOriginalAmount: billing.original_amount,
         couponId: billing.coupon_id,
       });
-      return jsonResponse(
-        { error: "Discount amount mismatch", expected: serverDiscountAmount, received: billing.discount_amount },
-        400,
-      );
+      const { error: updateErr } = await adminClient
+        .from("billing_history")
+        .update({
+          discount_amount: serverDiscountAmount,
+          original_amount: canonicalAmount,
+          amount: canonicalAmount - serverDiscountAmount,
+        })
+        .eq("id", orderId.trim())
+        .eq("payment_status", "pending");
+
+      if (updateErr) {
+        console.error("[toss-payment-confirm] Failed to overwrite billing discount:", updateErr.message);
+        return jsonResponse({ error: "Failed to correct billing record" }, 500);
+      }
     }
   }
 

@@ -4,6 +4,9 @@ import { couponService, CouponTemplate, UserCoupon, CouponStats, RedemptionStats
 import { useToast } from '../../../hooks/useToast';
 import { getBetaSignupPolicy } from '../../../utils/betaSignupPolicy';
 import ConfirmModal from '../../ConfirmModal';
+import CouponTemplateSection from './code-management/CouponTemplateSection';
+import CouponLookupSection from './code-management/CouponLookupSection';
+import CouponStatsSection from './code-management/CouponStatsSection';
 
 const CODE_TYPE_LABELS: Record<CodeType, string> = {
   beta: '베타코드',
@@ -51,14 +54,6 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   const [userCoupons, setUserCoupons] = useState<UserCoupon[]>([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
   const [couponHospitalId, setCouponHospitalId] = useState('');
-  const [showTemplateForm, setShowTemplateForm] = useState(false);
-  const [creatingTemplate, setCreatingTemplate] = useState(false);
-  const [tplName, setTplName] = useState('');
-  const [tplDescription, setTplDescription] = useState('');
-  const [tplDiscountType, setTplDiscountType] = useState<'percentage' | 'fixed_amount'>('percentage');
-  const [tplDiscountValue, setTplDiscountValue] = useState<number>(20);
-  const [tplMaxUses, setTplMaxUses] = useState<number>(10);
-  const [tplValidDays, setTplValidDays] = useState<number | ''>('');
 
   // ── 통계 상태 ──
   const [couponStats, setCouponStats] = useState<CouponStats | null>(null);
@@ -124,34 +119,31 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     void loadStats();
   }, [loadStats]);
 
-  const handleCreateTemplate = async () => {
-    if (!tplName.trim()) {
+  const handleCreateTemplate = async (params: {
+    name: string;
+    description?: string;
+    discountType: 'percentage' | 'fixed_amount';
+    discountValue: number;
+    maxUses: number;
+    validDays: number | null;
+  }) => {
+    if (!params.name.trim()) {
       showToast('템플릿 이름을 입력하세요.', 'error');
       return;
     }
-    setCreatingTemplate(true);
     try {
       const created = await couponService.createTemplate({
-        name: tplName.trim(),
-        description: tplDescription.trim() || undefined,
-        discountType: tplDiscountType,
-        discountValue: tplDiscountValue,
-        maxUses: tplMaxUses,
-        validDays: tplValidDays === '' ? null : tplValidDays,
+        name: params.name,
+        description: params.description,
+        discountType: params.discountType,
+        discountValue: params.discountValue,
+        maxUses: params.maxUses,
+        validDays: params.validDays,
       });
       setTemplates((prev) => [created, ...prev]);
-      setShowTemplateForm(false);
-      setTplName('');
-      setTplDescription('');
-      setTplDiscountType('percentage');
-      setTplDiscountValue(20);
-      setTplMaxUses(10);
-      setTplValidDays('');
       showToast('쿠폰 템플릿이 생성되었습니다.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '템플릿 생성에 실패했습니다.', 'error');
-    } finally {
-      setCreatingTemplate(false);
     }
   };
 
@@ -621,341 +613,29 @@ const SystemAdminBetaCodesTab: React.FC = () => {
       </div>
 
       {/* ── 쿠폰 템플릿 관리 ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-black text-slate-800">쿠폰 템플릿</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">제휴/프로모 코드에 연결할 할인 쿠폰 규칙을 관리합니다.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowTemplateForm((v) => !v)}
-            className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold hover:bg-violet-700 transition-colors"
-          >
-            {showTemplateForm ? '닫기' : '템플릿 추가'}
-          </button>
-        </div>
-
-        {showTemplateForm && (
-          <div className="px-5 py-4 border-b border-slate-100 bg-violet-50/50 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                value={tplName}
-                onChange={(e) => setTplName(e.target.value)}
-                placeholder="템플릿 이름 * (예: 제휴 20% 할인)"
-                className="w-full rounded-xl border border-violet-300 px-3 py-2 text-sm focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-              />
-              <input
-                value={tplDescription}
-                onChange={(e) => setTplDescription(e.target.value)}
-                placeholder="설명 (선택)"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-              />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">할인 유형</label>
-                <select
-                  value={tplDiscountType}
-                  onChange={(e) => setTplDiscountType(e.target.value as 'percentage' | 'fixed_amount')}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-                >
-                  <option value="percentage">정률 (%)</option>
-                  <option value="fixed_amount">정액 (원)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  할인 값 {tplDiscountType === 'percentage' ? '(%)' : '(원)'}
-                </label>
-                <input
-                  type="number"
-                  value={tplDiscountValue}
-                  onChange={(e) => setTplDiscountValue(Number(e.target.value))}
-                  min={1}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">최대 사용 횟수</label>
-                <input
-                  type="number"
-                  value={tplMaxUses}
-                  onChange={(e) => setTplMaxUses(Number(e.target.value))}
-                  min={1}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">유효기간 (일, 비워두면 무제한)</label>
-                <input
-                  type="number"
-                  value={tplValidDays}
-                  onChange={(e) => setTplValidDays(e.target.value === '' ? '' : Number(e.target.value))}
-                  min={1}
-                  placeholder="무제한"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => void handleCreateTemplate()}
-                disabled={creatingTemplate}
-                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 transition-colors disabled:opacity-50"
-              >
-                {creatingTemplate ? '생성 중...' : '템플릿 생성'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {templatesLoading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">불러오는 중...</div>
-        ) : templates.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">등록된 쿠폰 템플릿이 없습니다.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold">이름</th>
-                  <th className="px-4 py-3 text-left font-bold">할인</th>
-                  <th className="px-4 py-3 text-left font-bold">최대 사용</th>
-                  <th className="px-4 py-3 text-left font-bold">유효기간</th>
-                  <th className="px-4 py-3 text-left font-bold">상태</th>
-                  <th className="px-4 py-3 text-left font-bold">생성일</th>
-                  <th className="px-4 py-3 text-right font-bold">작업</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {templates.map((tpl) => (
-                  <tr key={tpl.id} className="text-slate-700">
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-slate-800">{tpl.name}</p>
-                      {tpl.description && <p className="text-[11px] text-slate-500 mt-0.5">{tpl.description}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold border bg-violet-50 text-violet-700 border-violet-200">
-                        {tpl.discount_type === 'percentage' ? `${tpl.discount_value}%` : `${tpl.discount_value.toLocaleString()}원`}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-semibold">{tpl.max_uses}회</td>
-                    <td className="px-4 py-3">{tpl.valid_days ? `${tpl.valid_days}일` : '무제한'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${tpl.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                        {tpl.is_active ? '활성' : '비활성'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[11px] text-slate-500">{formatDateTime(tpl.created_at)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleTemplate(tpl)}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${tpl.is_active ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                      >
-                        {tpl.is_active ? '비활성화' : '활성화'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <CouponTemplateSection
+        templates={templates}
+        templatesLoading={templatesLoading}
+        onCreateTemplate={handleCreateTemplate}
+        onToggleTemplate={handleToggleTemplate}
+      />
 
       {/* ── 발급 쿠폰 조회 ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h3 className="text-sm font-black text-slate-800">발급 쿠폰 조회</h3>
-          <p className="text-[11px] text-slate-500 mt-0.5">병원 ID로 해당 병원에 발급된 쿠폰을 조회합니다.</p>
-        </div>
-        <div className="px-5 py-3 flex items-center gap-3">
-          <input
-            value={couponHospitalId}
-            onChange={(e) => setCouponHospitalId(e.target.value)}
-            placeholder="병원 ID (UUID)"
-            className="flex-1 max-w-md rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSearchCoupons(); }}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSearchCoupons()}
-            disabled={couponsLoading}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-          >
-            {couponsLoading ? '조회 중...' : '조회'}
-          </button>
-        </div>
-
-        {userCoupons.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold">쿠폰명</th>
-                  <th className="px-4 py-3 text-left font-bold">할인</th>
-                  <th className="px-4 py-3 text-left font-bold">사용</th>
-                  <th className="px-4 py-3 text-left font-bold">출처</th>
-                  <th className="px-4 py-3 text-left font-bold">상태</th>
-                  <th className="px-4 py-3 text-left font-bold">만료일</th>
-                  <th className="px-4 py-3 text-right font-bold">작업</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {userCoupons.map((uc) => {
-                  const statusColors: Record<string, string> = {
-                    active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                    exhausted: 'bg-slate-100 text-slate-500 border-slate-200',
-                    expired: 'bg-amber-50 text-amber-700 border-amber-200',
-                    revoked: 'bg-rose-50 text-rose-600 border-rose-200',
-                  };
-                  const statusLabels: Record<string, string> = {
-                    active: '사용 가능',
-                    exhausted: '소진',
-                    expired: '만료',
-                    revoked: '회수됨',
-                  };
-                  return (
-                    <tr key={uc.id} className="text-slate-700">
-                      <td className="px-4 py-3 font-semibold">{uc.template?.name || '-'}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold border bg-violet-50 text-violet-700 border-violet-200">
-                          {uc.discount_type === 'percentage' ? `${uc.discount_value}%` : `${uc.discount_value.toLocaleString()}원`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">{uc.used_count}/{uc.max_uses}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${
-                          uc.source_type === 'partner' ? 'bg-violet-50 text-violet-700 border-violet-200'
-                          : uc.source_type === 'promo' ? 'bg-orange-50 text-orange-700 border-orange-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                        }`}>
-                          {uc.source_type === 'partner' ? '제휴' : uc.source_type === 'promo' ? '프로모' : '관리자'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[uc.status] || ''}`}>
-                          {statusLabels[uc.status] || uc.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[11px] text-slate-500">{uc.expires_at ? formatDateTime(uc.expires_at) : '무제한'}</td>
-                      <td className="px-4 py-3 text-right">
-                        {uc.status === 'active' && (
-                          <button
-                            type="button"
-                            onClick={() => void handleRevokeCoupon(uc.id)}
-                            className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
-                          >
-                            회수
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <CouponLookupSection
+        userCoupons={userCoupons}
+        couponsLoading={couponsLoading}
+        couponHospitalId={couponHospitalId}
+        onHospitalIdChange={setCouponHospitalId}
+        onSearch={handleSearchCoupons}
+        onRevoke={handleRevokeCoupon}
+      />
 
       {/* ── 운영 통계 ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* 쿠폰 발급 통계 */}
-        {couponStats && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-black text-slate-800 mb-3">쿠폰 발급 현황</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center">
-                <p className="text-2xl font-black text-indigo-600">{couponStats.total}</p>
-                <p className="text-[11px] text-slate-500 mt-1">총 발급</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-black text-emerald-600">{couponStats.active}</p>
-                <p className="text-[11px] text-slate-500 mt-1">사용 가능</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-black text-slate-600">{couponStats.totalUsed}</p>
-                <p className="text-[11px] text-slate-500 mt-1">총 사용 횟수</p>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3 text-[11px] text-slate-500">
-              <span>소진 {couponStats.exhausted}</span>
-              <span className="text-slate-300">|</span>
-              <span>만료 {couponStats.expired}</span>
-              <span className="text-slate-300">|</span>
-              <span>회수 {couponStats.revoked}</span>
-            </div>
-          </div>
-        )}
-
-        {/* 쿠폰 사용 통계 */}
-        {redemptionStats && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-black text-slate-800 mb-3">할인 실적</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <p className="text-2xl font-black text-violet-600">{redemptionStats.totalRedemptions}</p>
-                <p className="text-[11px] text-slate-500 mt-1">총 사용 건수</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-black text-violet-600">{redemptionStats.totalDiscountAmount.toLocaleString()}<span className="text-sm">원</span></p>
-                <p className="text-[11px] text-slate-500 mt-1">총 할인 금액</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 채널별 분석 */}
-      {channelStats.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100">
-            <h3 className="text-sm font-black text-slate-800">채널별 제휴코드 분석</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">제휴 코드의 채널별 사용 현황입니다.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold">채널</th>
-                  <th className="px-4 py-3 text-right font-bold">총 코드</th>
-                  <th className="px-4 py-3 text-right font-bold">활성 코드</th>
-                  <th className="px-4 py-3 text-right font-bold">검증 횟수</th>
-                  <th className="px-4 py-3 text-right font-bold">가입 전환</th>
-                  <th className="px-4 py-3 text-right font-bold">전환율</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {channelStats.map((ch) => {
-                  const cvr = ch.totalVerifications > 0
-                    ? Math.round((ch.signups / ch.totalVerifications) * 100)
-                    : 0;
-                  return (
-                    <tr key={ch.channel} className="text-slate-700">
-                      <td className="px-4 py-3 font-bold text-violet-700">{ch.channel}</td>
-                      <td className="px-4 py-3 text-right">{ch.totalCodes}</td>
-                      <td className="px-4 py-3 text-right">{ch.activeCodes}</td>
-                      <td className="px-4 py-3 text-right">{ch.totalVerifications}</td>
-                      <td className="px-4 py-3 text-right font-bold text-emerald-700">{ch.signups}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          cvr >= 50 ? 'bg-emerald-50 text-emerald-700' : cvr >= 20 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          {cvr}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <CouponStatsSection
+        couponStats={couponStats}
+        redemptionStats={redemptionStats}
+        channelStats={channelStats}
+      />
 
       {toast && (
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[260] px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>

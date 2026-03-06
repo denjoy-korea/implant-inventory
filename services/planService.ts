@@ -11,20 +11,7 @@ import {
 } from '../types';
 import { UNLIMITED_DAYS } from '../constants';
 import { getTrialDurationDays } from '../utils/trialPolicy';
-
-function resolveIsTestPayment(): boolean {
-  // 기본값은 테스트(true). 실결제 전환 시 VITE_PAYMENT_LIVE_MODE=true로 반전.
-  const liveMode = String(import.meta.env.VITE_PAYMENT_LIVE_MODE ?? '').trim().toLowerCase();
-  return liveMode !== 'true';
-}
-
-function isMissingIsTestPaymentColumnError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const message = 'message' in error && typeof error.message === 'string'
-    ? error.message
-    : '';
-  return message.includes('is_test_payment');
-}
+import { resolveIsTestPayment, isMissingIsTestPaymentColumnError } from '../utils/paymentCompat';
 
 export const planService = {
   /** 병원의 플랜 상태 조회 */

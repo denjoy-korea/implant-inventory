@@ -29,3 +29,4 @@
 | notion-integration | 95% | 2026-03-05 | [notion-integration/](./notion-integration/) |
 | useInventoryCompare-extraction | — | 2026-03-05 | [useInventoryCompare-extraction/](./useInventoryCompare-extraction/) |
 | traffic-tracking | 96.5% | 2026-03-05 | [traffic-tracking/](./traffic-tracking/) |
+| code-coupon-system | 100% | 2026-03-06 | [code-coupon-system/](./code-coupon-system/) |

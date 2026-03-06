@@ -20,7 +20,7 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   onDismiss,
 }) => {
   const [contactName, setContactName] = useState(user?.name || '');
-  const [contactPhone, setContactPhone] = useState((user as { phone?: string })?.phone || '');
+  const [contactPhone, setContactPhone] = useState(user?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer'>('card');
   const [receiptType, setReceiptType] = useState<'cash_receipt' | 'tax_invoice'>('cash_receipt');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,16 +34,21 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   const loadCoupons = useCallback(async () => {
     if (!user?.hospitalId) return;
     try {
-      const coupons = await couponService.getAvailableCoupons(user.hospitalId);
+      const coupons = await couponService.getAvailableCoupons(user.hospitalId, plan || undefined);
       setAvailableCoupons(coupons);
     } catch {
       // 쿠폰 조회 실패해도 결제는 진행 가능
     }
-  }, [user?.hospitalId]);
+  }, [user?.hospitalId, plan]);
 
   useEffect(() => {
     void loadCoupons();
   }, [loadCoupons]);
+
+  // 플랜/billing 변경 시 쿠폰 선택 초기화
+  useEffect(() => {
+    setSelectedCouponId(null);
+  }, [plan, billing]);
 
   // 쿠폰 선택 시 할인 미리보기 계산
   useEffect(() => {

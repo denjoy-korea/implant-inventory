@@ -104,6 +104,10 @@ export const couponService = {
     validDays?: number | null;
     applicablePlans?: string[];
   }): Promise<CouponTemplate> {
+    if (params.discountValue <= 0) throw new Error('할인 값은 0보다 커야 합니다.');
+    if (params.discountType === 'percentage' && params.discountValue > 100) {
+      throw new Error('퍼센트 할인은 100%를 초과할 수 없습니다.');
+    }
     const { data: authData } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from('coupon_templates')
@@ -165,19 +169,24 @@ export const couponService = {
     return (data || []) as UserCoupon[];
   },
 
-  async getAvailableCoupons(hospitalId: string): Promise<UserCoupon[]> {
-    const { data, error } = await supabase
+  async getAvailableCoupons(hospitalId: string, forPlan?: string): Promise<UserCoupon[]> {
+    let query = supabase
       .from('user_coupons')
       .select('*, template:coupon_templates(*)')
       .eq('hospital_id', hospitalId)
       .eq('status', 'active')
+      .lt('used_count', 'max_uses' as never)
+      .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString())
       .order('expires_at', { ascending: true, nullsFirst: false });
+    const { data, error } = await query;
     if (error) throw new Error('사용 가능 쿠폰 조회 실패');
-    const now = new Date();
-    return ((data || []) as UserCoupon[]).filter(c =>
-      c.used_count < c.max_uses &&
-      (!c.expires_at || new Date(c.expires_at) > now)
-    );
+    return ((data || []) as UserCoupon[]).filter(c => {
+      // applicable_plans 필터: 빈 배열이면 모든 플랜에 적용
+      if (forPlan && c.template?.applicable_plans?.length) {
+        if (!c.template.applicable_plans.includes(forPlan)) return false;
+      }
+      return true;
+    });
   },
 
   async revokeCoupon(couponId: string): Promise<void> {
@@ -226,31 +235,26 @@ export const couponService = {
   // ── 통계 (admin) ──
 
   async getCouponStats(): Promise<CouponStats> {
-    const { data, error } = await supabase
-      .from('user_coupons')
-      .select('status, discount_amount, used_count');
+    const { data, error } = await supabase.rpc('get_coupon_stats');
     if (error) throw new Error('쿠폰 통계 조회 실패');
-    const rows = (data || []) as { status: string; discount_amount: number; used_count: number }[];
-    const stats: CouponStats = { total: rows.length, active: 0, exhausted: 0, expired: 0, revoked: 0, totalUsed: 0 };
-    for (const r of rows) {
-      if (r.status === 'active') stats.active++;
-      else if (r.status === 'exhausted') stats.exhausted++;
-      else if (r.status === 'expired') stats.expired++;
-      else if (r.status === 'revoked') stats.revoked++;
-      stats.totalUsed += r.used_count || 0;
-    }
-    return stats;
+    const s = data as Record<string, number>;
+    return {
+      total: s.total ?? 0,
+      active: s.active ?? 0,
+      exhausted: s.exhausted ?? 0,
+      expired: s.expired ?? 0,
+      revoked: s.revoked ?? 0,
+      totalUsed: s.totalUsed ?? 0,
+    };
   },
 
   async getRedemptionStats(): Promise<RedemptionStats> {
-    const { data, error } = await supabase
-      .from('coupon_redemptions')
-      .select('discount_amount');
+    const { data, error } = await supabase.rpc('get_redemption_stats');
     if (error) throw new Error('쿠폰 사용 통계 조회 실패');
-    const rows = (data || []) as { discount_amount: number }[];
+    const s = data as Record<string, number>;
     return {
-      totalRedemptions: rows.length,
-      totalDiscountAmount: rows.reduce((sum, r) => sum + (r.discount_amount || 0), 0),
+      totalRedemptions: s.totalRedemptions ?? 0,
+      totalDiscountAmount: s.totalDiscountAmount ?? 0,
     };
   },
 

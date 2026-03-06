@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { User, PlanType, PLAN_NAMES } from '../types';
 import { getErrorMessage } from '../utils/errors';
 import { planService } from '../services/planService';
@@ -7,12 +7,11 @@ import { authService } from '../services/authService';
 import { supabase } from '../services/supabaseClient';
 import { dbToUser } from '../services/mappers';
 import { useToast } from './useToast';
-import { contactService } from '../services/contactService';
 import { pageViewService } from '../services/pageViewService';
 import { SIGNUP_PLANS } from '../components/auth/authSignupConfig';
 import { TRIAL_OFFER_LABEL } from '../utils/trialPolicy';
-import { betaInviteService, CodeType } from '../services/betaInviteService';
-import { getBetaSignupPolicy, normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
+import { useWaitlistForm } from './useWaitlistForm';
+import { useBetaCodeVerification } from './useBetaCodeVerification';
 
 export interface InviteInfo {
   token: string;
@@ -112,26 +111,12 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
   const [rememberEmail, setRememberEmail] = useState(savedEmail !== '');
   const [errorStatus, setErrorStatus] = useState<AuthErrorStatus | null>(null);
   const [resetEmailSent, setResetEmailSent] = useState(false);
-  const [betaInviteCode, setBetaInviteCode] = useState('');
-  const [betaInviteVerified, setBetaInviteVerified] = useState(false);
-  const [verifiedCodeType, setVerifiedCodeType] = useState<CodeType | null>(null);
-  const [betaInviteModalOpen, setBetaInviteModalOpen] = useState(false);
-  const [betaInviteChecking, setBetaInviteChecking] = useState(false);
-  const [betaInviteError, setBetaInviteError] = useState('');
-  const betaSignupPolicy = getBetaSignupPolicy();
-  const isBetaInviteRequired = type === 'signup' && betaSignupPolicy.requiresInviteCode;
 
   const [pendingTrialPlan, setPendingTrialPlan] = useState<PlanType | null>(null);
   const [trialConsented, setTrialConsented] = useState(false);
   const [planAvailability, setPlanAvailability] = useState<Record<string, boolean>>({});
   const [showFindId, setShowFindId] = useState(false);
 
-  const [waitlistPlan, setWaitlistPlan] = useState<{ key: string; name: string } | null>(null);
-  const [waitlistName, setWaitlistName] = useState('');
-  const [waitlistEmail, setWaitlistEmail] = useState('');
-  const [waitlistAgreed, setWaitlistAgreed] = useState(false);
-  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
-  const waitlistDialogRef = useRef<HTMLDivElement>(null);
   const [findPhone, setFindPhone] = useState('');
   const [foundEmail, setFoundEmail] = useState<string | null>(null);
 
@@ -147,6 +132,10 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast, showToast } = useToast();
+
+  // Compose sub-hooks
+  const beta = useBetaCodeVerification({ type, showToast });
+  const waitlist = useWaitlistForm({ showToast, showLegalType });
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -168,51 +157,6 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
   }, [type]);
 
   useEffect(() => {
-    if (!waitlistPlan) return;
-    const previousFocused = document.activeElement as HTMLElement | null;
-    const dialog = waitlistDialogRef.current;
-    if (!dialog) return;
-
-    const getFocusable = (): HTMLElement[] =>
-      Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      );
-
-    window.setTimeout(() => getFocusable()[0]?.focus(), 0);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (showLegalType) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (!waitlistSubmitting) setWaitlistPlan(null);
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = getFocusable();
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previousFocused?.focus();
-    };
-  }, [showLegalType, waitlistPlan, waitlistSubmitting]);
-
-  useEffect(() => {
     if (type !== 'signup' || !initialPlan) return;
     const planInfo = SIGNUP_PLANS.find(p => p.key === initialPlan);
     if (!planInfo) return;
@@ -224,6 +168,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     }
   }, [type, initialPlan]);
 
+  // Type-change cleanup effect
   useEffect(() => {
     if (type === 'invite') return;
     setErrorStatus(null);
@@ -236,49 +181,8 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     setPhone('');
     setBizFile(null);
     setPasswordConfirm('');
-    setBetaInviteCode('');
-    setBetaInviteVerified(false);
-    setBetaInviteModalOpen(false);
-    setBetaInviteError('');
+    beta.resetBetaState();
   }, [type]);
-
-  useEffect(() => {
-    if (type !== 'signup') return;
-    if (!isBetaInviteRequired) return;
-    if (betaInviteVerified) return;
-    setBetaInviteModalOpen(true);
-  }, [type, isBetaInviteRequired, betaInviteVerified]);
-
-  const handleWaitlistSubmit = async () => {
-    if (!waitlistPlan || !waitlistEmail.trim() || !waitlistName.trim() || !waitlistAgreed) return;
-    setWaitlistSubmitting(true);
-    pageViewService.trackEvent('waitlist_submit_start', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
-    try {
-      await contactService.submit({
-        hospital_name: '-',
-        contact_name: waitlistName.trim(),
-        email: waitlistEmail.trim(),
-        phone: '-',
-        weekly_surgeries: '-',
-        inquiry_type: `plan_waitlist_${waitlistPlan.key}`,
-        content: `${waitlistPlan.name} 플랜 대기 신청`,
-      });
-      pageViewService.trackEvent('waitlist_submit', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
-      setWaitlistPlan(null);
-      setWaitlistAgreed(false);
-      setWaitlistName('');
-      setWaitlistEmail('');
-    } catch (error) {
-      pageViewService.trackEvent('waitlist_submit_error', { plan: waitlistPlan.key, source: 'auth_signup' }, 'signup');
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : '대기 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
-      showToast(message, 'error');
-    } finally {
-      setWaitlistSubmitting(false);
-    }
-  };
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -392,43 +296,6 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     showToast('무료 체험 시작에 실패했습니다. 다시 시도해 주세요.', 'error');
   };
 
-  const openBetaInviteModal = () => {
-    setBetaInviteError('');
-    setBetaInviteModalOpen(true);
-  };
-
-  const handleVerifyBetaInviteCode = async (event?: React.FormEvent) => {
-    event?.preventDefault();
-    const normalizedCode = normalizeBetaInviteCode(betaInviteCode);
-    if (!normalizedCode) {
-      setBetaInviteError('초대 코드를 입력해주세요.');
-      return;
-    }
-
-    setBetaInviteChecking(true);
-    setBetaInviteError('');
-    const result = await betaInviteService.verifyCode(normalizedCode);
-    setBetaInviteChecking(false);
-
-    if (!result.ok) {
-      setBetaInviteError(result.message || '유효하지 않은 초대 코드입니다.');
-      setBetaInviteVerified(false);
-      return;
-    }
-
-    setBetaInviteCode(normalizedCode);
-    setBetaInviteVerified(true);
-    setVerifiedCodeType(result.codeType || 'beta');
-    setBetaInviteModalOpen(false);
-    setBetaInviteError('');
-    showToast(
-      result.codeType === 'partner'
-        ? '제휴 코드 확인 완료! 가입 시 할인 혜택이 자동 적용됩니다.'
-        : '코드 확인이 완료되었습니다.',
-      'success',
-    );
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorStatus(null);
@@ -458,8 +325,8 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
         showToast('이용약관 및 개인정보 처리방침에 동의해주세요.', 'error');
         return;
       }
-      if (isBetaInviteRequired && !betaInviteVerified) {
-        openBetaInviteModal();
+      if (beta.isBetaInviteRequired && !beta.betaInviteVerified) {
+        beta.openBetaInviteModal();
         return;
       }
 
@@ -484,7 +351,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
         bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
         signupSource: signupSource || undefined,
         trialPlan: (pendingTrialPlan && pendingTrialPlan !== 'free') ? pendingTrialPlan : undefined,
-        betaInviteCode: isBetaInviteRequired ? betaInviteCode : undefined,
+        betaInviteCode: beta.betaInviteVerified ? beta.betaInviteCode : undefined,
       });
       setIsSubmitting(false);
 
@@ -585,24 +452,24 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     rememberEmail, setRememberEmail,
     errorStatus, setErrorStatus,
     resetEmailSent, setResetEmailSent,
-    betaInviteCode, setBetaInviteCode,
-    betaInviteVerified,
-    verifiedCodeType,
-    betaInviteModalOpen, setBetaInviteModalOpen,
-    betaInviteChecking,
-    betaInviteError,
-    betaSignupPolicy,
-    isBetaInviteRequired,
+    betaInviteCode: beta.betaInviteCode, setBetaInviteCode: beta.setBetaInviteCode,
+    betaInviteVerified: beta.betaInviteVerified,
+    verifiedCodeType: beta.verifiedCodeType,
+    betaInviteModalOpen: beta.betaInviteModalOpen, setBetaInviteModalOpen: beta.setBetaInviteModalOpen,
+    betaInviteChecking: beta.betaInviteChecking,
+    betaInviteError: beta.betaInviteError,
+    betaSignupPolicy: beta.betaSignupPolicy,
+    isBetaInviteRequired: beta.isBetaInviteRequired,
     pendingTrialPlan, setPendingTrialPlan,
     trialConsented, setTrialConsented,
     planAvailability,
     showFindId, setShowFindId,
-    waitlistPlan, setWaitlistPlan,
-    waitlistName, setWaitlistName,
-    waitlistEmail, setWaitlistEmail,
-    waitlistAgreed, setWaitlistAgreed,
-    waitlistSubmitting,
-    waitlistDialogRef,
+    waitlistPlan: waitlist.waitlistPlan, setWaitlistPlan: waitlist.setWaitlistPlan,
+    waitlistName: waitlist.waitlistName, setWaitlistName: waitlist.setWaitlistName,
+    waitlistEmail: waitlist.waitlistEmail, setWaitlistEmail: waitlist.setWaitlistEmail,
+    waitlistAgreed: waitlist.waitlistAgreed, setWaitlistAgreed: waitlist.setWaitlistAgreed,
+    waitlistSubmitting: waitlist.waitlistSubmitting,
+    waitlistDialogRef: waitlist.waitlistDialogRef,
     findPhone, setFindPhone,
     foundEmail, setFoundEmail,
     resendCooldown, setResendCooldown,
@@ -616,11 +483,11 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     toast,
     showToast,
     // handlers
-    handleWaitlistSubmit,
+    handleWaitlistSubmit: waitlist.handleWaitlistSubmit,
     handleInviteSubmit,
     handleRoleSelect,
-    openBetaInviteModal,
-    handleVerifyBetaInviteCode,
+    openBetaInviteModal: beta.openBetaInviteModal,
+    handleVerifyBetaInviteCode: beta.handleVerifyBetaInviteCode,
     handleSubmit,
   };
 }

@@ -50,9 +50,11 @@ interface UpdateBetaCodeMetaParams {
 
 function buildRandomSegment(length: number): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const randomValues = new Uint32Array(length);
+  crypto.getRandomValues(randomValues);
   let out = '';
   for (let i = 0; i < length; i += 1) {
-    out += chars[Math.floor(Math.random() * chars.length)];
+    out += chars[randomValues[i] % chars.length];
   }
   return out;
 }
