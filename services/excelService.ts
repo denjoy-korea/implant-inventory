@@ -21,13 +21,32 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
   if (!file || file.size === 0) {
     throw new Error('빈 파일입니다. 올바른 .xlsx 파일을 선택해 주세요.');
   }
-  const ExcelJSModule = await import('exceljs');
-  // ESM/CJS 양면 대응: Vite는 default export를 ExcelJSModule.default로 감싸는 경우가 있음
-  const ExcelJS = (ExcelJSModule as Record<string, unknown>).default ?? ExcelJSModule;
-  const workbook = new (ExcelJS as { Workbook: new () => import('exceljs').Workbook }).Workbook();
+  const ExcelJSModule = await import('exceljs') as Record<string, unknown>;
+  // ESM/CJS/UMD 대응: Vite 브라우저 빌드는 다양한 형태로 감쌀 수 있음
+  // 가능한 경로: mod.Workbook, mod.default.Workbook, mod.default.default.Workbook
+  type WbCtor = new () => import('exceljs').Workbook;
+  const resolveWorkbook = (mod: Record<string, unknown>): WbCtor | null => {
+    if (typeof mod.Workbook === 'function') return mod.Workbook as WbCtor;
+    if (mod.default && typeof mod.default === 'object') {
+      const def = mod.default as Record<string, unknown>;
+      if (typeof def.Workbook === 'function') return def.Workbook as WbCtor;
+      if (def.default && typeof def.default === 'object') {
+        const def2 = def.default as Record<string, unknown>;
+        if (typeof def2.Workbook === 'function') return def2.Workbook as WbCtor;
+      }
+    }
+    return null;
+  };
+  const WorkbookCtor = resolveWorkbook(ExcelJSModule);
+  if (!WorkbookCtor) {
+    console.error('[excelService] ExcelJS Workbook 생성자를 찾을 수 없음. 모듈 구조:', Object.keys(ExcelJSModule), ExcelJSModule.default ? Object.keys(ExcelJSModule.default as object) : 'no default');
+    throw new Error('엑셀 라이브러리 초기화에 실패했습니다. 페이지를 새로고침 후 다시 시도해 주세요.');
+  }
+  const workbook = new WorkbookCtor();
   const buffer = await file.arrayBuffer();
   try {
-    await workbook.xlsx.load(buffer);
+    // JSZip(ExcelJS 내부)은 브라우저에서 Uint8Array를 ArrayBuffer보다 안정적으로 처리
+    await workbook.xlsx.load(new Uint8Array(buffer) as unknown as ArrayBuffer);
   } catch (e) {
     console.error('[excelService] workbook.xlsx.load 실패:', e, { fileName: file.name, fileSize: file.size, fileType: file.type });
     throw new Error(`엑셀 파일을 읽을 수 없습니다. 파일이 .xlsx 형식인지 확인해 주세요. (${file.name})`);
