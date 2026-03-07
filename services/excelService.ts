@@ -1,89 +1,77 @@
 import { ExcelData, ExcelRow } from '../types';
 import { supabase } from './supabaseClient';
 
-function toCellScalar(v: unknown): string | number | boolean {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'object') {
-    if ('result' in (v as object)) {
-      const r = (v as { result?: unknown }).result;
-      return (typeof r === 'string' || typeof r === 'number' || typeof r === 'boolean') ? r : String(r ?? '');
-    }
-    if ('richText' in (v as object)) {
-      return (v as { richText: { text: string }[] }).richText.map(rt => rt.text).join('');
-    }
+function toCellScalar(cell: { t?: string; v?: unknown; w?: string } | undefined): string | number | boolean {
+  if (!cell || cell.v === null || cell.v === undefined) return '';
+  // SheetJS cell types: s=string, n=number, b=boolean, d=date, e=error
+  switch (cell.t) {
+    case 'n': return typeof cell.v === 'number' ? cell.v : Number(cell.v);
+    case 'b': return !!cell.v;
+    case 'd': return cell.w ?? (cell.v instanceof Date ? cell.v.toISOString().slice(0, 10) : String(cell.v));
+    case 's': return String(cell.v);
+    default: return cell.w ?? String(cell.v ?? '');
   }
-  return String(v);
 }
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
   if (!file || file.size === 0) {
     throw new Error('빈 파일입니다. 올바른 .xlsx 파일을 선택해 주세요.');
   }
-  const ExcelJSModule = await import('exceljs') as Record<string, unknown>;
-  // ESM/CJS/UMD 대응: Vite 브라우저 빌드는 다양한 형태로 감쌀 수 있음
-  // 가능한 경로: mod.Workbook, mod.default.Workbook, mod.default.default.Workbook
-  type WbCtor = new () => import('exceljs').Workbook;
-  const resolveWorkbook = (mod: Record<string, unknown>): WbCtor | null => {
-    if (typeof mod.Workbook === 'function') return mod.Workbook as WbCtor;
-    if (mod.default && typeof mod.default === 'object') {
-      const def = mod.default as Record<string, unknown>;
-      if (typeof def.Workbook === 'function') return def.Workbook as WbCtor;
-      if (def.default && typeof def.default === 'object') {
-        const def2 = def.default as Record<string, unknown>;
-        if (typeof def2.Workbook === 'function') return def2.Workbook as WbCtor;
-      }
-    }
-    return null;
-  };
-  const WorkbookCtor = resolveWorkbook(ExcelJSModule);
-  if (!WorkbookCtor) {
-    console.error('[excelService] ExcelJS Workbook 생성자를 찾을 수 없음. 모듈 구조:', Object.keys(ExcelJSModule), ExcelJSModule.default ? Object.keys(ExcelJSModule.default as object) : 'no default');
-    throw new Error('엑셀 라이브러리 초기화에 실패했습니다. 페이지를 새로고침 후 다시 시도해 주세요.');
-  }
-  const workbook = new WorkbookCtor();
+
+  const XLSX = await import('xlsx');
   const buffer = await file.arrayBuffer();
+
+  let workbook;
   try {
-    // JSZip(ExcelJS 내부)은 브라우저에서 Uint8Array를 ArrayBuffer보다 안정적으로 처리
-    await workbook.xlsx.load(new Uint8Array(buffer) as unknown as ArrayBuffer);
+    workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
   } catch (e) {
-    console.error('[excelService] workbook.xlsx.load 실패:', e, { fileName: file.name, fileSize: file.size, fileType: file.type });
+    console.error('[excelService] XLSX.read 실패:', e, { fileName: file.name, fileSize: file.size, fileType: file.type });
     throw new Error(`엑셀 파일을 읽을 수 없습니다. 파일이 .xlsx 형식인지 확인해 주세요. (${file.name})`);
   }
 
   const sheets: Record<string, { name: string; columns: string[]; rows: ExcelRow[] }> = {};
   let activeSheetName = '';
 
-  workbook.eachSheet((worksheet) => {
-    const sheetName = worksheet.name;
+  for (const sheetName of workbook.SheetNames) {
     if (!activeSheetName) activeSheetName = sheetName;
+    const ws = workbook.Sheets[sheetName];
+    if (!ws || !ws['!ref']) {
+      sheets[sheetName] = { name: sheetName, columns: [], rows: [] };
+      continue;
+    }
 
-    const headerRow = worksheet.getRow(1);
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // 1행에서 헤더 추출 (빈 셀은 건너뜀)
     const columns: string[] = [];
-    for (let C = 1; C <= worksheet.columnCount; C++) {
-      const val = headerRow.getCell(C).value;
+    const colIndices: number[] = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+      const cell = ws[addr];
+      const val = cell?.v;
       if (val !== null && val !== undefined && val !== '') {
         columns.push(String(val));
+        colIndices.push(C);
       }
     }
 
+    // 2행부터 데이터 추출
     const rows: ExcelRow[] = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
+    for (let R = range.s.r + 1; R <= range.e.r; R++) {
       const rowData: ExcelRow = {};
       columns.forEach((colName, idx) => {
-        rowData[colName] = toCellScalar(row.getCell(idx + 1).value);
+        const addr = XLSX.utils.encode_cell({ r: R, c: colIndices[idx] });
+        rowData[colName] = toCellScalar(ws[addr] as { t?: string; v?: unknown; w?: string } | undefined);
       });
       if (rowData['사용안함'] !== undefined) {
         const val = rowData['사용안함'];
         rowData['사용안함'] = val === true || val === 'TRUE' || val === 1 || val === '1' || val === 'v';
       }
       rows.push(rowData);
-    });
+    }
 
     sheets[sheetName] = { name: sheetName, columns, rows };
-  });
+  }
 
   return { sheets, activeSheetName };
 };

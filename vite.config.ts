@@ -28,7 +28,7 @@ export default defineConfig(() => {
       }
     },
     build: {
-      // exceljs 번들은 업로드/분석 경로에서만 지연 로드되는 전용 청크라
+      // xlsx(SheetJS) 번들은 업로드/분석 경로에서만 지연 로드되는 전용 청크라
       // 번들 경고 임계값을 실사용 경로 기준으로 조정한다.
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
@@ -63,7 +63,7 @@ export default defineConfig(() => {
               id.includes('/qrcode.react/')
             ) return 'react-vendor';
             if (id.includes('@supabase')) return 'supabase-vendor';
-            if (id.includes('exceljs')) return 'exceljs-vendor';
+            if (id.includes('xlsx')) return 'xlsx-vendor';
             return undefined;
           }
         },
