@@ -69,6 +69,23 @@ export function useAppState(onNotify?: NotifyFn) {
   // initSession이 세션 복원 + loadHospitalData 완료 시 true → SIGNED_IN 중복 실행 방지
   const initSessionHandledRef = useRef(false);
 
+  /** 백그라운드 프로필 복호화: decrypt: false로 빠르게 진입한 뒤 이름/이메일/전화번호 복원 */
+  const backgroundDecryptUser = (userId: string) => {
+    waitForWarmup()
+      .then(() => authService.getProfileById(undefined, { decrypt: true }))
+      .then((decryptedProfile) => {
+        if (!decryptedProfile) return;
+        const decryptedUser = dbToUser(decryptedProfile);
+        setState((prev) => {
+          if (prev.user?.id !== userId) return prev;
+          return { ...prev, user: decryptedUser };
+        });
+      })
+      .catch((e) => {
+        console.warn('[useAppState] 프로필 백그라운드 복호화 실패:', e);
+      });
+  };
+
   /** 병원 데이터 로드 (로그인 후 / 세션 복원 시) */
   const loadHospitalData = async (user: User) => {
     const loadKey = `${user.id}:${user.hospitalId}:${user.status}:${user.role}`;
@@ -90,6 +107,8 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalBillingProgram: null,
         isLoading: false,
       }));
+      // 백그라운드 프로필 복호화
+      void backgroundDecryptUser(user.id);
       return;
     }
 
@@ -106,6 +125,8 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalBillingProgram: null,
         isLoading: false,
       }));
+      // 백그라운드 프로필 복호화
+      void backgroundDecryptUser(user.id);
       return;
     }
 
@@ -201,6 +222,9 @@ export function useAppState(onNotify?: NotifyFn) {
             console.warn('[useAppState] 수술기록 백그라운드 복호화 실패, 마스킹 유지:', e);
           });
       }
+
+      // 백그라운드 프로필 복호화: 사용자 이름/이메일/전화번호 복원
+      void backgroundDecryptUser(user.id);
     } catch (error) {
       console.error('[useAppState] Data loading failed:', error);
       setState(prev => ({
