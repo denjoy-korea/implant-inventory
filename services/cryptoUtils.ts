@@ -59,7 +59,7 @@ async function getValidToken(): Promise<string | null> {
 }
 
 async function callCryptoService(
-  op: 'encrypt' | 'decrypt' | 'hash' | 'decrypt_batch',
+  op: 'encrypt' | 'decrypt' | 'hash' | 'encrypt_batch' | 'hash_batch' | 'decrypt_batch',
   payload: { text?: string; texts?: string[] },
   requireAuth = true,
 ): Promise<string | string[]> {
@@ -91,6 +91,8 @@ async function callCryptoService(
     encrypt: 7_500,
     decrypt: 8_000,
     hash: 7_500,
+    encrypt_batch: 10_000,
+    hash_batch: 10_000,
     decrypt_batch: 10_000,
   };
   const defaultTimeout = timeoutByOp[op];
@@ -112,7 +114,7 @@ async function callCryptoService(
   } catch (err) {
     // AbortError(타임아웃): decrypt_batch는 재시도 시 총 대기시간만 증가하므로 즉시 실패 처리
     if (isAbortError(err)) {
-      if (op === 'decrypt_batch') {
+      if (op === 'decrypt_batch' || op === 'encrypt_batch' || op === 'hash_batch') {
         throw err;
       }
       console.warn(`[cryptoUtils] ${op} 타임아웃, 확장 타임아웃으로 1회 재시도`);
@@ -201,6 +203,101 @@ export async function hashPatientInfo(text: string): Promise<string> {
   if (!text) return '';
   // anon key 허용: 비인증 상태에서도 ID 조회(findByPhone/Email) 가능
   return callCryptoService('hash', { text }, false) as Promise<string>;
+}
+
+/**
+ * 여러 평문을 한 번의 Edge Function 호출로 암호화.
+ * 수술기록 업로드 시 N건의 patient_info를 배치 처리하여 N+1 호출 방지.
+ */
+export async function encryptPatientInfoBatch(
+  textList: string[],
+): Promise<string[]> {
+  if (!textList.length) return [];
+
+  // 빈 문자열은 Edge Function 호출 없이 빈 문자열로 반환
+  const nonEmptyIndices: number[] = [];
+  const nonEmptyValues: string[] = [];
+  textList.forEach((s, i) => {
+    if (s) {
+      nonEmptyIndices.push(i);
+      nonEmptyValues.push(s);
+    }
+  });
+  if (!nonEmptyValues.length) return textList.map(() => '');
+
+  const BATCH_LIMIT = 200;
+  const BATCH_CONCURRENCY = 2;
+  const chunkCount = Math.ceil(nonEmptyValues.length / BATCH_LIMIT);
+  const chunkResults: string[][] = new Array(chunkCount);
+
+  for (let base = 0; base < chunkCount; base += BATCH_CONCURRENCY) {
+    const workers: Promise<void>[] = [];
+    const end = Math.min(base + BATCH_CONCURRENCY, chunkCount);
+    for (let ci = base; ci < end; ci++) {
+      const start = ci * BATCH_LIMIT;
+      const chunk = nonEmptyValues.slice(start, start + BATCH_LIMIT);
+      workers.push(
+        (async () => {
+          chunkResults[ci] = await callCryptoService('encrypt_batch', { texts: chunk }, true) as string[];
+        })(),
+      );
+    }
+    await Promise.all(workers);
+  }
+  const encryptedValues = chunkResults.flat();
+
+  const result = textList.map(() => '');
+  nonEmptyIndices.forEach((origIdx, i) => {
+    result[origIdx] = encryptedValues[i];
+  });
+  return result;
+}
+
+/**
+ * 여러 평문을 한 번의 Edge Function 호출로 해시.
+ * 수술기록 업로드 시 N건의 patient_info_hash를 배치 처리.
+ */
+export async function hashPatientInfoBatch(
+  textList: string[],
+): Promise<string[]> {
+  if (!textList.length) return [];
+
+  const nonEmptyIndices: number[] = [];
+  const nonEmptyValues: string[] = [];
+  textList.forEach((s, i) => {
+    if (s) {
+      nonEmptyIndices.push(i);
+      nonEmptyValues.push(s);
+    }
+  });
+  if (!nonEmptyValues.length) return textList.map(() => '');
+
+  const BATCH_LIMIT = 200;
+  const BATCH_CONCURRENCY = 2;
+  const chunkCount = Math.ceil(nonEmptyValues.length / BATCH_LIMIT);
+  const chunkResults: string[][] = new Array(chunkCount);
+
+  for (let base = 0; base < chunkCount; base += BATCH_CONCURRENCY) {
+    const workers: Promise<void>[] = [];
+    const end = Math.min(base + BATCH_CONCURRENCY, chunkCount);
+    for (let ci = base; ci < end; ci++) {
+      const start = ci * BATCH_LIMIT;
+      const chunk = nonEmptyValues.slice(start, start + BATCH_LIMIT);
+      workers.push(
+        (async () => {
+          chunkResults[ci] = await callCryptoService('hash_batch', { texts: chunk }, false) as string[];
+        })(),
+      );
+    }
+    await Promise.all(workers);
+  }
+  const hashedValues = chunkResults.flat();
+
+  const result = textList.map(() => '');
+  nonEmptyIndices.forEach((origIdx, i) => {
+    result[origIdx] = hashedValues[i];
+  });
+  return result;
 }
 
 /**

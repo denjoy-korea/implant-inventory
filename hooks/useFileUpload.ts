@@ -239,7 +239,10 @@ export function useFileUpload({
         return true;
       }
     } catch (error) {
-      showAlertToast('엑셀 파일 처리에 실패했습니다.', 'error');
+      console.error('[useFileUpload] 엑셀 파일 처리 실패:', error);
+      const errMsg = error instanceof Error ? error.message : '';
+      const detail = errMsg.includes('timeout') ? ' (암호화 타임아웃)' : errMsg.includes('encrypt') ? ' (암호화 오류)' : '';
+      showAlertToast(`엑셀 파일 처리에 실패했습니다.${detail} 다시 시도해 주세요.`, 'error');
       setState(prev => ({ ...prev, isLoading: false }));
       return false;
     } finally {

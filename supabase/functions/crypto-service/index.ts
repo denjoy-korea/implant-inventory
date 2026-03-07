@@ -8,7 +8,9 @@
  *   encrypt        — 평문 → ENCv2 암호문 (JWT 필수)
  *   decrypt        — ENCv2/ENCv1 암호문 → 평문 (JWT 필수)
  *   hash           — 평문 → SHA-256 해시 (anon key 허용: 비인증 ID 조회 지원)
- *   decrypt_batch  — 암호문 배열 → 평문 배열 (JWT 필수)
+ *   encrypt_batch  — 평문 배열 → 암호문 배열 (JWT 필수, 최대 500개)
+ *   hash_batch     — 평문 배열 → 해시 배열 (anon key 허용, 최대 500개)
+ *   decrypt_batch  — 암호문 배열 → 평문 배열 (JWT 필수, 최대 500개)
  *
  * 환경 변수 (Supabase Secret):
  *   PATIENT_DATA_KEY  — 암호화 키 (기존 VITE_PATIENT_DATA_KEY 와 동일한 값으로 설정)
@@ -401,7 +403,7 @@ Deno.serve(async (req: Request) => {
     // 나머지 op: JWT 필수
     // C-1 MVP: authContext에 userId + hospitalId 포함 (향후 인가 검증 확장 가능)
     let authContext: AuthContext | null = null;
-    if (op !== "hash") {
+    if (op !== "hash" && op !== "hash_batch") {
       authContext = await verifyAuth(req);
       if (!authContext) {
         return new Response(
@@ -434,6 +436,42 @@ Deno.serve(async (req: Request) => {
       case "hash": {
         const result = await hashText(text ?? "");
         return new Response(JSON.stringify({ result }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      case "encrypt_batch": {
+        if ((texts?.length ?? 0) > 500) {
+          return new Response(
+            JSON.stringify({ error: "배치 크기는 최대 500개입니다." }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+        const encResults = await Promise.all(
+          (texts ?? []).map(encryptText),
+        );
+        return new Response(JSON.stringify({ results: encResults }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      case "hash_batch": {
+        if ((texts?.length ?? 0) > 500) {
+          return new Response(
+            JSON.stringify({ error: "배치 크기는 최대 500개입니다." }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+        const hashResults = await Promise.all(
+          (texts ?? []).map(hashText),
+        );
+        return new Response(JSON.stringify({ results: hashResults }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

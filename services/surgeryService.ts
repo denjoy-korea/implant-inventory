@@ -1,8 +1,8 @@
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbSurgeryRecord, ExcelRow } from '../types';
-import { excelRowToDbSurgery } from './mappers';
-import { hashPatientInfo, decryptPatientInfo } from './cryptoUtils';
+import { excelRowToDbSurgerySync } from './mappers';
+import { hashPatientInfo, decryptPatientInfo, encryptPatientInfoBatch, hashPatientInfoBatch } from './cryptoUtils';
 import { getSizeMatchKey, isIbsImplantManufacturer } from './sizeNormalizer';
 
 export const surgeryService = {
@@ -68,7 +68,19 @@ export const surgeryService = {
   ): Promise<{ records: DbSurgeryRecord[]; inserted: number; skipped: number }> {
     if (parsedRows.length === 0) return { records: [], inserted: 0, skipped: 0 };
 
-    const dbRows = await Promise.all(parsedRows.map(row => excelRowToDbSurgery(row, hospitalId)));
+    // 1단계: 동기 필드 매핑 (암호화 없이 즉시 완료)
+    const dbRows = parsedRows.map(row => excelRowToDbSurgerySync(row, hospitalId));
+
+    // 2단계: patient_info 배치 암호화 + 해시 (N건을 2~4회 Edge Function 호출로 처리)
+    const patientRaws = parsedRows.map(row => row['환자정보'] ? String(row['환자정보']) : '');
+    const [encryptedInfos, hashedInfos] = await Promise.all([
+      encryptPatientInfoBatch(patientRaws),
+      hashPatientInfoBatch(patientRaws),
+    ]);
+    dbRows.forEach((row, i) => {
+      row.patient_info = encryptedInfos[i] || null;
+      row.patient_info_hash = hashedInfos[i] || null;
+    });
     const buildDedupKey = (r: {
       date: string | null;
       patient_info_hash?: string | null;
