@@ -18,9 +18,20 @@ function toCellScalar(v: unknown): string | number | boolean {
 }
 
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
-  const ExcelJS = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(await file.arrayBuffer());
+  if (!file || file.size === 0) {
+    throw new Error('빈 파일입니다. 올바른 .xlsx 파일을 선택해 주세요.');
+  }
+  const ExcelJSModule = await import('exceljs');
+  // ESM/CJS 양면 대응: Vite는 default export를 ExcelJSModule.default로 감싸는 경우가 있음
+  const ExcelJS = (ExcelJSModule as Record<string, unknown>).default ?? ExcelJSModule;
+  const workbook = new (ExcelJS as { Workbook: new () => import('exceljs').Workbook }).Workbook();
+  const buffer = await file.arrayBuffer();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch (e) {
+    console.error('[excelService] workbook.xlsx.load 실패:', e, { fileName: file.name, fileSize: file.size, fileType: file.type });
+    throw new Error(`엑셀 파일을 읽을 수 없습니다. 파일이 .xlsx 형식인지 확인해 주세요. (${file.name})`);
+  }
 
   const sheets: Record<string, { name: string; columns: string[]; rows: ExcelRow[] }> = {};
   let activeSheetName = '';
