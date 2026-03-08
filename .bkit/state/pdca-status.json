@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-08T14:53:00.850Z",
+  "lastUpdated": "2026-03-08T15:22:35.558Z",
   "activeFeatures": [
     "implant-inventory",
     "surgery-dashboard",
@@ -488,18 +488,10 @@
       "autoAdvanced": true
     },
     "waitlist-admin": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-02-22T05:03:16.304Z",
-        "lastUpdated": "2026-02-22T05:03:16.304Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 97,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/waitlist-admin/"
     },
     "inventoryUtils.ts": {
       "phase": "do",
@@ -567,18 +559,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/system-admin/tabs/SystemAdminHospitalsTab.tsx"
     },
     "product-strategy": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-02-22T15:09:42.993Z",
-        "lastUpdated": "2026-02-22T15:09:42.993Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 93,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/product-strategy/"
     },
     "system-admin": {
       "phase": "do",
@@ -607,18 +591,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/services/fixtureReferenceService.ts"
     },
     "member-management Gap 분석": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-02-23T04:08:52.620Z",
-        "lastUpdated": "2026-02-23T04:08:52.620Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 100,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/member-management-gap-분석/"
     },
     "profiles-pii-encryption": {
       "phase": "archived",
@@ -642,18 +618,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/crypto-service/index.ts"
     },
     "crypto-security-hardening": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-02-23T12:12:38.830Z",
-        "lastUpdated": "2026-02-23T12:12:38.831Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 99.8,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/crypto-security-hardening/"
     },
     "product-strategy-gaps": {
       "phase": "archived",
@@ -709,18 +677,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/supabase/functions/get-notion-db-schema/index.ts"
     },
     "notion-integration": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-02-24T06:34:34.798Z",
-        "lastUpdated": "2026-02-24T06:34:34.799Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 95,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/notion-integration/"
     },
     "xlsx-parse": {
       "phase": "do",
@@ -869,7 +829,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T16:37:52.936Z",
-        "lastUpdated": "2026-02-26T16:55:33.228Z"
+        "lastUpdated": "2026-03-08T15:22:35.558Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/services/resetService.ts"
     },
@@ -955,18 +915,10 @@
       "archivedTo": "docs/archive/2026-03/mobile-ux/"
     },
     "hospital-integrations": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-03-03T02:52:50.365Z",
-        "lastUpdated": "2026-03-03T02:52:50.365Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 100,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/hospital-integrations/"
     },
     "fail": {
       "phase": "do",
@@ -1133,7 +1085,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-04T15:33:51.231Z",
-        "lastUpdated": "2026-03-08T14:39:54.940Z"
+        "lastUpdated": "2026-03-08T15:19:02.488Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/pricing/pricingData.tsx"
     },
@@ -1177,18 +1129,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/system-admin/modals/SolapiModal.tsx"
     },
     "release-gate-fix": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-03-05T07:14:32.591Z",
-        "lastUpdated": "2026-03-05T07:14:32.592Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 100,
+      "archivedAt": "2026-03-05",
+      "archivedTo": "docs/archive/2026-03/release-gate-fix/"
     },
     "htmlSanitizer.ts": {
       "phase": "do",
@@ -1225,9 +1169,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-05T16:55:20.308Z",
-        "lastUpdated": "2026-03-05T17:01:12.884Z"
+        "lastUpdated": "2026-03-08T15:22:27.230Z"
       },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/hooks/admin/useAdminAnalysisLeads.ts"
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/hooks/admin/useAdminUsers.ts"
     },
     "kick-member": {
       "phase": "do",
@@ -1308,18 +1252,10 @@
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/agent/main.py"
     },
     "dentweb-automation-refactor Gap Analysis": {
-      "phase": "act",
-      "phaseNumber": 5,
-      "matchRate": null,
-      "iterationCount": 0,
-      "requirements": [],
-      "documents": {},
-      "timestamps": {
-        "started": "2026-03-05T17:39:11.093Z",
-        "lastUpdated": "2026-03-05T17:39:11.093Z"
-      },
-      "previousPhase": "check",
-      "autoAdvanced": true
+      "phase": "archived",
+      "matchRate": 100,
+      "archivedAt": "2026-03-09",
+      "archivedTo": "docs/archive/2026-03/dentweb-automation-refactor-gap-analysis/"
     },
     "dateUtils.ts": {
       "phase": "do",
@@ -1441,7 +1377,7 @@
   "session": {
     "startedAt": "2026-02-15T02:05:59.134Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-03-08T14:53:00.850Z"
+    "lastActivity": "2026-03-08T15:22:35.558Z"
   },
   "history": [
     {
@@ -26928,6 +26864,30 @@
     {
       "timestamp": "2026-03-08T14:53:00.850Z",
       "feature": "diagnostics",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-08T15:19:02.488Z",
+      "feature": "pricing",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-08T15:22:21.056Z",
+      "feature": "admin",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-08T15:22:27.231Z",
+      "feature": "admin",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-08T15:22:35.558Z",
+      "feature": "resetService.ts",
       "phase": "do",
       "action": "updated"
     }
