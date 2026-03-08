@@ -139,7 +139,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       'inventory_audit', 'audit_history', 'return_management',
       'auto_stock_alert', 'exchange_analysis', 'order_optimization',
       'surgery_chart_basic', 'surgery_chart_advanced',
-      'simple_order', 'role_management', 'email_support', 'integrations',
+      'simple_order', 'role_management', 'email_support',
     ],
   },
   business: {

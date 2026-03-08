@@ -534,67 +534,103 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         )}
 
         {/* 외부 연동 카드 */}
-        {canAccessIntegrations && hospitalId && (
+        {isMaster && !isStaff && hospitalId && (
           <button
-            onClick={() => setShowIntegrationModal(true)}
-            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+            onClick={() => { if (canAccessIntegrations) setShowIntegrationModal(true); }}
+            disabled={!canAccessIntegrations}
+            className={`group relative text-left p-6 rounded-2xl border bg-white transition-all duration-200 ${
+              canAccessIntegrations
+                ? 'border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                : 'border-slate-200 cursor-not-allowed opacity-70'
+            }`}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-violet-50 text-violet-600 group-hover:bg-violet-100 transition-colors">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                canAccessIntegrations ? 'bg-violet-50 text-violet-600 group-hover:bg-violet-100' : 'bg-slate-100 text-slate-400'
+              }`}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-800">외부 연동</h3>
-                  {integrationCount > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className={`text-base font-bold ${canAccessIntegrations ? 'text-slate-800' : 'text-slate-500'}`}>외부 연동</h3>
+                  {canAccessIntegrations && integrationCount > 0 && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-700">
                       {integrationCount}개 연결됨
                     </span>
                   )}
+                  {!canAccessIntegrations && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-700">
+                      Business 이상 이용 가능
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                <p className="text-xs mt-1 leading-relaxed text-slate-400">
                   Notion, Slack, Solapi 등 외부 서비스와 연동합니다.
                 </p>
               </div>
-              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              {canAccessIntegrations ? (
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
             </div>
           </button>
         )}
 
-        {/* 덴트웹 자동화 카드 (클릭 → 모달) */}
-        {canAccessIntegrations && hospitalId && (
+        {/* 덴트웹 자동화 카드 */}
+        {isMaster && !isStaff && hospitalId && (
           <button
-            onClick={() => setShowAutomationModal(true)}
-            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+            onClick={() => { if (canAccessIntegrations) setShowAutomationModal(true); }}
+            disabled={!canAccessIntegrations}
+            className={`group relative text-left p-6 rounded-2xl border bg-white transition-all duration-200 ${
+              canAccessIntegrations
+                ? 'border-slate-200 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                : 'border-slate-200 cursor-not-allowed opacity-70'
+            }`}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                canAccessIntegrations ? 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-400'
+              }`}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3a6.75 6.75 0 100 13.5h4.5A5.25 5.25 0 1014.25 6h-.25A6.73 6.73 0 009.75 3z" />
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-800">덴트웹 자동화</h3>
-                  {automationState?.hasAgentToken && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className={`text-base font-bold ${canAccessIntegrations ? 'text-slate-800' : 'text-slate-500'}`}>덴트웹 자동화</h3>
+                  {canAccessIntegrations && automationState?.hasAgentToken && (
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${
                       automationState.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {automationState.enabled ? '자동 실행 ON' : '자동 실행 OFF'}
                     </span>
                   )}
+                  {!canAccessIntegrations && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-700">
+                      Business 이상 이용 가능
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                <p className="text-xs mt-1 leading-relaxed text-slate-400">
                   병원 PC 에이전트와 연동해 수술기록을 자동으로 업로드합니다.
                 </p>
               </div>
-              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              {canAccessIntegrations ? (
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
             </div>
           </button>
         )}
