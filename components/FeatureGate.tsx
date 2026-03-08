@@ -183,7 +183,7 @@ const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fall
         requiredPlan={requiredPlan}
         feature={feature}
         triggerMessage={lockConfig?.desc ?? `이 기능은 ${PLAN_NAMES[requiredPlan]} 이상에서 사용 가능합니다`}
-        onSelectPlan={(selectedPlan) => { setShowModal(false); onOpenPaymentModal?.(selectedPlan); }}
+        onSelectPlan={(selectedPlan, selectedBilling) => { setShowModal(false); onOpenPaymentModal?.(selectedPlan, selectedBilling); }}
       />
     </>
   );

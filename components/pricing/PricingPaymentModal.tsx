@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BillingCycle, PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
+import { PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
 import LegalModal from '../shared/LegalModal';
 import ModalShell from '../shared/ModalShell';
 import { formatPrice } from './pricingData';
@@ -68,11 +68,18 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
 
   if (!selectedPlan || selectedPlan === 'free') return null;
 
-  const billingCycle: BillingCycle = isYearly ? 'yearly' : 'monthly';
-  const monthlyPrice = billingCycle === 'yearly' ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice;
-  const basePrice = billingCycle === 'yearly' ? PLAN_PRICING[selectedPlan].yearlyPrice * 12 : PLAN_PRICING[selectedPlan].monthlyPrice;
+  const monthlyPrice = isYearly ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice;
+  const rawBase = isYearly ? monthlyPrice * 12 : monthlyPrice;
+  // 연간: 공급가액 천원 단위 절사
+  const basePrice = isYearly ? Math.floor(rawBase / 1000) * 1000 : rawBase;
   const vat = Math.round(basePrice * 0.1);
-  const yearlySaving = (PLAN_PRICING[selectedPlan].monthlyPrice - PLAN_PRICING[selectedPlan].yearlyPrice) * 12;
+  const rawTotal = basePrice + vat;
+  // 합계도 천원 단위 절사 (100원 단위 제거)
+  const finalTotal = isYearly ? Math.floor(rawTotal / 1000) * 1000 : rawTotal;
+  const cutAmount = rawTotal - finalTotal; // 절사된 금액
+  // 월간 대비 절약 = 월간(VAT포함)/년 - 연간 합계
+  const monthlyTotalPerYear = Math.round(PLAN_PRICING[selectedPlan].monthlyPrice * 12 * 1.1);
+  const yearlySaving = monthlyTotalPerYear - finalTotal;
 
   return (
     <>
@@ -117,6 +124,12 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 <span>공급가액</span>
                 <span>{formatPrice(basePrice)}원</span>
               </div>
+              {isYearly && cutAmount > 0 && (
+                <div className="flex justify-between items-center text-xs text-emerald-500">
+                  <span>절사금액</span>
+                  <span>-{formatPrice(cutAmount)}원</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-xs text-slate-400">
                 <span>부가세 (10%)</span>
                 <span>{formatPrice(vat)}원</span>
@@ -125,7 +138,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 <>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-slate-700">소계 (VAT 포함)</span>
-                    <span className="text-sm text-slate-500 line-through">{formatPrice(basePrice + vat)}원</span>
+                    <span className="text-sm text-slate-500 line-through">{formatPrice(finalTotal)}원</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-violet-600 font-semibold">쿠폰 할인</span>
@@ -136,13 +149,13 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               <div className="flex justify-between items-center pt-1 border-t border-slate-100">
                 <span className="text-sm font-bold text-slate-700">합계 (VAT 포함)</span>
                 <span className="text-lg font-black text-indigo-600">
-                  {formatPrice(discountPreview ? discountPreview.final_amount : basePrice + vat)}원
+                  {formatPrice(discountPreview ? finalTotal - discountPreview.discount_amount : finalTotal)}원
                 </span>
               </div>
             </div>
             {isYearly && (
               <p className="text-xs text-emerald-600 text-right">
-                월간 대비 {formatPrice(yearlySaving)}원 절약 (VAT 별도)
+                월간 대비 {formatPrice(yearlySaving)}원 절약 (VAT 포함)
               </p>
             )}
           </div>
