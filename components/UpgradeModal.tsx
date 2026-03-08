@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PlanType, BillingCycle, PlanFeature, PLAN_NAMES, PLAN_PRICING, PLAN_ORDER, PLAN_LIMITS } from '../types';
 import ModalShell from './shared/ModalShell';
 
@@ -49,6 +49,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
 }) => {
   const upgradePlans: PlanType[] = ['basic', 'plus', 'business'];
   const savings = feature ? FEATURE_SAVINGS[feature] : undefined;
+  const [billing, setBilling] = useState<BillingCycle>('monthly');
 
   return (
     <ModalShell isOpen={isOpen} onClose={onClose} title="업그레이드가 필요합니다" titleId="upgrade-modal-title" zIndex={200} maxWidth="max-w-lg" className="p-6 animate-fade-in-up">
@@ -78,12 +79,42 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
           </div>
         )}
 
+        {/* 월간/연간 토글 */}
+        <div className="flex justify-center mb-4">
+          <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+            <button
+              onClick={() => setBilling('monthly')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                billing === 'monthly'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              월간
+            </button>
+            <button
+              onClick={() => setBilling('yearly')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                billing === 'yearly'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              연간
+              <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">-20%</span>
+            </button>
+          </div>
+        </div>
+
         {/* Plan Cards */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {upgradePlans.map((plan) => {
             const isRequired = PLAN_ORDER[plan] >= PLAN_ORDER[requiredPlan];
             const isCurrent = plan === currentPlan;
             const isRecommended = plan === 'plus';
+            const displayPrice = billing === 'yearly'
+              ? PLAN_PRICING[plan].yearlyPrice
+              : PLAN_PRICING[plan].monthlyPrice;
 
             return (
               <div
@@ -105,9 +136,14 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
                   {PLAN_NAMES[plan]}
                 </p>
                 <p className={`text-lg font-black mb-0.5 ${isRecommended ? 'text-indigo-600' : 'text-slate-900'}`}>
-                  {formatPrice(PLAN_PRICING[plan].monthlyPrice)}
+                  {formatPrice(displayPrice)}
                 </p>
-                <p className="text-[10px] text-slate-400 mb-3">원/월</p>
+                <p className="text-[10px] text-slate-400 mb-1">원/월</p>
+                {billing === 'yearly' && displayPrice > 0 && (
+                  <p className="text-[10px] text-emerald-600 font-bold mb-1">
+                    연 {formatPrice(displayPrice * 12)}원
+                  </p>
+                )}
                 <p className="text-[10px] text-slate-500 mb-3">
                   품목 {PLAN_LIMITS[plan].maxItems === Infinity ? '무제한' : `${PLAN_LIMITS[plan].maxItems}개`}
                   {' / '}
@@ -119,7 +155,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
                   </span>
                 ) : isRequired ? (
                   <button
-                    onClick={() => onSelectPlan(plan, 'monthly')}
+                    onClick={() => onSelectPlan(plan, billing)}
                     className={`w-full px-3 py-1.5 text-[11px] font-bold rounded-lg transition-colors ${
                       isRecommended
                         ? 'bg-indigo-600 text-white hover:bg-indigo-700'
