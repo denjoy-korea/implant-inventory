@@ -216,12 +216,13 @@ export const resetService = {
     }
   },
 
-  /** 일시정지 해제 (사용 재개) */
+  /** 일시정지 해제 (사용 재개) — plan_downgrade로 정지된 계정은 재개 불가 */
   async resumeAccount(userId: string): Promise<boolean> {
     const { error } = await supabase
       .from('profiles')
-      .update({ status: 'active' })
-      .eq('id', userId);
+      .update({ status: 'active', suspend_reason: null })
+      .eq('id', userId)
+      .neq('suspend_reason', 'plan_downgrade');
 
     if (error) {
       console.error('[resetService] resumeAccount failed:', error);

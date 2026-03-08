@@ -330,7 +330,7 @@ export function useAdminUsers(
                 try {
                     const { error } = await supabase
                         .from('profiles')
-                        .update({ status: 'paused' })
+                        .update({ status: 'paused', suspend_reason: null })
                         .eq('id', profile.id);
                     if (error) {
                         showToast('정지에 실패했습니다.', 'error');
@@ -370,7 +370,7 @@ export function useAdminUsers(
                 try {
                     const { error } = await supabase
                         .from('profiles')
-                        .update({ status: 'active' })
+                        .update({ status: 'active', suspend_reason: null })
                         .eq('id', profile.id);
                     if (error) {
                         showToast('복구에 실패했습니다.', 'error');

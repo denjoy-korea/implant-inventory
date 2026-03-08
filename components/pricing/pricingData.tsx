@@ -203,7 +203,7 @@ export const faqs = [
   },
   {
     q: '사용자 추가나 변경은 어떻게 하나요?',
-    a: `Plus 플랜은 최대 ${PLAN_LIMITS['plus'].maxUsers}명, Business 플랜은 무제한으로 사용자를 추가할 수 있습니다. 관리자 계정에서 사용자 초대 및 권한 설정이 가능하며, 언제든 변경하실 수 있습니다.`,
+    a: `Plus 플랜은 최대 ${PLAN_LIMITS['plus'].maxUsers}명, Business 플랜은 기본 ${PLAN_LIMITS['business'].maxUsers}명이며 초과 인원은 1인당 5,000원/월이 추가 부과됩니다. 관리자 계정에서 사용자 초대 및 권한 설정이 가능하며, 언제든 변경하실 수 있습니다.`,
   },
 ];
 
