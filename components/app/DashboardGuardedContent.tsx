@@ -28,6 +28,7 @@ const DashboardGuardedContent: React.FC<DashboardGuardedContentProps> = ({
       <PausedAccountScreen
         userName={state.user.name}
         planName={state.planState ? PLAN_NAMES[state.planState.plan] : 'Free'}
+        suspendReason={state.user.suspendReason}
         onResume={async () => {
           const { data: { user: authUser } } = await supabase.auth.getUser();
           if (!authUser || !state.user) return;

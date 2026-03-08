@@ -185,6 +185,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             currentUserName={user?.name || '관리자'}
             isReadOnly={isReadOnly}
             hospitalId={user?.hospitalId}
+            plan={effectivePlan}
             onBulkSetupComplete={async () => {
               if (user) await onLoadHospitalData(user);
               onFailAuditDone?.();

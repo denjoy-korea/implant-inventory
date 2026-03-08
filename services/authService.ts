@@ -12,6 +12,15 @@ const isPlain = (v: string | null | undefined): boolean =>
 
 // H-5: 동일 profile.id에 대한 중복 동시 호출 방지 (race condition → 이중 암호화 시도)
 const _lazyEncryptInFlight = new Set<string>();
+const PROFILE_CACHE_TTL_MS = 1_500;
+const PROFILE_CACHE_TTL_NULL_MS = 200;
+let _profileInFlight: Promise<DbProfile | null> | null = null;
+let _profileCache: { value: DbProfile | null; expiresAt: number } | null = null;
+
+function clearProfileLookupCache(): void {
+  _profileInFlight = null;
+  _profileCache = null;
+}
 
 // H-7: Slack 알림에서 PII 마스킹 헬퍼
 function maskNameForLog(name: string): string {
@@ -480,6 +489,7 @@ export const authService = {
 
   /** 로그인 */
   async signIn(email: string, password: string): Promise<AuthResult> {
+    clearProfileLookupCache();
     let authError: Error | null = null;
     try {
       const { error } = await Promise.race([
@@ -518,6 +528,7 @@ export const authService = {
 
   /** 로그아웃 */
   async signOut(): Promise<void> {
+    clearProfileLookupCache();
     sessionStorage.removeItem('dentweb_session_token');
     await supabase.auth.signOut();
   },
@@ -534,27 +545,68 @@ export const authService = {
   },
 
   /** RPC로 프로필 조회 (RLS 우회, SECURITY DEFINER) — 읽기 시 PII 복호화 + lazy 암호화 */
-  async getProfileById(_userId?: string): Promise<DbProfile | null> {
-    const { data, error } = await supabase.rpc('get_my_profile');
-
-    if (error) {
-      console.error('[authService] getProfileById failed:', error);
-      return null;
+  async getProfileById(_userId?: string, options?: { decrypt?: boolean }): Promise<DbProfile | null> {
+    const shouldDecrypt = options?.decrypt ?? true;
+    if (!shouldDecrypt) {
+      const { data, error } = await supabase.rpc('get_my_profile');
+      if (error) {
+        console.error('[authService] getProfileById(raw) failed:', error);
+        return null;
+      }
+      const profile = data as DbProfile;
+      if (
+        isPlain(profile.name) ||
+        isPlain(profile.email) ||
+        isPlain(profile.phone) ||
+        (profile.email && !profile.email_hash) ||
+        (profile.phone && !profile.phone_hash)
+      ) {
+        void lazyEncryptProfile(profile);
+      }
+      return profile;
     }
-    const profile = data as DbProfile;
 
-    // 평문 PII 또는 hash 누락 시 백그라운드에서 암호화/보정
-    if (
-      isPlain(profile.name) ||
-      isPlain(profile.email) ||
-      isPlain(profile.phone) ||
-      (profile.email && !profile.email_hash) ||
-      (profile.phone && !profile.phone_hash)
-    ) {
-      void lazyEncryptProfile(profile);
+    if (_profileCache && _profileCache.expiresAt > Date.now()) {
+      return _profileCache.value;
+    }
+    if (_profileInFlight) {
+      return _profileInFlight;
     }
 
-    return decryptProfile(profile);
+    _profileInFlight = (async () => {
+      const { data, error } = await supabase.rpc('get_my_profile');
+
+      if (error) {
+        console.error('[authService] getProfileById failed:', error);
+        return null;
+      }
+      const profile = data as DbProfile;
+
+      // 평문 PII 또는 hash 누락 시 백그라운드에서 암호화/보정
+      if (
+        isPlain(profile.name) ||
+        isPlain(profile.email) ||
+        isPlain(profile.phone) ||
+        (profile.email && !profile.email_hash) ||
+        (profile.phone && !profile.phone_hash)
+      ) {
+        void lazyEncryptProfile(profile);
+      }
+
+      if (!shouldDecrypt) return profile;
+      return decryptProfile(profile);
+    })();
+
+    try {
+      const resolved = await _profileInFlight;
+      _profileCache = {
+        value: resolved,
+        expiresAt: Date.now() + (resolved ? PROFILE_CACHE_TTL_MS : PROFILE_CACHE_TTL_NULL_MS),
+      };
+      return resolved;
+    } finally {
+      _profileInFlight = null;
+    }
   },
 
   /** 비밀번호 재설정 이메일 발송 */
@@ -602,8 +654,12 @@ export const authService = {
       console.error('[authService] Profile update failed:', error);
       return null;
     }
-
-    return decryptProfile(data as DbProfile);
+    const decrypted = await decryptProfile(data as DbProfile);
+    _profileCache = {
+      value: decrypted,
+      expiresAt: Date.now() + PROFILE_CACHE_TTL_MS,
+    };
+    return decrypted;
   },
 
   /** 탈퇴 사유 저장 + 슬랙 알림 (fire-and-forget, 계정 삭제 전 호출) */

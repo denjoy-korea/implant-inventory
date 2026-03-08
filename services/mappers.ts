@@ -322,6 +322,7 @@ export function dbToUser(db: DbProfile): User {
     clinicRole: db.clinic_role ?? null,
     hospitalId: db.hospital_id || '',
     status: db.status,
+    suspendReason: db.suspend_reason ?? null,
     permissions: db.permissions ?? null,
     mfaEnabled: db.mfa_enabled ?? false,
   };

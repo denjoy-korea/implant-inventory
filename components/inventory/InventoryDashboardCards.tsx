@@ -24,7 +24,7 @@ interface InventoryDashboardCardsProps {
     shortageDeficit: number;
   };
   surgeryBreakdown: { placement: number; fail: number };
-  onShowOptimizeModal: () => void;
+  onShowOptimizeModal?: () => void;
   onShowBaseStockModal: () => void;
   onOpenAddItemModal: () => void;
 }
@@ -115,7 +115,7 @@ const InventoryDashboardCards: React.FC<InventoryDashboardCardsProps> = ({
 
         {/* Right: action buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
-          {!isReadOnly && deadStockCount > 0 && (
+          {!isReadOnly && deadStockCount > 0 && onShowOptimizeModal && (
             <button
               onClick={onShowOptimizeModal}
               className="relative px-3.5 py-2 text-xs font-bold rounded-xl border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm"

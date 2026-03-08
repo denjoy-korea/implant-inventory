@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { FunctionsError } from '@supabase/supabase-js';
 import { DbHospital, DbProfile, Hospital, DEFAULT_WORK_DAYS, MemberPermissions, UserRole, ClinicRole, VendorContact, BillingProgram } from '../types';
-import { dbToHospital, decryptProfile } from './mappers';
+import { dbToHospital, decryptProfilesBatch } from './mappers';
 import { decryptPatientInfo, encryptPatientInfo } from './cryptoUtils';
 import { isExchangePrefix } from './appUtils';
 
@@ -141,7 +141,18 @@ export const hospitalService = {
       .eq('status', 'active');
 
     if (error) return [];
-    return Promise.all((data as DbProfile[]).map(decryptProfile));
+    return decryptProfilesBatch(data as DbProfile[]);
+  },
+
+  /** 활성 구성원 수 조회 (복호화 없이 count만 조회) */
+  async getActiveMemberCount(hospitalId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('hospital_id', hospitalId)
+      .eq('status', 'active');
+    if (error) return 0;
+    return count ?? 0;
   },
 
   /** 가입 대기 멤버 조회 — PII 복호화 포함 */
@@ -153,7 +164,7 @@ export const hospitalService = {
       .eq('status', 'pending');
 
     if (error) return [];
-    return Promise.all((data as DbProfile[]).map(decryptProfile));
+    return decryptProfilesBatch(data as DbProfile[]);
   },
 
   /** 멤버 승인 */
@@ -252,7 +263,7 @@ export const hospitalService = {
       .eq('status', 'readonly');
 
     if (error) return [];
-    return Promise.all((data as DbProfile[]).map(decryptProfile));
+    return decryptProfilesBatch(data as DbProfile[]);
   },
 
   /** 개별 멤버 readonly → active 전환 */

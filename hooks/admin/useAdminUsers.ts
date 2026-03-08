@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { DbProfile, PlanType, BillingCycle, DbResetRequest } from '../../types';
 import { resetService } from '../../services/resetService';
 import { pageViewService } from '../../services/pageViewService';
-import { decryptProfile } from '../../services/mappers';
+import { decryptProfilesBatch } from '../../services/mappers';
 import { DbHospitalRow } from '../../components/system-admin/systemAdminDomain';
 import { useAdminBizFile } from '../useAdminBizFile';
 import { getBizFileName } from '../../utils/bizFileUtils';
@@ -34,6 +34,8 @@ export function useAdminUsers(
     setConfirmModal: SetConfirmModal,
     setManualEntries: (fn: (prev: ManualEntry[]) => ManualEntry[]) => void,
 ) {
+    const loadDataInFlightRef = useRef<Promise<void> | null>(null);
+
     // Core data
     const [hospitals, setHospitals] = useState<DbHospitalRow[]>([]);
     const [profiles, setProfiles] = useState<DbProfile[]>([]);
@@ -73,67 +75,86 @@ export function useAdminUsers(
     });
 
     const loadData = async () => {
-        setIsLoading(true);
-        const [profileRes, lastAccessRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
-            supabase.rpc('get_all_profiles_with_last_login'),
-            supabase.rpc('get_profiles_last_access_map'),
-            supabase.from('hospitals').select('*'),
-            resetService.getAllRequests(),
-            supabase.from('admin_manuals').select('*').order('created_at', { ascending: false }),
-            supabase.auth.getUser(),
-        ]);
+        if (loadDataInFlightRef.current) {
+            return loadDataInFlightRef.current;
+        }
 
-        const lastAccessMap = new Map<string, string>();
-        if (lastAccessRes.data) {
-            for (const row of (lastAccessRes.data as ProfileLastAccessRow[])) {
-                if (row.last_access_at) lastAccessMap.set(row.id, row.last_access_at);
+        const task = (async () => {
+            setIsLoading(true);
+            try {
+                const [profileRes, lastAccessRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
+                    supabase.rpc('get_all_profiles_with_last_login'),
+                    supabase.rpc('get_profiles_last_access_map'),
+                    supabase.from('hospitals').select('*'),
+                    resetService.getAllRequests(),
+                    supabase.from('admin_manuals').select('*').order('created_at', { ascending: false }),
+                    supabase.auth.getUser(),
+                ]);
+
+                const lastAccessMap = new Map<string, string>();
+                if (lastAccessRes.data) {
+                    for (const row of (lastAccessRes.data as ProfileLastAccessRow[])) {
+                        if (row.last_access_at) lastAccessMap.set(row.id, row.last_access_at);
+                    }
+                }
+
+                const mergeLastAccess = (rows: DbProfile[]): DbProfile[] => rows.map((row) => {
+                    const lastAccessAt = lastAccessMap.get(row.id);
+                    if (!lastAccessAt) return row;
+                    return {
+                        ...row,
+                        last_active_at: row.last_active_at ?? lastAccessAt,
+                        last_sign_in_at: row.last_sign_in_at ?? lastAccessAt,
+                    };
+                });
+
+                const sourceProfiles = (
+                    profileRes.error
+                    || !profileRes.data
+                    || (profileRes.data as DbProfile[]).length === 0
+                )
+                    ? (await supabase.rpc('get_all_profiles')).data as DbProfile[] | null
+                    : profileRes.data as DbProfile[];
+
+                if (sourceProfiles) {
+                    const decrypted = await decryptProfilesBatch(sourceProfiles);
+                    setProfiles(mergeLastAccess(decrypted));
+                }
+
+                if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
+                if (hospitalRes.data) setHospitals(hospitalRes.data as DbHospitalRow[]);
+                setResetRequests(resetData);
+
+                if (manualRes.data) {
+                    const sanitized = (manualRes.data as ManualEntry[]).map((entry) => ({
+                        ...entry,
+                        content: sanitizeRichHtml(String(entry.content || '')),
+                    }));
+                    setManualEntries(() => sanitized);
+                }
+
+                const [capRes, usageRes] = await Promise.all([
+                    supabase.from('plan_capacities').select('*').order('capacity', { ascending: false }),
+                    supabase.rpc('get_plan_usage_counts'),
+                ]);
+                if (capRes.data) setPlanCapacities(capRes.data as PlanCapacity[]);
+                if (usageRes.data) setPlanUsages(usageRes.data as PlanUsage[]);
+            } finally {
+                setIsLoading(false);
+            }
+        })();
+
+        loadDataInFlightRef.current = task;
+        try {
+            await task;
+        } finally {
+            if (loadDataInFlightRef.current === task) {
+                loadDataInFlightRef.current = null;
             }
         }
-
-        const mergeLastAccess = (rows: DbProfile[]): DbProfile[] => rows.map((row) => {
-            const lastAccessAt = lastAccessMap.get(row.id);
-            if (!lastAccessAt) return row;
-            return {
-                ...row,
-                last_active_at: row.last_active_at ?? lastAccessAt,
-                last_sign_in_at: row.last_sign_in_at ?? lastAccessAt,
-            };
-        });
-
-        if (profileRes.error || !profileRes.data || (profileRes.data as DbProfile[]).length === 0) {
-            const fallback = await supabase.rpc('get_all_profiles');
-            if (fallback.data) {
-                const decrypted = await Promise.all((fallback.data as DbProfile[]).map(decryptProfile));
-                setProfiles(mergeLastAccess(decrypted));
-            }
-        } else {
-            const decrypted = await Promise.all((profileRes.data as DbProfile[]).map(decryptProfile));
-            setProfiles(mergeLastAccess(decrypted));
-        }
-
-        if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
-        if (hospitalRes.data) setHospitals(hospitalRes.data as DbHospitalRow[]);
-        setResetRequests(resetData);
-
-        if (manualRes.data) {
-            const sanitized = (manualRes.data as ManualEntry[]).map((entry) => ({
-                ...entry,
-                content: sanitizeRichHtml(String(entry.content || '')),
-            }));
-            setManualEntries(() => sanitized);
-        }
-
-        const [capRes, usageRes] = await Promise.all([
-            supabase.from('plan_capacities').select('*').order('capacity', { ascending: false }),
-            supabase.rpc('get_plan_usage_counts'),
-        ]);
-        if (capRes.data) setPlanCapacities(capRes.data as PlanCapacity[]);
-        if (usageRes.data) setPlanUsages(usageRes.data as PlanUsage[]);
-
-        setIsLoading(false);
     };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { void loadData(); }, []);
 
     // ── Derived ────────────────────────────────────────────────
 

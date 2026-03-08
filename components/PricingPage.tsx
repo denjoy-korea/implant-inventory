@@ -62,6 +62,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
     finderAnswers, setFinderAnswers,
     finderResult, setFinderResult,
     handleFinderAnswer,
+    finderFeatureSelections,
+    toggleFinderFeature,
+    confirmFinderFeatures,
     resetFinder,
     handleWaitlistSubmit,
     resetPaymentForm,
@@ -301,18 +304,58 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   <span className="text-xs text-slate-400 ml-1">{finderStep + 1}/3</span>
                 </div>
                 <p className="text-sm font-black text-slate-800 mb-4">{FINDER_QUESTIONS[finderStep].q}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {FINDER_QUESTIONS[finderStep].options.map(opt => (
+                {finderStep === 2 ? (
+                  // 3단계: 복수 선택
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {FINDER_QUESTIONS[finderStep].options.map(opt => {
+                        const selected = finderFeatureSelections.has(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => toggleFinderFeature(opt.value)}
+                            className={`flex flex-col items-start p-4 rounded-xl border transition-all text-left relative ${
+                              selected
+                                ? 'border-indigo-400 bg-indigo-50'
+                                : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                            }`}
+                          >
+                            {selected && (
+                              <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            )}
+                            <span className={`text-sm font-bold ${selected ? 'text-indigo-700' : 'text-slate-800'}`}>{opt.label}</span>
+                            <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
-                      key={opt.value}
-                      onClick={() => handleFinderAnswer(opt.value)}
-                      className="flex flex-col items-start p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
+                      onClick={confirmFinderFeatures}
+                      disabled={finderFeatureSelections.size === 0}
+                      className="mt-3 w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">{opt.label}</span>
-                      <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
+                      {finderFeatureSelections.size > 0 ? `${finderFeatureSelections.size}개 선택 · 추천 보기` : '기능을 선택해주세요'}
                     </button>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  // 1·2단계: 단일 선택
+                  <div className="grid grid-cols-2 gap-2">
+                    {FINDER_QUESTIONS[finderStep].options.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => handleFinderAnswer(opt.value)}
+                        className="flex flex-col items-start p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
+                      >
+                        <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">{opt.label}</span>
+                        <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button onClick={() => { resetFinder(); setShowFinder(false); }} className="mt-4 w-full text-xs text-slate-300 hover:text-slate-500 transition-colors">
                   닫기
                 </button>

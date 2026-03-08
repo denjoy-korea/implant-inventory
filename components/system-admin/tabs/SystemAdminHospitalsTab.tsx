@@ -57,13 +57,24 @@ const SystemAdminHospitalsTab: React.FC<SystemAdminHospitalsTabProps> = ({
                   <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                   </div>
-                  <span className="text-xs font-bold text-slate-800">{h.name}</span>
-                  <button
-                    onClick={() => onOpenHospitalDetail(h)}
-                    className="ml-1 flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors"
-                  >
-                    상세
-                  </button>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-800">{h.name}</span>
+                      <button
+                        onClick={() => onOpenHospitalDetail(h)}
+                        className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                      >
+                        상세
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(h.id); }}
+                      className="text-left text-[10px] text-slate-400 font-mono truncate max-w-[180px] hover:text-indigo-500 transition-colors cursor-pointer"
+                      title="클릭하여 ID 복사"
+                    >
+                      {h.id}
+                    </button>
+                  </div>
                 </div>
               </td>
               <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-600 font-medium">{getMasterName(h.master_admin_id)}</td>

@@ -5,12 +5,18 @@ import { PublicMobileNav } from '../PublicMobileNav';
 import ErrorBoundary from '../ErrorBoundary';
 import PublicInfoFooter from '../shared/PublicInfoFooter';
 import KakaoChannelButton from '../KakaoChannelButton';
+import ConfirmModal from '../ConfirmModal';
+import DowngradeMemberSelectModal from '../settings/DowngradeMemberSelectModal';
+import { hospitalService } from '../../services/hospitalService';
 import {
   BillingCycle,
   DashboardTab,
   HospitalPlanState,
+  PlanFeature,
   PlanType,
+  PLAN_LIMITS,
   PLAN_NAMES,
+  PLAN_ORDER,
   User,
   View,
 } from '../../types';
@@ -18,6 +24,53 @@ import { ToastType } from '../../hooks/useToast';
 import { tossPaymentService } from '../../services/tossPaymentService';
 import { planService } from '../../services/planService';
 import { lazyWithRetry } from '../../utils/lazyWithRetry';
+
+const FEATURE_LABELS: Partial<Record<PlanFeature, string>> = {
+  dashboard_advanced: '고급 대시보드',
+  brand_analytics: '브랜드 분석',
+  fail_management: 'FAIL 관리',
+  order_execution: '발주 실행',
+  inventory_audit: '재고 실사',
+  audit_history: '재고실사 이력 및 분석',
+  return_management: '반납 관리',
+  auto_stock_alert: '자동 재고 알림',
+  monthly_report: '월간 리포트',
+  role_management: '역할 관리',
+  integrations: '외부 연동 (Notion · Slack)',
+};
+
+function getDowngradeLines(fromPlan: PlanType, toPlan: PlanType): { message: string; tip?: string } {
+  const fromLimits = PLAN_LIMITS[fromPlan];
+  const toLimits = PLAN_LIMITS[toPlan];
+  const toFeatureSet = new Set(toLimits.features);
+
+  const removedLabels = fromLimits.features
+    .filter(f => !toFeatureSet.has(f))
+    .map(f => FEATURE_LABELS[f])
+    .filter(Boolean) as string[];
+
+  const lines: string[] = [];
+  if (removedLabels.length > 0) {
+    lines.push('다음 기능이 더 이상 사용되지 않습니다:');
+    removedLabels.forEach(l => lines.push(`  • ${l}`));
+  }
+
+  const tips: string[] = [];
+  if (toLimits.maxItems !== Infinity && fromLimits.maxItems > toLimits.maxItems) {
+    tips.push(`재고 아이템 한도: ${fromLimits.maxItems}개 → ${toLimits.maxItems}개`);
+  }
+  if (toLimits.maxUsers !== Infinity && fromLimits.maxUsers > toLimits.maxUsers) {
+    tips.push(`멤버 수: ${fromLimits.maxUsers}명 → ${toLimits.maxUsers}명 (초과 멤버는 읽기 전용 전환)`);
+  }
+  if (fromLimits.retentionMonths > toLimits.retentionMonths) {
+    tips.push(`기록 보관 기간: ${fromLimits.retentionMonths}개월 → ${toLimits.retentionMonths}개월`);
+  }
+
+  return {
+    message: lines.join('\n') || `${PLAN_NAMES[fromPlan]} 플랜의 일부 기능이 ${PLAN_NAMES[toPlan]} 플랜에서는 사용 불가합니다.`,
+    tip: tips.length > 0 ? tips.join('\n') : undefined,
+  };
+}
 
 const LandingPage = lazyWithRetry(() => import('../LandingPage'));
 const AuthForm = lazyWithRetry(() => import('../AuthForm'));
@@ -84,23 +137,39 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   const isLoggedIn = !!user;
   const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
   const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
+  const [downgradePending, setDowngradePending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
+  const [memberSelectPending, setMemberSelectPending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const hasPublicMobileNav = publicViews.includes(currentView);
+
+  const executePlanChange = async (plan: PlanType, billing: BillingCycle, memberIdsToSuspend?: string[]) => {
+    try {
+      const ok = await planService.changePlan(user!.hospitalId!, plan, billing, memberIdsToSuspend);
+      if (ok) {
+        const ps = await planService.getHospitalPlan(user!.hospitalId!);
+        onPlanStateActivated(ps);
+        const suspendCount = memberIdsToSuspend?.length ?? 0;
+        const memberNote = suspendCount > 0
+          ? ` ${suspendCount}명의 멤버 접근이 제한되었습니다.`
+          : '';
+        showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.${memberNote}`, 'success');
+      } else {
+        showAlertToast('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.', 'error');
+      }
+    } catch (err) {
+      console.error('[PublicAppShell] Plan change error:', err);
+      showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+    }
+  };
 
   const handlePlanSelect = user?.hospitalId
     ? async (plan: PlanType, billing: BillingCycle) => {
-      try {
-        const ok = await planService.changePlan(user.hospitalId!, plan, billing);
-        if (ok) {
-          const ps = await planService.getHospitalPlan(user.hospitalId!);
-          onPlanStateActivated(ps);
-          showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.`, 'success');
-        } else {
-          showAlertToast('플랜 변경 권한이 없습니다. 병원 관리자만 플랜을 변경할 수 있습니다.', 'error');
-        }
-      } catch (err) {
-        console.error('[PublicAppShell] Plan change error:', err);
-        showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+      const currentPlan = planState?.plan ?? 'free';
+      const isDowngrade = PLAN_ORDER[plan] < PLAN_ORDER[currentPlan];
+      if (isDowngrade) {
+        setDowngradePending({ plan, billing });
+        return;
       }
+      await executePlanChange(plan, billing);
     }
     : undefined;
 
@@ -197,8 +266,50 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
 
   const meta = PAGE_META[currentView] || PAGE_META.landing;
 
+  const downgradeDiff = downgradePending
+    ? getDowngradeLines(planState?.plan ?? 'free', downgradePending.plan)
+    : null;
+
   return (
     <div className="h-full flex flex-col">
+      {downgradePending && downgradeDiff && (
+        <ConfirmModal
+          title={`${PLAN_NAMES[planState?.plan ?? 'free']} → ${PLAN_NAMES[downgradePending.plan]} 다운그레이드`}
+          message={downgradeDiff.message}
+          tip={downgradeDiff.tip}
+          confirmLabel="다음"
+          cancelLabel="취소"
+          confirmColor="amber"
+          onConfirm={async () => {
+            const { plan, billing } = downgradePending;
+            setDowngradePending(null);
+            // 멤버 수 제한이 있는 플랜이면 현재 멤버 수 확인
+            const newMaxUsers = PLAN_LIMITS[plan].maxUsers;
+            if (newMaxUsers !== Infinity && user?.hospitalId) {
+              const count = await hospitalService.getActiveMemberCount(user.hospitalId);
+              if (count > newMaxUsers) {
+                // 초과 멤버 있음 → 선택 모달
+                setMemberSelectPending({ plan, billing });
+                return;
+              }
+            }
+            void executePlanChange(plan, billing);
+          }}
+          onCancel={() => setDowngradePending(null)}
+        />
+      )}
+      {memberSelectPending && user?.hospitalId && (
+        <DowngradeMemberSelectModal
+          hospitalId={user.hospitalId}
+          newPlan={memberSelectPending.plan}
+          onConfirm={(memberIdsToSuspend) => {
+            const { plan, billing } = memberSelectPending;
+            setMemberSelectPending(null);
+            void executePlanChange(plan, billing, memberIdsToSuspend);
+          }}
+          onCancel={() => setMemberSelectPending(null)}
+        />
+      )}
       <Helmet>
         <title>{meta.title}</title>
         <meta name="description" content={meta.description} />

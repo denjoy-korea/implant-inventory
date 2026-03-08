@@ -17,8 +17,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 /** 서버사이드 정가 테이블 (types.ts PLAN_PRICING와 동기화 필요) */
 const PLAN_BASE_PRICES: Record<string, Record<string, number>> = {
-  basic:    { monthly: 29000,  yearly: 23000  },
-  plus:     { monthly: 69000,  yearly: 55000  },
+  basic:    { monthly: 27000,  yearly: 21000  },
+  plus:     { monthly: 59000,  yearly: 47000  },
   business: { monthly: 129000, yearly: 103000 },
 };
 

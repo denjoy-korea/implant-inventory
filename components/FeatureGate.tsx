@@ -38,6 +38,26 @@ const FEATURE_LOCK_CONFIG: Partial<Record<PlanFeature, { title: string; desc: st
     title: '권한 관리',
     desc: '직원별 접근 권한을 세분화하여 데이터를 안전하게 보호하세요.',
   },
+  surgery_chart_basic: {
+    title: '수술기록 차트',
+    desc: '월별 수술 추세와 요일별 식립 패턴을 차트로 확인하세요.',
+  },
+  surgery_chart_advanced: {
+    title: '수술기록 고급 분석',
+    desc: '규격별·브랜드별 상세 분석으로 수술 패턴을 깊이 있게 파악하세요.',
+  },
+  exchange_analysis: {
+    title: '교환 분석',
+    desc: '전체 교환 현황, 제조사 분석, 월별 추세, 다빈도 규격을 확인하세요.',
+  },
+  order_optimization: {
+    title: '발주 최적화',
+    desc: 'AI가 재고 소진 속도를 분석해 최적 발주 시점과 수량을 추천합니다.',
+  },
+  simple_order: {
+    title: '간편발주',
+    desc: '부족 품목을 카카오톡 메시지로 즉시 발주할 수 있습니다.',
+  },
 };
 
 /** 데모 지원 기능 목록 */

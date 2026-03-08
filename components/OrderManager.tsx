@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams } from '../types';
+import FeatureGate from './FeatureGate';
 import OrderCancelModal from './order/OrderCancelModal';
 import ConfirmModal from './ConfirmModal';
 import { ReceiptConfirmationModal, ReceiptUpdate } from './ReceiptConfirmationModal';
@@ -555,6 +556,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           lowStockCount={lowStockItems.length}
           lowStockQty={stats.lowStockQty}
           isReadOnly={isReadOnly}
+          plan={plan}
           setShowBulkOrderModal={setShowBulkOrderModal}
           setBrandOrderModalMfr={setBrandOrderModalMfr}
         />
@@ -566,15 +568,17 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           handleExchangeCandidateClick={handleExchangeCandidateClick}
         />
 
-        <OrderReturnSection
-          returnCandidates={returnCandidates}
-          bulkReturnItems={bulkReturnItems}
-          isReadOnly={isReadOnly}
-          setReturnCandidateCategory={setReturnCandidateCategory}
-          setShowReturnCandidateModal={setShowReturnCandidateModal}
-          setShowBulkReturnConfirm={setShowBulkReturnConfirm}
-          setShowOptimizeModal={setShowOptimizeModal}
-        />
+        <FeatureGate feature="return_management" plan={plan ?? 'free'}>
+          <OrderReturnSection
+            returnCandidates={returnCandidates}
+            bulkReturnItems={bulkReturnItems}
+            isReadOnly={isReadOnly}
+            setReturnCandidateCategory={setReturnCandidateCategory}
+            setShowReturnCandidateModal={setShowReturnCandidateModal}
+            setShowBulkReturnConfirm={setShowBulkReturnConfirm}
+            setShowOptimizeModal={setShowOptimizeModal}
+          />
+        </FeatureGate>
 
         </>)}
 

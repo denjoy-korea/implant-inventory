@@ -18,7 +18,7 @@ export type PlanFeature =
   | 'fail_management'
   | 'order_execution'
   | 'inventory_audit'
-  | 'audit_history'    // 재고실사 이력 + 분석 (Plus+)
+  | 'audit_history'         // 재고실사 이력 + 분석 (Plus+)
   | 'return_management'
   | 'auto_stock_alert'
   | 'monthly_report'
@@ -30,7 +30,13 @@ export type PlanFeature =
   | 'audit_log'
   | 'email_support'
   | 'priority_support'
-  | 'integrations';
+  | 'integrations'
+  // 신규 추가
+  | 'surgery_chart_basic'    // 수술기록 기본 차트 (월별 추세·요일별 패턴) — Basic+
+  | 'surgery_chart_advanced' // 수술기록 고급 차트 전체 — Plus+
+  | 'exchange_analysis'      // 교환관리 하단 4섹션 분석 — Plus+
+  | 'order_optimization'     // 발주 최적화 추천 + OptimizeModal — Plus+
+  | 'simple_order';          // 간편발주 (카톡 복사) — Plus+
 
 // ── 인테그레이션 타입 ─────────────────────────────────────────────
 export type IntegrationProvider = 'notion' | 'slack' | 'solapi';
@@ -67,6 +73,10 @@ export interface PlanLimits {
   maxUsers: number;
   maxBaseStockEdits: number;
   retentionMonths: number;
+  /** 수술기록 조회 가능 기간 (실제 저장과 분리) */
+  viewMonths: number;
+  /** 수술기록 업로드 빈도 */
+  uploadFrequency: 'monthly' | 'weekly' | 'unlimited';
   features: PlanFeature[];
 }
 
@@ -97,45 +107,56 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
     maxItems: 50,
     maxUsers: 1,
-    maxBaseStockEdits: 3,
-    retentionMonths: 3,
-    features: ['dashboard_basic', 'excel_upload', 'realtime_stock'],
+    maxBaseStockEdits: 0,
+    retentionMonths: 24,        // 실제 저장 24개월
+    viewMonths: 3,              // 조회는 3개월
+    uploadFrequency: 'monthly',
+    features: ['excel_upload'], // 재고·발주 대시보드 없음
   },
   basic: {
-    maxItems: 200,
+    maxItems: 150,
     maxUsers: 1,
     maxBaseStockEdits: Infinity,
-    retentionMonths: 12,
+    retentionMonths: 24,
+    viewMonths: 12,
+    uploadFrequency: 'weekly',
     features: [
       'dashboard_basic', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'fail_management', 'order_execution',
-      'inventory_audit',
+      'fail_management', 'order_execution', 'inventory_audit',
+      'surgery_chart_basic',
     ],
   },
   plus: {
-    maxItems: 500,
+    maxItems: 300,
     maxUsers: 5,
     maxBaseStockEdits: Infinity,
     retentionMonths: 24,
+    viewMonths: 24,
+    uploadFrequency: 'unlimited',
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
       'inventory_audit', 'audit_history', 'return_management',
-      'auto_stock_alert', 'monthly_report', 'role_management',
-      'email_support', 'integrations',
+      'auto_stock_alert', 'exchange_analysis', 'order_optimization',
+      'surgery_chart_basic', 'surgery_chart_advanced',
+      'simple_order', 'role_management', 'email_support', 'integrations',
     ],
   },
   business: {
     maxItems: Infinity,
-    maxUsers: Infinity,
+    maxUsers: 10,               // 기본 10명 (초과 시 별도 과금 5,000원/인)
     maxBaseStockEdits: Infinity,
     retentionMonths: 24,
+    viewMonths: 24,
+    uploadFrequency: 'unlimited',
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
       'inventory_audit', 'audit_history', 'return_management',
-      'auto_stock_alert', 'monthly_report', 'yearly_report',
-      'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
+      'auto_stock_alert', 'exchange_analysis', 'order_optimization',
+      'surgery_chart_basic', 'surgery_chart_advanced',
+      'simple_order', 'one_click_order', 'monthly_report', 'yearly_report',
+      'supplier_management', 'ai_forecast', 'role_management',
       'audit_log', 'email_support', 'priority_support', 'integrations',
     ],
   },
@@ -143,13 +164,17 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     maxItems: Infinity,
     maxUsers: Infinity,
     maxBaseStockEdits: Infinity,
-    retentionMonths: 999,
+    retentionMonths: 24,
+    viewMonths: 24,
+    uploadFrequency: 'unlimited',
     features: [
       'dashboard_basic', 'dashboard_advanced', 'excel_upload', 'realtime_stock',
       'brand_analytics', 'fail_management', 'order_execution',
       'inventory_audit', 'audit_history', 'return_management',
-      'auto_stock_alert', 'monthly_report', 'yearly_report',
-      'supplier_management', 'one_click_order', 'ai_forecast', 'role_management',
+      'auto_stock_alert', 'exchange_analysis', 'order_optimization',
+      'surgery_chart_basic', 'surgery_chart_advanced',
+      'simple_order', 'one_click_order', 'monthly_report', 'yearly_report',
+      'supplier_management', 'ai_forecast', 'role_management',
       'audit_log', 'email_support', 'priority_support', 'integrations',
     ],
   },
@@ -158,8 +183,8 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
 /** 플랜별 가격 */
 export const PLAN_PRICING: Record<PlanType, PlanPricing> = {
   free: { monthlyPrice: 0, yearlyPrice: 0 },
-  basic: { monthlyPrice: 29000, yearlyPrice: 23000 },
-  plus: { monthlyPrice: 69000, yearlyPrice: 55000 },
+  basic: { monthlyPrice: 27000, yearlyPrice: 21000 },
+  plus: { monthlyPrice: 59000, yearlyPrice: 47000 },
   business: { monthlyPrice: 129000, yearlyPrice: 103000 },
   ultimate: { monthlyPrice: 0, yearlyPrice: 0 },
 };
@@ -193,6 +218,9 @@ export const PLAN_ORDER: Record<PlanType, number> = {
 
 /** 체험 기본 기간 (일) — 베타 신청분 28일은 utils/trialPolicy.ts에서 계산 */
 export const TRIAL_DAYS = 14;
+
+/** Business 플랜 추가 사용자 단가 (부가세 별도, 1인/월) */
+export const EXTRA_USER_PRICE_PER_MONTH = 5000;
 
 /** Supabase billing_history 테이블 Row */
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';

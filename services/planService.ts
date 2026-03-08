@@ -55,30 +55,36 @@ export const planService = {
 
   /** 수술기록 업로드 가능 여부 확인 (플랜별 빈도 제한) */
   canUploadSurgery(plan: PlanType, lastUploadDate: Date | null): { allowed: boolean; nextAvailableDate: Date | null } {
-    // Plus 이상: 무제한
-    if (PLAN_ORDER[plan] >= PLAN_ORDER['plus']) {
-      return { allowed: true, nextAvailableDate: null };
-    }
+    const freq = PLAN_LIMITS[plan].uploadFrequency;
 
-    // 업로드 이력 없으면 허용
-    if (!lastUploadDate) {
-      return { allowed: true, nextAvailableDate: null };
-    }
+    if (freq === 'unlimited') return { allowed: true, nextAvailableDate: null };
+    if (!lastUploadDate) return { allowed: true, nextAvailableDate: null };
 
     const now = new Date();
 
-    if (plan === 'free') {
-      // Free: 1개월에 1회 (캘린더 기준, 2/15 → 3/15)
-      const nextDate = new Date(lastUploadDate);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      if (now >= nextDate) {
-        return { allowed: true, nextAvailableDate: null };
-      }
+    if (freq === 'monthly') {
+      // Free: 캘린더 월 기준 1회 (예: 2/15 업로드 → 3/1부터 가능)
+      const nextDate = new Date(lastUploadDate.getFullYear(), lastUploadDate.getMonth() + 1, 1);
+      if (now >= nextDate) return { allowed: true, nextAvailableDate: null };
       return { allowed: false, nextAvailableDate: nextDate };
     }
 
-    // 그 외(basic, business, ultimate): 무제한
+    if (freq === 'weekly') {
+      // Basic: 7일 간격
+      const nextDate = new Date(lastUploadDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+      if (now >= nextDate) return { allowed: true, nextAvailableDate: null };
+      return { allowed: false, nextAvailableDate: nextDate };
+    }
+
     return { allowed: true, nextAvailableDate: null };
+  },
+
+  /** 플랜에 따른 수술기록 조회 가능 시작일 반환 */
+  canViewDataFrom(plan: PlanType): Date {
+    const months = PLAN_LIMITS[plan].viewMonths;
+    const d = new Date();
+    d.setMonth(d.getMonth() - months);
+    return d;
   },
 
   /** 기초재고 수정 횟수 서버 조회 */
@@ -376,11 +382,25 @@ export const planService = {
     return plan === 'free' && currentItemCount > PLAN_LIMITS.free.maxItems;
   },
 
+  /** 플랜 다운그레이드 시 특정 멤버 접근 제한 (suspend_reason = 'plan_downgrade') */
+  async suspendMembersForDowngrade(hospitalId: string, memberIds: string[]): Promise<void> {
+    if (memberIds.length === 0) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status: 'paused', suspend_reason: 'plan_downgrade' })
+      .in('id', memberIds)
+      .eq('hospital_id', hospitalId);
+    if (error) {
+      console.error('[planService] suspendMembersForDowngrade failed:', error);
+    }
+  },
+
   /** 플랜 변경 (Phase 1: 결제 없이 DB만 변경) */
   async changePlan(
     hospitalId: string,
     newPlan: PlanType,
-    billingCycle: BillingCycle
+    billingCycle: BillingCycle,
+    memberIdsToSuspend?: string[] // 제공 시 자동 선택 대신 명시적으로 해당 멤버만 접근 제한
   ): Promise<boolean> {
     // 현재 플랜 조회 (다운그레이드 감지용)
     const currentState = await this.getHospitalPlan(hospitalId);
@@ -432,18 +452,27 @@ export const planService = {
     }
 
     if (success) {
-      // 다운그레이드 시 초과 멤버를 readonly로 전환
+      // 다운그레이드 처리
       if (isDowngrade) {
-        const excess = await this.handleDowngradeMembers(hospitalId, newPlan);
-        if (excess > 0) {
-          console.log(`[planService] ${excess}명의 초과 멤버가 readonly로 전환되었습니다.`);
+        if (memberIdsToSuspend !== undefined) {
+          // 명시적 선택: 지정한 멤버만 접근 제한
+          await this.suspendMembersForDowngrade(hospitalId, memberIdsToSuspend);
+          if (memberIdsToSuspend.length > 0) {
+            console.log(`[planService] ${memberIdsToSuspend.length}명의 멤버가 플랜 다운그레이드로 접근 제한되었습니다.`);
+          }
+        } else {
+          // 자동 선택: 초과 멤버 readonly 전환 (기존 동작)
+          const excess = await this.handleDowngradeMembers(hospitalId, newPlan);
+          if (excess > 0) {
+            console.log(`[planService] ${excess}명의 초과 멤버가 readonly로 전환되었습니다.`);
+          }
         }
       }
-      // 업그레이드 시 readonly 멤버를 active로 복구
+      // 업그레이드 시 readonly + plan_downgrade paused 멤버를 active로 복구
       if (isUpgradeChange) {
         const reactivated = await this.reactivateReadonlyMembers(hospitalId);
         if (reactivated > 0) {
-          console.log(`[planService] ${reactivated}명의 readonly 멤버가 active로 복구되었습니다.`);
+          console.log(`[planService] ${reactivated}명의 멤버가 active로 복구되었습니다.`);
         }
       }
     }
@@ -519,20 +548,33 @@ export const planService = {
     return excessIds.length;
   },
 
-  /** 폴백: 클라이언트에서 readonly 멤버 active 복구 */
+  /** 폴백: 클라이언트에서 readonly + plan_downgrade paused 멤버 active 복구 */
   async _reactivateReadonlyMembersFallback(hospitalId: string): Promise<number> {
+    // readonly 멤버
     const { data: readonlyMembers } = await supabase
       .from('profiles')
       .select('id')
       .eq('hospital_id', hospitalId)
       .eq('status', 'readonly');
 
-    if (!readonlyMembers || readonlyMembers.length === 0) return 0;
+    // plan_downgrade로 paused된 멤버
+    const { data: suspendedMembers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('hospital_id', hospitalId)
+      .eq('status', 'paused')
+      .eq('suspend_reason', 'plan_downgrade');
 
-    const ids = readonlyMembers.map(m => m.id);
+    const ids = [
+      ...(readonlyMembers ?? []).map(m => m.id),
+      ...(suspendedMembers ?? []).map(m => m.id),
+    ];
+
+    if (ids.length === 0) return 0;
+
     const { error } = await supabase
       .from('profiles')
-      .update({ status: 'active' })
+      .update({ status: 'active', suspend_reason: null })
       .in('id', ids);
 
     if (error) {

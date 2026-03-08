@@ -49,7 +49,7 @@ export function useFileUpload({
         if (!uploadCheck.allowed && uploadCheck.nextAvailableDate) {
           const nextDate = uploadCheck.nextAvailableDate;
           const formatted = `${nextDate.getFullYear()}년 ${nextDate.getMonth() + 1}월 ${nextDate.getDate()}일`;
-          const planLabel = effectivePlan === 'free' ? '무료 플랜은 월 1회' : '베이직 플랜은 주 1회';
+          const planLabel = effectivePlan === 'free' ? '무료 플랜은 월 1회' : '주 1회';
           showAlertToast(`${planLabel} 수술기록 업로드가 가능합니다. 다음 업로드 가능일: ${formatted}`, 'error');
           setState(prev => ({ ...prev, isLoading: false }));
           return false;

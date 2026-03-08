@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BillingCycle, PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
 import LegalModal from '../shared/LegalModal';
 import ModalShell from '../shared/ModalShell';
+import { formatPrice } from './pricingData';
 import type { UserCoupon, DiscountPreview } from '../../services/couponService';
 
 type PaymentMethod = 'card' | 'transfer';
@@ -31,10 +32,6 @@ interface PricingPaymentModalProps {
   selectedCouponId?: string | null;
   onSelectCoupon?: (couponId: string | null) => void;
   discountPreview?: DiscountPreview | null;
-}
-
-function formatPrice(price: number): string {
-  return price.toLocaleString('ko-KR');
 }
 
 const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
@@ -195,17 +192,15 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => onPaymentMethodChange('transfer')}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${
-                  paymentMethod === 'transfer'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                }`}
+                disabled
+                className="flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-300 text-sm font-bold cursor-not-allowed"
+                title="계좌이체는 준비 중입니다"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
                 계좌이체
+                <span className="ml-1 text-[10px] font-bold text-slate-300">준비 중</span>
               </button>
             </div>
           </div>

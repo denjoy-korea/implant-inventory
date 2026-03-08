@@ -13,6 +13,7 @@ import UnregisteredDetailModal from './inventory/UnregisteredDetailModal';
 import InventoryDetailSection from './inventory/InventoryDetailSection';
 import InventoryDashboardCards from './inventory/InventoryDashboardCards';
 import InventoryUsageChart from './inventory/InventoryUsageChart';
+import SectionLockCard from './surgery-dashboard/SectionLockCard';
 import InventoryManufacturerFilterStrip from './inventory/InventoryManufacturerFilterStrip';
 interface InventoryManagerProps {
   inventory: InventoryItem[];
@@ -79,6 +80,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const maxEdits = PLAN_LIMITS[plan].maxBaseStockEdits;
   const isUnlimited = maxEdits === Infinity;
   const canAiForecast = planService.canAccess(plan, 'ai_forecast');
+  const canBrandAnalytics = planService.canAccess(plan, 'brand_analytics');
+  const canOrderOptimization = planService.canAccess(plan, 'order_optimization');
   const {
     monthFactor,
     saveStatus,
@@ -187,7 +190,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         deadStockCount={deadStockItems.length}
         kpiData={kpiData}
         surgeryBreakdown={surgeryBreakdown}
-        onShowOptimizeModal={() => setShowOptimizeModal(true)}
+        onShowOptimizeModal={canOrderOptimization ? () => setShowOptimizeModal(true) : undefined}
         onShowBaseStockModal={() => setShowBaseStockModal(true)}
         onOpenAddItemModal={openAddItemModal}
       />
@@ -223,8 +226,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           </span>
         </div>
 
-        {/* 모바일 전용: 품목 최적화 진입 카드 (sticky 영역) */}
-        {!isReadOnly && deadStockItems.length > 0 && (
+        {/* 모바일 전용: 품목 최적화 진입 카드 (sticky 영역) — order_optimization (Plus+) */}
+        {!isReadOnly && deadStockItems.length > 0 && canOrderOptimization && (
           <button
             type="button"
             onClick={() => setShowOptimizeModal(true)}
@@ -391,15 +394,24 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
         )}
       </div>
 
-      <InventoryUsageChart
-        chartData={chartData}
-        maxUsage={maxUsage}
-        selectedManufacturer={selectedManufacturer}
-        monthFactor={monthFactor}
-        canAiForecast={canAiForecast}
-        sparklineSeriesByItemId={sparklineSeriesByItemId}
-        supplyCoverageData={supplyCoverageData}
-      />
+      {canBrandAnalytics ? (
+        <InventoryUsageChart
+          chartData={chartData}
+          maxUsage={maxUsage}
+          selectedManufacturer={selectedManufacturer}
+          monthFactor={monthFactor}
+          canAiForecast={canAiForecast}
+          sparklineSeriesByItemId={sparklineSeriesByItemId}
+          supplyCoverageData={supplyCoverageData}
+        />
+      ) : (
+        <SectionLockCard
+          title="규격별 사용량 분석"
+          desc="제조사·브랜드별 사용 현황과 소진 속도를 차트로 확인하세요."
+          requiredPlan="Plus"
+          onUpgrade={undefined}
+        />
+      )}
 
       <div className="hidden md:block">
         <InventoryDetailSection

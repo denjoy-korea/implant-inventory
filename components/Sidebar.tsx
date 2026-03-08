@@ -28,6 +28,7 @@ interface SidebarProps {
 const TAB_FEATURE_MAP: Partial<Record<DashboardTab, PlanFeature>> = {
   fail_management:    'fail_management',
   order_management:   'order_execution',
+  inventory_master:   'dashboard_basic',
   inventory_audit:    'inventory_audit',
   member_management:  'role_management',
   audit_log:          'audit_log',

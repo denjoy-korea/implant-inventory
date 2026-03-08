@@ -3,6 +3,7 @@ import React from 'react';
 interface PausedAccountScreenProps {
   userName: string;
   planName: string;
+  suspendReason?: string | null;
   onResume: () => void;
   onCancelPlan: () => void;
   onLogout: () => void;
@@ -11,11 +12,52 @@ interface PausedAccountScreenProps {
 const PausedAccountScreen: React.FC<PausedAccountScreenProps> = ({
   userName,
   planName,
+  suspendReason,
   onResume,
   onCancelPlan,
   onLogout,
 }) => {
   const [showCancelConfirm, setShowCancelConfirm] = React.useState(false);
+
+  // 플랜 다운그레이드로 인한 접근 제한
+  if (suspendReason === 'plan_downgrade') {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] p-6">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-400 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">{userName}님, 서비스 접근이 제한되었습니다</h2>
+            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+              플랜 변경으로 인해 이 계정의 접근 권한이 제한되었습니다.
+            </p>
+          </div>
+
+          <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl mb-6">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                서비스를 계속 이용하려면{' '}
+                <span className="font-semibold text-slate-800">담당 관리자에게 플랜 업그레이드를 요청</span>
+                해 주세요.
+              </p>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <button onClick={onLogout} className="px-6 py-3 text-sm font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-xl transition-colors">
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] p-6">

@@ -1,4 +1,7 @@
+import React from 'react';
 import { LowStockEntry, displayMfr } from '../../hooks/useOrderManagerData';
+import type { PlanType } from '../../types';
+import SimpleOrderCopyButton from './SimpleOrderCopyButton';
 
 interface Props {
   groupedLowStock: [string, LowStockEntry[]][];
@@ -6,6 +9,7 @@ interface Props {
   lowStockCount: number;
   lowStockQty: number;
   isReadOnly?: boolean;
+  plan?: PlanType;
   setShowBulkOrderModal: (b: boolean) => void;
   setBrandOrderModalMfr: (mfr: string) => void;
 }
@@ -16,6 +20,7 @@ export function OrderLowStockSection({
   lowStockCount,
   lowStockQty,
   isReadOnly,
+  plan,
   setShowBulkOrderModal,
   setBrandOrderModalMfr,
 }: Props) {
@@ -24,10 +29,11 @@ export function OrderLowStockSection({
   return (
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
           <h3 className="text-base font-black text-slate-800 tracking-tight">발주 권장 품목</h3>
           <span className="text-xs font-black text-rose-500 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-lg">{lowStockCount}종 · {lowStockQty}개 부족</span>
+          <SimpleOrderCopyButton groupedLowStock={groupedLowStock} plan={plan ?? 'free'} />
         </div>
         <p className="hidden sm:block text-xs text-slate-400 mt-1.5 ml-5">재고가 권장 수량보다 부족한 품목입니다. 제조사에 발주를 진행하세요.</p>
       </div>

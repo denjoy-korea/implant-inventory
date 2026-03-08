@@ -84,15 +84,15 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   // workDaysMap 확정 후 최종 stats 계산
   const stats = useSurgeryStats(rows, workDaysMap);
 
-  // 플랜별 보관 기간(retentionMonths) 기반 슬라이더 최솟값 계산
-  // - DB에는 최대 24개월만 존재하므로 실제 months 배열 기준으로 잠금 인덱스 결정
+  // 플랜별 조회 가능 기간(viewMonths) 기반 슬라이더 최솟값 계산
+  // - retentionMonths(저장 기간)와 별도로 viewMonths(조회 가능 기간)으로 UI 제한
   const minStartIdx = useMemo(() => {
     if (!planState) return 0;
-    const retentionMonths = PLAN_LIMITS[planState.plan]?.retentionMonths ?? 24;
-    if (retentionMonths >= 24) return 0; // business/ultimate — 전체 조회 가능
+    const viewMonths = PLAN_LIMITS[planState.plan]?.viewMonths ?? 24;
+    if (viewMonths >= 24) return 0; // Plus 이상 — 전체 조회 가능
     const total = stats.monthlyData.length;
-    if (total <= retentionMonths) return 0; // 데이터 자체가 제한 이내
-    return total - retentionMonths;
+    if (total <= viewMonths) return 0; // 데이터 자체가 제한 이내
+    return total - viewMonths;
   }, [planState, stats.monthlyData.length]);
 
   const [rangeStart, setRangeStart] = useState(0);
@@ -177,7 +177,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
 
   // 플랜별 기능 접근 가능 여부
   const currentPlan = planState?.plan ?? 'free';
-  const canBrandAnalytics = planService.canAccess(currentPlan, 'brand_analytics');
+  const canSurgeryChartBasic = planService.canAccess(currentPlan, 'surgery_chart_basic');
+  const canSurgeryChartAdvanced = planService.canAccess(currentPlan, 'surgery_chart_advanced');
   const canAdvanced = planService.canAccess(currentPlan, 'dashboard_advanced');
   const canMonthlyReport = planService.canAccess(currentPlan, 'monthly_report');
 
@@ -380,6 +381,27 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
 
   return (
     <div className="space-y-6 pb-16 [animation-duration:0s]">
+      {/* Free 플랜 업그레이드 유도 배너 */}
+      {currentPlan === 'free' && onUpgrade && (
+        <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-2xl px-4 py-3">
+          <div className="w-8 h-8 shrink-0 bg-indigo-100 rounded-xl flex items-center justify-center">
+            <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-black text-indigo-800">수술기록 3개월만 조회 중</p>
+            <p className="text-[11px] text-indigo-600 mt-0.5">Basic 업그레이드 시 12개월 + 재고 마스터 + FAIL 관리가 열립니다</p>
+          </div>
+          <button
+            onClick={onUpgrade}
+            className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            업그레이드
+          </button>
+        </div>
+      )}
+
       {/* Header + KPI (non-sticky, scrolls normally) */}
       <div className="space-y-4">
         {/* A. Header Strip */}
@@ -531,8 +553,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         </div>
       )}
 
-      {/* D. Charts 2x2 grid — brand_analytics (Basic+) */}
-      {canBrandAnalytics ? (
+      {/* D. Charts — surgery_chart_basic (Basic+): 월별추세·요일별, surgery_chart_advanced (Plus+): 나머지 */}
+      {canSurgeryChartBasic ? (
         <CollapsibleSection
           id="section-charts"
           title="통계 차트"
@@ -547,11 +569,23 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
               <MonthlyTrendChart monthlyData={kpiStats.monthlyData} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
             </div>
             <DayOfWeekChart dayOfWeekStats={kpiStats.dayOfWeekStats} dayInsight={kpiStats.dayInsight} mounted={mounted} onDayClick={handleDayClick} />
-            <div className="lg:col-span-2">
-              <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
-            </div>
-            <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
+            {canSurgeryChartAdvanced && (
+              <>
+                <div className="lg:col-span-2">
+                  <PlacementTrendChart monthlyData={kpiStats.monthlyData} monthlyAvgPlacement={kpiStats.monthlyAvgPlacement} trendline={kpiStats.trendline} mounted={mounted} onMonthClick={handleMonthClick} selectedMonth={selectedMonth} />
+                </div>
+                <ClassificationRatios classificationStats={kpiStats.classificationStats} mounted={mounted} />
+              </>
+            )}
           </div>
+          {!canSurgeryChartAdvanced && (
+            <SectionLockCard
+              title="추가 차트 (식립 추세 · 구분별 비율)"
+              desc="식립 추세선과 분류별 비율 차트는 Plus 이상에서 제공됩니다."
+              requiredPlan={PLAN_NAMES['plus']}
+              onUpgrade={onUpgrade}
+            />
+          )}
         </CollapsibleSection>
       ) : (
         <SectionLockCard
@@ -562,8 +596,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         />
       )}
 
-      {/* E. Deep Analysis — brand_analytics (Basic+) */}
-      {canBrandAnalytics ? (
+      {/* E. Deep Analysis — surgery_chart_advanced (Plus+) */}
+      {canSurgeryChartAdvanced ? (
         <CollapsibleSection
           id="section-deep"
           title="심층 분석"
@@ -586,7 +620,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
         <SectionLockCard
           title="심층 분석"
           desc="제조사별 교환율, 치아 부위별 식립 패턴, 사이즈 랭킹을 분석합니다."
-          requiredPlan={PLAN_NAMES['basic']}
+          requiredPlan={PLAN_NAMES['plus']}
           onUpgrade={onUpgrade}
         />
       )}

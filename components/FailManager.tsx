@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
-import type { ExcelRow, InventoryItem, Order as FailOrder, ReturnRequest, ReturnReason } from '../types';
+import type { ExcelRow, InventoryItem, Order as FailOrder, PlanType, ReturnRequest, ReturnReason } from '../types';
+import { planService } from '../services/planService';
+import SectionLockCard from './surgery-dashboard/SectionLockCard';
 import FailBulkSetupModal from './FailBulkSetupModal';
 import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
@@ -29,6 +31,7 @@ interface FailManagerProps {
   currentUserName: string;
   isReadOnly?: boolean;
   hospitalId?: string;
+  plan?: PlanType;
   onBulkSetupComplete?: () => Promise<void>;
   initialShowBulkModal?: boolean;
   onInitialModalOpened?: () => void;
@@ -38,7 +41,8 @@ interface FailManagerProps {
 // ============================================================
 // COMPONENT
 // ============================================================
-const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, returnRequests = [], onCreateReturn, currentUserName, isReadOnly, hospitalId, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened, onDeleteOrder }) => {
+const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, failOrders, returnRequests = [], onCreateReturn, currentUserName, isReadOnly, hospitalId, plan, onBulkSetupComplete, initialShowBulkModal, onInitialModalOpened, onDeleteOrder }) => {
+  const canExchangeAnalysis = planService.canAccess(plan ?? 'free', 'exchange_analysis');
   const {
     toast,
     // period filter
@@ -323,6 +327,9 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           {/* ROW 1: 제조사별 현황 + 브랜드/규격 분포      */}
           {/* ========================================= */}
 
+          {/* ROW 1·2: 교환 분석 — exchange_analysis (Plus+) */}
+          {canExchangeAnalysis ? (<>
+
           {/* ROW 1 — Mobile */}
           <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">
@@ -572,6 +579,15 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
               )}
             </div>
           </div>
+
+          </>) : (
+            <SectionLockCard
+              title="교환 분석"
+              desc="전체 교환 현황, 제조사 분석, 월별 추세, 다빈도 규격을 분석합니다."
+              requiredPlan="Plus"
+              onUpgrade={undefined}
+            />
+          )}
 
           <FailOrderHistorySection
             activeOrders={activeOrders}

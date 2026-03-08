@@ -73,6 +73,7 @@ export interface User {
   clinicRole?: ClinicRole | null;
   hospitalId: string;
   status?: 'pending' | 'active' | 'readonly' | 'paused';
+  suspendReason?: string | null;
   permissions?: MemberPermissions | null;
   mfaEnabled?: boolean;
   signupSource?: string | null;
@@ -96,6 +97,7 @@ export interface DbProfile {
   clinic_role: ClinicRole | null;
   hospital_id: string | null;
   status: 'pending' | 'active' | 'readonly' | 'paused';
+  suspend_reason?: string | null;
   permissions: MemberPermissions | null;
   created_at: string;
   updated_at: string;
