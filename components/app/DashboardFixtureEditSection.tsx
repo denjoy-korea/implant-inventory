@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExcelData, PlanType } from '../../types';
+import { BillingCycle, ExcelData, PlanType } from '../../types';
 import FeatureGate from '../FeatureGate';
 import FixtureWorkflowGuide from '../FixtureWorkflowGuide';
 import ManufacturerToggle from '../ManufacturerToggle';
@@ -32,7 +32,7 @@ interface DashboardFixtureEditSectionProps {
   onRequestDownloadExcel: () => void;
   onRequestApplyToInventory: () => void;
   onGoToFixtureUpload: () => void;
-  onOpenPaymentModal?: (plan: PlanType) => void;
+  onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
 }
 
 const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = ({

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlanType, PlanFeature, PLAN_NAMES } from '../types';
+import { PlanType, BillingCycle, PlanFeature, PLAN_NAMES } from '../types';
 import { planService } from '../services/planService';
 import UpgradeModal from './UpgradeModal';
 import FailManagementDemo from './fail/FailManagementDemo';
@@ -75,7 +75,7 @@ interface FeatureGateProps {
   /** 축적된 데이터 힌트 — Endowment Effect 강화용 (예: "FAIL 기록 47건 대기 중") */
   dataHint?: string;
   /** 결제 모달 직접 열기 콜백 */
-  onOpenPaymentModal?: (plan: PlanType) => void;
+  onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
 }
 
 const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fallback, dataHint, onOpenPaymentModal }) => {
@@ -113,7 +113,7 @@ const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fall
           requiredPlan={requiredPlan}
           feature={feature}
           triggerMessage={lockConfig?.desc ?? `이 기능은 ${PLAN_NAMES[requiredPlan]} 이상에서 사용 가능합니다`}
-          onSelectPlan={(selectedPlan) => { setShowModal(false); onOpenPaymentModal?.(selectedPlan); }}
+          onSelectPlan={(selectedPlan, selectedBilling) => { setShowModal(false); onOpenPaymentModal?.(selectedPlan, selectedBilling); }}
         />
       </div>
     );

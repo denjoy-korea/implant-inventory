@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import FeatureGate from '../FeatureGate';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import {
+  BillingCycle,
   DashboardTab,
   ExcelRow,
   HospitalPlanState,
@@ -63,7 +64,7 @@ interface DashboardOperationalTabsProps {
   onDeleteReturn: (returnId: string) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onGoToPricing?: () => void;
-  onOpenPaymentModal?: (plan: PlanType) => void;
+  onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
   onAuditSessionComplete?: () => void;
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;

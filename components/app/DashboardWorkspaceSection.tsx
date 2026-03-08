@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { AppState, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
+import { AppState, BillingCycle, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
@@ -83,7 +83,7 @@ export interface DashboardWorkspaceSectionProps {
   returnRequests: ReturnRequest[];
   onLoadHospitalData: (user: User) => Promise<void>;
   onGoToPricing: () => void;
-  onOpenPaymentModal?: (plan: PlanType) => void;
+  onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
   onDismissPlanLimitToast: () => void;
   onUpgradeFromPlanLimitToast: () => void;
   onStartOverviewTrial: () => Promise<void>;
