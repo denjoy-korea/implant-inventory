@@ -32,7 +32,7 @@ export default function DayOfWeekChart({ dayOfWeekStats, dayInsight, mounted, on
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-300 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
+    <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-300 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-800">요일별 식립 패턴</h3>
       </div>

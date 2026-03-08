@@ -288,6 +288,7 @@ export const authService = {
           name: hospitalName,
           master_admin_id: userId,
           phone: encHospitalPhone,
+          phone_last4: phone ? phone.replace(/\D/g, '').slice(-4) : null,
         })
         .select()
         .single();
@@ -351,6 +352,7 @@ export const authService = {
           name: `${name}의 워크스페이스`,
           master_admin_id: userId,
           phone: encWorkspacePhone,
+          phone_last4: phone ? phone.replace(/\D/g, '').slice(-4) : null,
         })
         .select()
         .single();
@@ -794,7 +796,7 @@ export const authService = {
       if (role === 'master' && hospitalName) {
         const { data: hospital, error } = await supabase
           .from('hospitals')
-          .insert({ name: hospitalName, master_admin_id: userId, phone: encPhone })
+          .insert({ name: hospitalName, master_admin_id: userId, phone: encPhone, phone_last4: phone ? phone.replace(/\D/g, '').slice(-4) : null })
           .select()
           .single();
 

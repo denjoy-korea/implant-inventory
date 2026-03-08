@@ -36,7 +36,7 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-500 p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
+    <div className="bg-white rounded-2xl border border-slate-100 border-l-[3px] border-l-indigo-500 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 h-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-sm font-semibold text-slate-800">월별 추세</h3>

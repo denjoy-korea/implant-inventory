@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Order, OrderStatus, InventoryItem, ReturnRequest, ReturnStatus,
   ReturnMutationResult, ExcelRow, CreateReturnParams,
@@ -81,6 +81,18 @@ export function useOrderManager({
   onUpdateReturnStatus,
   onQuickOrder,
 }: UseOrderManagerParams) {
+
+  // ── 뷰포트 감지 ──
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener('change', syncViewport);
+    return () => mediaQuery.removeEventListener('change', syncViewport);
+  }, []);
 
   // ── 필터 state ──
   const [filterType, setFilterType] = useState<Order['type'] | 'all' | 'fail_and_return'>('all');
@@ -492,6 +504,8 @@ export function useOrderManager({
   };
 
   return {
+    // 뷰포트
+    isMobileViewport,
     // 필터 state
     filterType, setFilterType,
     filterDateFrom, setFilterDateFrom,

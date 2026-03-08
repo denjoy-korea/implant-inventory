@@ -18,7 +18,7 @@ export type PlanFeature =
   | 'fail_management'
   | 'order_execution'
   | 'inventory_audit'
-  | 'audit_history'         // 재고실사 이력 + 분석 (Plus+)
+  | 'audit_history'         // 재고실사 이력 + 분석 (Basic+)
   | 'return_management'
   | 'auto_stock_alert'
   | 'monthly_report'
@@ -122,7 +122,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     uploadFrequency: 'weekly',
     features: [
       'dashboard_basic', 'excel_upload', 'realtime_stock',
-      'brand_analytics', 'order_execution', 'inventory_audit',
+      'brand_analytics', 'order_execution', 'inventory_audit', 'audit_history',
       'surgery_chart_basic',
     ],
   },
@@ -229,6 +229,8 @@ export interface DbBillingHistory {
   id: string;
   hospital_id: string | null; // 병원 삭제 시 SET NULL (migration 20260223040000)
   hospital_name_snapshot: string | null; // 결제 시점 병원명 스냅샷 (migration 20260309120000)
+  hospital_id_snapshot: string | null;   // 결제 시점 병원 UUID 스냅샷 (migration 20260309140000)
+  phone_last4_snapshot: string | null;   // 결제 시점 전화번호 뒷4자리 스냅샷 (migration 20260309150000)
   plan: PlanType;
   billing_cycle: BillingCycle | null;
   amount: number;
