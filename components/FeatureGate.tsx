@@ -8,7 +8,7 @@ import FailManagementDemo from './fail/FailManagementDemo';
 const FEATURE_LOCK_CONFIG: Partial<Record<PlanFeature, { title: string; desc: string }>> = {
   fail_management: {
     title: '교환(FAIL) 관리',
-    desc: 'FAIL 발생 이력을 제조사·원인별로 분석하고 자동 발주까지 한 번에 처리하세요.',
+    desc: '수술 중 교환 이력부터 반품까지 체계적으로 관리하세요.',
   },
   order_execution: {
     title: '발주 관리',

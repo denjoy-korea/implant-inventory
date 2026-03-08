@@ -17,8 +17,8 @@ const formatPrice = (price: number) => price.toLocaleString('ko-KR');
 /** 기능별 비용 절감 힌트 */
 const FEATURE_SAVINGS: Partial<Record<PlanFeature, { label: string; saving: string }>> = {
   fail_management: {
-    label: '교환 실수 1건 방지',
-    saving: '임플란트 재주문 비용 30~50만원 절약',
+    label: '교환품목 관리가 제대로 되지 않아 분실 시 픽스쳐 원가 손실',
+    saving: '식립 수술까지 고려하면 1건당 비용손실이 적지 않습니다',
   },
   order_execution: {
     label: '긴급 발주 마진 절감',

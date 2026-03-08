@@ -267,7 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={() => handleTabClick('fail_management')}
               disabled={isPermBlocked('fail_management')}
-              title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : isLocked('fail_management') ? `교환 관리 — Basic 플랜부터 사용 가능` : undefined}
+              title={isPermBlocked('fail_management') ? '접근 권한이 없습니다' : isLocked('fail_management') ? `교환 관리 — Plus 플랜부터 사용 가능` : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${isPermBlocked('fail_management') ? 'opacity-30 cursor-not-allowed text-slate-500'
                 : isLocked('fail_management') ? LOCKED_STYLE
                   : activeTab === 'fail_management' ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50'
@@ -276,7 +276,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               {(isPermBlocked('fail_management') || isLocked('fail_management')) ? <LockMenuIcon /> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
               <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">교환 관리</span>
               {isLocked('fail_management') && !isPermBlocked('fail_management') && (
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">Basic</span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">Plus</span>
               )}
             </button>
             <button

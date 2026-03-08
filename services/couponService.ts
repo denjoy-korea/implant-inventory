@@ -175,12 +175,13 @@ export const couponService = {
       .select('*, template:coupon_templates(*)')
       .eq('hospital_id', hospitalId)
       .eq('status', 'active')
-      .lt('used_count', 'max_uses' as never)
       .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString())
       .order('expires_at', { ascending: true, nullsFirst: false });
     const { data, error } = await query;
     if (error) throw new Error('사용 가능 쿠폰 조회 실패');
     return ((data || []) as UserCoupon[]).filter(c => {
+      // 사용 횟수 초과 쿠폰 제외
+      if (c.used_count >= c.max_uses) return false;
       // applicable_plans 필터: 빈 배열이면 모든 플랜에 적용
       if (forPlan && c.template?.applicable_plans?.length) {
         if (!c.template.applicable_plans.includes(forPlan)) return false;

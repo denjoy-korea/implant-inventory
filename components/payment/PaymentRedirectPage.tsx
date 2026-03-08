@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { tossPaymentService } from '../../services/tossPaymentService';
+import { supabase } from '../../services/supabaseClient';
 
 type PageState = 'loading' | 'success' | 'fail';
 
@@ -42,17 +43,25 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       return;
     }
 
-    tossPaymentService
-      .confirmPayment(paymentKey, orderId, amount)
-      .then(({ ok, error }) => {
-        if (ok) {
-          setPageState('success');
-          setTimeout(onComplete, 2500);
-        } else {
-          setMessage(error || '결제 승인에 실패했습니다.');
-          setPageState('fail');
-        }
-      });
+    // Supabase JS v2는 fresh page load 시 세션 복원이 비동기 → getSession()으로 먼저 대기
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setMessage('로그인 세션이 만료되었습니다. 다시 로그인 후 결제를 진행해주세요.');
+        setPageState('fail');
+        return;
+      }
+      return tossPaymentService.confirmPayment(paymentKey, orderId, amount);
+    }).then((result) => {
+      if (!result) return; // 세션 없음 처리됨
+      const { ok, error } = result;
+      if (ok) {
+        setPageState('success');
+        setTimeout(onComplete, 2500);
+      } else {
+        setMessage(error || '결제 승인에 실패했습니다.');
+        setPageState('fail');
+      }
+    });
   }, [isSuccessPath, onComplete]);
 
   return (

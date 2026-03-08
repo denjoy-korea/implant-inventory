@@ -122,7 +122,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     uploadFrequency: 'weekly',
     features: [
       'dashboard_basic', 'excel_upload', 'realtime_stock',
-      'fail_management', 'order_execution', 'inventory_audit',
+      'brand_analytics', 'order_execution', 'inventory_audit',
       'surgery_chart_basic',
     ],
   },
@@ -228,6 +228,7 @@ export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
 export interface DbBillingHistory {
   id: string;
   hospital_id: string | null; // 병원 삭제 시 SET NULL (migration 20260223040000)
+  hospital_name_snapshot: string | null; // 결제 시점 병원명 스냅샷 (migration 20260309120000)
   plan: PlanType;
   billing_cycle: BillingCycle | null;
   amount: number;
