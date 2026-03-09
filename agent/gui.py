@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.0"
+VERSION = "3.5.1"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -610,8 +610,9 @@ class CoordSettingsWindow:
         win.geometry("440x520")
         win.configure(bg=BG)
         win.attributes("-topmost", True)
-        win.grab_set()
+        # grab_set() 제거 — after() 체이닝 차단의 근본 원인
         self.win = win
+        self._win_geometry = "440x520"  # 원위치 복원용
 
         tk.Label(win, text="단계별 좌표 설정",
                  font=("Malgun Gothic", 13, "bold"), bg=BG, fg=TEXT
@@ -681,47 +682,65 @@ class CoordSettingsWindow:
                   ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
 
     def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
-        """카운트다운 오버레이 → 마우스 위치 캡처 후 좌표 저장"""
-        try:
-            self.win.grab_release()
-        except Exception:
-            pass
-        self.win.iconify()  # 작업표시줄로 최소화 (withdraw보다 안전)
+        """카운트다운 오버레이 → 마우스 위치 캡처 후 좌표 저장.
 
+        설계 원칙:
+        - grab_set() 없음 — after() 체이닝 차단 방지
+        - withdraw() 대신 화면 밖 이동 — 이벤트 루프 유지
+        - overlay.after() 체이닝만 사용 — threading 없음
+        - n=0 도달 시 메인 스레드에서 pyautogui.position() 직접 호출
+        """
+        # 화면 밖으로 이동 (withdraw/iconify 대신) — 이벤트 루프 중단 없음
+        self.win.geometry("-2000+0")
+        self.win.update_idletasks()
+
+        # 오버레이: 화면 하단 중앙, 항상 최상위, 테두리 없음
         overlay = tk.Toplevel()
-        overlay.attributes("-topmost", True)
         overlay.overrideredirect(True)
+        overlay.attributes("-topmost", True)
         overlay.configure(bg="#1e1e2e")
+
         sw = overlay.winfo_screenwidth()
         sh = overlay.winfo_screenheight()
-        ow, oh = 280, 120
-        overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh//2 - oh//2}")
+        ow, oh = 240, 100
+        ox = sw // 2 - ow // 2
+        oy = sh - oh - 60  # 하단 60px 여백
+        overlay.geometry(f"{ow}x{oh}+{ox}+{oy}")
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
-        tk.Label(overlay, textvariable=count_var,
-                 font=("Malgun Gothic", 44, "bold"), bg="#1e1e2e", fg=GREEN
-                 ).pack(pady=(8, 0))
-        tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
-                 font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
-                 ).pack()
+        tk.Label(
+            overlay, textvariable=count_var,
+            font=("Malgun Gothic", 42, "bold"), bg="#1e1e2e", fg=GREEN,
+        ).pack(pady=(4, 0))
+        tk.Label(
+            overlay, text="마우스를 목표 위치로 이동하세요",
+            font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED,
+        ).pack()
         overlay.update()
 
         def tick(n: int):
             if n > 0:
                 count_var.set(str(n))
+                overlay.update_idletasks()
+                # overlay 기준 after() — grab 없는 Toplevel이므로 항상 실행됨
                 overlay.after(1000, tick, n - 1)
             else:
-                # 캡처 및 저장 — 메인 스레드에서 실행됨
-                x, y = pyautogui.position()
+                # n=0: 메인 스레드에서 좌표 캡처 (StringVar.set 안전)
+                try:
+                    x, y = pyautogui.position()
+                except Exception:
+                    x, y = 0, 0
+
                 x_var.set(str(x))
                 y_var.set(str(y))
                 self.coords[key] = {"x": x, "y": y}
+
                 overlay.destroy()
-                self.win.deiconify()
-                try:
-                    self.win.grab_set()
-                except Exception:
-                    pass
+
+                # 창 원위치 복원 (화면 안, 중앙)
+                self.win.geometry(self._win_geometry)
+                self.win.update_idletasks()
+                # grab_set() 없이 포커스만 올림
                 self.win.lift()
                 self.win.focus_force()
 
