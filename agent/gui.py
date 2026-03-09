@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.4"
+VERSION = "3.5.5"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -701,17 +701,17 @@ class CoordSettingsWindow:
         sw = self.win.winfo_screenwidth()
         sh = self.win.winfo_screenheight()
 
-        # 창을 화면 오른쪽 밖으로 이동 (이벤트 루프 유지, 화면에서만 숨김)
-        self.win.geometry(f"440x700+{sw + 200}+0")
-        self.win.update_idletasks()
+        # grab_set 없으므로 iconify()해도 after() 정상 동작
+        self.win.iconify()
 
-        # 카운트다운 오버레이 — 화면 하단 중앙
-        overlay = tk.Toplevel(self.win)
+        # 카운트다운 오버레이 — 화면 하단 중앙, 항상 최상위
+        overlay = tk.Toplevel()
         overlay.overrideredirect(True)
         overlay.attributes("-topmost", True)
         overlay.configure(bg="#1e1e2e")
         ow, oh = 280, 120
         overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh - oh - 60}")
+        overlay.update()
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
         tk.Label(overlay, textvariable=count_var,
@@ -722,31 +722,31 @@ class CoordSettingsWindow:
                  ).pack()
         overlay.update()
 
-        def tick(n: int):
+        _remaining = [self.COUNTDOWN]
+
+        def tick():
+            n = _remaining[0]
             if n > 0:
                 count_var.set(str(n))
-                # self.win.after() 사용 — 루트 이벤트 루프에 직접 등록
-                self.win.after(1000, tick, n - 1)
+                _remaining[0] -= 1
+                overlay.after(1000, tick)
             else:
                 # ── 캡처 ──────────────────────────────────────────
                 x, y = pyautogui.position()
 
-                # 마우스 주변 200x120 스크린샷
+                # 마우스 주변 스크린샷
                 try:
                     from PIL import ImageGrab, ImageDraw, ImageTk
-                    half_w, half_h = 100, 60
-                    region = (x - half_w, y - half_h, x + half_w, y + half_h)
-                    shot = ImageGrab.grab(bbox=region)
-                    # 중앙에 빨간 십자 표시
+                    hw, hh = 100, 60
+                    shot = ImageGrab.grab(bbox=(x - hw, y - hh, x + hw, y + hh))
                     draw = ImageDraw.Draw(shot)
-                    draw.ellipse([half_w-8, half_h-8, half_w+8, half_h+8],
-                                 outline="#ff3030", width=2)
-                    draw.line([half_w-14, half_h, half_w+14, half_h], fill="#ff3030", width=2)
-                    draw.line([half_w, half_h-14, half_w, half_h+14], fill="#ff3030", width=2)
+                    draw.ellipse([hw-8, hh-8, hw+8, hh+8], outline="#ff3030", width=2)
+                    draw.line([hw-14, hh, hw+14, hh], fill="#ff3030", width=2)
+                    draw.line([hw, hh-14, hw, hh+14], fill="#ff3030", width=2)
                     photo = ImageTk.PhotoImage(shot)
-                    self._thumb_photos[key] = photo  # GC 방지
+                    self._thumb_photos[key] = photo
                     canvas = self._thumb_canvases[key]
-                    canvas.configure(width=200, height=120)
+                    canvas.configure(height=120)
                     canvas.delete("all")
                     canvas.create_image(0, 0, anchor="nw", image=photo)
                 except Exception:
@@ -759,14 +759,13 @@ class CoordSettingsWindow:
 
                 overlay.destroy()
 
-                # 창 화면 중앙으로 복원 + 최상위
-                self.win.geometry(f"500x700+{sw//2 - 250}+{sh//2 - 350}")
+                # 창 복원 + 최상위
+                self.win.deiconify()
                 self.win.attributes("-topmost", True)
                 self.win.lift()
                 self.win.focus_force()
-                self.win.update()
 
-        tick(self.COUNTDOWN)
+        tick()
 
     def _save(self):
         # 수동 입력값도 반영
