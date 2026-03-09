@@ -1,4 +1,3 @@
-import React from 'react';
 import { TRIAL_OFFER_LABEL } from '../../utils/trialPolicy';
 import { PLAN_LIMITS, PLAN_PRICING } from '../../types/plan';
 
@@ -84,11 +83,11 @@ export const plans: Plan[] = [
     features: [
       '재고 품목 무제한',
       '기본 10명 · 추가 인원 5,000원/인',
-      '원클릭 발주 시스템',
-      'AI 기반 수요 예측',
-      '월간·연간 리포트',
-      '거래처 관리 · 감사 로그',
-      'Notion·Slack·솔라피 연동 · 덴트웹 자동화',
+      '원클릭 발주 시스템 · AI 기반 수요 예측',
+      '월간·연간 리포트 · 감사 로그',
+      '거래처 관리 · Notion·Slack·솔라피 연동',
+      '수술기록지 자동 업로드 에이전트',
+      '자동 발주 · 자동 반품 시스템',
       '우선 지원 (채팅 + 전화)',
     ],
   },
@@ -121,7 +120,7 @@ export const comparisonCategories = [
       { label: '교환 분석', desc: '전체 교환현황, 제조사 분석, 월별 추세, 다빈도 규격', values: [false, false, true, true] },
       { label: '발주 생성 및 수령 처리', values: [false, true, true, true] },
       { label: '재고실사', values: [false, true, true, true] },
-      { label: '재고실사 이력 분석', values: [false, false, true, true] },
+      { label: '재고실사 이력 분석', values: [false, true, true, true] },
       { label: '발주 최적화 추천', values: [false, false, true, true] },
       { label: '자동 재고 알림', values: [false, false, true, true] },
       { label: '간편발주 (카카오톡)', desc: '부족 품목을 카톡 메시지로 즉시 발주', values: [false, false, true, true] },
@@ -139,12 +138,20 @@ export const comparisonCategories = [
     ],
   },
   {
+    name: '자동화',
+    features: [
+      { label: '수술기록지 자동 업로드 에이전트', desc: '덴트웹 에이전트가 매일 지정된 시간에 수술기록지를 자동으로 추출·업로드', values: [false, false, false, true] },
+      { label: '자동 발주 시스템', desc: '재고 부족 감지 시 거래처에 자동으로 발주 요청을 전송', values: [false, false, false, true] },
+      { label: '자동 반품 시스템', desc: 'FAIL(교환) 발생 시 제조사에 자동으로 반품·교환 요청을 처리', values: [false, false, false, true] },
+    ],
+  },
+  {
     name: '협업',
     features: [
       { label: '사용자 수', values: ['1명', '1명', `${PLAN_LIMITS['plus'].maxUsers}명`, `기본 ${PLAN_LIMITS['business'].maxUsers}명`] },
       { label: '추가 사용자', desc: '기본 인원 초과 시 1인당 5,000원/월 (부가세 별도)', values: [false, false, false, true] },
       { label: '역할별 권한 관리', desc: '원장/매니저/스탭 등 역할에 따라 메뉴 접근 및 데이터 수정 권한을 구분', values: [false, false, true, true] },
-      { label: '외부 서비스 연동', desc: 'Notion, Slack, 솔라피 등 외부 서비스 연동 + 덴트웹 자동화', values: [false, false, false, true] },
+      { label: '외부 서비스 연동', desc: 'Notion, Slack, 솔라피 등 외부 서비스와 연동하여 알림·리포트 자동 발송', values: [false, false, false, true] },
     ],
   },
   {

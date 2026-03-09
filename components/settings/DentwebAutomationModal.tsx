@@ -22,16 +22,6 @@ interface DentwebAutomationModalProps {
   onClose: () => void;
   automationLoading: boolean;
   automationState: DentwebAutomationState | null;
-  automationEnabled: boolean;
-  onToggleAutomationEnabled: () => void;
-  automationScheduledTime: string;
-  onAutomationScheduledTimeChange: (value: string) => void;
-  automationSaving: boolean;
-  automationChanged: boolean;
-  automationTimeValid: boolean;
-  onSaveAutomation: () => void | Promise<void>;
-  automationRunning: boolean;
-  onRequestAutomationRun: () => void | Promise<void>;
   generatingToken: boolean;
   onGenerateToken: () => void | Promise<void>;
   newAgentToken: string | null;
@@ -57,16 +47,6 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
   onClose,
   automationLoading,
   automationState,
-  automationEnabled,
-  onToggleAutomationEnabled,
-  automationScheduledTime,
-  onAutomationScheduledTimeChange,
-  automationSaving,
-  automationChanged,
-  automationTimeValid,
-  onSaveAutomation,
-  automationRunning,
-  onRequestAutomationRun,
   generatingToken,
   onGenerateToken,
   newAgentToken,
@@ -118,50 +98,6 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
           <p className="text-sm text-slate-400 py-8 text-center">설정 불러오는 중...</p>
         ) : (
           <div className="space-y-4">
-            {/* 자동 실행 토글 */}
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <label className="text-sm font-bold text-slate-700">자동 실행</label>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={automationEnabled}
-                onClick={onToggleAutomationEnabled}
-                className={`relative h-6 w-11 rounded-full transition-colors ${automationEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
-              >
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${automationEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
-            </div>
-
-            {/* 실행 시간 */}
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">실행 시간</label>
-              <input
-                type="time"
-                value={automationScheduledTime}
-                onChange={(event) => onAutomationScheduledTimeChange(event.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">매일 설정한 시간에 자동으로 실행됩니다.</p>
-            </div>
-
-            {/* 버튼 영역 */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => void onSaveAutomation()}
-                disabled={automationSaving || !automationChanged || !automationTimeValid}
-                className="px-3 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40"
-              >
-                {automationSaving ? '저장 중...' : '설정 저장'}
-              </button>
-              <button
-                onClick={() => void onRequestAutomationRun()}
-                disabled={automationRunning}
-                className="px-3 py-2.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
-              >
-                {automationRunning ? '요청 중...' : '지금 실행 요청'}
-              </button>
-            </div>
-
             {/* 상태 정보 */}
             {automationState && (
               <div className="rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 space-y-1.5">

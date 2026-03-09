@@ -406,6 +406,37 @@ Deno.serve(async (req: Request) => {
   // 에이전트 액션 (agent_token 전용)
   // ══════════════════════════════════════════════════════════
 
+  if (action === "agent_save_settings") {
+    if (ctx.type !== "agent") {
+      return jsonResponse({ ok: false, error: "agent_only" }, 403, corsHeaders);
+    }
+
+    const enabled = toBool(body.enabled, current.enabled);
+    const scheduledTime = typeof body.scheduled_time === "string"
+      ? body.scheduled_time.trim()
+      : current.scheduled_time || "18:00";
+
+    if (!/^\d{2}:\d{2}$/.test(scheduledTime)) {
+      return jsonResponse({ ok: false, error: "scheduled_time must be HH:MM format" }, 422, corsHeaders);
+    }
+    const [h, m] = scheduledTime.split(":").map(Number);
+    if (h < 0 || h > 23 || m < 0 || m > 59) {
+      return jsonResponse({ ok: false, error: "invalid time" }, 422, corsHeaders);
+    }
+
+    const { data, error } = await admin
+      .from("dentweb_automation_settings")
+      .update({ enabled, scheduled_time: scheduledTime })
+      .eq("hospital_id", ctx.hospitalId)
+      .select("*")
+      .maybeSingle();
+
+    if (error || !data) {
+      return jsonResponse({ ok: false, error: "save_failed" }, 500, corsHeaders);
+    }
+    return jsonResponse({ ok: true, state: sanitizeState(data as SettingsRow) }, 200, corsHeaders);
+  }
+
   if (action === "claim_run") {
     if (ctx.type !== "agent") {
       return jsonResponse({ ok: false, error: "agent_only" }, 403, corsHeaders);

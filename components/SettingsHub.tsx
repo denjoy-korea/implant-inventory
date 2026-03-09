@@ -85,11 +85,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   // 덴트웹 자동화 상태
   const [showAutomationModal, setShowAutomationModal] = useState(false);
   const [automationState, setAutomationState] = useState<DentwebAutomationState | null>(null);
-  const [automationEnabled, setAutomationEnabled] = useState(false);
-  const [automationScheduledTime, setAutomationScheduledTime] = useState('18:00');
   const [automationLoading, setAutomationLoading] = useState(false);
-  const [automationSaving, setAutomationSaving] = useState(false);
-  const [automationRunning, setAutomationRunning] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
@@ -136,8 +132,6 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       .then(state => {
         if (!state) return;
         setAutomationState(state);
-        setAutomationEnabled(state.enabled);
-        setAutomationScheduledTime(state.scheduledTime || '18:00');
       })
       .finally(() => setAutomationLoading(false));
   }, [hospitalId, canAccessIntegrations]);
@@ -274,43 +268,6 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     });
   };
 
-  const automationTimeValid = /^\d{2}:\d{2}$/.test(automationScheduledTime);
-  const automationChanged = automationState
-    ? (automationEnabled !== automationState.enabled || automationScheduledTime !== (automationState.scheduledTime || '18:00'))
-    : false;
-
-  const handleSaveAutomation = async () => {
-    if (!automationTimeValid) {
-      showToast('실행 시간을 올바르게 설정해주세요.', 'error');
-      return;
-    }
-    setAutomationSaving(true);
-    const res = await dentwebAutomationService.saveSettings(automationEnabled, automationScheduledTime);
-    if (!res.ok || !res.state) {
-      showToast('자동화 설정 저장에 실패했습니다.', 'error');
-      setAutomationSaving(false);
-      return;
-    }
-    setAutomationState(res.state);
-    setAutomationEnabled(res.state.enabled);
-    setAutomationScheduledTime(res.state.scheduledTime || '18:00');
-    showToast('자동화 설정이 저장되었습니다.', 'success');
-    setAutomationSaving(false);
-  };
-
-  const handleRequestAutomationRun = async () => {
-    setAutomationRunning(true);
-    const res = await dentwebAutomationService.requestRun();
-    if (!res.ok || !res.state) {
-      showToast('실행 요청에 실패했습니다.', 'error');
-      setAutomationRunning(false);
-      return;
-    }
-    setAutomationState(res.state);
-    showToast('실행 요청을 등록했습니다. 에이전트가 곧 실행합니다.', 'success');
-    setAutomationRunning(false);
-  };
-
   const handleGenerateToken = async () => {
     setGeneratingToken(true);
     setNewAgentToken(null);
@@ -389,6 +346,69 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  const renderCardItem = (card: SettingsCard) => {
+    const isPlanLocked = card.feature ? !planService.canAccess(plan, card.feature) : false;
+    const isRoleLocked = card.requireMaster ? (!isMaster || !!isStaff) : false;
+    const isLocked = isPlanLocked || isRoleLocked;
+    const minPlan = card.feature ? getMinPlanForFeature(card.feature) : null;
+    const minPlanLabel = minPlan ? PLAN_NAMES[minPlan] : '';
+
+    return (
+      <button
+        key={card.id}
+        onClick={() => !isLocked && onNavigate(card.id)}
+        disabled={isLocked}
+        className={`group relative text-left p-6 rounded-2xl border transition-all duration-200 ${
+          isLocked
+            ? 'bg-slate-50/80 border-slate-200 cursor-not-allowed'
+            : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 hover:-translate-y-0.5 active:scale-[0.99]'
+        }`}
+      >
+        <div className="flex items-start gap-4">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            isLocked
+              ? 'bg-slate-100 text-slate-300'
+              : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100'
+          } transition-colors`}>
+            {card.icon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className={`text-base font-bold ${isLocked ? 'text-slate-400' : 'text-slate-800'}`}>
+                {card.title}
+              </h3>
+              {isLocked && (
+                <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              )}
+            </div>
+            <p className={`text-xs mt-1 leading-relaxed ${isLocked ? 'text-slate-400' : 'text-slate-500'}`}>
+              {card.description}
+            </p>
+            {isLocked && (
+              <div className="mt-2 space-y-1">
+                {isPlanLocked && (
+                  <p className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
+                    <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-black">{minPlanLabel}</span> 이상 플랜에서 이용 가능
+                  </p>
+                )}
+                {isRoleLocked && (
+                  <p className="text-[11px] font-bold text-amber-600">
+                    {isStaff ? '클리닉 워크스페이스 전용 기능입니다' : '병원 관리자 권한이 필요합니다'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 transition-transform ${isLocked ? 'text-slate-200' : 'text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <>
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -398,68 +418,40 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {cards.map(card => {
-          const isPlanLocked = card.feature ? !planService.canAccess(plan, card.feature) : false;
-          const isRoleLocked = card.requireMaster ? (!isMaster || !!isStaff) : false;
-          const isLocked = isPlanLocked || isRoleLocked;
-          const minPlan = card.feature ? getMinPlanForFeature(card.feature) : null;
-          const minPlanLabel = minPlan ? PLAN_NAMES[minPlan] : '';
+        {/* Free 플랜 카드 */}
+        {renderCardItem(cards[0])}
+        {renderCardItem(cards[1])}
 
-          return (
-            <button
-              key={card.id}
-              onClick={() => !isLocked && onNavigate(card.id)}
-              disabled={isLocked}
-              className={`group relative text-left p-6 rounded-2xl border transition-all duration-200 ${
-                isLocked
-                  ? 'bg-slate-50/80 border-slate-200 cursor-not-allowed'
-                  : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 hover:-translate-y-0.5 active:scale-[0.99]'
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  isLocked
-                    ? 'bg-slate-100 text-slate-300'
-                    : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100'
-                } transition-colors`}>
-                  {card.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className={`text-base font-bold ${isLocked ? 'text-slate-400' : 'text-slate-800'}`}>
-                      {card.title}
-                    </h3>
-                    {isLocked && (
-                      <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                      </svg>
-                    )}
-                  </div>
-                  <p className={`text-xs mt-1 leading-relaxed ${isLocked ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {card.description}
-                  </p>
-                  {isLocked && (
-                    <div className="mt-2 space-y-1">
-                      {isPlanLocked && (
-                        <p className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
-                          <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-black">{minPlanLabel}</span> 이상 플랜에서 이용 가능
-                        </p>
-                      )}
-                      {isRoleLocked && (
-                        <p className="text-[11px] font-bold text-amber-600">
-                          {isStaff ? '클리닉 워크스페이스 전용 기능입니다' : '병원 관리자 권한이 필요합니다'}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 transition-transform ${isLocked ? 'text-slate-200' : 'text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        {/* 권장재고 산출 설정 (Free) */}
+        {isMaster && !isStaff && hospitalId && onStockCalcSettingsChange && (
+          <button
+            onClick={() => setShowCalcSettingsModal(true)}
+            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-violet-50 text-violet-600 group-hover:bg-violet-100 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-            </button>
-          );
-        })}
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-800">권장재고 산출 설정</h3>
+                <p className="text-xs mt-1 leading-relaxed text-slate-500">
+                  안전재고 배수·추세 반영 범위 등 권장량 계산 파라미터를 조정합니다.
+                </p>
+              </div>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        )}
+
+        {/* 구성원 관리 (Plus+) */}
+        {renderCardItem(cards[2])}
+
+        {/* 감사 로그 (Business+) */}
+        {renderCardItem(cards[3])}
 
         {/* 거래처 관리 카드 — master에게만 표시, Business+ 이상 플랜 필요 */}
         {(isMaster && !isStaff) && hospitalId && (() => {
@@ -507,31 +499,6 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
             </button>
           );
         })()}
-
-        {/* 권장재고 산출 설정 카드 */}
-        {isMaster && !isStaff && hospitalId && onStockCalcSettingsChange && (
-          <button
-            onClick={() => setShowCalcSettingsModal(true)}
-            className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-violet-50 text-violet-600 group-hover:bg-violet-100 transition-colors">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-slate-800">권장재고 산출 설정</h3>
-                <p className="text-xs mt-1 leading-relaxed text-slate-500">
-                  안전재고 배수·추세 반영 범위 등 권장량 계산 파라미터를 조정합니다.
-                </p>
-              </div>
-              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-          </button>
-        )}
 
         {/* 외부 연동 카드 */}
         {isMaster && !isStaff && hospitalId && (
@@ -709,16 +676,6 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
       }}
       automationLoading={automationLoading}
       automationState={automationState}
-      automationEnabled={automationEnabled}
-      onToggleAutomationEnabled={() => setAutomationEnabled((prev) => !prev)}
-      automationScheduledTime={automationScheduledTime}
-      onAutomationScheduledTimeChange={setAutomationScheduledTime}
-      automationSaving={automationSaving}
-      automationChanged={automationChanged}
-      automationTimeValid={automationTimeValid}
-      onSaveAutomation={handleSaveAutomation}
-      automationRunning={automationRunning}
-      onRequestAutomationRun={handleRequestAutomationRun}
       generatingToken={generatingToken}
       onGenerateToken={handleGenerateToken}
       newAgentToken={newAgentToken}
