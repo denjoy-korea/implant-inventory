@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - 'agent/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '버전 (예: 3.4.0)'
+        required: true
+        default: '3.4.0'
 
 jobs:
   build:
@@ -35,7 +41,13 @@ jobs:
 
       - name: 버전 태그 생성
         id: version
-        run: echo "tag=agent-$(date +'%Y%m%d-%H%M')" >> $env:GITHUB_OUTPUT
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            echo "tag=v${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
+          } else {
+            $d = Get-Date -Format "yyyyMMdd-HHmm"
+            echo "tag=agent-$d" >> $env:GITHUB_OUTPUT
+          }
 
       - name: GitHub Release 생성 및 EXE 업로드
         uses: softprops/action-gh-release@v2
