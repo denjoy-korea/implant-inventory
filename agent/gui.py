@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.9"
+VERSION = "3.6.0"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -811,14 +811,19 @@ class CoordSettingsWindow:
         overlay.bind("<ButtonPress-1>", _drag_start)
         overlay.bind("<B1-Motion>", _drag_move)
 
-        def worker():
-            # threading: time.sleep → root.after(0, ...) 로 UI 업데이트
-            for n in range(self.COUNTDOWN, 0, -1):
-                root.after(0, lambda v=n: count_lbl.configure(text=str(v)))
-                time.sleep(1)
+        # root.after() 인자 전달 방식 — overlay.after / threading 없이
+        # 가장 안정적: root(Tk)는 항상 mainloop 처리 보장
+        def tick(n: int):
+            if n > 0:
+                count_lbl.configure(text=str(n))
+                self.root.after(1000, tick, n - 1)
+                return
+            # ── n == 0: 캡처 ──────────────────────────────────
+            try:
+                x, y = pyautogui.position()
+            except Exception:
+                x, y = 0, 0
 
-            # 마우스 위치 + 스크린샷 캡처
-            x, y = pyautogui.position()
             photo_ref = [None]
             try:
                 from PIL import ImageGrab, ImageDraw, ImageTk
@@ -826,53 +831,48 @@ class CoordSettingsWindow:
                 shot = ImageGrab.grab(bbox=(x - hw, y - hh, x + hw, y + hh))
                 draw = ImageDraw.Draw(shot)
                 r = 12
-                draw.ellipse([hw - r, hh - r, hw + r, hh + r],
-                             outline="#ff3030", width=3)
-                draw.line([hw - r - 8, hh, hw + r + 8, hh], fill="#ff3030", width=2)
-                draw.line([hw, hh - r - 8, hw, hh + r + 8], fill="#ff3030", width=2)
+                draw.ellipse([hw-r, hh-r, hw+r, hh+r], outline="#ff3030", width=3)
+                draw.line([hw-r-8, hh, hw+r+8, hh], fill="#ff3030", width=2)
+                draw.line([hw, hh-r-8, hw, hh+r+8], fill="#ff3030", width=2)
                 photo_ref[0] = ImageTk.PhotoImage(shot)
             except Exception:
                 pass
 
-            def finish():
-                # 좌표 저장
-                self.coords[key] = {"x": x, "y": y}
-                self._coord_var.set(f"X: {x}    Y: {y}")
+            # 좌표 저장
+            self.coords[key] = {"x": x, "y": y}
+            self._coord_var.set(f"X: {x}    Y: {y}")
 
-                # 스크린샷 표시
-                self._canvas.delete("all")
-                if photo_ref[0]:
-                    self._thumb_photo = photo_ref[0]
-                    self._canvas.create_image(0, 0, anchor="nw",
-                                              image=self._thumb_photo)
-                else:
-                    self._canvas.create_text(
-                        self.CANVAS_W // 2, self.CANVAS_H // 2,
-                        text=f"X: {x}  Y: {y}",
-                        fill=GREEN, font=("Malgun Gothic", 11, "bold"))
+            # 스크린샷 표시
+            self._canvas.delete("all")
+            if photo_ref[0]:
+                self._thumb_photo = photo_ref[0]
+                self._canvas.create_image(0, 0, anchor="nw", image=self._thumb_photo)
+            else:
+                self._canvas.create_text(
+                    self.CANVAS_W // 2, self.CANVAS_H // 2,
+                    text=f"X: {x}  Y: {y}",
+                    fill=GREEN, font=("Malgun Gothic", 11, "bold"))
 
-                overlay.destroy()
+            overlay.destroy()
 
-                # 창 복원
-                self.win.deiconify()
-                self.win.attributes("-topmost", True)
-                self.win.lift()
-                self.win.focus_force()
+            # 창 복원
+            self.win.deiconify()
+            self.win.attributes("-topmost", True)
+            self.win.lift()
+            self.win.focus_force()
 
-                # 버튼 복원
-                self._hint_label.configure(
-                    text="✅ 좌표 저장 완료! '다음'을 눌러 진행하거나 다시 캡처하세요.")
-                self._recapture_btn.configure(state="normal")
-                self._recapture_btn.pack(fill="x", padx=20, pady=(6, 0), ipady=7)
-                self._prev_btn.configure(
-                    state="normal" if self.step_idx > 0 else "disabled")
-                self._next_btn.configure(state="normal")
-                self._skip_btn.configure(state="normal")
-                self._countdown_running = False
+            self._hint_label.configure(
+                text="✅ 좌표 저장 완료! '다음'을 눌러 진행하거나 다시 캡처하세요.")
+            self._recapture_btn.configure(state="normal")
+            self._recapture_btn.pack(fill="x", padx=20, pady=(6, 0), ipady=7)
+            self._prev_btn.configure(
+                state="normal" if self.step_idx > 0 else "disabled")
+            self._next_btn.configure(state="normal")
+            self._skip_btn.configure(state="normal")
+            self._countdown_running = False
 
-            root.after(0, finish)
-
-        threading.Thread(target=worker, daemon=True).start()
+        # 즉시 시작
+        tick(self.COUNTDOWN)
 
     def _prev_step(self):
         if self.step_idx > 0:
