@@ -16,6 +16,12 @@ DEFAULTS = {
     "max_retries": 3,
     "log_file": "agent.log",
     "log_max_lines": 1000,
+    # 저장 다이얼로그 좌표 (GUI 좌표 설정에서 입력)
+    "coords": {
+        "save_dialog_agent_folder":  {"x": 0, "y": 0},  # 덴트웹 에이전트 폴더 (더블클릭)
+        "save_dialog_exports_folder": {"x": 0, "y": 0},  # exports 폴더 (더블클릭)
+        "save_dialog_save_button":   {"x": 0, "y": 0},  # 저장(S) 버튼 (클릭)
+    },
 }
 
 
