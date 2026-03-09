@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.3"
+VERSION = "3.5.4"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -359,6 +359,11 @@ class AgentApp:
 STEPS = [
     ("경영/통계 메뉴",           "btn_stats",                  "click"),
     ("임플란트 수술통계",         "btn_implant",                "click"),
+    ("특정기간 라디오버튼",       "btn_period_radio",           "click"),
+    ("시작일 클릭",               "btn_date_start",             "click"),
+    ("달력 - 오늘(시작일)",       "btn_cal_today_start",        "click"),
+    ("종료일 클릭",               "btn_date_end",               "click"),
+    ("달력 - 오늘(종료일)",       "btn_cal_today_end",          "click"),
     ("엑셀저장 버튼",             "btn_export",                 "click"),
     ("덴트웹 에이전트 폴더",       "save_dialog_agent_folder",   "double"),
     ("exports 폴더",              "save_dialog_exports_folder", "double"),

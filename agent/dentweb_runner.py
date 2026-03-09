@@ -102,25 +102,28 @@ class DentwebRunner:
         return True
 
     def download_excel(self) -> str | None:
-        """DentWeb 자동화 시퀀스 -> Excel 파일 경로 반환"""
+        """DentWeb 자동화 전체 시퀀스 -> Excel 파일 경로 반환"""
         if not self._activate_dentweb():
             return None
 
-        # 클릭 시퀀스 (이미지 인식 + fallback 좌표)
-        # 실제 좌표는 병원별 config 또는 이미지 매칭으로 결정
-        steps = [
-            ("btn_stats.png", None),         # 경영/통계 메뉴
-            ("btn_implant.png", None),        # 임플란트 수술통계
-            ("btn_export.png", None, False),  # 엑셀저장 버튼 클릭
+        # ── 1~8: 메뉴 클릭 시퀀스 (좌표 기반) ──────────────────
+        sequence = [
+            ("btn_stats",           False),  # 경영/통계 메뉴
+            ("btn_implant",         False),  # 임플란트 수술통계
+            ("btn_period_radio",    False),  # 특정기간 라디오버튼
+            ("btn_date_start",      False),  # 시작일 클릭
+            ("btn_cal_today_start", False),  # 달력 오늘(시작)
+            ("btn_date_end",        False),  # 종료일 클릭
+            ("btn_cal_today_end",   False),  # 달력 오늘(종료)
+            ("btn_export",          False),  # 엑셀저장 버튼
         ]
 
-        for step in steps:
-            image, fallback = step[0], step[1]
-            double = step[2] if len(step) > 2 else False
-            if not self._find_and_click(image, fallback, double=double):
+        for key, double in sequence:
+            if not self._click_coord(key, double=double):
                 return None
+            time.sleep(self.click_delay)
 
-        # 저장 다이얼로그 처리 (덴트웹 에이전트 폴더 → exports → 저장)
+        # ── 9~11: 저장 다이얼로그 (에이전트 폴더 → exports → 저장) ──
         self._handle_save_dialog()
 
         return self._wait_for_download()
