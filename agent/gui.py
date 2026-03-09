@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.2"
+VERSION = "3.5.3"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -625,30 +625,34 @@ class CoordSettingsWindow:
         scroll_frame = tk.Frame(win, bg=BG)
         scroll_frame.pack(fill="both", expand=True, padx=16)
 
+        # 각 단계별 스크린샷 캔버스 저장용
+        self._thumb_canvases: dict[str, tk.Canvas] = {}
+        self._thumb_photos: dict[str, object] = {}
+
         for i, (label, key, click_type) in enumerate(STEPS):
             row = tk.Frame(scroll_frame, bg=CARD, pady=8, padx=12)
             row.pack(fill="x", pady=3)
-            row.columnconfigure(1, weight=1)
 
             # 단계 이름 + 뱃지
             type_badge = "더블클릭" if click_type == "double" else "클릭"
             badge_color = AMBER if click_type == "double" else GREEN
-            tk.Label(row, text=f"{i+1}. {label}",
+            top = tk.Frame(row, bg=CARD)
+            top.pack(fill="x")
+            tk.Label(top, text=f"{i+1}. {label}",
                      font=("Malgun Gothic", 10, "bold"), bg=CARD, fg=TEXT
-                     ).grid(row=0, column=0, sticky="w")
-            tk.Label(row, text=type_badge, font=("Malgun Gothic", 8),
+                     ).pack(side="left")
+            tk.Label(top, text=type_badge, font=("Malgun Gothic", 8),
                      bg=badge_color, fg="#000", padx=5
-                     ).grid(row=0, column=1, sticky="w", padx=(8, 0))
+                     ).pack(side="left", padx=(8, 0))
 
-            # 현재 좌표 표시 (읽기 전용)
+            # 좌표 + 캡처버튼 행
             coord = self.coords.get(key, {"x": 0, "y": 0})
             x_var = tk.StringVar(value=str(coord.get("x", 0)))
             y_var = tk.StringVar(value=str(coord.get("y", 0)))
             self._coord_vars[key] = (x_var, y_var)
 
             info_frame = tk.Frame(row, bg=CARD)
-            info_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-            info_frame.columnconfigure(1, weight=1)
+            info_frame.pack(fill="x", pady=(4, 0))
 
             tk.Label(info_frame, text="X:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
                      ).pack(side="left")
@@ -663,15 +667,21 @@ class CoordSettingsWindow:
                      insertbackground=TEXT
                      ).pack(side="left", padx=(2, 8))
 
-            # 캡처 버튼
-            capture_btn = tk.Button(
+            tk.Button(
                 info_frame, text="📍 캡처",
                 font=("Malgun Gothic", 9, "bold"),
                 bg=AMBER, fg="#000", activebackground="#d97706",
                 relief="flat", bd=0, cursor="hand2",
                 command=lambda k=key, xv=x_var, yv=y_var: self._start_capture(k, xv, yv)
-            )
-            capture_btn.pack(side="left", padx=(4, 0), ipady=3, ipadx=6)
+            ).pack(side="left", padx=(4, 0), ipady=3, ipadx=6)
+
+            # 스크린샷 미리보기 캔버스 (캡처 후 표시)
+            canvas = tk.Canvas(row, bg="#111", width=200, height=60,
+                                highlightthickness=1, highlightbackground=BORDER)
+            canvas.pack(fill="x", pady=(4, 0))
+            canvas.create_text(100, 30, text="캡처 후 미리보기",
+                                fill=TEXT_MUTED, font=("Malgun Gothic", 8))
+            self._thumb_canvases[key] = canvas
 
         # 저장 버튼
         tk.Button(win, text="저장",
@@ -682,57 +692,74 @@ class CoordSettingsWindow:
                   ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
 
     def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
-        """카운트다운 오버레이 → 마우스 위치 캡처 후 좌표 저장."""
+        """카운트다운 → 마우스 위치 캡처 → 스크린샷 미리보기"""
         sw = self.win.winfo_screenwidth()
         sh = self.win.winfo_screenheight()
 
-        # 화면 밖(오른쪽)으로 이동 — "+X+Y" 형식, X는 화면 너비보다 크게
-        self.win.geometry(f"440x520+{sw + 100}+0")
+        # 창을 화면 오른쪽 밖으로 이동 (이벤트 루프 유지, 화면에서만 숨김)
+        self.win.geometry(f"440x700+{sw + 200}+0")
         self.win.update_idletasks()
 
-        # 카운트다운 오버레이: 화면 하단 중앙, 항상 최상위
-        overlay = tk.Toplevel()
+        # 카운트다운 오버레이 — 화면 하단 중앙
+        overlay = tk.Toplevel(self.win)
         overlay.overrideredirect(True)
         overlay.attributes("-topmost", True)
         overlay.configure(bg="#1e1e2e")
-        ow, oh = 260, 110
-        ox = sw // 2 - ow // 2
-        oy = sh - oh - 60
-        overlay.geometry(f"{ow}x{oh}+{ox}+{oy}")
+        ow, oh = 280, 120
+        overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh - oh - 60}")
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
         tk.Label(overlay, textvariable=count_var,
-                 font=("Malgun Gothic", 44, "bold"), bg="#1e1e2e", fg=GREEN,
-                 ).pack(pady=(6, 0))
+                 font=("Malgun Gothic", 48, "bold"), bg="#1e1e2e", fg=GREEN
+                 ).pack(pady=(8, 0))
         tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
-                 font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED,
+                 font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
                  ).pack()
         overlay.update()
 
         def tick(n: int):
             if n > 0:
                 count_var.set(str(n))
-                overlay.after(1000, tick, n - 1)
+                # self.win.after() 사용 — 루트 이벤트 루프에 직접 등록
+                self.win.after(1000, tick, n - 1)
             else:
-                # 캡처
-                try:
-                    x, y = pyautogui.position()
-                except Exception:
-                    x, y = 0, 0
+                # ── 캡처 ──────────────────────────────────────────
+                x, y = pyautogui.position()
 
+                # 마우스 주변 200x120 스크린샷
+                try:
+                    from PIL import ImageGrab, ImageDraw, ImageTk
+                    half_w, half_h = 100, 60
+                    region = (x - half_w, y - half_h, x + half_w, y + half_h)
+                    shot = ImageGrab.grab(bbox=region)
+                    # 중앙에 빨간 십자 표시
+                    draw = ImageDraw.Draw(shot)
+                    draw.ellipse([half_w-8, half_h-8, half_w+8, half_h+8],
+                                 outline="#ff3030", width=2)
+                    draw.line([half_w-14, half_h, half_w+14, half_h], fill="#ff3030", width=2)
+                    draw.line([half_w, half_h-14, half_w, half_h+14], fill="#ff3030", width=2)
+                    photo = ImageTk.PhotoImage(shot)
+                    self._thumb_photos[key] = photo  # GC 방지
+                    canvas = self._thumb_canvases[key]
+                    canvas.configure(width=200, height=120)
+                    canvas.delete("all")
+                    canvas.create_image(0, 0, anchor="nw", image=photo)
+                except Exception:
+                    pass
+
+                # 좌표 저장
                 x_var.set(str(x))
                 y_var.set(str(y))
                 self.coords[key] = {"x": x, "y": y}
 
                 overlay.destroy()
 
-                # 창 화면 중앙으로 복원 + 최상위로
-                cx = sw // 2 - 220
-                cy = sh // 2 - 260
-                self.win.geometry(f"440x520+{cx}+{cy}")
+                # 창 화면 중앙으로 복원 + 최상위
+                self.win.geometry(f"500x700+{sw//2 - 250}+{sh//2 - 350}")
                 self.win.attributes("-topmost", True)
                 self.win.lift()
                 self.win.focus_force()
+                self.win.update()
 
         tick(self.COUNTDOWN)
 
