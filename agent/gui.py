@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.8"
+VERSION = "3.4.9"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -712,13 +712,14 @@ class CoordSettingsWindow:
                 overlay.after(0, count_var.set, str(i))
                 time.sleep(1)
 
-            # 캡처
+            # 캡처 — 좌표값은 메인 스레드(_finish)에서 처리
             x, y = pyautogui.position()
-            x_var.set(str(x))
-            y_var.set(str(y))
-            self.coords[key] = {"x": x, "y": y}
 
             def _finish():
+                # tkinter 변수는 반드시 메인 스레드에서 수정
+                x_var.set(str(x))
+                y_var.set(str(y))
+                self.coords[key] = {"x": x, "y": y}
                 overlay.destroy()
                 self.win.deiconify()
                 try:
