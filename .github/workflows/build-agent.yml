@@ -35,10 +35,10 @@ jobs:
       - name: EXE 빌드
         working-directory: agent
         run: |
-          pyinstaller --onefile --name dentweb-agent `
+          pyinstaller --onefile --windowed --name dentweb-agent `
             --add-data "images;images" `
             --add-data "config.example.json;." `
-            main.py
+            gui.py
 
       - name: 버전 태그 생성
         id: version

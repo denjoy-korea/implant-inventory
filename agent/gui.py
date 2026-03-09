@@ -1,0 +1,430 @@
+"""DenJOY 덴트웹 에이전트 GUI"""
+
+import json
+import os
+import sys
+import threading
+import time
+import tkinter as tk
+from tkinter import ttk, messagebox
+import traceback
+
+from config import load_config, DEFAULTS, SERVER_URL
+from api_client import ApiClient
+from dentweb_runner import DentwebRunner
+from logger import AgentLogger
+
+CONFIG_PATH = "config.json"
+VERSION = "3.4.2"
+
+# ── 색상/스타일 ──────────────────────────────────────────────
+BG = "#1e1e2e"
+CARD = "#2a2a3e"
+GREEN = "#3ecf8e"
+GREEN_DARK = "#2ea87a"
+TEXT = "#e2e8f0"
+TEXT_MUTED = "#94a3b8"
+BORDER = "#3a3a50"
+RED = "#f87171"
+AMBER = "#fbbf24"
+
+
+def apply_style(root):
+    root.configure(bg=BG)
+    style = ttk.Style(root)
+    style.theme_use("default")
+    style.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Malgun Gothic", 10))
+    style.configure("TFrame", background=BG)
+
+
+# ── 메인 앱 ─────────────────────────────────────────────────
+class AgentApp:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title(f"DenJOY 덴트웹 에이전트  v{VERSION}")
+        self.root.geometry("380x480")
+        self.root.resizable(False, False)
+        self.root.configure(bg=BG)
+        apply_style(self.root)
+
+        # 아이콘 설정 (없으면 무시)
+        try:
+            icon_path = resource_path("icon.ico")
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except Exception:
+            pass
+
+        self.cfg = None
+        self.api = None
+        self.runner = None
+        self.log = None
+        self._running = False
+        self._poll_thread = None
+
+        self._build_ui()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # ── UI 빌드 ──────────────────────────────────────────────
+    def _build_ui(self):
+        """config.json 존재 여부에 따라 초기 화면 분기"""
+        if os.path.exists(CONFIG_PATH):
+            try:
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if cfg.get("agent_token"):
+                    self._build_main_screen(cfg)
+                    return
+            except Exception:
+                pass
+        self._build_token_screen()
+
+    def _clear(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+
+    # ── 토큰 입력 화면 ───────────────────────────────────────
+    def _build_token_screen(self):
+        self._clear()
+        self.root.geometry("360x400")
+
+        frame = tk.Frame(self.root, bg=BG)
+        frame.pack(expand=True, fill="both", padx=32, pady=24)
+
+        # 로고 영역
+        logo_box = tk.Frame(frame, bg=GREEN, width=64, height=64)
+        logo_box.pack()
+        logo_box.pack_propagate(False)
+        tk.Label(logo_box, text="🦷", font=("", 28), bg=GREEN).pack(expand=True)
+
+        tk.Label(frame, text="DenJOY 덴트웹 에이전트",
+                 font=("Malgun Gothic", 14, "bold"), bg=BG, fg=TEXT).pack(pady=(12, 2))
+        tk.Label(frame, text="병원 PC에서 덴트웹 데이터를 자동 수집합니다",
+                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED).pack()
+
+        # 토큰 입력
+        tk.Label(frame, text="에이전트 토큰", font=("Malgun Gothic", 10, "bold"),
+                 bg=BG, fg=TEXT, anchor="w").pack(fill="x", pady=(24, 4))
+        self._token_var = tk.StringVar()
+        entry = tk.Entry(frame, textvariable=self._token_var, font=("Consolas", 10),
+                         bg=CARD, fg=TEXT, insertbackground=TEXT,
+                         relief="flat", bd=0, highlightthickness=1,
+                         highlightbackground=BORDER, highlightcolor=GREEN)
+        entry.pack(fill="x", ipady=8, ipadx=8)
+        entry.insert(0, "앱 설정에서 복사한 토큰 붙여넣기")
+        entry.configure(fg=TEXT_MUTED)
+        entry.bind("<FocusIn>", lambda e: self._clear_placeholder(entry))
+        entry.bind("<FocusOut>", lambda e: self._restore_placeholder(entry))
+
+        # 자동 실행 체크박스
+        self._autostart_var = tk.BooleanVar(value=True)
+        chk = ttk.Checkbutton(frame, text="컴퓨터 시작 시 자동 실행",
+                               variable=self._autostart_var)
+        chk.pack(anchor="w", pady=(12, 0))
+
+        # 시작 버튼
+        self._start_btn = tk.Button(
+            frame, text="시작하기",
+            font=("Malgun Gothic", 11, "bold"),
+            bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+            relief="flat", bd=0, cursor="hand2",
+            command=self._on_start
+        )
+        self._start_btn.pack(fill="x", pady=(20, 0), ipady=10)
+
+    def _clear_placeholder(self, entry):
+        if entry.get() == "앱 설정에서 복사한 토큰 붙여넣기":
+            entry.delete(0, "end")
+            entry.configure(fg=TEXT)
+
+    def _restore_placeholder(self, entry):
+        if not entry.get():
+            entry.insert(0, "앱 설정에서 복사한 토큰 붙여넣기")
+            entry.configure(fg=TEXT_MUTED)
+
+    def _on_start(self):
+        token = self._token_var.get().strip()
+        if not token or token == "앱 설정에서 복사한 토큰 붙여넣기":
+            messagebox.showwarning("토큰 필요", "에이전트 토큰을 입력해주세요.")
+            return
+
+        self._start_btn.configure(state="disabled", text="연결 중...")
+        self.root.update()
+
+        cfg = {**DEFAULTS, "agent_token": token}
+        try:
+            api = ApiClient(cfg["server_url"], token)
+            api.claim_run()  # 연결 확인
+        except Exception as e:
+            self._start_btn.configure(state="normal", text="시작하기")
+            messagebox.showerror("연결 실패", f"토큰이 올바르지 않거나 서버에 연결할 수 없습니다.\n\n{e}")
+            return
+
+        # config.json 저장
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+        # 자동 시작 설정
+        if self._autostart_var.get():
+            _set_autostart(True)
+
+        self._build_main_screen(cfg)
+
+    # ── 메인 화면 ────────────────────────────────────────────
+    def _build_main_screen(self, cfg: dict):
+        self._clear()
+        self.root.geometry("400x520")
+
+        for key, val in DEFAULTS.items():
+            cfg.setdefault(key, val)
+        self.cfg = cfg
+        self.api = ApiClient(cfg["server_url"], cfg["agent_token"])
+        self.runner = DentwebRunner(cfg)
+        self.log = AgentLogger(cfg.get("log_file", "agent.log"), cfg.get("log_max_lines", 1000))
+
+        pad = dict(padx=16, pady=0)
+
+        # 헤더
+        header = tk.Frame(self.root, bg=CARD, pady=14)
+        header.pack(fill="x")
+        tk.Label(header, text="● 서버 연결됨", font=("Malgun Gothic", 10),
+                 bg=CARD, fg=GREEN).pack(side="left", padx=16)
+        tk.Button(header, text="로그아웃", font=("Malgun Gothic", 9),
+                  bg=CARD, fg=TEXT_MUTED, relief="flat", bd=0,
+                  cursor="hand2", command=self._logout).pack(side="right", padx=16)
+
+        # 최근 실행
+        self._last_run_var = tk.StringVar(value="최근 실행: 기록 없음")
+        tk.Label(self.root, textvariable=self._last_run_var,
+                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED, anchor="w"
+                 ).pack(fill="x", padx=16, pady=(12, 0))
+
+        # 활동 로그
+        log_frame = tk.Frame(self.root, bg=CARD, bd=0, highlightthickness=1,
+                             highlightbackground=BORDER)
+        log_frame.pack(fill="both", expand=True, padx=16, pady=10)
+        self._log_text = tk.Text(log_frame, bg=CARD, fg=TEXT_MUTED,
+                                 font=("Consolas", 9), relief="flat",
+                                 state="disabled", wrap="word")
+        self._log_text.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # 버튼 영역
+        btn_frame = tk.Frame(self.root, bg=BG)
+        btn_frame.pack(fill="x", padx=16, pady=(0, 16))
+
+        tk.Button(btn_frame, text="지금 실행",
+                  font=("Malgun Gothic", 10, "bold"),
+                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+                  relief="flat", bd=0, cursor="hand2",
+                  command=self._run_now
+                  ).pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 6))
+
+        tk.Button(btn_frame, text="좌표 설정",
+                  font=("Malgun Gothic", 10),
+                  bg=CARD, fg=TEXT,
+                  relief="flat", bd=0, cursor="hand2",
+                  highlightthickness=1, highlightbackground=BORDER,
+                  command=self._open_coord_settings
+                  ).pack(side="left", fill="x", expand=True, ipady=8)
+
+        self._append_log("에이전트 시작 - 서버 폴링 중...")
+        self._start_polling()
+
+    def _append_log(self, msg: str):
+        ts = time.strftime("%H:%M:%S")
+        line = f"[{ts}] {msg}\n"
+        self._log_text.configure(state="normal")
+        self._log_text.insert("end", line)
+        self._log_text.see("end")
+        self._log_text.configure(state="disabled")
+
+    # ── 폴링 ─────────────────────────────────────────────────
+    def _start_polling(self):
+        self._running = True
+        self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._poll_thread.start()
+
+    def _poll_loop(self):
+        poll_sec = self.cfg.get("poll_interval_seconds", 30)
+        while self._running:
+            try:
+                result = self.api.claim_run()
+                if result.get("should_run"):
+                    self._append_log(f"실행 시작: {result.get('reason', '')}")
+                    self._do_run()
+            except Exception as e:
+                self._append_log(f"폴링 오류: {e}")
+            time.sleep(poll_sec)
+
+    def _do_run(self):
+        try:
+            excel_path = self.runner.download_excel()
+            if not excel_path:
+                self.api.report_run("no_data", "Excel 파일을 찾을 수 없습니다")
+                self._append_log("데이터 없음")
+                return
+            upload_url = f"{self.cfg['server_url']}/dentweb-upload"
+            result = self.api.upload_file(upload_url, excel_path)
+            if result.get("success"):
+                inserted = result.get("inserted", 0)
+                self.api.report_run("success", f"{inserted}건 업로드")
+                self._append_log(f"완료: {inserted}건 업로드")
+            else:
+                err = result.get("error", "업로드 실패")
+                self.api.report_run("failed", err)
+                self._append_log(f"업로드 실패: {err}")
+            self.runner.cleanup(excel_path)
+        except Exception as e:
+            self.api.report_run("failed", str(e)[:500])
+            self._append_log(f"오류: {e}")
+
+    def _run_now(self):
+        threading.Thread(target=self._do_run, daemon=True).start()
+
+    # ── 좌표 설정 ────────────────────────────────────────────
+    def _open_coord_settings(self):
+        CoordSettingsWindow(self.root, self.cfg)
+
+    # ── 로그아웃 ─────────────────────────────────────────────
+    def _logout(self):
+        if messagebox.askyesno("로그아웃", "로그아웃하면 config.json이 삭제됩니다.\n계속하시겠습니까?"):
+            self._running = False
+            try:
+                os.remove(CONFIG_PATH)
+            except Exception:
+                pass
+            self._build_token_screen()
+
+    def _on_close(self):
+        self._running = False
+        self.root.destroy()
+
+    def run(self):
+        self.root.mainloop()
+
+
+# ── 좌표 설정 창 ─────────────────────────────────────────────
+STEPS = [
+    ("경영/통계 메뉴",           "btn_stats",                  "click"),
+    ("임플란트 수술통계",         "btn_implant",                "click"),
+    ("엑셀저장 버튼",             "btn_export",                 "click"),
+    ("덴트웹 에이전트 폴더",       "save_dialog_agent_folder",   "double"),
+    ("exports 폴더",              "save_dialog_exports_folder", "double"),
+    ("저장(S) 버튼",              "save_dialog_save_button",    "click"),
+]
+
+
+class CoordSettingsWindow:
+    def __init__(self, parent, cfg: dict):
+        self.cfg = cfg
+        self.coords = cfg.get("coords", {})
+
+        win = tk.Toplevel(parent)
+        win.title("좌표 설정")
+        win.geometry("440x480")
+        win.configure(bg=BG)
+        win.grab_set()
+        self.win = win
+
+        tk.Label(win, text="단계별 좌표 설정",
+                 font=("Malgun Gothic", 13, "bold"), bg=BG, fg=TEXT
+                 ).pack(pady=(16, 4))
+        tk.Label(win, text="각 단계의 클릭 좌표를 입력하세요. (0,0이면 이미지 인식 사용)",
+                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED
+                 ).pack(pady=(0, 12))
+
+        scroll_frame = tk.Frame(win, bg=BG)
+        scroll_frame.pack(fill="both", expand=True, padx=16)
+
+        self._entries = {}
+        for i, (label, key, click_type) in enumerate(STEPS):
+            row = tk.Frame(scroll_frame, bg=CARD, pady=8, padx=12)
+            row.pack(fill="x", pady=4)
+
+            type_badge = "더블클릭" if click_type == "double" else "클릭"
+            badge_color = AMBER if click_type == "double" else GREEN
+            tk.Label(row, text=f"{i+1}. {label}",
+                     font=("Malgun Gothic", 10, "bold"), bg=CARD, fg=TEXT
+                     ).grid(row=0, column=0, sticky="w")
+            tk.Label(row, text=type_badge, font=("Malgun Gothic", 8),
+                     bg=badge_color, fg="#000", padx=6
+                     ).grid(row=0, column=1, sticky="e", padx=(8, 0))
+
+            coord = self.coords.get(key, {"x": 0, "y": 0})
+            xy_frame = tk.Frame(row, bg=CARD)
+            xy_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+            tk.Label(xy_frame, text="X:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
+                     ).pack(side="left")
+            x_var = tk.StringVar(value=str(coord.get("x", 0)))
+            tk.Entry(xy_frame, textvariable=x_var, width=6,
+                     font=("Consolas", 10), bg=BG, fg=TEXT,
+                     relief="flat", insertbackground=TEXT
+                     ).pack(side="left", padx=(2, 10))
+
+            tk.Label(xy_frame, text="Y:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
+                     ).pack(side="left")
+            y_var = tk.StringVar(value=str(coord.get("y", 0)))
+            tk.Entry(xy_frame, textvariable=y_var, width=6,
+                     font=("Consolas", 10), bg=BG, fg=TEXT,
+                     relief="flat", insertbackground=TEXT
+                     ).pack(side="left", padx=(2, 0))
+
+            self._entries[key] = (x_var, y_var)
+
+        # 저장 버튼
+        tk.Button(win, text="저장",
+                  font=("Malgun Gothic", 11, "bold"),
+                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+                  relief="flat", bd=0, cursor="hand2",
+                  command=self._save
+                  ).pack(fill="x", padx=16, pady=16, ipady=10)
+
+    def _save(self):
+        new_coords = {}
+        for key, (x_var, y_var) in self._entries.items():
+            try:
+                x = int(x_var.get())
+                y = int(y_var.get())
+            except ValueError:
+                x, y = 0, 0
+            new_coords[key] = {"x": x, "y": y}
+
+        self.cfg["coords"] = new_coords
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(self.cfg, f, indent=2, ensure_ascii=False)
+        messagebox.showinfo("저장 완료", "좌표 설정이 저장되었습니다.")
+        self.win.destroy()
+
+
+# ── 유틸 ─────────────────────────────────────────────────────
+def resource_path(relative: str) -> str:
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+
+def _set_autostart(enable: bool):
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE
+        )
+        name = "DenJOY DentWeb Agent"
+        if enable:
+            exe = sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__)
+            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, f'"{exe}"')
+        else:
+            try:
+                winreg.DeleteValue(key, name)
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+    except Exception:
+        pass
+
+
+if __name__ == "__main__":
+    app = AgentApp()
+    app.run()
