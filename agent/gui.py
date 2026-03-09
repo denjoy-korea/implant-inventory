@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.5"
+VERSION = "3.4.6"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -33,8 +33,42 @@ def apply_style(root):
     root.configure(bg=BG)
     style = ttk.Style(root)
     style.theme_use("default")
-    style.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Malgun Gothic", 10))
     style.configure("TFrame", background=BG)
+
+
+# ── 커스텀 토글 스위치 ────────────────────────────────────────
+class ToggleSwitch(tk.Canvas):
+    W, H = 46, 26
+
+    def __init__(self, parent, variable: tk.BooleanVar, bg=BG, command=None, **kwargs):
+        super().__init__(parent, width=self.W, height=self.H,
+                         bg=bg, highlightthickness=0, cursor="hand2", **kwargs)
+        self._var = variable
+        self._cmd = command
+        self.bind("<Button-1>", self._click)
+        self._var.trace_add("write", lambda *_: self._draw())
+        self._draw()
+
+    def _click(self, _event):
+        self._var.set(not self._var.get())
+        if self._cmd:
+            self._cmd()
+
+    def _draw(self):
+        self.delete("all")
+        on = self._var.get()
+        w, h = self.W, self.H
+        r = h // 2
+        color = GREEN if on else "#4a4a60"
+        # 배경 알약 모양
+        self.create_oval(0, 0, h, h, fill=color, outline="")
+        self.create_oval(w - h, 0, w, h, fill=color, outline="")
+        self.create_rectangle(r, 0, w - r, h, fill=color, outline="")
+        # 슬라이딩 원
+        pad = 3
+        cx = w - r if on else r
+        self.create_oval(cx - r + pad, pad, cx + r - pad, h - pad,
+                         fill="white", outline="")
 
 
 # ── 메인 앱 ─────────────────────────────────────────────────
@@ -116,11 +150,15 @@ class AgentApp:
         entry.bind("<FocusIn>", lambda e: self._clear_placeholder(entry))
         entry.bind("<FocusOut>", lambda e: self._restore_placeholder(entry))
 
-        # 자동 실행 체크박스
+        # 자동 실행 토글
         self._autostart_var = tk.BooleanVar(value=True)
-        chk = ttk.Checkbutton(frame, text="컴퓨터 시작 시 자동 실행",
-                               variable=self._autostart_var)
-        chk.pack(anchor="w", pady=(12, 0))
+        toggle_row = tk.Frame(frame, bg=BG)
+        toggle_row.pack(fill="x", pady=(16, 0))
+
+        tk.Label(toggle_row, text="컴퓨터 시작 시 자동 실행",
+                 font=("Malgun Gothic", 10), bg=BG, fg=TEXT
+                 ).pack(side="left")
+        ToggleSwitch(toggle_row, self._autostart_var, bg=BG).pack(side="right")
 
         # 시작 버튼
         self._start_btn = tk.Button(
