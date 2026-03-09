@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.3"
+VERSION = "3.4.4"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -199,28 +199,9 @@ class AgentApp:
                  font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED, anchor="w"
                  ).pack(fill="x", padx=16, pady=(12, 0))
 
-        # 활동 로그
-        log_frame = tk.Frame(self.root, bg=CARD, bd=0, highlightthickness=1,
-                             highlightbackground=BORDER)
-        log_frame.pack(fill="both", expand=True, padx=16, pady=10)
-        self._log_text = tk.Text(log_frame, bg=CARD, fg=TEXT_MUTED,
-                                 font=("Consolas", 9), relief="flat",
-                                 state="disabled", wrap="word")
-        self._log_text.pack(fill="both", expand=True, padx=8, pady=8)
-
-        # 버튼 영역
-        btn_top = tk.Frame(self.root, bg=BG)
-        btn_top.pack(fill="x", padx=16, pady=(0, 6))
-
-        tk.Button(btn_top, text="지금 실행",
-                  font=("Malgun Gothic", 10, "bold"),
-                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
-                  relief="flat", bd=0, cursor="hand2",
-                  command=self._run_now
-                  ).pack(fill="x", ipady=8)
-
+        # 버튼 영역 — side="bottom" 으로 먼저 배치해야 log_frame 확장에 밀리지 않음
         btn_bot = tk.Frame(self.root, bg=BG)
-        btn_bot.pack(fill="x", padx=16, pady=(0, 16))
+        btn_bot.pack(side="bottom", fill="x", padx=16, pady=(0, 16))
 
         tk.Button(btn_bot, text="테스트",
                   font=("Malgun Gothic", 10),
@@ -236,6 +217,25 @@ class AgentApp:
                   highlightthickness=1, highlightbackground=BORDER,
                   command=self._open_coord_settings
                   ).pack(side="left", fill="x", expand=True, ipady=8)
+
+        btn_top = tk.Frame(self.root, bg=BG)
+        btn_top.pack(side="bottom", fill="x", padx=16, pady=(0, 6))
+
+        tk.Button(btn_top, text="지금 실행",
+                  font=("Malgun Gothic", 10, "bold"),
+                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+                  relief="flat", bd=0, cursor="hand2",
+                  command=self._run_now
+                  ).pack(fill="x", ipady=8)
+
+        # 활동 로그
+        log_frame = tk.Frame(self.root, bg=CARD, bd=0, highlightthickness=1,
+                             highlightbackground=BORDER)
+        log_frame.pack(fill="both", expand=True, padx=16, pady=10)
+        self._log_text = tk.Text(log_frame, bg=CARD, fg=TEXT_MUTED,
+                                 font=("Consolas", 9), relief="flat",
+                                 state="disabled", wrap="word")
+        self._log_text.pack(fill="both", expand=True, padx=8, pady=8)
 
         self._append_log("에이전트 시작 - 서버 폴링 중...")
         self._start_polling()
