@@ -1,16 +1,12 @@
 name: Build DentWeb Agent EXE
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'agent/**'
   workflow_dispatch:
     inputs:
       version:
         description: '버전 (예: 3.4.0)'
         required: true
-        default: '3.4.0'
+        default: '3.4.3'
 
 jobs:
   build:
