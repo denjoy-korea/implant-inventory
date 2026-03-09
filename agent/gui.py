@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.7"
+VERSION = "3.4.8"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -681,15 +681,14 @@ class CoordSettingsWindow:
                   ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
 
     def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
-        """창을 숨기고 카운트다운 오버레이 표시 → 마우스 위치 캡처"""
-        # grab_set이 걸려 있으면 overlay의 after() 콜백이 막힘 → 먼저 해제
+        """창을 숨기고 카운트다운 오버레이 표시 → 마우스 위치 캡처 (스레드 방식)"""
         try:
             self.win.grab_release()
         except Exception:
             pass
         self.win.withdraw()
 
-        # 카운트다운 오버레이 (항상 최상위, 독립 Toplevel)
+        # 카운트다운 오버레이
         overlay = tk.Toplevel()
         overlay.attributes("-topmost", True)
         overlay.overrideredirect(True)
@@ -698,7 +697,6 @@ class CoordSettingsWindow:
         sh = overlay.winfo_screenheight()
         ow, oh = 280, 120
         overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh//2 - oh//2}")
-        overlay.update()
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
         tk.Label(overlay, textvariable=count_var,
@@ -707,24 +705,32 @@ class CoordSettingsWindow:
         tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
                  font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
                  ).pack()
+        overlay.update()
 
-        def tick(n: int):
-            if n > 0:
-                count_var.set(str(n))
-                overlay.update()
-                overlay.after(1000, tick, n - 1)
-            else:
-                x, y = pyautogui.position()
-                x_var.set(str(x))
-                y_var.set(str(y))
-                self.coords[key] = {"x": x, "y": y}
+        def _run():
+            for i in range(self.COUNTDOWN, 0, -1):
+                overlay.after(0, count_var.set, str(i))
+                time.sleep(1)
+
+            # 캡처
+            x, y = pyautogui.position()
+            x_var.set(str(x))
+            y_var.set(str(y))
+            self.coords[key] = {"x": x, "y": y}
+
+            def _finish():
                 overlay.destroy()
                 self.win.deiconify()
-                self.win.grab_set()
+                try:
+                    self.win.grab_set()
+                except Exception:
+                    pass
                 self.win.lift()
                 self.win.focus_force()
 
-        tick(self.COUNTDOWN)
+            overlay.after(0, _finish)
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _save(self):
         # 수동 입력값도 반영
