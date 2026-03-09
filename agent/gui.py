@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.5"
+VERSION = "3.5.6"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -599,124 +599,202 @@ class TestWindow:
         self.win.destroy()
 
 
-# ── 좌표 설정 창 ─────────────────────────────────────────────
+# ── 좌표 설정 창 (마법사 형식 — 1단계씩 진행) ──────────────────
 class CoordSettingsWindow:
-    """단계별 좌표 설정 — 마우스 캡처 방식 (5초 카운트다운)"""
+    """단계별 좌표 설정 — 1단계씩 순서대로 캡처"""
 
-    COUNTDOWN = 5  # 캡처까지 대기 초
+    COUNTDOWN = 5
+    CANVAS_W, CANVAS_H = 380, 200
 
     def __init__(self, parent, cfg: dict):
         self.cfg = cfg
         self.coords = {k: dict(v) for k, v in cfg.get("coords", {}).items()}
-        self._coord_vars: dict[str, tuple[tk.StringVar, tk.StringVar]] = {}
+        self.step_idx = 0
+        self._thumb_photo = None
+        self._captured = False  # 현재 단계 캡처 완료 여부
 
         win = tk.Toplevel(parent)
         win.title("좌표 설정")
-        win.geometry("440x520")
+        win.geometry("440x560")
         win.configure(bg=BG)
         win.attributes("-topmost", True)
-        # grab_set() 제거 — after() 체이닝 차단의 근본 원인
+        # grab_set() 제거 — after() 체이닝을 막는 원인
         self.win = win
-        self._win_geometry = "440x520"  # 원위치 복원용
 
-        tk.Label(win, text="단계별 좌표 설정",
-                 font=("Malgun Gothic", 13, "bold"), bg=BG, fg=TEXT
-                 ).pack(pady=(16, 2))
-        tk.Label(win,
-                 text="캡처 버튼 클릭 → 창이 사라짐 → 5초 안에 마우스를 목표 위치로 이동",
-                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED, wraplength=400
-                 ).pack(pady=(0, 10))
+        # ── 진행 상태 표시 ──────────────────────────────────────
+        top_bar = tk.Frame(win, bg=CARD, pady=12, padx=16)
+        top_bar.pack(fill="x")
 
-        scroll_frame = tk.Frame(win, bg=BG)
-        scroll_frame.pack(fill="both", expand=True, padx=16)
+        self._step_num_label = tk.Label(
+            top_bar, text="", font=("Malgun Gothic", 10),
+            bg=CARD, fg=TEXT_MUTED
+        )
+        self._step_num_label.pack(side="left")
 
-        # 각 단계별 스크린샷 캔버스 저장용
-        self._thumb_canvases: dict[str, tk.Canvas] = {}
-        self._thumb_photos: dict[str, object] = {}
+        # 진행 바 (Canvas 기반)
+        self._prog_canvas = tk.Canvas(top_bar, height=6, bg=CARD,
+                                      highlightthickness=0)
+        self._prog_canvas.pack(side="left", fill="x", expand=True, padx=(12, 0))
 
-        for i, (label, key, click_type) in enumerate(STEPS):
-            row = tk.Frame(scroll_frame, bg=CARD, pady=8, padx=12)
-            row.pack(fill="x", pady=3)
+        # ── 단계 이름 + 뱃지 ───────────────────────────────────
+        name_frame = tk.Frame(win, bg=BG, pady=14, padx=20)
+        name_frame.pack(fill="x")
 
-            # 단계 이름 + 뱃지
-            type_badge = "더블클릭" if click_type == "double" else "클릭"
-            badge_color = AMBER if click_type == "double" else GREEN
-            top = tk.Frame(row, bg=CARD)
-            top.pack(fill="x")
-            tk.Label(top, text=f"{i+1}. {label}",
-                     font=("Malgun Gothic", 10, "bold"), bg=CARD, fg=TEXT
-                     ).pack(side="left")
-            tk.Label(top, text=type_badge, font=("Malgun Gothic", 8),
-                     bg=badge_color, fg="#000", padx=5
-                     ).pack(side="left", padx=(8, 0))
+        self._name_label = tk.Label(
+            name_frame, text="", font=("Malgun Gothic", 14, "bold"),
+            bg=BG, fg=TEXT, anchor="w"
+        )
+        self._name_label.pack(side="left")
 
-            # 좌표 + 캡처버튼 행
-            coord = self.coords.get(key, {"x": 0, "y": 0})
-            x_var = tk.StringVar(value=str(coord.get("x", 0)))
-            y_var = tk.StringVar(value=str(coord.get("y", 0)))
-            self._coord_vars[key] = (x_var, y_var)
+        self._badge_label = tk.Label(
+            name_frame, text="", font=("Malgun Gothic", 9),
+            padx=7, pady=2, fg="#000"
+        )
+        self._badge_label.pack(side="left", padx=(10, 0))
 
-            info_frame = tk.Frame(row, bg=CARD)
-            info_frame.pack(fill="x", pady=(4, 0))
+        # ── 안내 문구 ───────────────────────────────────────────
+        self._hint_label = tk.Label(
+            win, text="", font=("Malgun Gothic", 9),
+            bg=BG, fg=TEXT_MUTED, wraplength=400
+        )
+        self._hint_label.pack(padx=20, anchor="w")
 
-            tk.Label(info_frame, text="X:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
-                     ).pack(side="left")
-            tk.Entry(info_frame, textvariable=x_var, width=6,
-                     font=("Consolas", 9), bg=BG, fg=TEXT, relief="flat",
-                     insertbackground=TEXT
-                     ).pack(side="left", padx=(2, 8))
-            tk.Label(info_frame, text="Y:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
-                     ).pack(side="left")
-            tk.Entry(info_frame, textvariable=y_var, width=6,
-                     font=("Consolas", 9), bg=BG, fg=TEXT, relief="flat",
-                     insertbackground=TEXT
-                     ).pack(side="left", padx=(2, 8))
+        # ── 스크린샷 캔버스 ─────────────────────────────────────
+        canvas_wrap = tk.Frame(win, bg=BORDER, padx=1, pady=1)
+        canvas_wrap.pack(padx=20, pady=(10, 0))
+        self._canvas = tk.Canvas(
+            canvas_wrap, bg="#111",
+            width=self.CANVAS_W, height=self.CANVAS_H,
+            highlightthickness=0
+        )
+        self._canvas.pack()
+        self._canvas_msg = self._canvas.create_text(
+            self.CANVAS_W // 2, self.CANVAS_H // 2,
+            text="캡처 버튼을 누르면\n마우스 위치 스크린샷이 표시됩니다",
+            fill=TEXT_MUTED, font=("Malgun Gothic", 9), justify="center"
+        )
 
-            tk.Button(
-                info_frame, text="📍 캡처",
-                font=("Malgun Gothic", 9, "bold"),
-                bg=AMBER, fg="#000", activebackground="#d97706",
-                relief="flat", bd=0, cursor="hand2",
-                command=lambda k=key, xv=x_var, yv=y_var: self._start_capture(k, xv, yv)
-            ).pack(side="left", padx=(4, 0), ipady=3, ipadx=6)
+        # ── 좌표 표시 ───────────────────────────────────────────
+        self._coord_var = tk.StringVar(value="X: —    Y: —")
+        tk.Label(win, textvariable=self._coord_var,
+                 font=("Consolas", 10), bg=BG, fg=GREEN
+                 ).pack(pady=(6, 0))
 
-            # 스크린샷 미리보기 캔버스 (캡처 후 표시)
-            canvas = tk.Canvas(row, bg="#111", width=200, height=60,
-                                highlightthickness=1, highlightbackground=BORDER)
-            canvas.pack(fill="x", pady=(4, 0))
-            canvas.create_text(100, 30, text="캡처 후 미리보기",
-                                fill=TEXT_MUTED, font=("Malgun Gothic", 8))
-            self._thumb_canvases[key] = canvas
+        # ── 캡처 버튼 ───────────────────────────────────────────
+        self._capture_btn = tk.Button(
+            win, text="📍  캡처  (5초 카운트다운)",
+            font=("Malgun Gothic", 11, "bold"),
+            bg=AMBER, fg="#000", activebackground="#d97706",
+            relief="flat", bd=0, cursor="hand2",
+            command=self._start_capture
+        )
+        self._capture_btn.pack(fill="x", padx=20, pady=(10, 4), ipady=10)
 
-        # 저장 버튼
-        tk.Button(win, text="저장",
-                  font=("Malgun Gothic", 11, "bold"),
-                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
-                  relief="flat", bd=0, cursor="hand2",
-                  command=self._save
-                  ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
+        # ── 이전 / 건너뛰기 / 다음 ─────────────────────────────
+        nav = tk.Frame(win, bg=BG)
+        nav.pack(fill="x", padx=20, pady=(4, 16))
 
-    def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
-        """카운트다운 → 마우스 위치 캡처 → 스크린샷 미리보기"""
+        self._prev_btn = tk.Button(
+            nav, text="◀ 이전",
+            font=("Malgun Gothic", 10),
+            bg=CARD, fg=TEXT, relief="flat", bd=0, cursor="hand2",
+            highlightthickness=1, highlightbackground=BORDER,
+            command=self._prev_step
+        )
+        self._prev_btn.pack(side="left", ipady=7, ipadx=10)
+
+        self._skip_btn = tk.Button(
+            nav, text="건너뛰기",
+            font=("Malgun Gothic", 10),
+            bg=BG, fg=TEXT_MUTED, relief="flat", bd=0, cursor="hand2",
+            command=self._skip_step
+        )
+        self._skip_btn.pack(side="left", padx=(8, 0), ipady=7, ipadx=10)
+
+        self._next_btn = tk.Button(
+            nav, text="다음 ▶",
+            font=("Malgun Gothic", 10, "bold"),
+            bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+            relief="flat", bd=0, cursor="hand2",
+            command=self._next_step
+        )
+        self._next_btn.pack(side="right", ipady=7, ipadx=14)
+
+        self._update_ui()
+
+    def _update_ui(self):
+        total = len(STEPS)
+        i = self.step_idx
+        label, key, click_type = STEPS[i]
+
+        # 진행 바
+        self._step_num_label.configure(text=f"{i + 1} / {total}")
+        self._prog_canvas.update_idletasks()
+        pw = self._prog_canvas.winfo_width() or 200
+        filled = int(pw * (i + 1) / total)
+        self._prog_canvas.delete("all")
+        self._prog_canvas.create_rectangle(0, 0, pw, 6, fill=BORDER, outline="")
+        self._prog_canvas.create_rectangle(0, 0, filled, 6, fill=GREEN, outline="")
+
+        # 단계명 + 뱃지
+        self._name_label.configure(text=label)
+        if click_type == "double":
+            self._badge_label.configure(text="더블클릭", bg=AMBER)
+        else:
+            self._badge_label.configure(text="클릭", bg=GREEN)
+
+        # 힌트
+        coord = self.coords.get(key, {"x": 0, "y": 0})
+        x, y = coord.get("x", 0), coord.get("y", 0)
+        if x == 0 and y == 0:
+            self._hint_label.configure(
+                text="캡처 버튼 클릭 → 창이 사라짐 → 5초 안에 마우스를 목표 위치로 이동"
+            )
+        else:
+            self._hint_label.configure(text="이미 저장된 좌표가 있습니다. 재캡처하거나 다음으로 이동하세요.")
+
+        # 좌표 표시
+        if x == 0 and y == 0:
+            self._coord_var.set("X: —    Y: —")
+        else:
+            self._coord_var.set(f"X: {x}    Y: {y}")
+
+        # 스크린샷 리셋
+        self._canvas.delete("all")
+        self._canvas.create_text(
+            self.CANVAS_W // 2, self.CANVAS_H // 2,
+            text="캡처 버튼을 누르면\n마우스 위치 스크린샷이 표시됩니다",
+            fill=TEXT_MUTED, font=("Malgun Gothic", 9), justify="center"
+        )
+        self._thumb_photo = None
+        self._captured = False
+
+        # 버튼 상태
+        self._prev_btn.configure(state="normal" if i > 0 else "disabled")
+        is_last = (i == total - 1)
+        self._next_btn.configure(text="저장 ✓" if is_last else "다음 ▶")
+
+    def _start_capture(self):
+        _, key, _ = STEPS[self.step_idx]
         sw = self.win.winfo_screenwidth()
         sh = self.win.winfo_screenheight()
 
-        # grab_set 없으므로 iconify()해도 after() 정상 동작
+        self._capture_btn.configure(state="disabled")
         self.win.iconify()
 
-        # 카운트다운 오버레이 — 화면 하단 중앙, 항상 최상위
+        # 카운트다운 오버레이
         overlay = tk.Toplevel()
         overlay.overrideredirect(True)
         overlay.attributes("-topmost", True)
         overlay.configure(bg="#1e1e2e")
-        ow, oh = 280, 120
-        overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh - oh - 60}")
+        ow, oh = 300, 130
+        overlay.geometry(f"{ow}x{oh}+{sw // 2 - ow // 2}+{sh - oh - 60}")
         overlay.update()
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
         tk.Label(overlay, textvariable=count_var,
-                 font=("Malgun Gothic", 48, "bold"), bg="#1e1e2e", fg=GREEN
-                 ).pack(pady=(8, 0))
+                 font=("Malgun Gothic", 52, "bold"), bg="#1e1e2e", fg=GREEN
+                 ).pack(pady=(6, 0))
         tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
                  font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
                  ).pack()
@@ -731,31 +809,31 @@ class CoordSettingsWindow:
                 _remaining[0] -= 1
                 overlay.after(1000, tick)
             else:
-                # ── 캡처 ──────────────────────────────────────────
+                # 마우스 위치 캡처
                 x, y = pyautogui.position()
 
                 # 마우스 주변 스크린샷
                 try:
                     from PIL import ImageGrab, ImageDraw, ImageTk
-                    hw, hh = 100, 60
+                    hw = self.CANVAS_W // 2
+                    hh = self.CANVAS_H // 2
                     shot = ImageGrab.grab(bbox=(x - hw, y - hh, x + hw, y + hh))
                     draw = ImageDraw.Draw(shot)
-                    draw.ellipse([hw-8, hh-8, hw+8, hh+8], outline="#ff3030", width=2)
-                    draw.line([hw-14, hh, hw+14, hh], fill="#ff3030", width=2)
-                    draw.line([hw, hh-14, hw, hh+14], fill="#ff3030", width=2)
-                    photo = ImageTk.PhotoImage(shot)
-                    self._thumb_photos[key] = photo
-                    canvas = self._thumb_canvases[key]
-                    canvas.configure(height=120)
-                    canvas.delete("all")
-                    canvas.create_image(0, 0, anchor="nw", image=photo)
+                    draw.ellipse([hw - 10, hh - 10, hw + 10, hh + 10],
+                                 outline="#ff3030", width=3)
+                    draw.line([hw - 18, hh, hw + 18, hh], fill="#ff3030", width=2)
+                    draw.line([hw, hh - 18, hw, hh + 18], fill="#ff3030", width=2)
+                    self._thumb_photo = ImageTk.PhotoImage(shot)
+                    self._canvas.delete("all")
+                    self._canvas.create_image(0, 0, anchor="nw",
+                                              image=self._thumb_photo)
                 except Exception:
                     pass
 
                 # 좌표 저장
-                x_var.set(str(x))
-                y_var.set(str(y))
                 self.coords[key] = {"x": x, "y": y}
+                self._coord_var.set(f"X: {x}    Y: {y}")
+                self._captured = True
 
                 overlay.destroy()
 
@@ -764,22 +842,53 @@ class CoordSettingsWindow:
                 self.win.attributes("-topmost", True)
                 self.win.lift()
                 self.win.focus_force()
+                self._capture_btn.configure(state="normal",
+                                            text="📍  재캡처")
+                # 힌트 업데이트
+                self._hint_label.configure(
+                    text="✅ 좌표 저장 완료! '다음'을 눌러 진행하세요."
+                )
 
         tick()
 
-    def _save(self):
-        # 수동 입력값도 반영
-        for key, (x_var, y_var) in self._coord_vars.items():
-            try:
-                x, y = int(x_var.get()), int(y_var.get())
-            except ValueError:
-                x, y = 0, 0
-            self.coords[key] = {"x": x, "y": y}
+    def _prev_step(self):
+        if self.step_idx > 0:
+            self.step_idx -= 1
+            self._capture_btn.configure(text="📍  캡처  (5초 카운트다운)",
+                                        state="normal")
+            self._update_ui()
 
+    def _skip_step(self):
+        """현재 단계 건너뛰기 (기존 좌표 유지)"""
+        self._advance()
+
+    def _next_step(self):
+        _, key, _ = STEPS[self.step_idx]
+        # 현재 좌표가 없고 캡처도 안 했으면 경고
+        coord = self.coords.get(key, {"x": 0, "y": 0})
+        if coord.get("x", 0) == 0 and coord.get("y", 0) == 0 and not self._captured:
+            if not messagebox.askyesno(
+                "좌표 미설정",
+                "이 단계의 좌표가 설정되지 않았습니다.\n계속 진행하시겠습니까?",
+                parent=self.win
+            ):
+                return
+        self._advance()
+
+    def _advance(self):
+        if self.step_idx < len(STEPS) - 1:
+            self.step_idx += 1
+            self._capture_btn.configure(text="📍  캡처  (5초 카운트다운)",
+                                        state="normal")
+            self._update_ui()
+        else:
+            self._save()
+
+    def _save(self):
         self.cfg["coords"] = self.coords
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(self.cfg, f, indent=2, ensure_ascii=False)
-        messagebox.showinfo("저장 완료", "좌표 설정이 저장되었습니다.", parent=self.win)
+        messagebox.showinfo("저장 완료", "모든 좌표 설정이 저장되었습니다.", parent=self.win)
         self.win.destroy()
 
 
