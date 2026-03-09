@@ -1,0 +1,48 @@
+name: Build DentWeb Agent EXE
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        working-directory: agent
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: EXE 빌드
+        working-directory: agent
+        run: |
+          pyinstaller --onefile --name dentweb-agent `
+            --add-data "images;images" `
+            --add-data "config.example.json;." `
+            --noconsole `
+            main.py
+
+      - name: 버전 태그 생성
+        id: version
+        run: echo "tag=agent-$(date +'%Y%m%d-%H%M')" >> $env:GITHUB_OUTPUT
+
+      - name: GitHub Release 생성 및 EXE 업로드
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: DentWeb Agent ${{ steps.version.outputs.tag }}
+          files: agent/dist/dentweb-agent.exe
+          body: |
+            자동 빌드된 DentWeb 에이전트입니다.
+            다운로드 후 실행하세요.
