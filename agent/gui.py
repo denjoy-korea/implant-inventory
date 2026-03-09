@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.6"
+VERSION = "3.5.7"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -898,6 +898,20 @@ def resource_path(relative: str) -> str:
     return os.path.join(base, relative)
 
 
+def _agent_dir() -> str:
+    """EXE(또는 스크립트)가 위치한 폴더 경로"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _ensure_exports_dir() -> str:
+    """EXE 옆에 exports 폴더를 생성하고 경로를 반환"""
+    path = os.path.join(_agent_dir(), "exports")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def _set_autostart(enable: bool):
     try:
         import winreg
@@ -921,5 +935,6 @@ def _set_autostart(enable: bool):
 
 
 if __name__ == "__main__":
+    _ensure_exports_dir()  # EXE 옆에 exports 폴더 자동 생성
     app = AgentApp()
     app.run()

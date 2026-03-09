@@ -6,10 +6,19 @@ import sys
 
 SERVER_URL = "https://qhoyaonrkagdngglrcas.supabase.co/functions/v1"
 
+def _default_exports_dir() -> str:
+    """EXE 옆 exports 폴더 (없으면 ~/Downloads 폴백)"""
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "exports")
+
+
 DEFAULTS = {
     "server_url": SERVER_URL,
     "poll_interval_seconds": 30,
-    "download_dir": os.path.join(os.path.expanduser("~"), "Downloads"),
+    "download_dir": _default_exports_dir(),
     "dentweb_window_title": "DentWeb",
     "click_delay_ms": 300,
     "download_timeout_seconds": 30,
