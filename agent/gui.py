@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.2"
+VERSION = "3.4.3"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -209,17 +209,27 @@ class AgentApp:
         self._log_text.pack(fill="both", expand=True, padx=8, pady=8)
 
         # 버튼 영역
-        btn_frame = tk.Frame(self.root, bg=BG)
-        btn_frame.pack(fill="x", padx=16, pady=(0, 16))
+        btn_top = tk.Frame(self.root, bg=BG)
+        btn_top.pack(fill="x", padx=16, pady=(0, 6))
 
-        tk.Button(btn_frame, text="지금 실행",
+        tk.Button(btn_top, text="지금 실행",
                   font=("Malgun Gothic", 10, "bold"),
                   bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
                   relief="flat", bd=0, cursor="hand2",
                   command=self._run_now
+                  ).pack(fill="x", ipady=8)
+
+        btn_bot = tk.Frame(self.root, bg=BG)
+        btn_bot.pack(fill="x", padx=16, pady=(0, 16))
+
+        tk.Button(btn_bot, text="테스트",
+                  font=("Malgun Gothic", 10),
+                  bg=AMBER, fg="#000", activebackground="#d97706",
+                  relief="flat", bd=0, cursor="hand2",
+                  command=self._open_test
                   ).pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 6))
 
-        tk.Button(btn_frame, text="좌표 설정",
+        tk.Button(btn_bot, text="좌표 설정",
                   font=("Malgun Gothic", 10),
                   bg=CARD, fg=TEXT,
                   relief="flat", bd=0, cursor="hand2",
@@ -281,6 +291,10 @@ class AgentApp:
     def _run_now(self):
         threading.Thread(target=self._do_run, daemon=True).start()
 
+    # ── 테스트 ───────────────────────────────────────────────
+    def _open_test(self):
+        TestWindow(self.root, self.cfg)
+
     # ── 좌표 설정 ────────────────────────────────────────────
     def _open_coord_settings(self):
         CoordSettingsWindow(self.root, self.cfg)
@@ -303,7 +317,7 @@ class AgentApp:
         self.root.mainloop()
 
 
-# ── 좌표 설정 창 ─────────────────────────────────────────────
+# ── 단계 정의 (테스트 + 좌표설정 공용) ──────────────────────────
 STEPS = [
     ("경영/통계 메뉴",           "btn_stats",                  "click"),
     ("임플란트 수술통계",         "btn_implant",                "click"),
@@ -314,6 +328,235 @@ STEPS = [
 ]
 
 
+# ── 단계별 테스트 창 ─────────────────────────────────────────
+class TestWindow:
+    CANVAS_W = 560
+    CANVAS_H = 380
+
+    def __init__(self, parent, cfg: dict):
+        self.cfg = cfg
+        self.coords = {k: dict(v) for k, v in cfg.get("coords", {}).items()}
+        self.step_idx = 0
+        self._photo = None
+        self._screen_size = None
+        self._last_screenshot = None
+
+        win = tk.Toplevel(parent)
+        win.title("단계별 테스트")
+        win.geometry("600x660")
+        win.configure(bg=BG)
+        win.grab_set()
+        self.win = win
+        self.parent = parent
+
+        # ── 상단: 단계 네비게이션 ──────────────────────────────
+        nav = tk.Frame(win, bg=BG)
+        nav.pack(fill="x", padx=16, pady=(16, 0))
+
+        self._prev_btn = tk.Button(nav, text="◀", font=("Malgun Gothic", 11),
+                                   bg=CARD, fg=TEXT, relief="flat", bd=0,
+                                   cursor="hand2", command=self._prev_step,
+                                   width=3, padx=4)
+        self._prev_btn.pack(side="left")
+
+        self._step_label = tk.Label(nav, text="", font=("Malgun Gothic", 11, "bold"),
+                                    bg=BG, fg=TEXT)
+        self._step_label.pack(side="left", padx=10, expand=True)
+
+        self._next_btn = tk.Button(nav, text="▶", font=("Malgun Gothic", 11),
+                                   bg=CARD, fg=TEXT, relief="flat", bd=0,
+                                   cursor="hand2", command=self._next_step,
+                                   width=3, padx=4)
+        self._next_btn.pack(side="right")
+
+        # ── 좌표 표시 ──────────────────────────────────────────
+        self._coord_var = tk.StringVar()
+        tk.Label(win, textvariable=self._coord_var,
+                 font=("Consolas", 9), bg=BG, fg=TEXT_MUTED
+                 ).pack(anchor="w", padx=16, pady=(4, 0))
+
+        # ── 스크린샷 캔버스 ────────────────────────────────────
+        canvas_wrap = tk.Frame(win, bg=BORDER, padx=1, pady=1)
+        canvas_wrap.pack(padx=16, pady=8)
+        self._canvas = tk.Canvas(canvas_wrap, bg="#111",
+                                 width=self.CANVAS_W, height=self.CANVAS_H,
+                                 cursor="crosshair")
+        self._canvas.pack()
+        self._canvas.bind("<Button-1>", self._on_canvas_click)
+
+        # 캔버스 안내 문구
+        self._canvas.create_text(
+            self.CANVAS_W // 2, self.CANVAS_H // 2,
+            text="단계 실행 후 스크린샷이 표시됩니다\n스크린샷에서 클릭 → 해당 좌표로 업데이트",
+            fill=TEXT_MUTED, font=("Malgun Gothic", 10), justify="center"
+        )
+
+        tk.Label(win, text="스크린샷에서 클릭하면 해당 위치로 좌표가 업데이트됩니다",
+                 font=("Malgun Gothic", 8), bg=BG, fg=TEXT_MUTED).pack()
+
+        # ── 액션 버튼 ──────────────────────────────────────────
+        btn_row = tk.Frame(win, bg=BG)
+        btn_row.pack(fill="x", padx=16, pady=(8, 4))
+
+        self._run_btn = tk.Button(btn_row, text="▶  이 단계 실행",
+                                  font=("Malgun Gothic", 10, "bold"),
+                                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+                                  relief="flat", bd=0, cursor="hand2",
+                                  command=self._run_step)
+        self._run_btn.pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 6))
+
+        tk.Button(btn_row, text="좌표 초기화",
+                  font=("Malgun Gothic", 10),
+                  bg=CARD, fg=RED,
+                  relief="flat", bd=0, cursor="hand2",
+                  highlightthickness=1, highlightbackground=BORDER,
+                  command=self._reset_coord
+                  ).pack(side="left", fill="x", expand=True, ipady=8)
+
+        # ── 저장 ───────────────────────────────────────────────
+        tk.Button(win, text="저장",
+                  font=("Malgun Gothic", 11, "bold"),
+                  bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
+                  relief="flat", bd=0, cursor="hand2",
+                  command=self._save
+                  ).pack(fill="x", padx=16, pady=(4, 16), ipady=10)
+
+        self._update_step_ui()
+
+    def _update_step_ui(self):
+        label, key, click_type = STEPS[self.step_idx]
+        total = len(STEPS)
+        type_str = "더블클릭" if click_type == "double" else "클릭"
+        self._step_label.configure(text=f"[{self.step_idx + 1}/{total}]  {label}  ({type_str})")
+        coord = self.coords.get(key, {"x": 0, "y": 0})
+        x, y = coord.get("x", 0), coord.get("y", 0)
+        self._coord_var.set(f"현재 좌표: X={x}, Y={y}  {'(이미지 인식 사용)' if x == 0 and y == 0 else ''}")
+        self._prev_btn.configure(state="normal" if self.step_idx > 0 else "disabled")
+        self._next_btn.configure(state="normal" if self.step_idx < len(STEPS) - 1 else "disabled")
+
+    def _prev_step(self):
+        if self.step_idx > 0:
+            self.step_idx -= 1
+            self._update_step_ui()
+
+    def _next_step(self):
+        if self.step_idx < len(STEPS) - 1:
+            self.step_idx += 1
+            self._update_step_ui()
+
+    def _run_step(self):
+        self._run_btn.configure(state="disabled", text="실행 중...")
+        self.win.update()
+
+        _, key, click_type = STEPS[self.step_idx]
+        coord = self.coords.get(key, {"x": 0, "y": 0})
+        x, y = int(coord.get("x", 0)), int(coord.get("y", 0))
+
+        # 창 숨기기 (스크린샷에 포함되지 않도록)
+        self.win.withdraw()
+        self.win.update()
+        time.sleep(0.8)
+
+        click_x, click_y = None, None
+        try:
+            if x != 0 or y != 0:
+                if click_type == "double":
+                    pyautogui.doubleClick(x, y)
+                else:
+                    pyautogui.click(x, y)
+                click_x, click_y = x, y
+            else:
+                # 이미지 인식 시도
+                img_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "images", f"{key}.png"
+                )
+                if os.path.exists(img_path):
+                    try:
+                        loc = pyautogui.locateOnScreen(img_path, confidence=0.8)
+                        if loc:
+                            c = pyautogui.center(loc)
+                            click_x, click_y = int(c.x), int(c.y)
+                            if click_type == "double":
+                                pyautogui.doubleClick(click_x, click_y)
+                            else:
+                                pyautogui.click(click_x, click_y)
+                    except Exception:
+                        pass
+
+            time.sleep(0.5)
+            screenshot = pyautogui.screenshot()
+        except Exception as e:
+            screenshot = None
+            messagebox.showerror("오류", str(e), parent=self.win)
+        finally:
+            self.win.deiconify()
+            self.win.lift()
+            self.win.focus_force()
+
+        if screenshot:
+            self._display_screenshot(screenshot, click_x, click_y)
+
+        self._run_btn.configure(state="normal", text="▶  이 단계 실행")
+
+    def _display_screenshot(self, pil_img, click_x=None, click_y=None):
+        try:
+            from PIL import Image, ImageDraw, ImageTk
+        except ImportError:
+            messagebox.showwarning("PIL 없음", "Pillow가 설치되지 않아 스크린샷을 표시할 수 없습니다.", parent=self.win)
+            return
+
+        sw, sh = pil_img.size
+        self._screen_size = (sw, sh)
+        scale_x = self.CANVAS_W / sw
+        scale_y = self.CANVAS_H / sh
+
+        resized = pil_img.resize((self.CANVAS_W, self.CANVAS_H), Image.LANCZOS)
+
+        if click_x is not None and click_y is not None:
+            draw = ImageDraw.Draw(resized)
+            cx = int(click_x * scale_x)
+            cy = int(click_y * scale_y)
+            r = 14
+            draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline="#ff3030", width=3)
+            draw.line([cx - r - 6, cy, cx + r + 6, cy], fill="#ff3030", width=2)
+            draw.line([cx, cy - r - 6, cx, cy + r + 6], fill="#ff3030", width=2)
+
+        self._photo = ImageTk.PhotoImage(resized)
+        self._last_screenshot = pil_img
+        self._canvas.delete("all")
+        self._canvas.create_image(0, 0, anchor="nw", image=self._photo)
+
+    def _on_canvas_click(self, event):
+        """스크린샷 클릭 → 해당 화면 좌표로 업데이트"""
+        if self._screen_size is None:
+            return
+        sw, sh = self._screen_size
+        scale_x = self.CANVAS_W / sw
+        scale_y = self.CANVAS_H / sh
+        screen_x = int(event.x / scale_x)
+        screen_y = int(event.y / scale_y)
+
+        _, key, _ = STEPS[self.step_idx]
+        self.coords[key] = {"x": screen_x, "y": screen_y}
+        self._update_step_ui()
+
+        if self._last_screenshot:
+            self._display_screenshot(self._last_screenshot, screen_x, screen_y)
+
+    def _reset_coord(self):
+        _, key, _ = STEPS[self.step_idx]
+        self.coords[key] = {"x": 0, "y": 0}
+        self._update_step_ui()
+
+    def _save(self):
+        self.cfg["coords"] = self.coords
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(self.cfg, f, indent=2, ensure_ascii=False)
+        messagebox.showinfo("저장 완료", "좌표 설정이 저장되었습니다.", parent=self.win)
+        self.win.destroy()
+
+
+# ── 좌표 설정 창 ─────────────────────────────────────────────
 class CoordSettingsWindow:
     def __init__(self, parent, cfg: dict):
         self.cfg = cfg
