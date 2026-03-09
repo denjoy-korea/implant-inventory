@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.4"
+VERSION = "3.4.5"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -558,62 +558,81 @@ class TestWindow:
 
 # ── 좌표 설정 창 ─────────────────────────────────────────────
 class CoordSettingsWindow:
+    """단계별 좌표 설정 — 마우스 캡처 방식 (5초 카운트다운)"""
+
+    COUNTDOWN = 5  # 캡처까지 대기 초
+
     def __init__(self, parent, cfg: dict):
         self.cfg = cfg
-        self.coords = cfg.get("coords", {})
+        self.coords = {k: dict(v) for k, v in cfg.get("coords", {}).items()}
+        self._coord_vars: dict[str, tuple[tk.StringVar, tk.StringVar]] = {}
 
         win = tk.Toplevel(parent)
         win.title("좌표 설정")
-        win.geometry("440x480")
+        win.geometry("440x520")
         win.configure(bg=BG)
+        win.attributes("-topmost", True)
         win.grab_set()
         self.win = win
 
         tk.Label(win, text="단계별 좌표 설정",
                  font=("Malgun Gothic", 13, "bold"), bg=BG, fg=TEXT
-                 ).pack(pady=(16, 4))
-        tk.Label(win, text="각 단계의 클릭 좌표를 입력하세요. (0,0이면 이미지 인식 사용)",
-                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED
-                 ).pack(pady=(0, 12))
+                 ).pack(pady=(16, 2))
+        tk.Label(win,
+                 text="캡처 버튼 클릭 → 창이 사라짐 → 5초 안에 마우스를 목표 위치로 이동",
+                 font=("Malgun Gothic", 9), bg=BG, fg=TEXT_MUTED, wraplength=400
+                 ).pack(pady=(0, 10))
 
         scroll_frame = tk.Frame(win, bg=BG)
         scroll_frame.pack(fill="both", expand=True, padx=16)
 
-        self._entries = {}
         for i, (label, key, click_type) in enumerate(STEPS):
             row = tk.Frame(scroll_frame, bg=CARD, pady=8, padx=12)
-            row.pack(fill="x", pady=4)
+            row.pack(fill="x", pady=3)
+            row.columnconfigure(1, weight=1)
 
+            # 단계 이름 + 뱃지
             type_badge = "더블클릭" if click_type == "double" else "클릭"
             badge_color = AMBER if click_type == "double" else GREEN
             tk.Label(row, text=f"{i+1}. {label}",
                      font=("Malgun Gothic", 10, "bold"), bg=CARD, fg=TEXT
                      ).grid(row=0, column=0, sticky="w")
             tk.Label(row, text=type_badge, font=("Malgun Gothic", 8),
-                     bg=badge_color, fg="#000", padx=6
-                     ).grid(row=0, column=1, sticky="e", padx=(8, 0))
+                     bg=badge_color, fg="#000", padx=5
+                     ).grid(row=0, column=1, sticky="w", padx=(8, 0))
 
+            # 현재 좌표 표시 (읽기 전용)
             coord = self.coords.get(key, {"x": 0, "y": 0})
-            xy_frame = tk.Frame(row, bg=CARD)
-            xy_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-            tk.Label(xy_frame, text="X:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
-                     ).pack(side="left")
             x_var = tk.StringVar(value=str(coord.get("x", 0)))
-            tk.Entry(xy_frame, textvariable=x_var, width=6,
-                     font=("Consolas", 10), bg=BG, fg=TEXT,
-                     relief="flat", insertbackground=TEXT
-                     ).pack(side="left", padx=(2, 10))
-
-            tk.Label(xy_frame, text="Y:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
-                     ).pack(side="left")
             y_var = tk.StringVar(value=str(coord.get("y", 0)))
-            tk.Entry(xy_frame, textvariable=y_var, width=6,
-                     font=("Consolas", 10), bg=BG, fg=TEXT,
-                     relief="flat", insertbackground=TEXT
-                     ).pack(side="left", padx=(2, 0))
+            self._coord_vars[key] = (x_var, y_var)
 
-            self._entries[key] = (x_var, y_var)
+            info_frame = tk.Frame(row, bg=CARD)
+            info_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+            info_frame.columnconfigure(1, weight=1)
+
+            tk.Label(info_frame, text="X:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
+                     ).pack(side="left")
+            tk.Entry(info_frame, textvariable=x_var, width=6,
+                     font=("Consolas", 9), bg=BG, fg=TEXT, relief="flat",
+                     insertbackground=TEXT
+                     ).pack(side="left", padx=(2, 8))
+            tk.Label(info_frame, text="Y:", font=("Malgun Gothic", 9), bg=CARD, fg=TEXT_MUTED
+                     ).pack(side="left")
+            tk.Entry(info_frame, textvariable=y_var, width=6,
+                     font=("Consolas", 9), bg=BG, fg=TEXT, relief="flat",
+                     insertbackground=TEXT
+                     ).pack(side="left", padx=(2, 8))
+
+            # 캡처 버튼
+            capture_btn = tk.Button(
+                info_frame, text="📍 캡처",
+                font=("Malgun Gothic", 9, "bold"),
+                bg=AMBER, fg="#000", activebackground="#d97706",
+                relief="flat", bd=0, cursor="hand2",
+                command=lambda k=key, xv=x_var, yv=y_var: self._start_capture(k, xv, yv)
+            )
+            capture_btn.pack(side="left", padx=(4, 0), ipady=3, ipadx=6)
 
         # 저장 버튼
         tk.Button(win, text="저장",
@@ -621,22 +640,59 @@ class CoordSettingsWindow:
                   bg=GREEN, fg="#fff", activebackground=GREEN_DARK,
                   relief="flat", bd=0, cursor="hand2",
                   command=self._save
-                  ).pack(fill="x", padx=16, pady=16, ipady=10)
+                  ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
+
+    def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
+        """창을 숨기고 카운트다운 오버레이 표시 → 마우스 위치 캡처"""
+        self.win.withdraw()
+
+        # 카운트다운 오버레이 (항상 최상위)
+        overlay = tk.Toplevel()
+        overlay.attributes("-topmost", True)
+        overlay.overrideredirect(True)
+        overlay.configure(bg="#1e1e2e")
+        sw = overlay.winfo_screenwidth()
+        sh = overlay.winfo_screenheight()
+        ow, oh = 260, 110
+        overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh//2 - oh//2}")
+
+        count_var = tk.StringVar(value=str(self.COUNTDOWN))
+        tk.Label(overlay, textvariable=count_var,
+                 font=("Malgun Gothic", 40, "bold"), bg="#1e1e2e", fg=GREEN
+                 ).pack(pady=(10, 0))
+        tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
+                 font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
+                 ).pack()
+
+        def tick(n: int):
+            if n > 0:
+                count_var.set(str(n))
+                overlay.after(1000, tick, n - 1)
+            else:
+                x, y = pyautogui.position()
+                x_var.set(str(x))
+                y_var.set(str(y))
+                self.coords[key] = {"x": x, "y": y}
+                overlay.destroy()
+                self.win.deiconify()
+                self.win.lift()
+                self.win.focus_force()
+
+        tick(self.COUNTDOWN)
 
     def _save(self):
-        new_coords = {}
-        for key, (x_var, y_var) in self._entries.items():
+        # 수동 입력값도 반영
+        for key, (x_var, y_var) in self._coord_vars.items():
             try:
-                x = int(x_var.get())
-                y = int(y_var.get())
+                x, y = int(x_var.get()), int(y_var.get())
             except ValueError:
                 x, y = 0, 0
-            new_coords[key] = {"x": x, "y": y}
+            self.coords[key] = {"x": x, "y": y}
 
-        self.cfg["coords"] = new_coords
+        self.cfg["coords"] = self.coords
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(self.cfg, f, indent=2, ensure_ascii=False)
-        messagebox.showinfo("저장 완료", "좌표 설정이 저장되었습니다.")
+        messagebox.showinfo("저장 완료", "좌표 설정이 저장되었습니다.", parent=self.win)
         self.win.destroy()
 
 
