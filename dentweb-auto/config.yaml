@@ -11,6 +11,8 @@ paths:
   output_dir: "./exports"
   state_file: "./state/run_state.json"
   log_dir: "./logs"
+  # 엑셀 저장 다이얼로그에서 이동할 폴더 (에이전트 설치 폴더 기준 상대경로)
+  save_folder: "./exports"
 
 upload:
   # SaaS URL/토큰 설정 전까지 false 유지
@@ -66,6 +68,26 @@ selectors:
     candidates:
       - {title: "엑셀저장", control_type: "Button"}
       - {title: "엑셀 저장", control_type: "Button"}
+
+  # 저장 다이얼로그 단계 (좌표 설정 필요 - 더블클릭)
+  save_dialog_agent_folder:
+    double_click: true
+    candidates: []
+    coords: {x: 0, y: 0}
+
+  # exports 폴더 (더블클릭)
+  save_dialog_exports_folder:
+    double_click: true
+    candidates: []
+    coords: {x: 0, y: 0}
+
+  # 저장(S) 버튼 (단일 클릭)
+  save_dialog_save_button:
+    double_click: false
+    candidates:
+      - {title: "저장(S)", control_type: "Button"}
+      - {title: "저장", control_type: "Button"}
+    coords: {x: 0, y: 0}
 
 no_data_dialog_keywords:
   - "조회된 데이터가 없습니다"

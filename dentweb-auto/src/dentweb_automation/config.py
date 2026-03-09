@@ -53,6 +53,7 @@ class Config:
     excel_filename_prefix: str
     on_row_count_unknown: str
     output_dir: Path
+    save_folder: Path  # 저장 다이얼로그에서 이동할 폴더 (미설정 시 output_dir 사용)
     state_file: Path
     log_dir: Path
     selectors: dict[str, Any]
@@ -76,6 +77,9 @@ def load_config(path: str | Path) -> Config:
     state_file = _to_abs_path(project_dir, paths.get("state_file", "./state/run_state.json"))
     log_dir = _to_abs_path(project_dir, paths.get("log_dir", "./logs"))
 
+    raw_save_folder = (paths.get("save_folder") or "").strip()
+    save_folder = _to_abs_path(project_dir, raw_save_folder) if raw_save_folder else output_dir
+
     return Config(
         project_dir=project_dir,
         window_title_regex=app.get("window_title_regex", ".*덴트웹.*"),
@@ -86,6 +90,7 @@ def load_config(path: str | Path) -> Config:
         excel_filename_prefix=app.get("excel_filename_prefix", "implant_stats"),
         on_row_count_unknown=app.get("on_row_count_unknown", "abort"),
         output_dir=output_dir,
+        save_folder=save_folder,
         state_file=state_file,
         log_dir=log_dir,
         selectors=raw.get("selectors", {}),

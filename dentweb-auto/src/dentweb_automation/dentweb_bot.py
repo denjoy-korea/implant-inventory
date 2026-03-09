@@ -157,19 +157,73 @@ class DentwebBot:
         )
 
     def _confirm_save_dialog_if_present(self) -> None:
-        deadline = time.time() + 5
+        """다른 이름으로 저장 다이얼로그 감지 → 좌표 기반으로 폴더 이동 후 저장."""
+        self.logger.info("저장 다이얼로그 대기 중...")
+        deadline = time.time() + 10
+        dlg = None
         while time.time() < deadline:
             try:
-                dlg = Desktop(backend="uia").window(title_re=".*(저장|다른 이름으로 저장).*")
-                if dlg.exists(timeout=0.5):
-                    self.logger.info("저장 확인 창 감지, Enter 입력")
-                    if not self.dry_run:
-                        dlg.set_focus()
-                        send_keys("{ENTER}")
-                    return
+                candidate = Desktop(backend="uia").window(title_re=".*다른 이름으로 저장.*")
+                if candidate.exists(timeout=0.5):
+                    dlg = candidate
+                    break
             except Exception:
                 pass
             time.sleep(self.config.poll_interval_sec)
+
+        if dlg is None:
+            self.logger.info("저장 다이얼로그 없음 (자동 저장으로 간주)")
+            return
+
+        self.logger.info("저장 다이얼로그 감지")
+        if self.dry_run:
+            return
+
+        self.config.save_folder.mkdir(parents=True, exist_ok=True)
+
+        # 1단계: 덴트웹 에이전트 폴더 더블클릭
+        self._click_in_dialog(dlg, "save_dialog_agent_folder")
+        time.sleep(0.5)
+
+        # 2단계: exports 폴더 더블클릭
+        self._click_in_dialog(dlg, "save_dialog_exports_folder")
+        time.sleep(0.5)
+
+        # 3단계: 저장(S) 버튼 클릭
+        self._click_in_dialog(dlg, "save_dialog_save_button")
+        self.logger.info("저장 완료")
+
+    def _click_in_dialog(self, dlg, selector_name: str) -> None:
+        """저장 다이얼로그 내에서 selector 또는 좌표로 클릭/더블클릭."""
+        spec = self.config.selectors.get(selector_name, {})
+        is_double = spec.get("double_click", False)
+
+        # UIA 컨트롤 우선 시도
+        for candidate in spec.get("candidates", []):
+            try:
+                ctrl = dlg.child_window(**candidate)
+                if ctrl.exists(timeout=1):
+                    if is_double:
+                        ctrl.double_click_input()
+                    else:
+                        ctrl.click_input()
+                    self.logger.info("%s: 컨트롤 %s 클릭", selector_name, candidate)
+                    return
+            except Exception:
+                continue
+
+        # 좌표 폴백
+        coords = self._extract_coords(spec)
+        if coords and coords != (0, 0):
+            if is_double:
+                pyautogui.doubleClick(coords[0], coords[1])
+            else:
+                pyautogui.click(coords[0], coords[1])
+            time.sleep(self.config.post_action_sleep_sec)
+            self.logger.info("%s: 좌표 %s %s클릭", selector_name, coords, "더블" if is_double else "")
+            return
+
+        self.logger.warning("%s: 좌표 미설정, 건너뜀", selector_name)
 
     def _normalize_filename(self, file_path: Path, target_day: date) -> Path:
         ext = file_path.suffix or ".xlsx"
