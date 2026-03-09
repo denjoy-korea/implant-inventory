@@ -210,7 +210,7 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
                 병원 PC에서 에이전트를 다운로드하여 실행하면, 토큰 입력 후 자동으로 덴트웹과 연동됩니다.
               </p>
               <a
-                href="https://github.com/denjoy-korea/dentweb-agent/releases/latest/download/dentweb-agent.exe"
+                href="https://github.com/denjoy-korea/implant-inventory/releases/latest/download/dentweb-agent.exe"
                 download
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
