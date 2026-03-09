@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.5.8"
+VERSION = "3.5.9"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -782,9 +782,11 @@ class CoordSettingsWindow:
         overlay = tk.Toplevel(root)
         overlay.overrideredirect(True)
         overlay.attributes("-topmost", True)
+        overlay.attributes("-alpha", 0.82)   # 반투명 — 뒤 화면 보임
         overlay.configure(bg="#1e1e2e")
-        ow, oh = 300, 140
-        overlay.geometry(f"{ow}x{oh}+{sw // 2 - ow // 2}+{sh - oh - 60}")
+        ow, oh = 300, 150
+        # 화면 우하단 배치 (덴트웹 메뉴가 주로 상단/좌측이라 겹침 최소화)
+        overlay.geometry(f"{ow}x{oh}+{sw - ow - 20}+{sh - oh - 60}")
 
         count_lbl = tk.Label(overlay, text=str(self.COUNTDOWN),
                              font=("Malgun Gothic", 56, "bold"),
@@ -792,7 +794,22 @@ class CoordSettingsWindow:
         count_lbl.pack(pady=(8, 0))
         tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
                  font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED).pack()
+        tk.Label(overlay, text="[드래그로 이동 가능]",
+                 font=("Malgun Gothic", 8), bg="#1e1e2e", fg="#555570").pack()
         overlay.update()
+
+        # 드래그로 오버레이 이동 가능
+        overlay._drag_x = 0
+        overlay._drag_y = 0
+        def _drag_start(e):
+            overlay._drag_x = e.x
+            overlay._drag_y = e.y
+        def _drag_move(e):
+            nx = overlay.winfo_x() + e.x - overlay._drag_x
+            ny = overlay.winfo_y() + e.y - overlay._drag_y
+            overlay.geometry(f"+{nx}+{ny}")
+        overlay.bind("<ButtonPress-1>", _drag_start)
+        overlay.bind("<B1-Motion>", _drag_move)
 
         def worker():
             # threading: time.sleep → root.after(0, ...) 로 UI 업데이트
