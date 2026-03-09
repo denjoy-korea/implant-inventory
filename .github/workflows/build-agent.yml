@@ -38,7 +38,6 @@ jobs:
           pyinstaller --onefile --name dentweb-agent `
             --add-data "images;images" `
             --add-data "config.example.json;." `
-            --noconsole `
             main.py
 
       - name: 버전 태그 생성

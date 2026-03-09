@@ -232,40 +232,60 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
                 </button>
               )}
 
-              {/* 토큰 표시 (newAgentToken 보유 시) */}
-              {newAgentToken && (
+              {/* 토큰 표시 영역 (토큰 존재 시) */}
+              {(newAgentToken || automationState?.hasAgentToken) && (
                 <div className="space-y-2">
                   <p className="text-[11px] text-slate-500">프로그램 실행 시 아래 토큰을 붙여넣으세요:</p>
+
+                  {/* 토큰 박스 + 눈/복사 아이콘 */}
                   <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
                     <code className="flex-1 text-xs text-slate-800 font-mono break-all select-all">
-                      {tokenVisible ? newAgentToken : '*'.repeat(newAgentToken.length)}
+                      {newAgentToken
+                        ? (tokenVisible ? newAgentToken : '*'.repeat(newAgentToken.length))
+                        : automationState!.agentTokenMasked}
                     </code>
-                    {tokenVisible ? (
-                      <button
-                        onClick={() => void handleCopyAndHide(newAgentToken)}
-                        title="복사"
-                        className="flex-shrink-0 p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded transition-colors"
-                      >
-                        {tokenCopied ? (
-                          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <CopyIcon />
-                        )}
-                      </button>
+                    {newAgentToken ? (
+                      tokenVisible ? (
+                        /* 눈 열림 → 복사 아이콘 */
+                        <button
+                          onClick={() => void handleCopyAndHide(newAgentToken)}
+                          title="복사"
+                          className="flex-shrink-0 p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded transition-colors"
+                        >
+                          {tokenCopied ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            <CopyIcon />
+                          )}
+                        </button>
+                      ) : (
+                        /* 눈 닫힘 */
+                        <button
+                          onClick={() => setTokenVisible(true)}
+                          title="토큰 보기"
+                          className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                        >
+                          <EyeOffIcon />
+                        </button>
+                      )
                     ) : (
+                      /* 기존 토큰만 있는 경우: 눈 클릭 → 재발급해야 전체 토큰 확인 가능 */
                       <button
-                        onClick={() => setTokenVisible(true)}
-                        title="토큰 보기"
-                        className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                        onClick={() => void onGenerateToken()}
+                        disabled={generatingToken}
+                        title="토큰 보기 (재발급 필요)"
+                        className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors disabled:opacity-40"
                       >
                         <EyeOffIcon />
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-slate-400">토큰 분실 시 재발급하세요. 기존 토큰은 즉시 무효화됩니다.</p>
+
+                  {/* 재발급 - 별도 하단 */}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <p className="text-[10px] text-slate-400">재발급하면 기존 토큰은 즉시 무효화됩니다.</p>
                     <button
                       onClick={() => void onGenerateToken()}
                       disabled={generatingToken}
@@ -274,24 +294,6 @@ const DentwebAutomationModal: React.FC<DentwebAutomationModalProps> = ({
                       {generatingToken ? '재발급 중...' : '재발급'}
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* 기존 토큰 있으나 현재 세션에서 발급 안 한 경우 */}
-              {automationState?.hasAgentToken && !newAgentToken && (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-slate-500">에이전트 토큰이 등록되어 있습니다.</p>
-                  <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    <code className="flex-1 text-xs text-slate-500 font-mono">{automationState.agentTokenMasked}</code>
-                    <button
-                      onClick={() => void onGenerateToken()}
-                      disabled={generatingToken}
-                      className="flex-shrink-0 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded hover:bg-amber-100 transition-colors disabled:opacity-40"
-                    >
-                      {generatingToken ? '재발급 중...' : '재발급'}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400">재발급하면 기존 토큰은 즉시 무효화됩니다.</p>
                 </div>
               )}
             </div>
