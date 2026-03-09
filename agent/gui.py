@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.9"
+VERSION = "3.5.0"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -681,14 +681,13 @@ class CoordSettingsWindow:
                   ).pack(side="bottom", fill="x", padx=16, pady=16, ipady=10)
 
     def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
-        """창을 숨기고 카운트다운 오버레이 표시 → 마우스 위치 캡처 (스레드 방식)"""
+        """카운트다운 오버레이 → 마우스 위치 캡처 후 좌표 저장"""
         try:
             self.win.grab_release()
         except Exception:
             pass
-        self.win.withdraw()
+        self.win.iconify()  # 작업표시줄로 최소화 (withdraw보다 안전)
 
-        # 카운트다운 오버레이
         overlay = tk.Toplevel()
         overlay.attributes("-topmost", True)
         overlay.overrideredirect(True)
@@ -707,16 +706,13 @@ class CoordSettingsWindow:
                  ).pack()
         overlay.update()
 
-        def _run():
-            for i in range(self.COUNTDOWN, 0, -1):
-                overlay.after(0, count_var.set, str(i))
-                time.sleep(1)
-
-            # 캡처 — 좌표값은 메인 스레드(_finish)에서 처리
-            x, y = pyautogui.position()
-
-            def _finish():
-                # tkinter 변수는 반드시 메인 스레드에서 수정
+        def tick(n: int):
+            if n > 0:
+                count_var.set(str(n))
+                overlay.after(1000, tick, n - 1)
+            else:
+                # 캡처 및 저장 — 메인 스레드에서 실행됨
+                x, y = pyautogui.position()
                 x_var.set(str(x))
                 y_var.set(str(y))
                 self.coords[key] = {"x": x, "y": y}
@@ -729,9 +725,7 @@ class CoordSettingsWindow:
                 self.win.lift()
                 self.win.focus_force()
 
-            overlay.after(0, _finish)
-
-        threading.Thread(target=_run, daemon=True).start()
+        tick(self.COUNTDOWN)
 
     def _save(self):
         # 수동 입력값도 반영
