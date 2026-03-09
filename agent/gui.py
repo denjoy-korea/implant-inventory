@@ -15,7 +15,7 @@ from dentweb_runner import DentwebRunner
 from logger import AgentLogger
 
 CONFIG_PATH = "config.json"
-VERSION = "3.4.6"
+VERSION = "3.4.7"
 
 # ── 색상/스타일 ──────────────────────────────────────────────
 BG = "#1e1e2e"
@@ -682,22 +682,28 @@ class CoordSettingsWindow:
 
     def _start_capture(self, key: str, x_var: tk.StringVar, y_var: tk.StringVar):
         """창을 숨기고 카운트다운 오버레이 표시 → 마우스 위치 캡처"""
+        # grab_set이 걸려 있으면 overlay의 after() 콜백이 막힘 → 먼저 해제
+        try:
+            self.win.grab_release()
+        except Exception:
+            pass
         self.win.withdraw()
 
-        # 카운트다운 오버레이 (항상 최상위)
+        # 카운트다운 오버레이 (항상 최상위, 독립 Toplevel)
         overlay = tk.Toplevel()
         overlay.attributes("-topmost", True)
         overlay.overrideredirect(True)
         overlay.configure(bg="#1e1e2e")
         sw = overlay.winfo_screenwidth()
         sh = overlay.winfo_screenheight()
-        ow, oh = 260, 110
+        ow, oh = 280, 120
         overlay.geometry(f"{ow}x{oh}+{sw//2 - ow//2}+{sh//2 - oh//2}")
+        overlay.update()
 
         count_var = tk.StringVar(value=str(self.COUNTDOWN))
         tk.Label(overlay, textvariable=count_var,
-                 font=("Malgun Gothic", 40, "bold"), bg="#1e1e2e", fg=GREEN
-                 ).pack(pady=(10, 0))
+                 font=("Malgun Gothic", 44, "bold"), bg="#1e1e2e", fg=GREEN
+                 ).pack(pady=(8, 0))
         tk.Label(overlay, text="마우스를 목표 위치로 이동하세요",
                  font=("Malgun Gothic", 9), bg="#1e1e2e", fg=TEXT_MUTED
                  ).pack()
@@ -705,6 +711,7 @@ class CoordSettingsWindow:
         def tick(n: int):
             if n > 0:
                 count_var.set(str(n))
+                overlay.update()
                 overlay.after(1000, tick, n - 1)
             else:
                 x, y = pyautogui.position()
@@ -713,6 +720,7 @@ class CoordSettingsWindow:
                 self.coords[key] = {"x": x, "y": y}
                 overlay.destroy()
                 self.win.deiconify()
+                self.win.grab_set()
                 self.win.lift()
                 self.win.focus_force()
 
