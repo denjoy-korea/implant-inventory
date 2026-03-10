@@ -362,6 +362,22 @@ export const planService = {
     return result;
   },
 
+  /** 환불 가능한 최근 완료 결제 조회 (TossPayments 자동 환불용) */
+  async getLatestCompletedBilling(hospitalId: string): Promise<DbBillingHistory | null> {
+    const { data, error } = await supabase
+      .from('billing_history')
+      .select('*')
+      .eq('hospital_id', hospitalId)
+      .eq('payment_status', 'completed')
+      .not('plan', 'eq', 'free')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data as DbBillingHistory;
+  },
+
   /** 결제 대기 중인 건 확인 */
   async getPendingPayment(hospitalId: string): Promise<DbBillingHistory | null> {
     const { data, error } = await supabase

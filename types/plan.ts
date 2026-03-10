@@ -223,7 +223,9 @@ export const TRIAL_DAYS = 14;
 export const EXTRA_USER_PRICE_PER_MONTH = 5000;
 
 /** Supabase billing_history 테이블 Row */
-export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled' | 'refunded';
+
+export type RefundType = 'full' | 'prorata_monthly' | 'prorata_yearly' | 'none';
 
 export interface DbBillingHistory {
   id: string;
@@ -243,4 +245,8 @@ export interface DbBillingHistory {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** 환불 관련 (migration 20260310200000) */
+  refund_amount: number | null;
+  refunded_at: string | null;
+  refund_reason: string | null;
 }

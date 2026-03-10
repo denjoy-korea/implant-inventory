@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, BillingCycle, TrustedDevice } from '../types';
+import type { DbBillingHistory } from '../types';
 import { authService } from '../services/authService';
 import { planService } from '../services/planService';
+import { calcRefundPreview, requestRefund } from '../services/refundService';
+import type { RefundPreview } from '../services/refundService';
 import PlanBadge from './PlanBadge';
 import { UNLIMITED_DAYS } from '../constants';
 import { useToast } from '../hooks/useToast';
@@ -100,6 +103,68 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [showPlanPicker, setShowPlanPicker] = useState(false);
     const [pickerCycle, setPickerCycle] = useState<'monthly' | 'yearly'>(planState?.billingCycle ?? 'monthly');
     const [pickerSelectedPlan, setPickerSelectedPlan] = useState<PlanType | null>(null);
+
+    // 구독 취소 + 환불 미리보기
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+    const [cancelBilling, setCancelBilling] = useState<DbBillingHistory | null>(null);
+    const [cancelRefundPreview, setCancelRefundPreview] = useState<RefundPreview | null>(null);
+    const [isCancelLoading, setIsCancelLoading] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
+
+    const handleOpenCancelModal = async () => {
+        if (!user.hospitalId) return;
+        setIsCancelLoading(true);
+        try {
+            const billing = await planService.getLatestCompletedBilling(user.hospitalId);
+            const preview = billing ? calcRefundPreview(billing) : null;
+            setCancelBilling(billing);
+            setCancelRefundPreview(preview);
+        } catch (error) {
+            console.error('[UserProfile] getLatestCompletedBilling failed:', error);
+            setCancelBilling(null);
+            setCancelRefundPreview(null);
+        } finally {
+            setIsCancelLoading(false);
+            setShowCancelConfirm(true);
+        }
+    };
+
+    const handleCancelSubscription = async () => {
+        if (!user.hospitalId) return;
+        setIsCancelling(true);
+        try {
+            // TossPayments 자동 환불 가능한 경우
+            if (cancelBilling?.id && cancelBilling.payment_ref) {
+                const result = await requestRefund(cancelBilling.id);
+                if (!result.ok) {
+                    if (result.isManualPayment) {
+                        // 수동 결제: 환불은 이메일로, 플랜만 즉시 취소
+                        await planService.cancelSubscription(user.hospitalId);
+                        showToast('구독이 취소되었습니다. 환불은 고객지원(admin@denjoy.info)으로 문의해 주세요.', 'success');
+                    } else {
+                        showToast(result.error ?? '구독 취소에 실패했습니다.', 'error');
+                        return;
+                    }
+                } else {
+                    const refundMsg = result.refundAmount > 0
+                        ? `구독이 취소되었습니다. ${result.refundAmount.toLocaleString('ko-KR')}원이 환불됩니다 (영업일 5~7일 소요).`
+                        : '구독이 취소되었습니다. 무료 플랜으로 전환되었습니다.';
+                    showToast(refundMsg, 'success');
+                }
+            } else {
+                // payment_ref 없는 수동 결제 or billing 없음
+                await planService.cancelSubscription(user.hospitalId);
+                showToast('구독이 취소되었습니다. 환불은 고객지원(admin@denjoy.info)으로 문의해 주세요.', 'success');
+            }
+            setShowCancelConfirm(false);
+            onClose();
+        } catch (error) {
+            console.error('[UserProfile] cancelSubscription failed:', error);
+            showToast('구독 취소에 실패했습니다. 다시 시도해 주세요.', 'error');
+        } finally {
+            setIsCancelling(false);
+        }
+    };
 
     const planName = isUltimatePlan ? 'Ultimate' : (planState ? PLAN_NAMES[planState.plan] : 'Free');
     const billingLabel = planState?.billingCycle === 'yearly' ? '연간' : planState?.billingCycle === 'monthly' ? '월간' : null;
@@ -618,6 +683,22 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                 </div>
                             )}
 
+                            {!isUltimatePlan && planState?.plan !== 'free' && !planState?.isTrialActive && (
+                                <button
+                                    onClick={handleOpenCancelModal}
+                                    disabled={isCancelLoading}
+                                    className="w-full py-2 rounded-xl border border-rose-200 text-rose-400 font-bold text-xs hover:bg-rose-50 hover:text-rose-500 hover:border-rose-300 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                                >
+                                    {isCancelLoading && (
+                                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                    )}
+                                    구독 취소
+                                </button>
+                            )}
+
                             {!isStaff && !isSystemAdmin && (
                                 <ReferralSection
                                     hospitalId={user.hospitalId || ''}
@@ -790,6 +871,86 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                 onConfirm={() => { setConfirmModal(null); confirmModal.onConfirm(); }}
                 onCancel={() => setConfirmModal(null)}
             />
+        )}
+
+        {showCancelConfirm && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => !isCancelling && setShowCancelConfirm(false)}>
+                <div className="bg-white w-full max-w-sm rounded-[28px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    <div className="p-7">
+                        {/* 아이콘 + 제목 */}
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-500 flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </div>
+                            <div>
+                                <h3 className="text-base font-black text-slate-900">구독 취소</h3>
+                                <p className="text-xs text-slate-400 mt-0.5">취소 즉시 무료 플랜으로 전환됩니다</p>
+                            </div>
+                        </div>
+
+                        {/* 환불 정보 */}
+                        <div className="bg-slate-50 rounded-2xl p-4 mb-5 space-y-2.5">
+                            {cancelRefundPreview ? (
+                                <>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-slate-400">결제금액</span>
+                                        <span className="text-sm font-bold text-slate-700">{cancelBilling?.amount.toLocaleString('ko-KR')}원</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-slate-400">이용 기간</span>
+                                        <span className="text-sm font-bold text-slate-700">{cancelRefundPreview.usedDays}일</span>
+                                    </div>
+                                    <div className="border-t border-slate-200 pt-2.5 flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-500">예상 환불금액</span>
+                                        <span className={`text-base font-black ${cancelRefundPreview.refundAmount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {cancelRefundPreview.refundAmount > 0
+                                                ? `${cancelRefundPreview.refundAmount.toLocaleString('ko-KR')}원`
+                                                : '없음'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 leading-relaxed">{cancelRefundPreview.reason}</p>
+                                    {cancelRefundPreview.refundAmount > 0 && (
+                                        <p className="text-[11px] text-slate-400">환불 처리: 영업일 5~7일 소요</p>
+                                    )}
+                                    {/* payment_ref 없으면 수동 처리 안내 */}
+                                    {cancelBilling && !cancelBilling.payment_ref && (
+                                        <p className="text-[11px] text-amber-600 font-medium">환불은 고객지원(admin@denjoy.info)으로 신청해 주세요.</p>
+                                    )}
+                                </>
+                            ) : (
+                                /* 결제 내역 없는 경우 */
+                                <p className="text-xs text-slate-400 text-center py-1">결제 내역을 확인할 수 없습니다.<br />환불이 필요하면 고객지원으로 문의해 주세요.</p>
+                            )}
+                        </div>
+
+                        <p className="text-xs text-slate-500 mb-5">취소 후 현재 구독 기간의 미이용 혜택은 소멸됩니다. 정말 구독을 취소하시겠습니까?</p>
+                    </div>
+
+                    {/* 버튼 */}
+                    <div className="px-7 pb-7 flex gap-2">
+                        <button
+                            onClick={() => setShowCancelConfirm(false)}
+                            disabled={isCancelling}
+                            className="flex-1 py-3 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all disabled:opacity-50"
+                        >
+                            돌아가기
+                        </button>
+                        <button
+                            onClick={handleCancelSubscription}
+                            disabled={isCancelling}
+                            className="flex-1 py-3 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 active:scale-95 rounded-2xl shadow-lg shadow-rose-100 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        >
+                            {isCancelling && (
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                            )}
+                            {isCancelling ? '처리 중...' : '구독 취소'}
+                        </button>
+                    </div>
+                </div>
+            </div>
         )}
 
         <WithdrawFlowModal

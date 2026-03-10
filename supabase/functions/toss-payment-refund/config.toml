@@ -1,0 +1,2 @@
+[functions.toss-payment-refund]
+verify_jwt = true
