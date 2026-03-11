@@ -64,7 +64,7 @@ interface UseOrderManagerParams {
     status: ReturnStatus,
     currentStatus: ReturnStatus
   ) => Promise<ReturnMutationResult>;
-  onQuickOrder: (item: InventoryItem) => void;
+  onQuickOrder: (item: InventoryItem, quantity?: number) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────

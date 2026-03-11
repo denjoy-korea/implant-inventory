@@ -34,8 +34,8 @@ root.render(
     {isPaymentRedirect ? (
       <PaymentRedirectPage
         onComplete={() => {
-          // pricing 페이지로 이동 (hash 라우팅)
-          window.location.href = `${window.location.origin}/#/pricing`;
+          // 결제 완료 후 대시보드로 이동 — planState가 새로 로드되어 플랜 즉시 반영
+          window.location.href = `${window.location.origin}/#/dashboard`;
         }}
       />
     ) : (

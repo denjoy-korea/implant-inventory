@@ -51,7 +51,7 @@ interface DashboardOperationalTabsProps {
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
-  onQuickOrder: (item: InventoryItem) => Promise<void>;
+  onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
   onCreateReturn: (params: {
     manufacturer: string;
     reason: ReturnReason;
@@ -65,6 +65,7 @@ interface DashboardOperationalTabsProps {
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onGoToPricing?: () => void;
   onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
+  onOpenProfilePlan?: () => void;
   onAuditSessionComplete?: () => void;
   initialShowFailBulkModal?: boolean;
   onFailBulkModalOpened?: () => void;
@@ -113,6 +114,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   stockCalcSettings,
   onStockCalcSettingsChange,
   onOpenPaymentModal,
+  onOpenProfilePlan,
 }) => {
   const prevTabRef = useRef<DashboardTab>(dashboardTab);
 
@@ -135,7 +137,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
   return (
     <>
       {dashboardTab === 'inventory_audit' && (
-        <FeatureGate feature="inventory_audit" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
+        <FeatureGate feature="inventory_audit" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal} onOpenProfilePlan={onOpenProfilePlan}>
           <InventoryAudit
             inventory={inventory}
             hospitalId={user?.hospitalId || ''}
@@ -164,7 +166,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           hospitalId={user?.hospitalId}
           isReadOnly={isReadOnly}
           currentUserName={user?.name || '관리자'}
-          onUpgrade={onGoToPricing}
+          onUpgrade={onOpenProfilePlan ?? onGoToPricing}
         />
       )}
       {dashboardTab === 'fail_management' && (
@@ -172,6 +174,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
           feature="fail_management"
           plan={effectivePlan}
           onOpenPaymentModal={onOpenPaymentModal}
+          onOpenProfilePlan={onOpenProfilePlan}
           dataHint={(() => {
             const count = orders.filter(o => o.type === 'fail_exchange').length;
             return count > 0 ? `FAIL 기록 ${count}건이 쌓여 있습니다 — 지금 관리를 시작하세요` : undefined;
@@ -198,7 +201,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         </FeatureGate>
       )}
       {dashboardTab === 'order_management' && (
-        <FeatureGate feature="order_execution" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
+        <FeatureGate feature="order_execution" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal} onOpenProfilePlan={onOpenProfilePlan}>
           <OrderManager
             orders={orders}
             inventory={inventory}
@@ -219,7 +222,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
             isReadOnly={isReadOnly}
             historyOnly={orderHistoryOnly}
             plan={effectivePlan}
-            onUpgradePlan={() => onOpenPaymentModal?.('basic')}
+            onUpgradePlan={onOpenProfilePlan ?? (() => onOpenPaymentModal?.('basic'))}
           />
         </FeatureGate>
       )}
@@ -238,7 +241,7 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         />
       )}
       {dashboardTab === 'audit_log' && user?.hospitalId && (
-        <FeatureGate feature="audit_log" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
+        <FeatureGate feature="audit_log" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal} onOpenProfilePlan={onOpenProfilePlan}>
           <AuditLogViewer hospitalId={user.hospitalId} />
         </FeatureGate>
       )}

@@ -65,7 +65,7 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   assert.match(appOrderWiring, /onAddOrder:\s*handleAddOrder,/);
   assert.match(appOrderWiring, /onDeleteOrder:\s*handleDeleteOrder,/);
   assert.match(appOrderWiring, /onCreateReturn:\s*handleCreateReturn,/);
-  assert.match(workspace, /onQuickOrder=\{\(item\) => onAddOrder\(buildQuickOrder\(item\)\)\}/);
+  assert.match(workspace, /onQuickOrder=\{\(item,\s*qty\) => onAddOrder\(buildQuickOrder\(item,\s*qty\)\)\}/);
   assert.match(workspace, /onDeleteOrder=\{onDeleteOrder\}/);
   assert.match(workspace, /onCreateReturn=\{onCreateReturn\}/);
   assert.match(tabs, /dashboardTab === 'inventory_audit'[\s\S]*<InventoryAudit/s);

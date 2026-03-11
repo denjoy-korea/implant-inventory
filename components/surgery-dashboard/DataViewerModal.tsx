@@ -1,41 +1,57 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ModalShell from '../shared/ModalShell';
 import { ExcelRow } from '../../types';
+import { supabase } from '../../services/supabaseClient';
 
 const COLUMNS = ['날짜', '환자정보', '치아번호', '갯수', '수술기록', '구분', '제조사', '브랜드', '규격(SIZE)', '골질', '초기고정'] as const;
-const COL_WIDTHS: Record<string, number> = { '날짜': 100, '환자정보': 100, '치아번호': 65, '갯수': 45, '수술기록': 320, '구분': 80, '제조사': 100, '브랜드': 100, '규격(SIZE)': 100, '골질': 60, '초기고정': 60 };
+
+// 컬럼별 % 너비 (합계 100%)
+const COL_WIDTH_CLASS: Record<string, string> = {
+  '날짜': 'w-[9%]',
+  '환자정보': 'w-[9%]',
+  '치아번호': 'w-[5%]',
+  '갯수': 'w-[4%]',
+  '수술기록': 'w-[28%]',
+  '구분': 'w-[6%]',
+  '제조사': 'w-[8%]',
+  '브랜드': 'w-[8%]',
+  '규격(SIZE)': 'w-[9%]',
+  '골질': 'w-[5%]',
+  '초기고정': 'w-[5%]',
+};
 const PAGE_SIZE = 50;
 
 function getKoreanWeekday(dateValue: unknown): string | null {
   const raw = String(dateValue || '').trim();
   if (!raw) return null;
-
-  // Prefer date-only parsing to avoid timezone day shifts from Date string parsing.
   const datePart = raw.slice(0, 10);
   const match = datePart.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
   let parsed: Date | null = null;
-
   if (match) {
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const localDate = new Date(year, month - 1, day);
+    const localDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
     if (!Number.isNaN(localDate.getTime())) parsed = localDate;
   } else {
     const fallback = new Date(raw);
     if (!Number.isNaN(fallback.getTime())) parsed = fallback;
   }
-
   if (!parsed) return null;
-  const days = ['일', '월', '화', '수', '목', '금', '토'] as const;
-  return days[parsed.getDay()];
+  return ['일', '월', '화', '수', '목', '금', '토'][parsed.getDay()];
 }
 
-const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | null; onClose: () => void }> = ({ rows, initialDayFilter, onClose }) => {
+interface EditForm { manufacturer: string; brand: string; size: string; }
+
+const DataViewerModal: React.FC<{
+  rows: ExcelRow[];
+  initialDayFilter: string | null;
+  unregisteredIds?: Set<string>;
+  hospitalId?: string;
+  onClose: () => void;
+}> = ({ rows, initialDayFilter, unregisteredIds, onClose }) => {
   const [search, setSearch] = useState('');
   const [filterCol, setFilterCol] = useState<string>('전체');
   const [filterCls, setFilterCls] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<string | null>(initialDayFilter);
+  const [filterUnregistered, setFilterUnregistered] = useState(false);
   const [page, setPage] = useState(0);
   const COL_SETTINGS_KEY = 'dentweb_data_viewer_col_settings';
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -50,6 +66,13 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  // 인라인 편집
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ manufacturer: '', brand: '', size: '' });
+  const [isSaving, setIsSaving] = useState(false);
+  const [rowOverrides, setRowOverrides] = useState<Map<string, Partial<ExcelRow>>>(new Map());
+  const firstInputRef = useRef<HTMLInputElement>(null);
 
   const saveColSettings = () => {
     localStorage.setItem(COL_SETTINGS_KEY, JSON.stringify({ visible: [...visibleCols], order: colOrder }));
@@ -81,23 +104,19 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
   };
 
   const handleSort = (col: string) => {
-    if (sortCol === col) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortCol(col);
-      setSortDir('desc');
-    }
+    if (sortCol === col) { setSortDir(prev => prev === 'asc' ? 'desc' : 'asc'); }
+    else { setSortCol(col); setSortDir('desc'); }
   };
 
   const displayCols = colOrder.filter(c => visibleCols.has(c));
 
   const filtered = useMemo(() => {
     let result = rows;
+    if (filterUnregistered && unregisteredIds && unregisteredIds.size > 0) {
+      result = result.filter(row => unregisteredIds.has(String(row._id || '')));
+    }
     if (dayFilter) {
-      result = result.filter(row => {
-        const weekday = getKoreanWeekday(row['날짜']);
-        return weekday === dayFilter;
-      });
+      result = result.filter(row => getKoreanWeekday(row['날짜']) === dayFilter);
     }
     if (filterCls) {
       result = result.filter(row => String(row['구분'] || '') === filterCls);
@@ -105,9 +124,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter(row => {
-        if (filterCol === '전체') {
-          return COLUMNS.some(col => String(row[col] || '').toLowerCase().includes(q));
-        }
+        if (filterCol === '전체') return COLUMNS.some(col => String(row[col] || '').toLowerCase().includes(q));
         return String(row[filterCol] || '').toLowerCase().includes(q);
       });
     }
@@ -115,21 +132,19 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
       result = [...result].sort((a, b) => {
         const av = String(a[sortCol] ?? '');
         const bv = String(b[sortCol] ?? '');
-        const an = Number(av);
-        const bn = Number(bv);
+        const an = Number(av), bn = Number(bv);
         const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv, 'ko');
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
     return result;
-  }, [rows, search, filterCol, filterCls, dayFilter, sortCol, sortDir]);
+  }, [rows, search, filterCol, filterCls, dayFilter, sortCol, sortDir, filterUnregistered, unregisteredIds]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  useEffect(() => { setPage(0); }, [search, filterCol, filterCls, dayFilter, sortCol, sortDir]);
+  useEffect(() => { setPage(0); }, [search, filterCol, filterCls, dayFilter, sortCol, sortDir, filterUnregistered]);
 
-  // 구분별 집계 (청구·골이식만은 갯수 0으로 처리)
   const summary = useMemo(() => {
     const noUsageTypes = new Set(['청구', '골이식만']);
     const counts = new Map<string, { rows: number; qty: number }>();
@@ -141,6 +156,50 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
     });
     return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b, 'ko'));
   }, [rows]);
+
+  // 행 클릭 → 편집 패널 열기
+  const handleRowClick = (row: ExcelRow) => {
+    const id = String(row._id || '');
+    if (!id) return;
+    if (!unregisteredIds?.has(id)) return; // 미등록 행만 편집 가능
+    const override = rowOverrides.get(id) ?? {};
+    setEditingRowId(id);
+    setEditForm({
+      manufacturer: String(override['제조사'] ?? row['제조사'] ?? ''),
+      brand: String(override['브랜드'] ?? row['브랜드'] ?? ''),
+      size: String(override['규격(SIZE)'] ?? row['규격(SIZE)'] ?? ''),
+    });
+    setTimeout(() => firstInputRef.current?.focus(), 50);
+  };
+
+  const handleSave = async () => {
+    if (!editingRowId) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('surgery_records')
+        .update({ manufacturer: editForm.manufacturer, brand: editForm.brand, size: editForm.size })
+        .eq('id', editingRowId);
+      if (error) throw error;
+      setRowOverrides(prev => {
+        const next = new Map(prev);
+        next.set(editingRowId, { '제조사': editForm.manufacturer, '브랜드': editForm.brand, '규격(SIZE)': editForm.size });
+        return next;
+      });
+      setEditingRowId(null);
+    } catch (e) {
+      console.error('[DataViewer] 수정 실패:', e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 행 데이터에 로컬 override 적용
+  const applyOverrides = (row: ExcelRow): ExcelRow => {
+    const id = String(row._id || '');
+    const override = rowOverrides.get(id);
+    return override ? { ...row, ...override } : row;
+  };
 
   return (
     <ModalShell
@@ -169,9 +228,23 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
             </div>
             <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{filtered.length}건의 레코드 (총 {rows.length}건)</p>
           </div>
-          <button onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
-            <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {unregisteredIds && unregisteredIds.size > 0 && (
+              <button
+                onClick={() => setFilterUnregistered(p => !p)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black transition-all ${filterUnregistered ? 'bg-amber-500 text-white shadow-md shadow-amber-200' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                미등록 조회
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none ${filterUnregistered ? 'bg-white/25' : 'bg-amber-200 text-amber-800'}`}>
+                  {unregisteredIds.size}건
+                </span>
+              </button>
+            )}
+            <button onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
+              <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         {/* Summary Strip + Classification Filter */}
@@ -183,11 +256,7 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
                 <div key={cls} className="px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 text-xs whitespace-nowrap">
                   <span className="font-bold text-slate-700">{cls}</span>
                   <span className="text-slate-400 mx-1.5">|</span>
-                  {noUsage ? (
-                    <span className="text-slate-500">{cnt}건</span>
-                  ) : (
-                    <span className="font-bold text-indigo-600">갯수합계 {qty}</span>
-                  )}
+                  {noUsage ? <span className="text-slate-500">{cnt}건</span> : <span className="font-bold text-indigo-600">갯수합계 {qty}</span>}
                 </div>
               );
             })}
@@ -208,60 +277,32 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
 
         {/* Search & Filter */}
         <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-3 shrink-0">
-          <select
-            value={filterCol}
-            onChange={e => setFilterCol(e.target.value)}
-            className="px-3 py-2 text-base sm:text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-indigo-400"
-          >
+          <select value={filterCol} onChange={e => setFilterCol(e.target.value)} className="px-3 py-2 text-base sm:text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-indigo-400">
             <option value="전체">전체 컬럼</option>
             {COLUMNS.map(col => <option key={col} value={col}>{col}</option>)}
           </select>
           <div className="flex-1 relative">
             <svg className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="검색어 입력..."
-              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-indigo-400 text-slate-700"
-            />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="검색어 입력..." className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-indigo-400 text-slate-700" />
           </div>
           <span className="text-xs text-slate-400 font-medium whitespace-nowrap">검색결과 {filtered.length}건</span>
-          {/* Column visibility toggle + Save */}
           <div className="flex items-center gap-1.5">
             <div className="relative">
-              <button
-                onClick={() => setShowColFilter(p => !p)}
-                aria-label="컬럼 설정 열기"
-                className={`p-2 rounded-lg border transition-all ${showColFilter ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
-                title="컬럼 설정"
-              >
+              <button onClick={() => setShowColFilter(p => !p)} aria-label="컬럼 설정 열기" className={`p-2 rounded-lg border transition-all ${showColFilter ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`} title="컬럼 설정">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
               </button>
               {showColFilter && (
                 <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl border border-slate-200 shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
                   {colOrder.map((col, idx) => (
-                    <div
-                      key={col}
-                      draggable
-                      onDragStart={() => handleDragStart(idx)}
-                      onDragOver={(e) => handleDragOver(e, idx)}
-                      onDragEnd={handleDragEnd}
-                      className={`flex items-center gap-1 px-2 py-1.5 text-xs transition-colors ${dragOverIdx === idx ? 'bg-indigo-50 border-t-2 border-indigo-300' : 'hover:bg-slate-50'} ${dragIdx === idx ? 'opacity-40' : ''}`}
-                    >
+                    <div key={col} draggable onDragStart={() => handleDragStart(idx)} onDragOver={(e) => handleDragOver(e, idx)} onDragEnd={handleDragEnd} className={`flex items-center gap-1 px-2 py-1.5 text-xs transition-colors ${dragOverIdx === idx ? 'bg-indigo-50 border-t-2 border-indigo-300' : 'hover:bg-slate-50'} ${dragIdx === idx ? 'opacity-40' : ''}`}>
                       <span className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 px-1 shrink-0">
                         <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" /></svg>
                       </span>
-                      <button
-                        onClick={() => toggleCol(col)}
-                        className="shrink-0 p-0.5"
-                        aria-label={`${col} 컬럼 ${visibleCols.has(col) ? '숨기기' : '보이기'}`}
-                      >
-                        {visibleCols.has(col) ? (
-                          <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                        ) : (
-                          <svg className="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
-                        )}
+                      <button onClick={() => toggleCol(col)} className="shrink-0 p-0.5" aria-label={`${col} 컬럼 ${visibleCols.has(col) ? '숨기기' : '보이기'}`}>
+                        {visibleCols.has(col)
+                          ? <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                          : <svg className="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                        }
                       </button>
                       <span className={`font-medium flex-1 ${visibleCols.has(col) ? 'text-slate-700' : 'text-slate-400'}`}>{col}</span>
                       <span className="text-[9px] text-slate-300 tabular-nums w-4 text-right">{idx + 1}</span>
@@ -270,110 +311,145 @@ const DataViewerModal: React.FC<{ rows: ExcelRow[]; initialDayFilter: string | n
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setShowSaveConfirm(true)}
-              aria-label="컬럼 설정 저장 열기"
-              className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-all"
-              title="컬럼 설정 저장"
-            >
+            <button onClick={() => setShowSaveConfirm(true)} aria-label="컬럼 설정 저장 열기" className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-all" title="컬럼 설정 저장">
               <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
             </button>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto" onClick={() => showColFilter && setShowColFilter(false)}>
+        {/* Table — 세로 스크롤만, 가로 없음 */}
+        <div className="flex-1 overflow-y-auto" onClick={() => showColFilter && setShowColFilter(false)}>
           <table className="w-full text-left border-collapse table-fixed">
-            <colgroup>
-              <col style={{ width: 40 }} />
-              {displayCols.map(col => (
-                <col key={col} style={{ width: COL_WIDTHS[col] || 100 }} />
-              ))}
-            </colgroup>
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr>
-                <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 text-center border-b border-slate-200">#</th>
+                <th className="w-[3%] px-2 py-2.5 text-[10px] font-bold text-slate-400 text-center border-b border-slate-200">#</th>
                 {displayCols.map(col => (
-                  <th
-                    key={col}
-                    onClick={() => handleSort(col)}
-                    className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-100 hover:text-slate-600 transition-colors select-none"
-                  >
+                  <th key={col} onClick={() => handleSort(col)} className={`${COL_WIDTH_CLASS[col] ?? ''} px-2 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-100 hover:text-slate-600 transition-colors select-none`}>
                     <span className="inline-flex items-center gap-1">
                       {col}
-                      {sortCol === col ? (
-                        <svg className="w-3 h-3 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          {sortDir === 'asc'
-                            ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                            : <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />}
-                        </svg>
-                      ) : (
-                        <svg className="w-3 h-3 text-slate-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
-                      )}
+                      {sortCol === col
+                        ? <svg className="w-3 h-3 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>{sortDir === 'asc' ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />}</svg>
+                        : <svg className="w-3 h-3 text-slate-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+                      }
                     </span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {paged.map((row, i) => (
-                <tr key={i} className="hover:bg-indigo-50/30 transition-colors">
-                  <td className="px-3 py-2 text-[10px] text-slate-300 text-center tabular-nums">{page * PAGE_SIZE + i + 1}</td>
-                  {displayCols.map(col => {
-                    const rowCls = String(row['구분'] || '');
-                    const noUsage = rowCls === '청구' || rowCls === '골이식만';
-                    const isQty = col === '갯수';
-                    const isCls = col === '구분';
-                    let displayVal = isQty && noUsage ? '0' : String(row[col] ?? '');
-                    if (col === '환자정보' && displayVal) {
-                      displayVal = displayVal
-                        .replace(/^(.)(.+?)(?=\()/, (_m, first, rest) => first + '*'.repeat(rest.length))
-                        .replace(/\((\d+)\)/, (_m, nums) => '(' + '*'.repeat(nums.length) + ')');
-                    }
-                    return (
-                      <td key={col} className={`px-3 py-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap ${isQty ? 'text-center font-black tabular-nums' : ''} ${isCls ? 'font-bold' : 'text-slate-600'} ${isCls && rowCls === '식립' ? 'text-indigo-600' : ''} ${isCls && rowCls === '수술중교환' ? 'text-rose-500' : ''} ${isCls && rowCls === '청구' ? 'text-teal-600' : ''} ${isCls && rowCls === '골이식만' ? 'text-amber-600' : ''} ${isQty && !noUsage && Number(displayVal) > 1 ? 'text-rose-600 bg-rose-50/50' : ''}`} title={displayVal}>
-                        {displayVal}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {paged.map((rawRow, i) => {
+                const row = applyOverrides(rawRow);
+                const rowId = String(rawRow._id || '');
+                const isUnregistered = unregisteredIds?.has(rowId);
+                const isEdited = rowOverrides.has(rowId);
+                const isSelected = editingRowId === rowId;
+                return (
+                  <tr
+                    key={i}
+                    onClick={() => handleRowClick(rawRow)}
+                    className={`transition-colors ${isUnregistered ? 'cursor-pointer' : 'cursor-default'} ${isSelected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : isUnregistered ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-indigo-50/30'}`}
+                  >
+                    <td className="px-2 py-2 text-[10px] text-slate-300 text-center tabular-nums">
+                      {isEdited && <span className="text-indigo-400">✓</span>}
+                      {!isEdited && page * PAGE_SIZE + i + 1}
+                    </td>
+                    {displayCols.map(col => {
+                      const rowCls = String(row['구분'] || '');
+                      const noUsage = rowCls === '청구' || rowCls === '골이식만';
+                      const isQty = col === '갯수';
+                      const isCls = col === '구분';
+                      const isEditable = col === '제조사' || col === '브랜드' || col === '규격(SIZE)';
+                      let displayVal = isQty && noUsage ? '0' : String(row[col] ?? '');
+                      if (col === '환자정보' && displayVal) {
+                        displayVal = displayVal
+                          .replace(/^(.)(.+?)(?=\()/, (_m, first, rest) => first + '*'.repeat(rest.length))
+                          .replace(/\((\d+)\)/, (_m, nums) => '(' + '*'.repeat(nums.length) + ')');
+                      }
+                      return (
+                        <td key={col} className={`px-2 py-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap ${isEditable ? 'group/edit' : ''} ${isQty ? 'text-center font-black tabular-nums' : ''} ${isCls ? 'font-bold' : 'text-slate-600'} ${isCls && rowCls === '식립' ? 'text-indigo-600' : ''} ${isCls && rowCls === '수술중교환' ? 'text-rose-500' : ''} ${isCls && rowCls === '청구' ? 'text-teal-600' : ''} ${isCls && rowCls === '골이식만' ? 'text-amber-600' : ''} ${isQty && !noUsage && Number(displayVal) > 1 ? 'text-rose-600 bg-rose-50/50' : ''} ${isEditable && isEdited && rowOverrides.get(rowId)?.[col as keyof ExcelRow] !== undefined ? 'text-indigo-600 font-semibold' : ''}`} title={displayVal}>
+                          {displayVal}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
+        {/* 인라인 편집 패널 */}
+        {editingRowId && (
+          <div className="shrink-0 border-t-2 border-indigo-200 bg-indigo-50 px-6 py-4 animate-in slide-in-from-bottom-2 duration-200">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-black text-indigo-800 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                제조사 · 브랜드 · 규격 수정
+              </p>
+              <button onClick={() => setEditingRowId(null)} className="p-1 hover:bg-indigo-100 rounded-lg transition-colors">
+                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-indigo-600 mb-1">제조사</label>
+                <input
+                  ref={firstInputRef}
+                  type="text"
+                  value={editForm.manufacturer}
+                  onChange={e => setEditForm(p => ({ ...p, manufacturer: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-indigo-200 bg-white rounded-lg outline-none focus:border-indigo-500 text-slate-700"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-indigo-600 mb-1">브랜드</label>
+                <input
+                  type="text"
+                  value={editForm.brand}
+                  onChange={e => setEditForm(p => ({ ...p, brand: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-indigo-200 bg-white rounded-lg outline-none focus:border-indigo-500 text-slate-700"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-indigo-600 mb-1">규격(SIZE)</label>
+                <input
+                  type="text"
+                  value={editForm.size}
+                  onChange={e => setEditForm(p => ({ ...p, size: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditingRowId(null); }}
+                  className="w-full px-3 py-2 text-xs border border-indigo-200 bg-white rounded-lg outline-none focus:border-indigo-500 text-slate-700"
+                />
+              </div>
+              <div className="flex items-end gap-2 pb-0.5">
+                <button onClick={() => setEditingRowId(null)} className="px-3 py-2 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
+                  취소
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-4 py-2 text-xs font-black text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 shadow-sm shadow-indigo-200"
+                >
+                  {isSaving ? '저장 중...' : '저장'}
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] text-indigo-500">Enter 저장 · Esc 취소 · 수정된 행은 ✓ 표시됩니다</p>
+          </div>
+        )}
+
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between shrink-0 bg-white">
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              이전
-            </button>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">이전</button>
             <span className="text-xs text-slate-400 font-medium tabular-nums">{page + 1} / {totalPages}</span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              다음
-            </button>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">다음</button>
           </div>
         )}
 
         {/* Save Confirm Modal */}
         {showSaveConfirm && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-[24px]" onClick={() => setShowSaveConfirm(false)}>
-            <div
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-              onClick={e => e.stopPropagation()}
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="save-col-settings-title"
-              aria-describedby="save-col-settings-desc"
-            >
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true" aria-labelledby="save-col-settings-title" aria-describedby="save-col-settings-desc">
               <div className="p-6 flex flex-col items-center text-center">
                 <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-4">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>

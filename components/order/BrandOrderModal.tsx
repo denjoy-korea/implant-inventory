@@ -11,7 +11,7 @@ export interface BrandOrderEntry {
 interface BrandOrderModalProps {
   mfr: string;
   entries: BrandOrderEntry[];
-  onOrder: (item: InventoryItem) => void;
+  onOrder: (item: InventoryItem, quantity: number) => void;
   onClose: () => void;
   isReadOnly?: boolean;
   showAlertToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -30,6 +30,14 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
   const allIds = entries.map(e => e.item.id);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(allIds));
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, number>>({});
+
+  const getQty = (id: string, defaultQty: number) =>
+    quantityOverrides[id] !== undefined ? quantityOverrides[id] : defaultQty;
+
+  const setQty = (id: string, value: number) => {
+    setQuantityOverrides(prev => ({ ...prev, [id]: Math.max(1, value) }));
+  };
 
   const undoneEntries = entries.filter(e => !doneIds.has(e.item.id));
   const allSelected = undoneEntries.length > 0 && undoneEntries.every(e => selectedIds.has(e.item.id));
@@ -54,7 +62,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
 
   const handleSingleOrder = (entry: BrandOrderEntry) => {
     if (isReadOnly || doneIds.has(entry.item.id)) return;
-    onOrder(entry.item);
+    onOrder(entry.item, getQty(entry.item.id, entry.remainingDeficit));
     setDoneIds(prev => new Set(prev).add(entry.item.id));
     setSelectedIds(prev => { const next = new Set(prev); next.delete(entry.item.id); return next; });
   };
@@ -63,7 +71,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
     if (isReadOnly) return;
     const targets = entries.filter(e => selectedIds.has(e.item.id) && !doneIds.has(e.item.id));
     if (targets.length === 0) return;
-    targets.forEach(e => onOrder(e.item));
+    targets.forEach(e => onOrder(e.item, getQty(e.item.id, e.remainingDeficit)));
     const newDone = new Set(doneIds);
     targets.forEach(e => newDone.add(e.item.id));
     setDoneIds(newDone);
@@ -127,9 +135,10 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                 </th>
                 <th className="px-2 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">브랜드</th>
                 <th className="px-2 py-2.5 text-left text-[11px] font-bold text-slate-500 whitespace-nowrap">규격</th>
-                <th className="px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">재고</th>
-                <th className="px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">권장</th>
+                <th className="hidden sm:table-cell px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">재고</th>
+                <th className="hidden sm:table-cell px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">권장</th>
                 <th className="px-2 py-2.5 text-right text-[11px] font-bold text-rose-400 whitespace-nowrap">부족</th>
+                <th className="px-2 py-2.5 text-center text-[11px] font-bold text-indigo-500 whitespace-nowrap">수량</th>
                 <th className="px-2 py-2.5 text-center text-[11px] font-bold text-slate-500 whitespace-nowrap">발주</th>
               </tr>
             </thead>
@@ -165,14 +174,37 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                     <td className="px-2 py-2.5 text-slate-500 whitespace-nowrap">
                       {(!item.size || item.size === '기타') ? '-' : item.size}
                     </td>
-                    <td className="px-2 py-2.5 text-right font-bold text-slate-700 tabular-nums whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-2 py-2.5 text-right font-bold text-slate-700 tabular-nums whitespace-nowrap">
                       {item.currentStock}
                     </td>
-                    <td className="px-2 py-2.5 text-right text-slate-400 tabular-nums whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-2 py-2.5 text-right text-slate-400 tabular-nums whitespace-nowrap">
                       {item.recommendedStock}
                     </td>
                     <td className="px-2 py-2.5 text-right font-black text-rose-600 tabular-nums whitespace-nowrap">
                       +{remainingDeficit}
+                    </td>
+                    <td className="px-1 py-2" onClick={e => e.stopPropagation()}>
+                      {isDone ? null : (
+                        <div className="flex items-center justify-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) - 1)}
+                            className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
+                          >−</button>
+                          <input
+                            type="number"
+                            min={1}
+                            value={getQty(item.id, remainingDeficit)}
+                            onChange={e => setQty(item.id, parseInt(e.target.value) || 1)}
+                            className="w-8 text-center text-xs font-bold text-indigo-700 tabular-nums bg-indigo-50 rounded border border-indigo-100 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) + 1)}
+                            className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
+                          >+</button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                       {isDone ? (

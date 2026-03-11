@@ -24,6 +24,8 @@ interface DashboardHeaderProps {
   onOpenProfile: () => void;
   onGoHome: () => void;
   onLogout: () => void | Promise<void>;
+  onOpenContactForm?: () => void;
+  onOpenSupportChat?: () => void;
 }
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -46,6 +48,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onOpenProfile,
   onGoHome,
   onLogout,
+  onOpenContactForm,
+  onOpenSupportChat,
 }) => {
   const today = new Date();
   const dateLabel = `${today.getFullYear()}. ${today.getMonth() + 1}. ${today.getDate()}. ${['일', '월', '화', '수', '목', '금', '토'][today.getDay()]}요일`;
@@ -108,19 +112,16 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             실사 이력
           </button>
         )}
-      </div>
-
-      {dashboardTab === 'fixture_edit' && fixtureDataExists && (
-        <div className="hidden md:flex items-center gap-2 absolute left-1/2 transform -translate-x-1/2">
+        {dashboardTab === 'fixture_edit' && fixtureDataExists && (
           <button
             onClick={onRequestResetFixtureEdit}
-            className="px-3 py-1.5 text-slate-400 hover:text-rose-500 font-medium rounded-lg text-xs transition-colors flex items-center gap-1.5"
+            className="hidden md:flex px-3 py-1.5 text-slate-400 hover:text-rose-500 font-medium rounded-lg text-xs transition-colors items-center gap-1.5"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             초기화
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="hidden md:flex items-center gap-3">
         {user && (
@@ -162,6 +163,18 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             ) : (
               <PlanBadge plan={effectivePlan} size="sm" />
             )}
+            {(planState?.creditBalance ?? 0) > 0 && (
+              <button
+                onClick={onOpenProfile}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-teal-600 hover:bg-teal-100 transition-colors"
+                title="보유 크레딧 — 다음 결제 시 자동 차감"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {(planState!.creditBalance).toLocaleString('ko-KR')}원
+              </button>
+            )}
             <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
               <span className="inline-flex items-center gap-0.5" title="등록 품목">
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
@@ -196,6 +209,24 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       </div>
 
       <div className="md:hidden flex items-center gap-1.5 shrink-0">
+        {dashboardTab === 'overview' && (onOpenSupportChat || onOpenContactForm) && (
+          <button
+            onClick={() => {
+              if (onOpenSupportChat) {
+                onOpenSupportChat();
+                return;
+              }
+              onOpenContactForm?.();
+            }}
+            className="h-11 px-3 rounded-xl border border-teal-200 bg-teal-50 text-teal-600 flex items-center gap-1.5 text-xs font-bold active:scale-[0.98] transition-all shrink-0"
+            aria-label="상담문의"
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+            </svg>
+            상담문의
+          </button>
+        )}
         {dashboardTab === 'inventory_audit' && (
           <button
             onClick={onOpenAuditHistory}

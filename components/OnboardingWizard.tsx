@@ -84,9 +84,9 @@ export default function OnboardingWizard({
 
   const handleNext = () => {
     if (step === 1) handleWelcomeNext();
-    else if (step === 2) { onboardingService.markFixtureDownloaded(hospitalId); goToStep(3); }
+    else if (step === 2) { onboardingService.markSurgeryDownloaded(hospitalId); goToStep(3); }
     else if (step === 3) goToStep(4);
-    else if (step === 4) { onboardingService.markSurgeryDownloaded(hospitalId); goToStep(5); }
+    else if (step === 4) { onboardingService.markFixtureDownloaded(hospitalId); goToStep(5); }
     else if (step === 5) goToStep(6);
     else if (step === 6) goToStep(7);
     else handleFailAuditNext();
@@ -132,13 +132,8 @@ export default function OnboardingWizard({
           className={`overflow-y-auto flex-1 transition-all duration-150 ${animating ? 'opacity-0' : 'opacity-100'} ${animating ? (directionRef.current === 'forward' ? 'translate-x-3' : '-translate-x-3') : 'translate-x-0'}`}
         >
           {step === 1 && <Step1Welcome hospitalName={hospitalName} onNext={handleNext} onSkip={onSkip} />}
-          {step === 2 && <Step2DenwebFixtureDownload onNext={handleNext} />}
-          {step === 3 && <Step2FixtureUpload onGoToDataSetup={(file, corrections) => {
-            onGoToDataSetup(file, corrections);
-            onSkip(false); // 데이터 편집 중 위저드 최소화 (토스트로 전환)
-          }} />}
-          {step === 4 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
-          {step === 5 && (
+          {step === 2 && <Step4DenwebSurgeryDownload onNext={handleNext} />}
+          {step === 3 && (
             <Step4UploadGuide
               inventory={inventory}
               onGoToSurgeryUpload={async (file?: File) => {
@@ -146,9 +141,14 @@ export default function OnboardingWizard({
                 if (!file) onSkip(false); // 탭 이동(파일 없음) 시에만 최소화 — 업로드 실패는 dismiss 안 함
                 return ok;
               }}
-              onUploaded={() => goToStep(6)}
+              onUploaded={() => onSkip(false)} // FAIL 모달이 위저드 뒤에 가리지 않도록 토스트로 최소화
             />
           )}
+          {step === 4 && <Step2DenwebFixtureDownload onNext={handleNext} />}
+          {step === 5 && <Step2FixtureUpload onGoToDataSetup={(file, corrections) => {
+            onGoToDataSetup(file, corrections);
+            onSkip(false); // 데이터 편집 중 위저드 최소화 (토스트로 전환)
+          }} />}
           {step === 6 && <Step6InventoryAudit onGoToBaseStockEdit={() => {
             onGoToInventoryAudit();
             onSkip(false); // 재고 편집 중 위저드 최소화 (토스트로 전환)

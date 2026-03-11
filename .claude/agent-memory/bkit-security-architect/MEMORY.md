@@ -12,11 +12,18 @@
 - Plan limits (maxUsers) enforced server-side only in `invite-member` and `accept-invite`
 - Plan limits (maxItems, retentionMonths, maxBaseStockEdits) enforced client-side only
 
-## Known Security Gaps (as of 2026-03-05)
+## Known Security Gaps (as of 2026-03-06)
 - `maxItems`: No server-side enforcement (INSERT via SDK bypasses UI check)
 - `retentionMonths`: Client-only filtering, direct SDK queries can access older records
 - PLAN_MAX_USERS duplicated in 2 Edge Functions (sync risk with types/plan.ts)
 - TOCTOU race in accept-invite member count check (low practical risk)
+- FIXED: SECURITY DEFINER coupon functions missing REVOKE/GRANT (migration 20260306250000)
+- FIXED: toss-payment-confirm coupon validation (ownership, applicable_plans, redeem_coupon)
+
+## SECURITY DEFINER Pattern Checklist
+- Every SECURITY DEFINER function MUST have: REVOKE ALL FROM PUBLIC + GRANT to specific role
+- Good example: `process_payment_callback` in 20260306220000 (service_role only + JWT check)
+- Bad example (fixed): `issue_partner_coupon`, `redeem_coupon`, `expire_coupons_batch`
 
 ## verify_jwt = false Functions (complete list)
 crypto-service, notify-signup, notify-withdrawal, holiday-proxy,

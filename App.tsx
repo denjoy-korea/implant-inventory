@@ -1,4 +1,4 @@
-import React, { Suspense, useRef } from 'react';
+import React, { Suspense, useRef, useState } from 'react';
 import { useAppState } from './hooks/useAppState';
 import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -24,6 +24,7 @@ const AppPublicRouteSection = lazyWithRetry(() => import('./components/app/AppPu
 const SystemAdminDashboard = lazyWithRetry(() => import('./components/SystemAdminDashboard'));
 const AppUserOverlayStack = lazyWithRetry(() => import('./components/app/AppUserOverlayStack'));
 const DirectPaymentModal = lazyWithRetry(() => import('./components/DirectPaymentModal'));
+const SupportChatWidget = lazyWithRetry(() => import('./components/support/SupportChatWidget'));
 
 declare global {
   // eslint-disable-next-line no-var
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   const fixtureFileRef = useRef<HTMLInputElement>(null);
   const surgeryFileRef = useRef<HTMLInputElement>(null);
   const dashboardHeaderRef = useRef<HTMLElement>(null);
+  const [supportChatOpenRequest, setSupportChatOpenRequest] = useState(0);
 
   const { toast: alertToast, showToast: showAlertToast } = useToast(3500);
   const { state, setState, loadHospitalData, handleLoginSuccess, handleDeleteAccount } = useAppState(showAlertToast);
@@ -52,9 +54,9 @@ const App: React.FC = () => {
     isFinePointer, isMobileMenuOpen, setIsMobileMenuOpen,
     mobileOrderNav, setMobileOrderNav, mobilePrimaryTabs,
     inviteInfo, processingInvite, uploadingTypeRef, handleFileUpload, setShowAuditHistory,
-    directPayment, setDirectPayment,
+    directPayment, setDirectPayment, refreshPlanState,
     billingProgramSaving, billingProgramError, handleSelectBillingProgram, handleRefreshBillingProgram,
-    pendingFailCandidates, setPendingFailCandidates,
+    pendingFailCandidates, setPendingFailCandidates, handleFailDetectionClose,
     billableItemCount, surgeryUnregisteredItems,
     workspaceProps, userOverlayProps, globalOverlayPartialProps,
   } = useAppLogic({
@@ -144,6 +146,7 @@ const App: React.FC = () => {
           onReturnToAdmin={isSystemAdmin ? () => setState(prev => ({ ...prev, adminViewMode: 'admin' })) : undefined}
           userName={state.user?.name}
           onProfileClick={() => setState(prev => ({ ...prev, showProfile: true }))}
+          onUpgrade={workspaceProps.onOpenProfilePlan}
         />
       )}
 
@@ -196,6 +199,8 @@ const App: React.FC = () => {
                 onOpenProfile={() => setState(prev => ({ ...prev, showProfile: true }))}
                 onGoHome={() => setState(prev => ({ ...prev, currentView: 'landing' }))}
                 onLogout={signOut}
+                onOpenContactForm={() => setState(prev => ({ ...prev, currentView: 'contact' }))}
+                onOpenSupportChat={() => setSupportChatOpenRequest((prev) => prev + 1)}
               />
               <main className="flex-1 overflow-x-clip">
                 <ErrorBoundary>
@@ -256,7 +261,9 @@ const App: React.FC = () => {
             billing={directPayment.billing}
             user={state.user}
             hospitalName={state.hospitalName}
+            planState={state.planState}
             onDismiss={() => setDirectPayment(null)}
+            onSuccess={async () => { await refreshPlanState(); setDirectPayment(null); }}
           />
         </Suspense>
       )}
@@ -267,7 +274,20 @@ const App: React.FC = () => {
             candidates={pendingFailCandidates}
             hospitalId={state.user.hospitalId}
             currentUserName={state.user.name}
-            onClose={() => setPendingFailCandidates([])}
+            onClose={handleFailDetectionClose}
+          />
+        </Suspense>
+      )}
+
+      {state.user && state.user.role !== 'admin' && state.currentView !== 'suspended' && (
+        <Suspense fallback={null}>
+          <SupportChatWidget
+            user={state.user}
+            hospitalName={state.hospitalName}
+            plan={effectivePlan}
+            liftForBottomNav={showMobileDashboardNav || showMobilePublicNav}
+            onOpenContactForm={() => setState(prev => ({ ...prev, currentView: 'contact' }))}
+            openRequestToken={supportChatOpenRequest}
           />
         </Suspense>
       )}

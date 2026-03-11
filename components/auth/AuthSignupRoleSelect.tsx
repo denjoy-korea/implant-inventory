@@ -89,7 +89,7 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
                     <h3 className="text-[17px] font-bold text-slate-900">치과 회원 (관리자)</h3>
                     <svg className="w-5 h-5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                   </div>
-                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원 데이터를 생성·관리하고, 스태프에게 권한을 부여합니다.</p>
+                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원 데이터를 생성·관리합니다. 스태프 초대 및 권한 부여는 Plus 이상에서 가능합니다.</p>
                 </div>
               </button>
 

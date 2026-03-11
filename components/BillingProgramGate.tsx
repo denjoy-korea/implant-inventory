@@ -26,7 +26,7 @@ const PROGRAM_OPTIONS: BillingProgramOption[] = [
   },
   {
     value: 'oneclick',
-    description: '준비 중입니다. 지원 전까지는 덴트웹 선택 후 이용해 주세요.',
+    description: '준비 중입니다.',
     enabled: false,
     badge: '준비 중',
   },

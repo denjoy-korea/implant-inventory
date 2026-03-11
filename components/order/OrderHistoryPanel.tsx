@@ -388,7 +388,17 @@ export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptCo
                                                                     </span>
                                                                 ))}
                                                             </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
+                                                            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                                                                {order.manager && (
+                                                                    <span className="text-[10px] text-slate-400 hidden sm:inline">
+                                                                        주문: <span className="font-semibold text-slate-600">{order.manager}</span>
+                                                                    </span>
+                                                                )}
+                                                                {order.confirmedBy && (
+                                                                    <span className="text-[10px] text-emerald-600 hidden sm:inline">
+                                                                        수령: <span className="font-semibold">{order.confirmedBy}</span>
+                                                                    </span>
+                                                                )}
                                                                 <span className="text-xs font-black text-slate-700 tabular-nums">{totalQty}개</span>
                                                                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${ORDER_STATUS_COLOR[order.status] || ''}`}>{ORDER_STATUS_LABEL[order.status] || order.status}</span>
                                                                 {order.receivedDate && <span className="text-[10px] font-semibold text-emerald-600 hidden sm:inline">→ {order.receivedDate.slice(0, 10)}</span>}

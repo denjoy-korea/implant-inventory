@@ -13,6 +13,7 @@ interface DirectPaymentModalProps {
   hospitalName: string;
   planState?: HospitalPlanState | null;
   onDismiss: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
@@ -22,6 +23,7 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   hospitalName,
   planState,
   onDismiss,
+  onSuccess,
 }) => {
   const [contactName, setContactName] = useState(user?.name || '');
   const [contactPhone, setContactPhone] = useState(user?.phone || '');
@@ -119,6 +121,10 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       });
       if (result.error && result.error !== 'user_cancel') {
         setRequestError(result.error);
+      } else if (!result.error) {
+        // 크레딧 전액 결제 성공 (0원 — TossPayments redirect 없음)
+        await onSuccess?.();
+        onDismiss();
       }
     } catch (err) {
       setRequestError(err instanceof Error ? err.message : '결제 중 오류가 발생했습니다.');

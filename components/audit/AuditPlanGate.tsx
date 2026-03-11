@@ -9,7 +9,7 @@ const AuditPlanGate: React.FC = () => {
         </svg>
       </div>
       <div>
-        <p className="text-base font-bold text-slate-800">실사 이력 분석은 Plus 플랜부터</p>
+        <p className="text-base font-bold text-slate-800">실사 이력 분석은 Basic 플랜부터</p>
         <p className="text-sm text-slate-500 mt-1">누적 실사 데이터와 재고 이력을 분석하려면 플랜을 업그레이드하세요.</p>
       </div>
     </div>

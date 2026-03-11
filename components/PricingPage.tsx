@@ -62,9 +62,6 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
     finderAnswers, setFinderAnswers,
     finderResult, setFinderResult,
     handleFinderAnswer,
-    finderFeatureSelections,
-    toggleFinderFeature,
-    confirmFinderFeatures,
     resetFinder,
     handleWaitlistSubmit,
     resetPaymentForm,
@@ -304,58 +301,18 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                   <span className="text-xs text-slate-400 ml-1">{finderStep + 1}/3</span>
                 </div>
                 <p className="text-sm font-black text-slate-800 mb-4">{FINDER_QUESTIONS[finderStep].q}</p>
-                {finderStep === 2 ? (
-                  // 3단계: 복수 선택
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      {FINDER_QUESTIONS[finderStep].options.map(opt => {
-                        const selected = finderFeatureSelections.has(opt.value);
-                        return (
-                          <button
-                            key={opt.value}
-                            onClick={() => toggleFinderFeature(opt.value)}
-                            className={`flex flex-col items-start p-4 rounded-xl border transition-all text-left relative ${
-                              selected
-                                ? 'border-indigo-400 bg-indigo-50'
-                                : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
-                            }`}
-                          >
-                            {selected && (
-                              <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                            <span className={`text-sm font-bold ${selected ? 'text-indigo-700' : 'text-slate-800'}`}>{opt.label}</span>
-                            <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {FINDER_QUESTIONS[finderStep].options.map(opt => (
                     <button
-                      onClick={confirmFinderFeatures}
-                      disabled={finderFeatureSelections.size === 0}
-                      className="mt-3 w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      key={opt.value}
+                      onClick={() => handleFinderAnswer(opt.value)}
+                      className="flex flex-col items-start p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
                     >
-                      {finderFeatureSelections.size > 0 ? `${finderFeatureSelections.size}개 선택 · 추천 보기` : '기능을 선택해주세요'}
+                      <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">{opt.label}</span>
+                      <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
                     </button>
-                  </>
-                ) : (
-                  // 1·2단계: 단일 선택
-                  <div className="grid grid-cols-2 gap-2">
-                    {FINDER_QUESTIONS[finderStep].options.map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => handleFinderAnswer(opt.value)}
-                        className="flex flex-col items-start p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
-                      >
-                        <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700">{opt.label}</span>
-                        <span className="text-xs text-slate-400 mt-0.5">{opt.sub}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  ))}
+                </div>
                 <button onClick={() => { resetFinder(); setShowFinder(false); }} className="mt-4 w-full text-xs text-slate-300 hover:text-slate-500 transition-colors">
                   닫기
                 </button>
@@ -383,7 +340,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         </span>
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full border transition-colors duration-300 ${isYearly ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-400 bg-slate-50 border-slate-200'
           }`}>
-          20% 할인
+          약 20% 할인
         </span>
       </div>
 
@@ -397,11 +354,16 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-black text-emerald-800">연간 결제로 최대 <span className="text-emerald-600">312,000원</span> 절약</p>
+              <p className="text-sm font-black text-emerald-800">연간 결제로 최대 <span className="text-emerald-600">{(((PLAN_PRICING['business'].monthlyPrice - PLAN_PRICING['business'].yearlyPrice) * 12)).toLocaleString('ko-KR')}원</span> 절약</p>
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
-                <span className="text-[11px] font-semibold text-emerald-600">Basic: 연 72,000원 절약</span>
-                <span className="text-[11px] font-semibold text-emerald-600">Plus: 연 168,000원 절약</span>
-                <span className="text-[11px] font-semibold text-emerald-600">Business: 연 312,000원 절약</span>
+                {(['basic', 'plus', 'business'] as const).map((p) => {
+                  const saving = (PLAN_PRICING[p].monthlyPrice - PLAN_PRICING[p].yearlyPrice) * 12;
+                  return (
+                    <span key={p} className="text-[11px] font-semibold text-emerald-600">
+                      {PLAN_NAMES[p]}: 연 {saving.toLocaleString('ko-KR')}원 절약
+                    </span>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -647,10 +609,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead>
                 <tr className="border-b-2 border-slate-200">
-                  <th className="text-left py-4 pr-6 w-[220px]"></th>
+                  <th className="text-left py-4 pr-6 w-[28%]"></th>
                   {planNames.map((name, i) => (
                     <th
                       key={name}

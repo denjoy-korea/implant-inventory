@@ -5,6 +5,8 @@ html {
   touch-action: manipulation;
   /* iOS 탭 하이라이트 제거 */
   -webkit-tap-highlight-color: transparent;
+  /* 스크롤바 표시/숨김으로 인한 레이아웃 시프트 방지 */
+  scrollbar-gutter: stable;
 }
 
 body {

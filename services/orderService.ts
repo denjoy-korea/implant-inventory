@@ -2,6 +2,7 @@ import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { DbOrder, DbOrderItem, OrderStatus } from '../types';
 import { toCanonicalSize } from './sizeNormalizer';
+import { notifyHospitalSlack } from './hospitalSlackService';
 
 export type OrderMutationResult =
   | { ok: true }
@@ -11,6 +12,8 @@ interface UpdateOrderStatusOptions {
   expectedCurrentStatus?: OrderStatus;
   receivedDate?: string;
   confirmedBy?: string;
+  /** Slack 알림용 병원 ID */
+  hospitalId?: string;
 }
 
 interface DeleteOrderOptions {
@@ -76,7 +79,16 @@ export const orderService = {
           .single();
 
         if (!fullOrderError && fullOrder) {
-          return fullOrder as DbOrder & { order_items: DbOrderItem[] };
+          const typedOrder = fullOrder as DbOrder & { order_items: DbOrderItem[] };
+          if (typedOrder.hospital_id) {
+            const slackEvent = typedOrder.type === 'fail_exchange' ? 'fail_registered' : 'order_created';
+            notifyHospitalSlack(typedOrder.hospital_id, slackEvent, {
+              manufacturer: typedOrder.manufacturer,
+              item_count: typedOrder.order_items?.length ?? normalizedItems.length,
+              created_by: typedOrder.manager,
+            });
+          }
+          return typedOrder;
         }
         // RPC가 주문을 생성했지만 full fetch 실패 → 순차 삽입으로 폴백하면 중복 주문 발생
         // Realtime INSERT 이벤트가 결국 상태에 반영하므로 null 반환
@@ -118,10 +130,20 @@ export const orderService = {
       // 주문은 생성됨, items만 실패 - items 없이 반환
     }
 
-    return {
+    const fallbackOrder = {
       ...orderData,
       order_items: (itemsData || []) as DbOrderItem[],
     } as DbOrder & { order_items: DbOrderItem[] };
+
+    if (fallbackOrder.hospital_id) {
+      const slackEvent = fallbackOrder.type === 'fail_exchange' ? 'fail_registered' : 'order_created';
+      notifyHospitalSlack(fallbackOrder.hospital_id, slackEvent, {
+        manufacturer: fallbackOrder.manufacturer,
+        item_count: fallbackOrder.order_items.length,
+        created_by: fallbackOrder.manager,
+      });
+    }
+    return fallbackOrder;
   },
 
   /** 주문 상태 변경 (ordered → received) */
@@ -151,7 +173,7 @@ export const orderService = {
     }
 
     const { data, error } = await query
-      .select('id')
+      .select('id, hospital_id, manufacturer, confirmed_by, received_date')
       .maybeSingle();
 
     if (error) {
@@ -160,6 +182,14 @@ export const orderService = {
     }
 
     if (data) {
+      if (status === 'received' && options?.hospitalId) {
+        const d = data as { hospital_id?: string; manufacturer?: string; confirmed_by?: string; received_date?: string };
+        notifyHospitalSlack(options.hospitalId, 'order_received', {
+          manufacturer: d.manufacturer ?? '',
+          received_date: d.received_date ?? updates.received_date ?? '',
+          confirmed_by: d.confirmed_by ?? options.confirmedBy ?? '',
+        });
+      }
       return { ok: true };
     }
 

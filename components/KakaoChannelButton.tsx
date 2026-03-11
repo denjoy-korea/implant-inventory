@@ -2,7 +2,7 @@ import React from 'react';
 
 const KakaoChannelButton: React.FC = () => {
     return (
-        <div className="fixed bottom-24 right-4 md:bottom-8 md:right-8 z-[200] print:hidden pointer-events-none">
+        <div className="fixed bottom-24 right-4 md:bottom-[7.5rem] md:right-8 z-[200] print:hidden pointer-events-none">
             <div className="relative pointer-events-auto group animate-float">
                 {/* Glow effect */}
                 <div className="absolute inset-0 bg-yellow-400 rounded-full blur-md opacity-30 group-hover:opacity-60 transition-opacity duration-300" />

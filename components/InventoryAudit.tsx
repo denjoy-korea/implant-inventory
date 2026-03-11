@@ -61,7 +61,7 @@ const InventoryAudit: React.FC<InventoryAuditProps> = ({ inventory, hospitalId, 
     if (!planService.canAccess(plan ?? 'free', 'audit_history')) {
       return <AuditPlanGate />;
     }
-    return <AuditReportDashboard auditHistory={auditHistory} isLoading={isHistoryLoading} />;
+    return <AuditReportDashboard auditHistory={auditHistory} isLoading={isHistoryLoading} plan={plan ?? 'free'} />;
   }
 
   return (

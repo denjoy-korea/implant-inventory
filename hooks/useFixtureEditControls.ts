@@ -3,6 +3,7 @@ import { AppState, ExcelData, ExcelRow } from '../types';
 import { extractLengthFromSize } from '../services/sizeNormalizer';
 import { normalizeLength } from '../components/LengthFilter';
 import { isExchangePrefix } from '../services/appUtils';
+import { isFixtureRowUnused } from '../services/fixtureUsageUtils';
 
 const FIXTURE_SETTINGS_KEY = 'fixture_settings_v1';
 const MAX_SETTINGS_PAYLOAD_SIZE = 5 * 1024 * 1024;
@@ -136,6 +137,27 @@ export function useFixtureEditControls({
       const newRows = activeSheet.rows.map(row => {
         const matches = Object.entries(filters).every(([field, value]) => String(row[field] || '') === value);
         return matches ? { ...row, '사용안함': targetUnused } : row;
+      });
+      const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
+      return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
+    });
+  }, [markDirtyAfterSave, setState]);
+
+  const handleMarkUnusedBySurgery = useCallback((usageSet: Set<string>) => {
+    markDirtyAfterSave();
+    setState(prev => {
+      const currentData = prev.fixtureData;
+      if (!currentData) return prev;
+      const activeSheet = currentData.sheets[currentData.activeSheetName];
+      const newRows = activeSheet.rows.map(row => {
+        if (row['사용안함'] === true) return row;
+        const unused = isFixtureRowUnused(
+          usageSet,
+          String(row['제조사'] || ''),
+          String(row['브랜드'] || ''),
+          String(row['규격(SIZE)'] || ''),
+        );
+        return unused ? { ...row, '사용안함': true } : row;
       });
       const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
       return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
@@ -335,6 +357,7 @@ export function useFixtureEditControls({
     fixtureRestoreDiffCount,
     restorePanelRef,
     handleBulkToggle,
+    handleMarkUnusedBySurgery,
     handleManufacturerToggle,
     handleLengthToggle,
     handleRestoreToSavedPoint,

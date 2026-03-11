@@ -91,7 +91,7 @@ export function FloatingTOC({ hasClinical }: { hasClinical: boolean }) {
 
   return (
     <div
-      className={`fixed right-6 bottom-8 z-30 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-5 pointer-events-none'}`}
+      className={`fixed right-[7.5rem] bottom-8 z-30 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-5 pointer-events-none'}`}
     >
       <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/80 py-2 px-1.5 flex flex-col gap-1">
         {filteredSections.map(s => {

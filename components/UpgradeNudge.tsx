@@ -43,8 +43,8 @@ const NUDGE_CONFIG: Record<NudgeType, NudgeConfig> = {
     ),
     message: ({ daysLeft }) =>
       daysLeft === 0
-        ? '오늘 무료 체험이 종료됩니다. 연간 결제 시 20% 할인.'
-        : `무료 체험 ${daysLeft}일 남았습니다. 연간 결제 시 20% 할인.`,
+        ? '오늘 무료 체험이 종료됩니다. 연간 결제 시 약 20% 할인.'
+        : `무료 체험 ${daysLeft}일 남았습니다. 연간 결제 시 약 20% 할인.`,
     cta: '지금 업그레이드',
   },
   item_limit_warning: {

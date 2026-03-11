@@ -12,6 +12,7 @@ import SystemAdminPlanManagementTab from './system-admin/tabs/SystemAdminPlanMan
 import SystemAdminReviewsTab from './system-admin/tabs/SystemAdminReviewsTab';
 import SystemAdminWaitlistTab from './system-admin/tabs/SystemAdminWaitlistTab';
 import SystemAdminInquiriesTab from './system-admin/tabs/SystemAdminInquiriesTab';
+import SystemAdminSupportChatTab from './system-admin/tabs/SystemAdminSupportChatTab';
 import SystemAdminPlanChangeTab from './system-admin/tabs/SystemAdminPlanChangeTab';
 import SystemAdminAnalysisLeadsTab from './system-admin/tabs/SystemAdminAnalysisLeadsTab';
 import SystemAdminTrafficTab from './system-admin/tabs/SystemAdminTrafficTab';
@@ -52,6 +53,10 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
         allReviews, reviewsLoading, reviewTogglingId, reviewDeletingId, reviewFeaturingId,
         inquiries, inquiriesLoading, selectedInquiry, setSelectedInquiry, inquiryStatusUpdating,
         replyModal, setReplyModal, replyMessage, setReplyMessage, replySending,
+        supportThreads, supportThreadsLoading, selectedSupportThread, supportMessages, supportMessagesLoading,
+        supportDraft, setSupportDraft, supportSending, supportStatusUpdating, pendingSupportChatCount,
+        supportAlertState, handleSelectSupportThread, handleClearSelectedSupportThread,
+        handleSendSupportMessage, handleUpdateSupportThreadStatus, handleEnableSupportAlerts, handleDisableSupportAlerts,
         waitlist, waitlistLoading, waitlistFilter, setWaitlistFilter, waitlistStatusUpdating,
         planChangeRequests, planChangeLoading, selectedPlanChange, setSelectedPlanChange, planChangeStatusUpdating,
         analysisLeads, analysisLeadsTotal, analysisLeadFilter, analysisLeadPage, analysisLeadsLoading,
@@ -124,6 +129,7 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                     pendingResetCount={pendingResetCount}
                     manualEntriesCount={manualEntries.length}
                     pendingInquiryCount={pendingInquiryCount}
+                    pendingSupportChatCount={pendingSupportChatCount}
                     pendingWaitlistCount={pendingWaitlistCount}
                     pendingPlanChangeCount={pendingPlanChangeCount}
                     analysisLeadsTotal={analysisLeadsTotal}
@@ -207,7 +213,11 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                         </div>
                     </header>
 
-                    <main className="flex-1 overflow-x-hidden p-3 sm:p-6 max-w-7xl mx-auto w-full space-y-6">
+                    <main className={`flex-1 max-w-7xl mx-auto w-full p-3 sm:p-6 ${
+                        activeTab === 'support_chat'
+                            ? 'flex min-h-0 flex-col overflow-hidden'
+                            : 'overflow-x-hidden space-y-6'
+                    }`}>
                         {isLoading ? (
                             <div className="flex items-center justify-center py-20 text-slate-400">불러오는 중...</div>
                         ) : (
@@ -303,6 +313,31 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
                                         onOpenReply={openInquiryReplyModal}
                                         onDeleteInquiry={requestDeleteInquiry}
                                     />
+                                )}
+
+                                {activeTab === 'support_chat' && (
+                                    <div className="min-h-0 flex-1">
+                                        <SystemAdminSupportChatTab
+                                            isMobileViewport={isMobileViewport}
+                                            supportThreads={supportThreads}
+                                            supportThreadsLoading={supportThreadsLoading}
+                                            selectedSupportThread={selectedSupportThread}
+                                            supportMessages={supportMessages}
+                                            supportMessagesLoading={supportMessagesLoading}
+                                            supportDraft={supportDraft}
+                                            supportSending={supportSending}
+                                            supportStatusUpdating={supportStatusUpdating}
+                                            supportAlertState={supportAlertState}
+                                            getHospitalName={getHospitalName}
+                                            onSelectSupportThread={handleSelectSupportThread}
+                                            onClearSelectedSupportThread={handleClearSelectedSupportThread}
+                                            onSupportDraftChange={setSupportDraft}
+                                            onSendSupportMessage={handleSendSupportMessage}
+                                            onUpdateSupportThreadStatus={handleUpdateSupportThreadStatus}
+                                            onEnableSupportAlerts={handleEnableSupportAlerts}
+                                            onDisableSupportAlerts={handleDisableSupportAlerts}
+                                        />
+                                    </div>
                                 )}
 
                                 {activeTab === 'waitlist' && (

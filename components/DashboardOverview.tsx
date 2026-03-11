@@ -30,6 +30,27 @@ interface DashboardOverviewProps {
   onUpgrade?: () => void;
 }
 
+const PLUS_PLANS = ['plus', 'business', 'ultimate'] as const;
+
+const PlusSectionGroup: React.FC<{ children: React.ReactNode; onClick?: () => void }> = ({ children, onClick }) => (
+  <div className="relative">
+    <div className="pointer-events-none select-none blur-[3px] opacity-60">
+      {children}
+    </div>
+    <div className="absolute inset-0 flex items-center justify-center">
+      <button
+        onClick={onClick}
+        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-full shadow-md transition-colors cursor-pointer"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Plus 플랜에서 이용 가능
+      </button>
+    </div>
+  </div>
+);
+
 const PRIORITY_BADGE: Record<PriorityLevel, { label: string; className: string }> = {
   critical: { label: '긴급', className: 'bg-rose-100 text-rose-700' },
   warning: { label: '주의', className: 'bg-amber-100 text-amber-700' },
@@ -103,6 +124,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     onResumeOnboarding,
     onSurgeryUploadClick,
   });
+
+  const isPlus = PLUS_PLANS.includes((planState?.plan ?? 'free') as typeof PLUS_PLANS[number]);
 
   return (
     <>
@@ -511,6 +534,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </section>
 
+      {isPlus ? (<>
       <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-black text-slate-900">운영 추이 스냅샷</h3>
@@ -685,6 +709,27 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         )}
       </section>
+      </>) : (
+      <PlusSectionGroup onClick={onUpgrade}>
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-900">운영 추이 스냅샷</h3>
+            <p className="text-[11px] font-semibold text-slate-500">최근 2개월</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="h-32 rounded-xl border border-slate-100 bg-slate-50" />
+            <div className="h-32 rounded-xl border border-slate-100 bg-slate-50" />
+          </div>
+        </section>
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 className="text-sm font-black text-slate-900 mb-3">제조사 사용 추이</h3>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mb-3">
+            {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-xl border border-slate-100 bg-slate-50" />)}
+          </div>
+          <div className="h-40 rounded-xl border border-slate-100 bg-slate-50" />
+        </section>
+      </PlusSectionGroup>
+      )}
     </div>
 
     <AuditSessionDetailModal

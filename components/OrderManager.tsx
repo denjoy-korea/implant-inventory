@@ -31,7 +31,7 @@ interface OrderManagerProps {
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onDeleteOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
-  onQuickOrder: (item: InventoryItem) => void;
+  onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
   onCreateReturn: (params: CreateReturnParams) => Promise<void>;
   onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
   onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
@@ -213,6 +213,14 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   setIsReceiptConfirming(false);
                 }
               }}
+              onConfirmStep={async (updates, orderIds) => {
+                setIsReceiptConfirming(true);
+                try {
+                  await onConfirmReceipt(updates, orderIds);
+                } finally {
+                  setIsReceiptConfirming(false);
+                }
+              }}
               onUpdateOrderStatus={onUpdateOrderStatus}
               onDeleteOrder={onDeleteOrder}
               isLoading={isReceiptConfirming}
@@ -251,15 +259,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             }
             onConfirm={() => {
               setShowBulkOrderModal(false);
-              void Promise.all(
-                lowStockItems.map(entry =>
-                  onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit })
-                )
-              ).then(() => {
-                showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
-              }).catch(() => {
-                showAlertToast('일부 발주 처리에 실패했습니다. 다시 시도해주세요.', 'error');
-              });
+              void (async () => {
+                let failed = 0;
+                for (const entry of lowStockItems) {
+                  try {
+                    await onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit });
+                  } catch {
+                    failed += 1;
+                  }
+                }
+                if (failed === 0) {
+                  showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
+                } else {
+                  showAlertToast(`일부 발주 처리에 실패했습니다 (${failed}건). 다시 시도해주세요.`, 'error');
+                }
+              })();
             }}
             onCancel={() => setShowBulkOrderModal(false)}
           />
@@ -813,6 +827,14 @@ const OrderManager: React.FC<OrderManagerProps> = ({
                   setIsReceiptConfirming(false);
                 }
               }}
+              onConfirmStep={async (updates, orderIds) => {
+                setIsReceiptConfirming(true);
+                try {
+                  await onConfirmReceipt(updates, orderIds);
+                } finally {
+                  setIsReceiptConfirming(false);
+                }
+              }}
               onUpdateOrderStatus={onUpdateOrderStatus}
               onDeleteOrder={onDeleteOrder}
               isLoading={isReceiptConfirming}
@@ -850,15 +872,21 @@ const OrderManager: React.FC<OrderManagerProps> = ({
             }
             onConfirm={() => {
               setShowBulkOrderModal(false);
-              void Promise.all(
-                lowStockItems.map(entry =>
-                  onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit })
-                )
-              ).then(() => {
-                showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
-              }).catch(() => {
-                showAlertToast('일부 발주 처리에 실패했습니다. 다시 시도해주세요.', 'error');
-              });
+              void (async () => {
+                let failed = 0;
+                for (const entry of lowStockItems) {
+                  try {
+                    await onQuickOrder({ ...entry.item, currentStock: entry.item.recommendedStock - entry.remainingDeficit });
+                  } catch {
+                    failed += 1;
+                  }
+                }
+                if (failed === 0) {
+                  showAlertToast(`${lowStockItems.length}품목이 성공적으로 발주 목록에 추가되었습니다.`, 'success');
+                } else {
+                  showAlertToast(`일부 발주 처리에 실패했습니다 (${failed}건). 다시 시도해주세요.`, 'error');
+                }
+              })();
             }}
             onCancel={() => setShowBulkOrderModal(false)}
           />

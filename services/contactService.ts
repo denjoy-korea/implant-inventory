@@ -4,6 +4,9 @@ import { FunctionsError } from '@supabase/supabase-js';
 export type InquiryStatus = 'pending' | 'in_progress' | 'resolved';
 
 const DEFAULT_SUBMIT_ERROR_MESSAGE = '문의 접수에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+const SUBMIT_CONTACT_TIMEOUT_MS = 15000;
+const SUPABASE_URL = ((import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '').replace(/\/$/, '');
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '';
 
 const normalizeSubmitErrorMessage = (raw?: string | null, code?: string | null): string => {
   const errorCode = (code ?? '').trim().toLowerCase();
@@ -66,6 +69,15 @@ const normalizeSubmitErrorMessage = (raw?: string | null, code?: string | null):
   return DEFAULT_SUBMIT_ERROR_MESSAGE;
 };
 
+const shouldFallbackToAuthenticatedInsert = (raw?: string | null, code?: string | null): boolean => {
+  const normalizedCode = (code ?? '').trim().toLowerCase();
+  const normalizedMessage = (raw ?? '').trim().toLowerCase();
+  return normalizedCode === '401'
+    || normalizedMessage.includes('invalid jwt')
+    || normalizedMessage.includes('unauthorized')
+    || normalizedMessage.includes('jwt');
+};
+
 interface SubmitErrorInfo {
   code: string | null;
   message: string | null;
@@ -108,6 +120,13 @@ interface SubmitContactResponse {
   request_id?: string;
 }
 
+interface SubmitContactHttpErrorPayload {
+  error_code?: string;
+  error?: string;
+  message?: string;
+  request_id?: string;
+}
+
 export interface ContactInquiry {
   id: string;
   hospital_name: string;
@@ -139,24 +158,91 @@ export interface SubmitInquiryResult {
   requestId: string | null;
 }
 
+function toSubmitPayload(params: SubmitInquiryParams) {
+  return {
+    hospital_name: params.hospital_name.trim(),
+    contact_name: params.contact_name.trim(),
+    email: params.email.trim(),
+    role: params.role?.trim() || null,
+    phone: params.phone.trim(),
+    weekly_surgeries: params.weekly_surgeries,
+    inquiry_type: params.inquiry_type,
+    content: params.content.trim(),
+  };
+}
+
+async function submitViaEdgeHttp(payload: ReturnType<typeof toSubmitPayload>): Promise<SubmitInquiryResult> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error(DEFAULT_SUBMIT_ERROR_MESSAGE);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), SUBMIT_CONTACT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/submit-contact`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    let body: SubmitContactResponse | SubmitContactHttpErrorPayload | null = null;
+    try {
+      body = await response.json() as SubmitContactResponse | SubmitContactHttpErrorPayload;
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok) {
+      const rawCode = typeof body?.error_code === 'string' ? body.error_code : String(response.status);
+      const rawMessage =
+        (typeof body?.error === 'string' && body.error.trim())
+        || (typeof body?.message === 'string' && body.message.trim())
+        || response.statusText
+        || null;
+      throw new Error(normalizeSubmitErrorMessage(rawMessage, rawCode));
+    }
+
+    const result = (body ?? {}) as SubmitContactResponse;
+    if (result.success === false) {
+      throw new Error(normalizeSubmitErrorMessage(result.error ?? result.message ?? null, result.error_code ?? null));
+    }
+
+    return { requestId: result.request_id ?? null };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export const contactService = {
   /** 문의 제출 (비로그인 가능) - Edge Function으로 처리 (DB insert + Slack) */
   async submit(params: SubmitInquiryParams): Promise<SubmitInquiryResult> {
+    const payload = toSubmitPayload(params);
     const { data, error } = await supabase.functions.invoke('submit-contact', {
-      body: {
-        hospital_name: params.hospital_name.trim(),
-        contact_name: params.contact_name.trim(),
-        email: params.email.trim(),
-        role: params.role?.trim() || null,
-        phone: params.phone.trim(),
-        weekly_surgeries: params.weekly_surgeries,
-        inquiry_type: params.inquiry_type,
-        content: params.content.trim(),
-      },
+      body: payload,
     });
 
     if (error) {
       const parsed = await extractFunctionErrorInfo(error);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session && shouldFallbackToAuthenticatedInsert(parsed.message, parsed.code)) {
+        try {
+          return await submitViaEdgeHttp(payload);
+        } catch (fallbackError) {
+          console.error('[contactService] submit edge http fallback failed:', fallbackError);
+          return await this.submitAuthenticated(params);
+        }
+      }
       // SEC-10: 개발 환경에서만 상세 에러 로깅 (프로덕션에서는 에러 코드만)
       if (import.meta.env.DEV) {
         console.error('[contactService] submit invoke failed:', error, parsed);
@@ -185,6 +271,21 @@ export const contactService = {
       throw new Error(normalizeSubmitErrorMessage(rawMessage, rawCode));
     }
     return { requestId: response.request_id ?? null };
+  },
+
+  /** 로그인 회원 문의 제출 - Edge Function JWT 이슈를 피하기 위해 DB에 직접 적재 */
+  async submitAuthenticated(params: SubmitInquiryParams): Promise<SubmitInquiryResult> {
+    const payload = toSubmitPayload(params);
+    const { error } = await supabase
+      .from('contact_inquiries')
+      .insert(payload);
+
+    if (error) {
+      console.error('[contactService] submitAuthenticated failed:', error);
+      throw new Error(normalizeSubmitErrorMessage(error.message, error.code));
+    }
+
+    return { requestId: null };
   },
 
   /** 관리자용 전체 문의 조회 */

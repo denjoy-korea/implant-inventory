@@ -56,11 +56,11 @@ export function useOnboarding({
     const hid = hospitalId;
     if (!onboardingService.isWelcomeSeen(hid)) return 1;
     if (isLoading) return null;
-    if (!onboardingService.isFixtureDownloaded(hid)) return 2;
-    if (inventoryLength === 0) return 3;
-    if (!onboardingService.isSurgeryDownloaded(hid)) return 4;
+    if (!onboardingService.isSurgeryDownloaded(hid)) return 2;
     const hasSurgery = Object.values(surgeryMaster).some(rows => rows.length > 0);
-    if (!hasSurgery) return 5;
+    if (!hasSurgery) return 3;
+    if (!onboardingService.isFixtureDownloaded(hid)) return 4;
+    if (inventoryLength === 0) return 5;
     if (!onboardingService.isInventoryAuditSeen(hid)) return 6;
     if (!onboardingService.isFailAuditDone(hid)) return 7;
     return null;
@@ -80,12 +80,18 @@ export function useOnboarding({
   const onboardingProgress =
     firstIncompleteStep ? (ONBOARDING_STEP_PROGRESS[firstIncompleteStep] ?? 0) : 100;
 
-  // Step 5→6 전환 감지: surgery_database 탭에서 업로드 완료 후 토스트에 피드백
+  // 스텝 전환 감지: 업로드 완료 후 토스트에 피드백
   useEffect(() => {
     const prev = prevFirstIncompleteStepRef.current;
     prevFirstIncompleteStepRef.current = firstIncompleteStep;
-    if (prev === 5 && firstIncompleteStep === 6 && showOnboardingToast) {
-      setToastCompletedLabel('수술기록 업로드 완료');
+    let label: string | null = null;
+    if (prev === 3 && firstIncompleteStep === 4 && showOnboardingToast) {
+      label = '수술기록 업로드 완료';
+    } else if (prev === 5 && firstIncompleteStep === 6 && showOnboardingToast) {
+      label = '픽스처 저장 완료';
+    }
+    if (label) {
+      setToastCompletedLabel(label);
       if (toastTimerRef.current !== null) clearTimeout(toastTimerRef.current);
       toastTimerRef.current = setTimeout(() => setToastCompletedLabel(null), 2500);
     }

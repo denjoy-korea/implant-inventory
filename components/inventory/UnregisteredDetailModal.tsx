@@ -381,10 +381,9 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
 
     setRegisteringUnregistered(prev => ({ ...prev, [item.rowKey]: true }));
 
-    try {
-      // non_list_input + 일관성 있음: 기존 재고 형식으로 수술기록 일괄 수정 (신규 등록 없음)
-      if (item.reason === 'non_list_input') {
-        if (!onResolveManualInput) return;
+    // non_list_input: 수술기록 형식 수정 (기존 재고 형식으로 일괄 수정) 후 재고 추가로 계속 진행
+    if (item.reason === 'non_list_input' && onResolveManualInput) {
+      try {
         const recordIds = item.recordIds ?? [];
         if (recordIds.length > 0) {
           await onResolveManualInput({
@@ -394,19 +393,8 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
             targetSize: item.preferredManualFixSize,
           });
         }
-        setResolvedUnregisteredRows(prev => ({ ...prev, [item.rowKey]: true }));
-        return;
-      }
-    } catch (error) {
-      console.error('[UnregisteredDetailModal] 수기 입력 일괄 수정 실패:', error);
-      return;
-    } finally {
-      if (item.reason === 'non_list_input') {
-        setRegisteringUnregistered(prev => {
-          const next = { ...prev };
-          delete next[item.rowKey];
-          return next;
-        });
+      } catch (error) {
+        console.error('[UnregisteredDetailModal] 수기 입력 일괄 수정 실패:', error);
       }
     }
 

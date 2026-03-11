@@ -3,6 +3,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.1.0/mod.ts";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 
@@ -32,6 +33,98 @@ const asTrimmedString = (value: unknown): string =>
 
 const isWaitlistInquiry = (inquiryType: string): boolean =>
   inquiryType.startsWith("plan_waitlist_");
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendInquiryEmail(params: {
+  contactName: string;
+  hospitalName: string;
+  email: string;
+  role: string | null;
+  phone: string;
+  weeklySurgeries: string;
+  inquiryType: string;
+  content: string;
+  now: string;
+}) {
+  const gmailUser = Deno.env.get("GMAIL_USER");
+  const gmailPass = Deno.env.get("GMAIL_APP_PASSWORD");
+
+  if (!gmailUser || !gmailPass) {
+    console.warn("[submit-contact] Gmail env missing; skip email notification");
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f6fb;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f6fb;">
+  <tr><td align="center" style="padding:40px 16px;">
+    <table width="620" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;">
+      <tr><td style="background:#06111f;padding:28px 32px;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.18em;color:#5eead4;text-transform:uppercase;font-family:Arial,sans-serif;">Support Intake</div>
+        <div style="margin-top:8px;font-size:24px;font-weight:700;color:#ffffff;font-family:Arial,sans-serif;">새 문의가 접수되었습니다</div>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+          ${[
+            ["회원명", params.contactName],
+            ["병원명", params.hospitalName],
+            ["이메일", params.email],
+            ["직위", params.role || "—"],
+            ["연락처", params.phone],
+            ["주간 수술 건수", params.weeklySurgeries],
+            ["문의 유형", params.inquiryType],
+            ["접수 시각", `${params.now} (KST)`],
+          ].map(([label, value]) => `
+            <tr>
+              <td style="padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:700;color:#64748b;font-family:Arial,sans-serif;">${escapeHtml(label)}</td>
+              <td style="padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:14px;color:#0f172a;text-align:right;font-family:Arial,sans-serif;">${escapeHtml(value)}</td>
+            </tr>
+          `).join("")}
+        </table>
+        <div style="margin-top:24px;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff;padding:20px 22px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#2563eb;text-transform:uppercase;font-family:Arial,sans-serif;">문의 내용</div>
+          <div style="margin-top:10px;font-size:14px;line-height:1.8;color:#0f172a;white-space:pre-wrap;font-family:Arial,sans-serif;">${escapeHtml(params.content)}</div>
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+
+  const client = new SMTPClient({
+    connection: {
+      hostname: "smtp.gmail.com",
+      port: 465,
+      tls: true,
+      auth: {
+        username: gmailUser,
+        password: gmailPass,
+      },
+    },
+  });
+
+  try {
+    await client.send({
+      from: `DenJOY <${gmailUser}>`,
+      to: "admin@denjoy.info",
+      subject: `[문의]임플란트재고주문시스템:${params.contactName}`,
+      html,
+    });
+  } finally {
+    await client.close().catch(() => {});
+  }
+}
 
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
@@ -218,6 +311,20 @@ Deno.serve(async (req: Request) => {
 
     // 일반 문의 → 기존 Slack 채널 (실패해도 200 반환)
     if (!waitlist) {
+      sendInquiryEmail({
+        contactName,
+        hospitalName,
+        email,
+        role,
+        phone,
+        weeklySurgeries,
+        inquiryType,
+        content,
+        now,
+      }).catch((emailError) => {
+        console.warn("[submit-contact] inquiry email failed:", { requestId, emailError });
+      });
+
       const webhookUrl = await getSlackWebhookUrl("문의알림");
       if (webhookUrl) {
         const slackBody = {

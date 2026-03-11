@@ -29,7 +29,7 @@ const SNOOZE_MONTHS = 1;
 const SNOOZE_DB_KEY = 'optimize_snooze';
 
 const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteInventoryItem, onCreateReturn, managerName, hospitalId, onClose }) => {
-  const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('year');
+  const [optimizeFilter, setOptimizeFilter] = useState<'year' | 'never'>('never');
   const [selectedOptimizeIds, setSelectedOptimizeIds] = useState<Set<string>>(new Set());
   const [isDeletingOptimize, setIsDeletingOptimize] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
@@ -255,7 +255,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
   }
 
   return (
-    <ModalShell isOpen={true} onClose={onClose} title="품목 최적화" titleId="optimize-modal-title" maxWidth="max-w-2xl" className="flex flex-col max-h-[calc(100dvh-80px)] md:max-h-[85vh]">
+    <ModalShell isOpen={true} onClose={onClose} title="품목 최적화" titleId="optimize-modal-title" maxWidth="max-w-2xl" className="flex flex-col h-[calc(100dvh-80px)] md:h-[85vh]">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100">
           <div className="flex items-start justify-between">
@@ -270,21 +270,6 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
           {/* 요약 배너 */}
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
-              onClick={() => { setOptimizeFilter('year'); setSelectedOptimizeIds(new Set()); setNeverStockFilter('all'); setReturningId(null); }}
-              className={`group relative p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'year' ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span className="text-xs font-bold text-slate-700">1년 이상 미사용</span>
-              </div>
-              <p className="text-2xl font-black text-amber-600 tabular-nums">{yearItems.length}<span className="text-sm font-semibold text-slate-400 ml-1">품목</span></p>
-              <p className="text-[10px] text-slate-400 mt-0.5">사용 기록이 1년 이상 없는 규격</p>
-              <div className="pointer-events-none absolute top-full left-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                전체 수술 데이터에서 사용한 이력은 있지만 <strong className="font-bold text-amber-300">1년 이상 미사용</strong>된 품목입니다.
-                <span className="absolute -top-1.5 left-4 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
-              </div>
-            </button>
-            <button
               onClick={() => { setOptimizeFilter('never'); setSelectedOptimizeIds(new Set()); setNeverStockFilter('all'); setReturningId(null); }}
               className={`group relative p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'never' ? 'border-rose-400 bg-rose-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
             >
@@ -294,8 +279,23 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               </div>
               <p className="text-2xl font-black text-rose-500 tabular-nums">{neverItems.length}<span className="text-sm font-semibold text-slate-400 ml-1">품목</span></p>
               <p className="text-[10px] text-slate-400 mt-0.5">수술기록에 전혀 나타나지 않은 규격</p>
-              <div className="pointer-events-none absolute top-full right-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              <div className="pointer-events-none absolute top-full left-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                 전체 수술 데이터에서 <strong className="font-bold text-rose-300">한번도 사용하지 않은</strong> 품목입니다.
+                <span className="absolute -top-1.5 left-4 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
+              </div>
+            </button>
+            <button
+              onClick={() => { setOptimizeFilter('year'); setSelectedOptimizeIds(new Set()); setNeverStockFilter('all'); setReturningId(null); }}
+              className={`group relative p-3 rounded-xl border-2 text-left transition-all ${optimizeFilter === 'year' ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span className="text-xs font-bold text-slate-700">1년 이상 미사용</span>
+              </div>
+              <p className="text-2xl font-black text-amber-600 tabular-nums">{yearItems.length}<span className="text-sm font-semibold text-slate-400 ml-1">품목</span></p>
+              <p className="text-[10px] text-slate-400 mt-0.5">사용 기록이 1년 이상 없는 규격</p>
+              <div className="pointer-events-none absolute top-full right-0 mt-2 z-20 w-60 rounded-lg bg-slate-900 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-white shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                전체 수술 데이터에서 사용한 이력은 있지만 <strong className="font-bold text-amber-300">1년 이상 미사용</strong>된 품목입니다.
                 <span className="absolute -top-1.5 right-4 h-0 w-0 border-x-4 border-b-4 border-x-transparent border-b-slate-900" />
               </div>
             </button>

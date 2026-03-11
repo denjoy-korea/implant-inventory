@@ -82,6 +82,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const canAiForecast = planService.canAccess(plan, 'ai_forecast');
   const canBrandAnalytics = planService.canAccess(plan, 'brand_analytics');
   const canOrderOptimization = planService.canAccess(plan, 'order_optimization');
+  const canUnregisteredDetail = planService.canAccess(plan, 'return_management'); // Plus+
   const {
     monthFactor,
     saveStatus,
@@ -290,24 +291,39 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 <div className="px-2.5 py-1 rounded-full bg-white/80 border border-amber-200 text-[11px] font-bold text-amber-700">
                   누적 사용 {unregisteredUsageTotal.toLocaleString()}개
                 </div>
-                <button
-                  onClick={() => {
-                    setShowUnregisteredDetailModal(true);
-                  }}
-                  className="group relative inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[11px] font-black shadow-lg shadow-indigo-200 hover:from-indigo-700 hover:to-violet-700 active:scale-95 transition-all"
-                >
-                  <span className="absolute -top-1 -right-1 inline-flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-300 opacity-75" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-400" />
-                  </span>
-                  <svg className="w-3.5 h-3.5 text-white/90 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                  </svg>
-                  상세보기
-                  <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] leading-none">
-                    {unregisteredFromSurgery.length}종
-                  </span>
-                </button>
+                {canUnregisteredDetail ? (
+                  <button
+                    onClick={() => {
+                      setShowUnregisteredDetailModal(true);
+                    }}
+                    className="group relative inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[11px] font-black shadow-lg shadow-indigo-200 hover:from-indigo-700 hover:to-violet-700 active:scale-95 transition-all"
+                  >
+                    <span className="absolute -top-1 -right-1 inline-flex h-2.5 w-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-300 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-400" />
+                    </span>
+                    <svg className="w-3.5 h-3.5 text-white/90 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                    </svg>
+                    상세보기
+                    <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] leading-none">
+                      {unregisteredFromSurgery.length}종
+                    </span>
+                  </button>
+                ) : (
+                  <div className="relative group/plus-gate inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-slate-200 text-slate-400 text-[11px] font-black cursor-not-allowed select-none">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    상세보기
+                    <span className="px-1.5 py-0.5 rounded-full bg-white/60 text-[10px] leading-none">
+                      {unregisteredFromSurgery.length}종
+                    </span>
+                    <div className="absolute bottom-full right-0 mb-2 w-max bg-slate-800 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg shadow-xl opacity-0 group-hover/plus-gate:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                      Plus 플랜부터 이용 가능
+                    </div>
+                  </div>
+                )}
               </div>
               <p className="text-[10px] font-bold text-amber-700">
                 미등록 품목 확인 후 바로 목록 등록

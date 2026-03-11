@@ -6,6 +6,7 @@ import {
   ReturnMutationResult,
   ReturnStatus,
 } from '../types';
+import { notifyHospitalSlack } from './hospitalSlackService';
 
 async function getReturnStatusById(
   returnId: string
@@ -61,6 +62,14 @@ export const returnService = {
 
     if (!returnId) {
       return { ok: false, reason: 'error' };
+    }
+
+    if (returnData.hospital_id) {
+      notifyHospitalSlack(returnData.hospital_id, 'return_requested', {
+        manufacturer: returnData.manufacturer,
+        item_count: items.length,
+        created_by: returnData.manager,
+      });
     }
 
     return { ok: true };
@@ -123,6 +132,8 @@ export const returnService = {
       }
       return { ok: false, reason: 'error' };
     }
+
+    notifyHospitalSlack(hospitalId, 'return_completed', {});
 
     return { ok: true };
   },

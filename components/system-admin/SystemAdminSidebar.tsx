@@ -9,6 +9,7 @@ interface SystemAdminSidebarProps {
   pendingResetCount: number;
   manualEntriesCount: number;
   pendingInquiryCount: number;
+  pendingSupportChatCount: number;
   pendingWaitlistCount: number;
   pendingPlanChangeCount: number;
   analysisLeadsTotal: number;
@@ -26,6 +27,7 @@ const SystemAdminSidebar: React.FC<SystemAdminSidebarProps> = ({
   pendingResetCount,
   manualEntriesCount,
   pendingInquiryCount,
+  pendingSupportChatCount,
   pendingWaitlistCount,
   pendingPlanChangeCount,
   analysisLeadsTotal,
@@ -162,6 +164,15 @@ const SystemAdminSidebar: React.FC<SystemAdminSidebarProps> = ({
                 {pendingInquiryCount > 0 && (
                   <span className="ml-auto bg-amber-100 text-amber-700 text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center shrink-0">
                     {pendingInquiryCount}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => onTabChange('support_chat')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold transition-all duration-200 text-sm ${activeTab === 'support_chat' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H5a2 2 0 01-2-2v-2m14-6V6a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h2l4 3v-3h4a2 2 0 002-2z" /></svg>
+                <span>실시간 상담</span>
+                {pendingSupportChatCount > 0 && (
+                  <span className="ml-auto bg-teal-100 text-teal-700 text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                    {pendingSupportChatCount}
                   </span>
                 )}
               </button>

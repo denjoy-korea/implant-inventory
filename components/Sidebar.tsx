@@ -22,6 +22,7 @@ interface SidebarProps {
   onReturnToAdmin?: () => void;
   userName?: string;
   onProfileClick?: () => void;
+  onUpgrade?: () => void;
 }
 
 /** 탭에 매핑되는 기능 식별자 (해당 기능이 없으면 잠금 아이콘 표시) */
@@ -62,6 +63,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onReturnToAdmin,
   userName,
   onProfileClick,
+  onUpgrade,
 }) => {
   const unregisteredBadgeText = surgeryUnregisteredCount > 99 ? '99+' : String(surgeryUnregisteredCount);
 
@@ -77,10 +79,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     return !canAccessTab(tab, userPermissions, effectiveRole);
   };
 
-  /** 탭 버튼 클릭 처리 — 차단된 탭은 무시 */
+  /** 탭 버튼 클릭 처리 — 차단된 탭은 무시, 잠긴 탭은 업그레이드 모달 */
   const handleTabClick = (tab: DashboardTab) => {
     if (isPermBlocked(tab)) return;
-    // 플랜 잠금 탭도 클릭 가능 — FeatureGate 오버레이를 보여주기 위해 탭 전환은 허용
+    if (isLocked(tab) && onUpgrade) {
+      onUpgrade();
+      if (isMobile) onRequestClose?.();
+      return;
+    }
     onTabChange(tab);
     if (isMobile) onRequestClose?.();
   };

@@ -5,6 +5,7 @@ import { useAdminReviews } from './admin/useAdminReviews';
 import { useAdminManuals, MANUAL_CATEGORIES } from './admin/useAdminManuals';
 import { useAdminAnalysisLeads, ANALYSIS_LEADS_PER_PAGE } from './admin/useAdminAnalysisLeads';
 import { useAdminContacts } from './admin/useAdminContacts';
+import { useAdminSupportChat } from './admin/useAdminSupportChat';
 import { useAdminUsers } from './admin/useAdminUsers';
 import type { ConfirmModalState } from './admin/adminTypes';
 
@@ -30,12 +31,14 @@ export function useSystemAdminDashboard() {
     const analysisLeads = useAdminAnalysisLeads(setConfirmModal);
     const contacts = useAdminContacts(showToast, setConfirmModal);
     const users = useAdminUsers(showToast, setConfirmModal, manuals.setManualEntries);
+    const supportChat = useAdminSupportChat(showToast, { isMobileViewport });
 
     // ── Derived counts ─────────────────────────────────────────
     const activeCount = users.profiles.filter(p => p.status === 'active').length;
     const pendingCount = users.profiles.filter(p => p.status === 'pending').length;
     const pendingResetCount = users.resetRequests.filter(r => r.status === 'pending').length;
     const pendingInquiryCount = contacts.inquiries.filter(i => i.status === 'pending').length;
+    const pendingSupportChatCount = supportChat.supportUnreadThreadCount;
     const pendingWaitlistCount = contacts.waitlist.filter(w => w.status === 'pending').length;
     const pendingPlanChangeCount = contacts.planChangeRequests.filter(r => r.status === 'pending').length;
 
@@ -71,6 +74,7 @@ export function useSystemAdminDashboard() {
         if (tab === 'reviews' && reviews.allReviews.length === 0) reviews.loadReviews();
         if (tab === 'analysis_leads') analysisLeads.loadAnalysisLeads(0, analysisLeads.analysisLeadFilter);
         if (tab === 'inquiries' && contacts.inquiries.length === 0) contacts.loadInquiries();
+        if (tab === 'support_chat' && !supportChat.supportInitialized) void supportChat.loadSupportThreads();
         if (tab === 'waitlist' && contacts.waitlist.length === 0) contacts.loadWaitlist();
         if (tab === 'plan_change_requests' && contacts.planChangeRequests.length === 0) contacts.loadPlanChangeRequests();
         if (tab === 'traffic') users.loadTrafficData(users.trafficRange);
@@ -91,6 +95,8 @@ export function useSystemAdminDashboard() {
         ...users,
         // Manuals domain
         ...manuals,
+        // Support chat domain
+        ...supportChat,
         // Reviews domain
         ...reviews,
         // Contacts domain
@@ -98,7 +104,7 @@ export function useSystemAdminDashboard() {
         // Analysis leads domain
         ...analysisLeads,
         // Derived
-        pendingResetCount, pendingInquiryCount, pendingWaitlistCount, pendingPlanChangeCount,
+        pendingResetCount, pendingInquiryCount, pendingSupportChatCount, pendingWaitlistCount, pendingPlanChangeCount,
         ANALYSIS_LEADS_PER_PAGE, MANUAL_CATEGORIES,
     };
 }

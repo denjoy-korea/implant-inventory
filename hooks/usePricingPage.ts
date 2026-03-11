@@ -55,20 +55,12 @@ export function usePricingPage({
   const [finderStep, setFinderStep] = useState(0);
   const [finderAnswers, setFinderAnswers] = useState<string[]>([]);
   const [finderResult, setFinderResult] = useState<string | null>(null);
-  // 3단계: 복수 선택 (기능 선택)
-  const [finderFeatureSelections, setFinderFeatureSelections] = useState<Set<string>>(new Set());
 
   const getFinderRecommendation = (answers: string[]): string => {
-    const [surgeries, team, featureRaw] = answers;
-    // featureRaw는 쉼표 구분 복수값 (예: "alert,analysis")
-    const features = featureRaw ? featureRaw.split(',') : [];
-    const featureLevel = features.includes('ai') ? 3
-      : features.includes('alert') ? 2
-      : features.includes('analysis') ? 1
-      : 0;
-    if (surgeries === 'over30' || team === '6plus' || featureLevel === 3) return 'Business';
-    if (surgeries === '15to30' || team === '4to5' || featureLevel === 2) return 'Plus';
-    if (surgeries === '5to15' || team === '2to3' || featureLevel === 1) return 'Basic';
+    const [surgeries, team, brands] = answers;
+    if (surgeries === 'over30' || team === '6plus') return 'Business';
+    if (surgeries === '15to30' || team === '4to5' || brands === '3brand' || brands === '4plus') return 'Plus';
+    if (surgeries === '5to15' || team === '2to3' || brands === '2brand') return 'Basic';
     return 'Free';
   };
 
@@ -83,27 +75,10 @@ export function usePricingPage({
     }
   };
 
-  const toggleFinderFeature = (value: string) => {
-    setFinderFeatureSelections(prev => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
-  };
-
-  const confirmFinderFeatures = () => {
-    const featureRaw = Array.from(finderFeatureSelections).join(',') || 'basic';
-    const next = [...finderAnswers, featureRaw];
-    setFinderAnswers(next);
-    setFinderResult(getFinderRecommendation(next));
-  };
-
   const resetFinder = () => {
     setFinderStep(0);
     setFinderAnswers([]);
     setFinderResult(null);
-    setFinderFeatureSelections(new Set());
   };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -306,9 +281,6 @@ export function usePricingPage({
     finderAnswers, setFinderAnswers,
     finderResult, setFinderResult,
     handleFinderAnswer,
-    finderFeatureSelections,
-    toggleFinderFeature,
-    confirmFinderFeatures,
     resetFinder,
     handleWaitlistSubmit,
     resetPaymentForm,

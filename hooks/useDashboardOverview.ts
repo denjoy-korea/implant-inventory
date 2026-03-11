@@ -89,10 +89,10 @@ export function formatDateKorean(value: string | null | undefined): string {
 
 const ONBOARDING_STEP_LABELS: Record<number, { title: string; desc: string }> = {
   1: { title: '초기 설정을 시작하세요', desc: '웰컴 가이드를 확인하고 DenJOY 설정을 시작합니다.' },
-  2: { title: '덴트웹 픽스쳐 데이터 다운로드', desc: '덴트웹에서 픽스쳐(재고) 데이터를 내려받으세요.' },
-  3: { title: '픽스쳐 데이터 업로드', desc: '다운받은 픽스쳐 엑셀 파일을 업로드하세요.' },
-  4: { title: '덴트웹 수술기록 다운로드', desc: '덴트웹에서 수술기록 데이터를 내려받으세요.' },
-  5: { title: '수술기록 업로드', desc: '다운받은 수술기록 엑셀 파일을 업로드하세요.' },
+  2: { title: '덴트웹 수술기록 다운로드', desc: '덴트웹에서 수술기록 데이터를 내려받으세요.' },
+  3: { title: '수술기록 업로드', desc: '다운받은 수술기록 엑셀 파일을 업로드하세요.' },
+  4: { title: '덴트웹 픽스쳐 데이터 다운로드', desc: '덴트웹에서 픽스쳐(재고) 데이터를 내려받으세요.' },
+  5: { title: '픽스쳐 데이터 업로드', desc: '다운받은 픽스쳐 엑셀 파일을 업로드하세요.' },
   6: { title: '기초재고 실사 실행', desc: '현재 실물 재고와 시스템 재고를 대조하세요.' },
   7: { title: '교환 재고 정리', desc: '미교환 교환 임플란트를 확인하고 정리하세요.' },
 };

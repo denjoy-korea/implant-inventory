@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { AppState, BillingCycle, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
@@ -15,6 +15,7 @@ const DashboardOverview = lazyWithRetry(() => import('../DashboardOverview'));
 const DashboardInventoryMasterSection = lazyWithRetry(() => import('./DashboardInventoryMasterSection'));
 const DashboardOperationalTabs = lazyWithRetry(() => import('../dashboard/DashboardOperationalTabs'));
 import { ReceiptUpdate } from '../ReceiptConfirmationModal';
+import { buildSurgeryUsageSet } from '../../services/fixtureUsageUtils';
 
 interface FixtureEditBindings {
   enabledManufacturers: string[];
@@ -27,6 +28,7 @@ interface FixtureEditBindings {
   restorePanelRef: React.RefObject<HTMLDivElement | null>;
   onManufacturerToggle: (manufacturer: string, isActive: boolean) => void;
   onBulkToggle: (filters: Record<string, string>, targetUnused: boolean) => void;
+  onMarkUnusedBySurgery: (usageSet: Set<string>) => void;
   onLengthToggle: (normalizedTarget: string, setUnused: boolean) => void;
   onRestoreToSavedPoint: () => void;
   onSaveSettings: () => boolean;
@@ -84,6 +86,7 @@ export interface DashboardWorkspaceSectionProps {
   onLoadHospitalData: (user: User) => Promise<void>;
   onGoToPricing: () => void;
   onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
+  onOpenProfilePlan?: () => void;
   onDismissPlanLimitToast: () => void;
   onUpgradeFromPlanLimitToast: () => void;
   onStartOverviewTrial: () => Promise<void>;
@@ -135,6 +138,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   returnRequests,
   onLoadHospitalData,
   onGoToPricing,
+  onOpenProfilePlan,
   onDismissPlanLimitToast,
   onUpgradeFromPlanLimitToast,
   onFixtureUploadClick,
@@ -161,12 +165,17 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onStockCalcSettingsChange,
   onOpenPaymentModal,
 }) => {
-  const buildQuickOrder = (item: InventoryItem): Order => ({
+  const surgeryUsageSet = useMemo(
+    () => buildSurgeryUsageSet(state.surgeryMaster),
+    [state.surgeryMaster],
+  );
+
+  const buildQuickOrder = (item: InventoryItem, quantity?: number): Order => ({
     id: `order_${Date.now()}`,
     type: 'replenishment',
     manufacturer: item.manufacturer,
     date: new Date().toISOString().split('T')[0],
-    items: [{ brand: item.brand, size: item.size, quantity: item.recommendedStock - item.currentStock }],
+    items: [{ brand: item.brand, size: item.size, quantity: quantity ?? (item.recommendedStock - item.currentStock) }],
     manager: state.user?.name || '관리자',
     status: 'ordered',
   });
@@ -187,7 +196,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           currentCount={billableItemCount}
           maxCount={PLAN_LIMITS.free.maxItems}
           failCount={failOrderCount}
-          onUpgrade={onGoToPricing}
+          onUpgrade={onOpenProfilePlan ?? onGoToPricing}
         />
       )}
 
@@ -196,7 +205,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           type={planLimitToast}
           currentCount={billableItemCount}
           maxCount={PLAN_LIMITS.free.maxItems}
-          onUpgrade={onUpgradeFromPlanLimitToast}
+          onUpgrade={onOpenProfilePlan ?? onUpgradeFromPlanLimitToast}
           onClose={onDismissPlanLimitToast}
         />
       )}
@@ -224,7 +233,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         <ReadOnlyBanner
           currentItemCount={billableItemCount}
           maxItems={PLAN_LIMITS.free.maxItems}
-          onUpgrade={onGoToPricing}
+          onUpgrade={onOpenProfilePlan ?? onGoToPricing}
         />
       )}
 
@@ -242,13 +251,13 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
             onboardingStep={onboardingStep}
             onResumeOnboarding={onResumeOnboarding}
             onSurgeryUploadClick={onSurgeryUploadClick}
-            onUpgrade={() => onOpenPaymentModal ? onOpenPaymentModal('basic') : onGoToPricing()}
+            onUpgrade={onOpenProfilePlan ?? (() => onOpenPaymentModal ? onOpenPaymentModal('basic') : onGoToPricing())}
           />
         </Suspense>
       )}
 
       {state.dashboardTab === 'member_management' && state.user && (
-        <FeatureGate feature="role_management" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal}>
+        <FeatureGate feature="role_management" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal} onOpenProfilePlan={onOpenProfilePlan}>
           <MemberManager
             currentUser={state.user}
             onClose={() => setState(prev => ({ ...prev, dashboardTab: 'overview' }))}
@@ -280,8 +289,10 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           formattedSavedAt={fixtureEdit.formattedSavedAt}
           restoreDiffCount={fixtureEdit.fixtureRestoreDiffCount}
           restorePanelRef={fixtureEdit.restorePanelRef}
+          surgeryUsageSet={surgeryUsageSet}
           onManufacturerToggle={fixtureEdit.onManufacturerToggle}
           onBulkToggle={fixtureEdit.onBulkToggle}
+          onMarkUnusedBySurgery={fixtureEdit.onMarkUnusedBySurgery}
           onLengthToggle={fixtureEdit.onLengthToggle}
           onRestoreToSavedPoint={fixtureEdit.onRestoreToSavedPoint}
           onSaveSettings={fixtureEdit.onSaveSettings}
@@ -348,7 +359,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         onUpdateOrderStatus={onUpdateOrderStatus}
         onCancelOrder={onCancelOrder}
         onDeleteOrder={onDeleteOrder}
-        onQuickOrder={(item) => onAddOrder(buildQuickOrder(item))}
+        onQuickOrder={(item, qty) => onAddOrder(buildQuickOrder(item, qty))}
         onCreateReturn={onCreateReturn}
         onUpdateReturnStatus={onUpdateReturnStatus}
         onCompleteReturn={onCompleteReturn}
@@ -356,6 +367,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
         showAlertToast={showAlertToast}
         onGoToPricing={onGoToPricing}
         onOpenPaymentModal={onOpenPaymentModal}
+        onOpenProfilePlan={onOpenProfilePlan}
         onAuditSessionComplete={onAuditSessionComplete}
         initialShowFailBulkModal={initialShowFailBulkModal}
         onFailBulkModalOpened={onFailBulkModalOpened}

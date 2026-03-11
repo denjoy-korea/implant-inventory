@@ -25,13 +25,24 @@ export default function Step4DenwebSurgeryDownload({ onNext }: Props) {
               <p className="text-sm text-slate-700 flex-1">{label}</p>
             </div>
             {i === 1 && (
-              <div className="flex items-start gap-2 px-5 py-2.5 mt-2 bg-indigo-50 rounded-2xl">
-                <svg className="w-3.5 h-3.5 text-indigo-400 mt-0.5 shrink-0 animate-pulse-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-[11px] text-indigo-600 leading-relaxed">
-                  가능하면 <span className="font-bold">최근 1년 이상</span>의 데이터를 포함하는 것이 분석 정확도에 도움이 됩니다.
-                </p>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-start gap-2 px-5 py-2.5 bg-indigo-50 rounded-2xl">
+                  <svg className="w-3.5 h-3.5 text-indigo-400 mt-0.5 shrink-0 animate-pulse-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-[11px] text-indigo-600 leading-relaxed">
+                    가능하면 <span className="font-bold">최근 1년 이상</span>의 데이터를 포함하는 것이 분석 정확도에 도움이 됩니다.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 px-5 py-2.5 bg-slate-50 rounded-2xl">
+                  <svg className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    1년 이상 업로드해도 <span className="font-bold text-slate-600">조회 가능한 기간은 플랜에 따라 다릅니다.</span>
+                    <span className="block mt-1 text-slate-400">Free 3개월 · Basic 12개월 · Plus/Business 24개월</span>
+                  </p>
+                </div>
               </div>
             )}
           </div>

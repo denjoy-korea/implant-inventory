@@ -288,7 +288,7 @@ export function useAppLogic({
   const {
     enabledManufacturers, hasSavedPoint, isDirtyAfterSave, restoreToast, saveToast,
     formattedSavedAt, fixtureRestoreDiffCount, restorePanelRef,
-    handleBulkToggle, handleManufacturerToggle, handleLengthToggle,
+    handleBulkToggle, handleMarkUnusedBySurgery, handleManufacturerToggle, handleLengthToggle,
     handleRestoreToSavedPoint, handleSaveSettings, handleExpandFailClaim, handleUpdateCell,
   } = useFixtureEditControls({ fixtureData: state.fixtureData, setState, showAlertToast });
 
@@ -418,6 +418,7 @@ export function useAppLogic({
       restorePanelRef,
       onManufacturerToggle: handleManufacturerToggle,
       onBulkToggle: handleBulkToggle,
+      onMarkUnusedBySurgery: handleMarkUnusedBySurgery,
       onLengthToggle: handleLengthToggle,
       onRestoreToSavedPoint: handleRestoreToSavedPoint,
       onSaveSettings: handleSaveSettingsAndProceed,
@@ -517,7 +518,7 @@ export function useAppLogic({
     saveToast, formattedSavedAt, fixtureRestoreDiffCount, returnRequests,
     virtualSurgeryData, autoOpenBaseStockEdit, autoOpenFailBulkModal,
     firstIncompleteStep, showMobileDashboardNav, mobileOrderNav,
-    handleManufacturerToggle, handleBulkToggle, handleLengthToggle, handleRestoreToSavedPoint,
+    handleManufacturerToggle, handleBulkToggle, handleMarkUnusedBySurgery, handleLengthToggle, handleRestoreToSavedPoint,
     handleSaveSettingsAndProceed, handleUpdateCell, handleExpandFailClaim,
     requestFixtureExcelDownload, requestApplyFixtureToInventory,
     applyBaseStockBatch, refreshLatestSurgeryUsage, resolveManualSurgeryInput,
@@ -542,9 +543,17 @@ export function useAppLogic({
     showOnboardingToast,
     onboardingProgress,
     toastCompletedLabel,
-    onCloseProfile: () => {
+    onCloseProfile: async () => {
       setState(prev => ({ ...prev, showProfile: false }));
       setProfileInitialTab(undefined);
+      // 프로필 닫힐 때 planState 갱신 (구독 취소·다운그레이드·크레딧 변경 반영)
+      const hospitalId = state.user?.hospitalId;
+      if (hospitalId) {
+        try {
+          const ps = await planService.getHospitalPlan(hospitalId);
+          setState(prev => ({ ...prev, planState: ps }));
+        } catch { /* silent */ }
+      }
     },
     onDeleteAccount: handleDeleteAccount,
     onChangePlan: async (plan: PlanType, billing: BillingCycle) => {
@@ -691,6 +700,14 @@ export function useAppLogic({
     reviewPopupType, profileInitialTab, setProfileInitialTab,
     // Direct payment
     directPayment, setDirectPayment,
+    refreshPlanState: async () => {
+      const hospitalId = state.user?.hospitalId;
+      if (!hospitalId) return;
+      try {
+        const ps = await planService.getHospitalPlan(hospitalId);
+        setState(prev => ({ ...prev, planState: ps }));
+      } catch { /* silent */ }
+    },
     // Billing program
     billingProgramSaving, billingProgramError,
     handleSelectBillingProgram, handleRefreshBillingProgram,

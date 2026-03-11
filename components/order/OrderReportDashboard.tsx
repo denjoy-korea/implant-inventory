@@ -251,14 +251,12 @@ const OrderReportDashboard: React.FC<Props> = ({
             <p className="text-sm font-black text-slate-900">최근 주문 내역</p>
             <p className="text-[11px] text-slate-400 mt-0.5">최근 발주 및 반품 신청 내역입니다.</p>
           </div>
-          {unifiedRows.length > 10 && (
-            <button
-              onClick={() => setShowHistoryPanel(true)}
-              className="text-[11px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
-            >
-              전체 보기 →
-            </button>
-          )}
+          <button
+            onClick={() => setShowHistoryPanel(true)}
+            className="text-[11px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
+          >
+            히스토리 →
+          </button>
         </div>
 
         {recentRows.length === 0 ? (
@@ -278,6 +276,7 @@ const OrderReportDashboard: React.FC<Props> = ({
                   <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">날짜</th>
                   <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">유형</th>
                   <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">제조사</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">주문자</th>
                   <th className="text-right px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">수량</th>
                   <th className="text-center px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">상태</th>
                 </tr>
@@ -295,6 +294,14 @@ const OrderReportDashboard: React.FC<Props> = ({
                           </span>
                         </td>
                         <td className="px-4 py-2.5 font-medium text-slate-700 truncate max-w-[120px]">{displayMfr(g.manufacturer)}</td>
+                        <td className="px-4 py-2.5 text-slate-500 truncate max-w-[100px]">
+                          {g.managers.length > 0 ? g.managers[0] : '—'}
+                          {g.confirmers.length > 0 && (
+                            <span className="ml-1 text-[9px] text-emerald-500 font-bold">
+                              수령:{g.confirmers[0]}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5 text-right font-bold text-slate-700 tabular-nums">{g.totalQuantity}개</td>
                         <td className="px-4 py-2.5 text-center">
                           <StatusBadge status={g.overallStatus} />
@@ -312,6 +319,9 @@ const OrderReportDashboard: React.FC<Props> = ({
                           </span>
                         </td>
                         <td className="px-4 py-2.5 font-medium text-slate-700 truncate max-w-[120px]">{displayMfr(g.manufacturer)}</td>
+                        <td className="px-4 py-2.5 text-slate-500 truncate max-w-[100px]">
+                          {g.managers.length > 0 ? g.managers[0] : '—'}
+                        </td>
                         <td className="px-4 py-2.5 text-right font-bold text-slate-700 tabular-nums">{g.totalQty}개</td>
                         <td className="px-4 py-2.5 text-center">
                           <StatusBadge status={g.overallStatus} />

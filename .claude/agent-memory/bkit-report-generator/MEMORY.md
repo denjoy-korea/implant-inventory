@@ -71,8 +71,29 @@ Used for `/pdca report {feature}` after Check phase (Match Rate ≥90%).
 **Key pattern**: Multi-workstream feature requires Requirements Completion Matrix split by phase/workstream
 **Dataroom note**: Design said folders 01-commercial/02-legal/03-security, but implementation uses specific functional names (01-contracts, 02-billing-reconciliation, etc.) — documented as intentional in Analysis
 
+## pricing-overhaul Report Pattern (2026-03-08)
+
+**Scope**: 4 Milestones (M1 코드 정합성 + M2 화면 잠금 + M3 pricingData + M4 신규 기능) with 23 requirements
+- Match Rate: 97.8% (22/23: 22 PASS, 1 CHANGED, 0 FAIL, 0 DEFERRED)
+- M1: 100% (7/7) — Types, Services, FeatureGate, UI Gating, PricingPaymentModal, useFileUpload, toss-payment-confirm
+- M2: 100% (6/6) — Sidebar, SurgeryDashboard (viewMonths clamp + charts + banner), FailManager, InventoryManager
+- M3: 100% (4/4) — pricingData import + differentiation + comparisonCategories + formatPrice dedup
+- M4: 91.7% (5.5/6) — SimpleOrderCopyButton (PASS), EXTRA_USER_PRICING (CHANGED: single constant instead of object), extra_user_count (PASS), DowngradeMemberSelectModal (PASS), planService.suspendMembersForDowngrade (PASS), OrderLowStockSection integration (PASS)
+
+**Key insights**:
+- v1 → v2 → v3: 79.4% → 97.1% (M1-M3 only) → 97.8% (full). v2/v3 DEFERRED 2건 모두 해소 (SO-01 SimpleOrderCopy, BU-03 DowngradeMember)
+- IM-01 (brand_analytics FeatureGate): v2 CHANGED → v3 PASS. 정확한 위치는 InventoryManager.tsx L397-414 조건부 렌더링 + SectionLockCard fallback
+- BU-01 (EXTRA_USER_PRICING): yearlyPrice 4000 미포함. 현재 Business 연간 결제 시나리오 없으므로 수용. 설계 문서 업데이트 필요 (Low priority)
+- viewMonths clamp: 설계의 canViewDataFrom() 호출 대신 슬라이더 인덱스 방식 (더 효율적). 동일 결과, 더 간결한 구현
+- SimpleOrderCopyButton props: 설계의 `items: OrderItem[]` 대신 `groupedLowStock: [string, LowStockEntry[]][]` (OrderLowStockSection에서 이미 그룹화, 중복 제거)
+- DowngradeMemberSelectModal: 설계의 "추가 사용자 과금" 안내 대신 "다운그레이드 멤버 선택" 모달. 더 포괄적인 다운그레이드 경험 제공 (2단계 플로우: ConfirmModal → SelectModal)
+- Positive additions: SectionLockCard intra-section lock cards, pricingData FAQ/FINDER_QUESTIONS 동적화, planService.reactivateReadonlyMembers 업그레이드 시 멤버 복구
+
+**Test Results**: 138/138 PASS, TypeScript clean, verify:premerge ✅
+
 ## Files to Reference
 - Report template: `/Users/mac/.claude/plugins/cache/bkit-marketplace/bkit/1.5.8/templates/report.template.md`
 - Plan: `docs/01-plan/features/{feature}.plan.md`
 - Analysis: `docs/03-analysis/features/{feature}.analysis.md`
 - Output: `docs/04-report/features/{feature}.report.md`
+- pricing-overhaul Report: `docs/04-report/features/pricing-overhaul.report.md`

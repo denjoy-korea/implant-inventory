@@ -54,10 +54,33 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ plan }) => {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="text-sm font-black text-slate-800 mb-1">친구 초대</h3>
-      <p className="text-[11px] text-slate-500 mb-4">
-        초대 코드를 공유하세요. 초대받은 회원이 유료 결제를 완료하면 10% 할인 쿠폰을 받습니다.
-      </p>
+      {/* 헤더: 제목+설명(왼쪽) / 버튼(오른쪽) */}
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-black text-slate-800 mb-1">친구 초대</h3>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            초대 코드를 공유하세요. 초대받은 회원이 유료 결제를<br />
+            완료하면 10% 할인 쿠폰을 받습니다.
+          </p>
+        </div>
+        {!loading && !info?.code && (
+          <div className="shrink-0">
+            {isFree ? (
+              <span className="text-[11px] text-slate-400 font-medium">유료 플랜 전용</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleCreate()}
+                disabled={creating}
+                className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {creating ? '생성 중...' : '초대 코드 생성'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {error && <p className="text-xs text-rose-600 -mt-2 mb-3">{error}</p>}
 
       {loading ? (
         <div className="text-xs text-slate-400 py-4 text-center">불러오는 중...</div>
@@ -77,25 +100,7 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ plan }) => {
                 {copied ? '복사됨' : '복사'}
               </button>
             </div>
-          ) : (
-            <div className="mb-4">
-              {isFree ? (
-                <p className="text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-3">
-                  유료 플랜 사용자만 초대 코드를 생성할 수 있습니다.
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleCreate()}
-                  disabled={creating}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                >
-                  {creating ? '생성 중...' : '초대 코드 생성'}
-                </button>
-              )}
-              {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
-            </div>
-          )}
+          ) : null}
 
           {/* 초대 현황 */}
           {info && (info.referred_count > 0 || info.rewards.length > 0) && (

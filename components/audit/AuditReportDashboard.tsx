@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuditHistoryItem } from '../../services/auditService';
+import { PlanType } from '../../types';
 import { useAuditReport } from './hooks/useAuditReport';
 import AuditReportKpiStrip from './AuditReportKpiStrip';
 import AuditMismatchTrend from './AuditMismatchTrend';
@@ -12,12 +13,33 @@ import AuditMobileQrPanel from './AuditMobileQrPanel';
 interface Props {
   auditHistory: AuditHistoryItem[];
   isLoading: boolean;
+  plan: PlanType;
 }
 
 const AUDIT_URL = `${window.location.origin}/#/dashboard/audit`;
 
-const AuditReportDashboard: React.FC<Props> = ({ auditHistory, isLoading }) => {
+const PLUS_PLANS: PlanType[] = ['plus', 'business', 'ultimate'];
+
+/** Basic 플랜 — Plus 전용 섹션 그룹 블러 + 배지 1개 */
+const PlusSectionGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="relative">
+    <div className="pointer-events-none select-none blur-[3px] opacity-60 flex flex-col gap-5">
+      {children}
+    </div>
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="flex items-center gap-1.5 bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-md">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Plus 플랜에서 이용 가능
+      </div>
+    </div>
+  </div>
+);
+
+const AuditReportDashboard: React.FC<Props> = ({ auditHistory, isLoading, plan }) => {
   const { sessions, kpi, trendData, itemRanking, reasonStats, cycleStats } = useAuditReport(auditHistory);
+  const isPlus = PLUS_PLANS.includes(plan);
 
   if (isLoading) {
     return (
@@ -55,25 +77,39 @@ const AuditReportDashboard: React.FC<Props> = ({ auditHistory, isLoading }) => {
 
   return (
     <div className="flex flex-col gap-5 pb-10">
-      {/* KPI Strip */}
+      {/* KPI Strip — Basic+ */}
       <AuditReportKpiStrip kpi={kpi} />
 
-      {/* QR + Cycle row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <AuditMobileQrPanel auditUrl={AUDIT_URL} />
-        <AuditCycleIndicator stats={cycleStats} />
-      </div>
+      {/* QR — Basic+ / Cycle+분석 — Plus+ */}
+      {isPlus ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <AuditMobileQrPanel auditUrl={AUDIT_URL} />
+            <AuditCycleIndicator stats={cycleStats} />
+          </div>
+          <AuditMismatchTrend data={trendData} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <AuditItemRanking items={itemRanking} />
+            <AuditReasonChart stats={reasonStats} />
+          </div>
+        </>
+      ) : (
+        <>
+          <AuditMobileQrPanel auditUrl={AUDIT_URL} />
+          <PlusSectionGroup>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AuditCycleIndicator stats={cycleStats} />
+              <AuditMismatchTrend data={trendData} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AuditItemRanking items={itemRanking} />
+              <AuditReasonChart stats={reasonStats} />
+            </div>
+          </PlusSectionGroup>
+        </>
+      )}
 
-      {/* Trend chart */}
-      <AuditMismatchTrend data={trendData} />
-
-      {/* Ranking + Reason row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <AuditItemRanking items={itemRanking} />
-        <AuditReasonChart stats={reasonStats} />
-      </div>
-
-      {/* Session table */}
+      {/* Session table — Basic+ */}
       <AuditSessionTable sessions={sessions} />
     </div>
   );

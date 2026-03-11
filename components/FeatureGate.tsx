@@ -76,9 +76,11 @@ interface FeatureGateProps {
   dataHint?: string;
   /** 결제 모달 직접 열기 콜백 */
   onOpenPaymentModal?: (plan: PlanType, billing?: BillingCycle) => void;
+  /** 마이페이지 구독 관리 탭 열기 콜백 */
+  onOpenProfilePlan?: () => void;
 }
 
-const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fallback, dataHint, onOpenPaymentModal }) => {
+const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fallback, dataHint, onOpenPaymentModal, onOpenProfilePlan }) => {
   const [showModal, setShowModal] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
 
@@ -138,7 +140,7 @@ const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fall
             {lockConfig ? (
               <div>
                 <p className="text-base font-bold text-slate-800">{lockConfig.title}</p>
-                <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{lockConfig.desc}</p>
+                <p className="text-sm text-slate-500 mt-1.5 leading-relaxed [word-break:keep-all]">{lockConfig.desc}</p>
               </div>
             ) : (
               <p className="text-sm font-bold text-slate-700">
@@ -159,7 +161,7 @@ const FeatureGate: React.FC<FeatureGateProps> = ({ feature, plan, children, fall
                 <span className="font-bold text-indigo-600">{PLAN_NAMES[requiredPlan]}</span> 플랜부터 사용 가능
               </p>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={onOpenProfilePlan ?? (() => setShowModal(true))}
                 className="w-full px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
               >
                 업그레이드하기

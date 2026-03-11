@@ -7,6 +7,7 @@ import { operationLogService } from '../services/operationLogService';
 import { failDetectionService } from '../services/failDetectionService';
 import { dbToExcelRowBatch, fixIbsImplant } from '../services/mappers';
 import { isIbsImplantManufacturer, toCanonicalSize } from '../services/sizeNormalizer';
+import { notifyHospitalSlack } from '../services/hospitalSlackService';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -174,6 +175,11 @@ export function useFileUpload({
                 'surgery_upload',
                 `수술기록 ${inserted}건 저장${skipped > 0 ? `, ${skipped}건 중복 skip` : ''} (${file.name})`
               );
+              notifyHospitalSlack(user.hospitalId, 'surgery_uploaded', {
+                inserted,
+                skipped,
+                file_name: file.name,
+              });
               // FAIL 자동 감지 (재식립)
               try {
                 const failCandidates = await failDetectionService.detectReimplantationFails(

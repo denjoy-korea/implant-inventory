@@ -109,6 +109,8 @@ function analyzeSurgeryRows(
   inventory: InventoryItem[]
 ): AnalysisResult {
   const formatIndex = buildBrandSizeFormatIndex(inventory);
+  // 픽스처 등록 전(inventory 비어 있음) → 미등록 분석 스킵, 레코드 수만 집계
+  const skipUnregistered = inventory.length === 0;
   const missingMap = new Map<string, SurgeryUnregisteredItem>();
   let totalRecords = 0;
 
@@ -161,6 +163,8 @@ function analyzeSurgeryRows(
     }
 
     totalRecords += qty;
+
+    if (skipUnregistered) continue;
 
     // 등록된 사이즈 텍스트와 정확히 일치하는 경우만 등록된 것으로 인정.
     // 형식이 다른 수술기록(e.g. "Φ5.0 ×10" vs "Φ5.0 × 10")도 미등록으로 잡기 위함.
@@ -333,10 +337,14 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-sm font-bold text-emerald-700">모두 등록된 품목</p>
+              <p className="text-sm font-bold text-emerald-700">
+                {inventory.length === 0 ? '수술기록 확인 완료' : '모두 등록된 품목'}
+              </p>
               <p className="text-[11px] text-emerald-600">
                 {analysis.totalRecords}건 수술기록을 확인했습니다.<br />
-                미등록 규격이 없습니다.
+                {inventory.length === 0
+                  ? '픽스처 데이터 등록 후 미등록 품목을 확인할 수 있습니다.'
+                  : '미등록 규격이 없습니다.'}
               </p>
             </div>
           ) : (

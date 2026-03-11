@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BillingCycle, ExcelData, PlanType } from '../../types';
 import FeatureGate from '../FeatureGate';
 import FixtureWorkflowGuide from '../FixtureWorkflowGuide';
@@ -7,6 +7,7 @@ import BrandChart from '../BrandChart';
 import LengthFilter from '../LengthFilter';
 import ExcelTable from '../ExcelTable';
 import { isExchangePrefix } from '../../services/appUtils';
+import { isFixtureRowUnused } from '../../services/fixtureUsageUtils';
 
 interface DashboardFixtureEditSectionProps {
   fixtureData: ExcelData | null;
@@ -21,8 +22,10 @@ interface DashboardFixtureEditSectionProps {
   formattedSavedAt: string | null;
   restoreDiffCount: number;
   restorePanelRef: React.RefObject<HTMLDivElement | null>;
+  surgeryUsageSet: Set<string> | null;
   onManufacturerToggle: (manufacturer: string, isActive: boolean) => void;
   onBulkToggle: (filters: Record<string, string>, targetUnused: boolean) => void;
+  onMarkUnusedBySurgery: (usageSet: Set<string>) => void;
   onLengthToggle: (normalizedTarget: string, setUnused: boolean) => void;
   onRestoreToSavedPoint: () => void;
   onSaveSettings: () => boolean;
@@ -48,8 +51,10 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
   formattedSavedAt,
   restoreDiffCount,
   restorePanelRef,
+  surgeryUsageSet,
   onManufacturerToggle,
   onBulkToggle,
+  onMarkUnusedBySurgery,
   onLengthToggle,
   onRestoreToSavedPoint,
   onSaveSettings,
@@ -128,9 +133,63 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
 
   const selectedIndices = selectedFixtureIndices[fixtureData.activeSheetName] || new Set<number>();
 
+  // 수술기록 없는 품목 수 (배너용 — 교환/FAIL prefix 행 포함)
+  const unusedBySurgeryCount = surgeryUsageSet
+    ? activeSheet.rows.filter(r =>
+        r['사용안함'] !== true &&
+        isFixtureRowUnused(surgeryUsageSet, String(r['제조사'] || ''), String(r['브랜드'] || ''), String(r['규격(SIZE)'] || ''))
+      ).length
+    : 0;
+
+  const [optimizeCardDismissed, setOptimizeCardDismissed] = useState(false);
+  const [filterRequest, setFilterRequest] = useState<'no_surgery' | 'active' | null>(null);
+
+  const handleOptimizeClick = () => {
+    if (surgeryUsageSet) {
+      onMarkUnusedBySurgery(surgeryUsageSet);
+    }
+    setOptimizeCardDismissed(true);
+    setFilterRequest('active');
+  };
+
   return (
     <div className="space-y-6">
       <FixtureWorkflowGuide completedSteps={completedSteps} />
+
+      {surgeryUsageSet && unusedBySurgeryCount > 0 && !optimizeCardDismissed && (
+        <div className="rounded-2xl border-2 border-rose-200 bg-rose-50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">품목 최적화</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-500 font-bold">한 번도 미사용</span>
+                </div>
+                <p className="text-2xl font-black text-rose-500 tabular-nums leading-none">
+                  {unusedBySurgeryCount}<span className="text-sm font-semibold text-slate-400 ml-1">개 품목</span>
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">수술기록에 한 번도 나타나지 않은 픽스처 품목입니다.</p>
+                <p className="text-[10px] text-rose-400 mt-0.5">⚠️ 삭제 시 수술기록 미등록으로 재검출될 수 있으니 확인 후 처리하세요.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleOptimizeClick}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-all active:scale-[0.98] shadow-sm shadow-rose-200"
+            >
+              목록 정리하기
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       <ManufacturerToggle
         sheet={activeSheet}
@@ -247,6 +306,8 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
         onSheetChange={onFixtureSheetChange}
         onExpandFailClaim={onExpandFailClaim}
         activeManufacturers={activeManufacturers}
+        surgeryUsageSet={surgeryUsageSet}
+        filterRequest={filterRequest}
       />
 
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">

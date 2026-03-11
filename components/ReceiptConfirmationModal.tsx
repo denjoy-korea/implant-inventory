@@ -22,6 +22,8 @@ interface ReceiptConfirmationModalProps {
     inventory: InventoryItem[];
     onClose: () => void;
     onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
+    /** 중간 단계 처리용 — 모달을 닫지 않고 단일 주문만 처리 */
+    onConfirmStep?: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
     onUpdateOrderStatus?: (id: string, status: OrderStatus) => void;
     onDeleteOrder?: (id: string) => void;
     isLoading?: boolean;
@@ -97,6 +99,7 @@ export function ReceiptConfirmationModal({
     inventory,
     onClose,
     onConfirmReceipt,
+    onConfirmStep,
     onUpdateOrderStatus,
     onDeleteOrder,
     isLoading
@@ -124,12 +127,15 @@ export function ReceiptConfirmationModal({
     // Stepper state
     const [currentOrderIdx, setCurrentOrderIdx] = useState(0);
     const [cardVisible, setCardVisible] = useState(true);
+    const [processedCount, setProcessedCount] = useState(0);
 
     const activeOrders = groupedOrder.orders.filter(o => !excludedOrderIds.includes(o.id) && o.status === 'ordered');
+    // 모달 오픈 시점의 총 주문 수를 고정 (처리되면서 activeOrders가 줄어도 분모는 유지)
+    const [initialTotal] = useState(() => activeOrders.length);
     const safeIdx = Math.min(currentOrderIdx, Math.max(0, activeOrders.length - 1));
     const currentOrder = activeOrders[safeIdx];
-    const isLastStep = safeIdx >= activeOrders.length - 1;
-    const hasMultipleOrders = activeOrders.length > 1;
+    const isLastStep = activeOrders.length <= 1;
+    const hasMultipleOrders = initialTotal > 1;
 
     useEffect(() => {
         if (currentOrderIdx >= activeOrders.length && activeOrders.length > 0) {
@@ -202,48 +208,66 @@ export function ReceiptConfirmationModal({
         else if (val === '') setQuantities(prev => ({ ...prev, [key]: 0 }));
     };
 
-    const handleConfirm = async () => {
+    // 단일 주문에 대한 ReceiptUpdate 목록 생성
+    const buildUpdatesForOrder = (order: typeof activeOrders[number]): ReceiptUpdate[] => {
         const updates: ReceiptUpdate[] = [];
-        groupedOrder.orders.forEach(order => {
-            if (excludedOrderIds.includes(order.id)) return;
-            order.items.forEach((item, idx) => {
-                const key = `${order.id}-${idx}`;
-                const newQty = quantities[key];
-                if (newQty !== undefined && newQty !== item.quantity) {
-                    const wdSel = wrongDeliverySelections[key];
-                    updates.push({
-                        orderId: order.id,
-                        item,
-                        originalQuantity: item.quantity,
-                        newQuantity: newQty,
-                        memo: memos[key],
-                        autoReorderDeficit: autoReorders[key],
-                        wrongDeliveryReturn:
-                            returnWrongDelivery[key] && wdSel?.diameter && wdSel?.length
-                                ? {
-                                    receivedSize: buildReceivedSize(
-                                        item.size,
-                                        order.manufacturer,
-                                        wdSel.diameter,
-                                        wdSel.length,
-                                        wdSel.cuff
-                                    ),
-                                    quantity: wdSel.qty,
-                                }
-                                : undefined,
-                    });
-                }
-            });
+        order.items.forEach((item, idx) => {
+            const key = `${order.id}-${idx}`;
+            const newQty = quantities[key];
+            if (newQty !== undefined && newQty !== item.quantity) {
+                const wdSel = wrongDeliverySelections[key];
+                updates.push({
+                    orderId: order.id,
+                    item,
+                    originalQuantity: item.quantity,
+                    newQuantity: newQty,
+                    memo: memos[key],
+                    autoReorderDeficit: autoReorders[key],
+                    wrongDeliveryReturn:
+                        returnWrongDelivery[key] && wdSel?.diameter && wdSel?.length
+                            ? {
+                                receivedSize: buildReceivedSize(
+                                    item.size,
+                                    order.manufacturer,
+                                    wdSel.diameter,
+                                    wdSel.length,
+                                    wdSel.cuff
+                                ),
+                                quantity: wdSel.qty,
+                            }
+                            : undefined,
+                });
+            }
         });
-        const orderIdsToReceive = groupedOrder.orders
-            .filter(o => o.status === 'ordered' && !excludedOrderIds.includes(o.id))
-            .map(o => o.id);
-        await onConfirmReceipt(updates, orderIdsToReceive);
+        return updates;
+    };
+
+    const handleConfirm = async () => {
+        // 마지막 남은 주문 처리 (activeOrders에서 excluded 제외한 것들)
+        const updates: ReceiptUpdate[] = [];
+        const orderIdsToReceive: string[] = [];
+        activeOrders.forEach(order => {
+            if (excludedOrderIds.includes(order.id)) return;
+            updates.push(...buildUpdatesForOrder(order));
+            orderIdsToReceive.push(order.id);
+        });
+        if (updates.length > 0 || orderIdsToReceive.length > 0) {
+            await onConfirmReceipt(updates, orderIdsToReceive);
+        }
     };
 
     const handleStepConfirm = async () => {
         if (!isLastStep) {
-            goToStep(safeIdx + 1);
+            // 현재 주문 즉시 처리 후 다음으로 이동 (모달 닫지 않음)
+            // 처리된 주문은 status→'received'로 변경되어 activeOrders에서 자동으로 제거됨
+            // → goToStep(safeIdx) 로 같은 인덱스 유지하면 다음 주문이 올라옴
+            if (currentOrder && !excludedOrderIds.includes(currentOrder.id)) {
+                const updates = buildUpdatesForOrder(currentOrder);
+                const confirmFn = onConfirmStep ?? onConfirmReceipt;
+                await confirmFn(updates, [currentOrder.id]);
+                setProcessedCount(prev => prev + 1);
+            }
+            goToStep(safeIdx);
         } else if (wrongDeliveryItemList.length > 0 && phase === 'orders') {
             // 마지막 주문 확인 완료 → 규격 오배송 처리 세션으로 전환
             const initialSelections: Record<string, WrongDeliverySelection> = {};
@@ -263,7 +287,7 @@ export function ReceiptConfirmationModal({
         }
     };
 
-    const progressPct = isLoading ? 100 : (safeIdx / Math.max(activeOrders.length, 1)) * 100;
+    const progressPct = isLoading ? 100 : (processedCount / Math.max(initialTotal, 1)) * 100;
     const isCurrentChanged = currentOrder?.status === 'ordered' && currentOrder.items.some(
         (item, idx) => quantities[`${currentOrder.id}-${idx}`] !== item.quantity
     );
@@ -522,7 +546,7 @@ export function ReceiptConfirmationModal({
                             <h3 id="receipt-confirm-title" className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
                             {hasMultipleOrders && (
                                 <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 tabular-nums">
-                                    {safeIdx + 1} / {activeOrders.length}
+                                    {processedCount + 1} / {initialTotal}
                                 </span>
                             )}
                         </div>

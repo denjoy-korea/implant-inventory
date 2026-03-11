@@ -9,6 +9,7 @@ export type AdminTab =
   | 'reviews'
   | 'analysis_leads'
   | 'inquiries'
+  | 'support_chat'
   | 'waitlist'
   | 'plan_change_requests'
   | 'traffic'
@@ -27,6 +28,7 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   plan_management: '플랜 관리',
   reviews: '고객 후기 관리',
   inquiries: '문의내역 관리',
+  support_chat: '실시간 상담',
   waitlist: '대기자 관리',
   plan_change_requests: '플랜 변경 신청',
   analysis_leads: '분석 리드 관리',

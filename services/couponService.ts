@@ -203,7 +203,7 @@ export const couponService = {
   previewDiscount(coupon: UserCoupon, originalAmount: number): DiscountPreview {
     let discountAmount: number;
     if (coupon.discount_type === 'percentage') {
-      discountAmount = Math.floor(originalAmount * coupon.discount_value / 100);
+      discountAmount = Math.round(originalAmount * coupon.discount_value / 100);
     } else {
       discountAmount = Math.min(coupon.discount_value, originalAmount);
     }

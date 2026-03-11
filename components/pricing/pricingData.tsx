@@ -234,12 +234,12 @@ export const FINDER_QUESTIONS = [
     ],
   },
   {
-    q: '가장 필요한 기능은?',
+    q: '사용 중인 임플란트 브랜드 수는?',
     options: [
-      { label: '기본 재고 관리', value: 'basic', sub: '품목 등록·조회' },
-      { label: '브랜드별 분석', value: 'analysis', sub: '소모 패턴 파악' },
-      { label: '자동 재고 알림', value: 'alert', sub: '부족 알림·월간 리포트' },
-      { label: 'AI 발주 자동화', value: 'ai', sub: '원클릭 발주·AI 예측' },
+      { label: '1종', value: '1brand', sub: '단일 브랜드' },
+      { label: '2종', value: '2brand', sub: '2개 브랜드' },
+      { label: '3종', value: '3brand', sub: '플러스 권장' },
+      { label: '4종 이상', value: '4plus', sub: '플러스 이상 권장' },
     ],
   },
 ];

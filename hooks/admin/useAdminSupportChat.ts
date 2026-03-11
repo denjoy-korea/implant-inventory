@@ -1,4 +1,5 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { adminSupportAlertService, type SupportAlertSnapshot } from '../../services/adminSupportAlertService';
 import { supabase } from '../../services/supabaseClient';
 import {
   patchSupportMessage,
@@ -14,7 +15,7 @@ import {
 } from '../../services/supportChatService';
 import type { ShowToast } from './adminTypes';
 
-export function useAdminSupportChat(showToast: ShowToast) {
+export function useAdminSupportChat(showToast: ShowToast, options?: { isMobileViewport?: boolean }) {
   const [supportInitialized, setSupportInitialized] = useState(false);
   const [supportThreads, setSupportThreads] = useState<SupportThread[]>([]);
   const [supportThreadsLoading, setSupportThreadsLoading] = useState(false);
@@ -24,6 +25,13 @@ export function useAdminSupportChat(showToast: ShowToast) {
   const [supportDraft, setSupportDraft] = useState('');
   const [supportSending, setSupportSending] = useState(false);
   const [supportStatusUpdating, setSupportStatusUpdating] = useState<string | null>(null);
+  const [supportAlertState, setSupportAlertState] = useState<SupportAlertSnapshot>(() => (
+    adminSupportAlertService.getSnapshot()
+  ));
+
+  const selectedThreadIdRef = useRef<string | null>(null);
+  const supportThreadsRef = useRef<SupportThread[]>([]);
+  const isMobileViewport = options?.isMobileViewport ?? false;
 
   const selectedSupportThread = useMemo(
     () => supportThreads.find((thread) => thread.id === selectedSupportThreadId) ?? null,
@@ -35,6 +43,14 @@ export function useAdminSupportChat(showToast: ShowToast) {
     [supportThreads],
   );
 
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedSupportThreadId;
+  }, [selectedSupportThreadId]);
+
+  useEffect(() => {
+    supportThreadsRef.current = supportThreads;
+  }, [supportThreads]);
+
   const loadSupportThreads = async () => {
     setSupportInitialized(true);
     setSupportThreadsLoading(true);
@@ -43,6 +59,7 @@ export function useAdminSupportChat(showToast: ShowToast) {
       setSupportThreads(threads);
       setSelectedSupportThreadId((prev) => {
         if (prev && threads.some((thread) => thread.id === prev)) return prev;
+        if (isMobileViewport) return null;
         return threads[0]?.id ?? null;
       });
     } catch (error) {
@@ -55,6 +72,45 @@ export function useAdminSupportChat(showToast: ShowToast) {
 
   const handleSelectSupportThread = (thread: SupportThread) => {
     setSelectedSupportThreadId(thread.id);
+  };
+
+  const handleClearSelectedSupportThread = () => {
+    setSelectedSupportThreadId(null);
+  };
+
+  const handleEnableSupportAlerts = async () => {
+    const next = await adminSupportAlertService.requestPermission();
+    setSupportAlertState(next);
+    if (next.permission === 'granted') {
+      showToast('브라우저 알림이 켜졌습니다.', 'success');
+      return;
+    }
+    showToast('브라우저 알림 권한이 허용되지 않았습니다.', 'info');
+  };
+
+  const handleDisableSupportAlerts = () => {
+    const next = adminSupportAlertService.disable();
+    setSupportAlertState(next);
+    showToast('브라우저 알림을 끄었습니다.', 'info');
+  };
+
+  const notifyIncomingSupportMessage = (thread: SupportThread) => {
+    if (!supportAlertState.enabled) return;
+    adminSupportAlertService.playIncomingTone();
+
+    if (
+      typeof document !== 'undefined'
+      && document.visibilityState === 'visible'
+      && selectedThreadIdRef.current === thread.id
+    ) {
+      return;
+    }
+
+    void adminSupportAlertService.showIncomingNotification({
+      title: `새 문의 · ${thread.created_by_name || '회원'}`,
+      body: thread.last_message_preview || '새 메시지가 도착했습니다.',
+      tag: `support-thread-${thread.id}`,
+    });
   };
 
   const handleSendSupportMessage = async () => {
@@ -96,6 +152,7 @@ export function useAdminSupportChat(showToast: ShowToast) {
             status: 'open',
             admin_last_read_at: null,
             member_last_read_at: null,
+            member_reset_at: null,
             admin_unread_count: 0,
             member_unread_count: 0,
             last_message_at: null,
@@ -137,11 +194,15 @@ export function useAdminSupportChat(showToast: ShowToast) {
     setSupportStatusUpdating(thread.id);
     try {
       await supportChatService.updateThreadStatus(thread.id, status);
+      const now = new Date().toISOString();
       startTransition(() => {
         setSupportThreads((prev) => upsertSupportThread(prev, {
           ...thread,
           status,
-          updated_at: new Date().toISOString(),
+          member_reset_at: status === 'closed' ? now : thread.member_reset_at,
+          member_unread_count: status === 'closed' ? 0 : thread.member_unread_count,
+          member_last_read_at: status === 'closed' ? now : thread.member_last_read_at,
+          updated_at: now,
         }));
       });
     } catch (error) {
@@ -166,9 +227,25 @@ export function useAdminSupportChat(showToast: ShowToast) {
       }
 
       const next = payload.new as SupportThread;
+      const previous = supportThreadsRef.current.find((thread) => thread.id === next.id) ?? null;
+      const shouldNotify = (
+        next.last_message_sender_kind === 'member'
+        && next.admin_unread_count > 0
+        && Boolean(next.last_message_at)
+        && next.last_message_at !== previous?.last_message_at
+      );
+
+      if (shouldNotify) {
+        notifyIncomingSupportMessage(next);
+      }
+
       startTransition(() => {
         setSupportThreads((prev) => upsertSupportThread(prev, next));
-        setSelectedSupportThreadId((prev) => prev ?? next.id);
+        setSelectedSupportThreadId((prev) => {
+          if (prev) return prev;
+          if (isMobileViewport) return prev;
+          return next.id;
+        });
       });
     });
 
@@ -264,6 +341,12 @@ export function useAdminSupportChat(showToast: ShowToast) {
       });
   }, [selectedSupportThread, selectedSupportThreadId, supportInitialized]);
 
+  useEffect(() => {
+    if (isMobileViewport) return;
+    if (selectedSupportThreadId || supportThreads.length === 0) return;
+    setSelectedSupportThreadId(supportThreads[0]?.id ?? null);
+  }, [isMobileViewport, selectedSupportThreadId, supportThreads]);
+
   return {
     supportInitialized,
     supportThreads,
@@ -276,9 +359,13 @@ export function useAdminSupportChat(showToast: ShowToast) {
     supportSending,
     supportStatusUpdating,
     supportUnreadThreadCount,
+    supportAlertState,
     loadSupportThreads,
     handleSelectSupportThread,
+    handleClearSelectedSupportThread,
     handleSendSupportMessage,
     handleUpdateSupportThreadStatus,
+    handleEnableSupportAlerts,
+    handleDisableSupportAlerts,
   };
 }
