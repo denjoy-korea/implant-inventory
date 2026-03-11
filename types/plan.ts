@@ -100,6 +100,8 @@ export interface HospitalPlanState {
   retentionDaysLeft?: number;
   /** T3: 이번 달 업로드 한도 초과 여부 (planService 확장 시 채워짐) */
   uploadLimitExceeded?: boolean;
+  /** 다운그레이드 크레딧 잔액 (원) */
+  creditBalance: number;
 }
 
 /** 플랜별 제한 상수 */
@@ -249,4 +251,9 @@ export interface DbBillingHistory {
   refund_amount: number | null;
   refunded_at: string | null;
   refund_reason: string | null;
+  /** 업그레이드 크레딧 (migration 20260310210000) */
+  upgrade_credit_amount: number;
+  upgrade_source_billing_id: string | null;
+  /** 크레딧 잔액으로 결제한 금액 (migration 20260310210000) */
+  credit_used_amount: number | null;
 }

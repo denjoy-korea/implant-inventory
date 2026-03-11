@@ -298,10 +298,10 @@ Deno.serve(async (req: Request) => {
   //   dailyRate = ceil(amount / totalDays / 10) * 10  (10원 올림)
   //   serverCredit = amount - min(dailyRate × usedDays, amount)  (일할 계산)
   let serverUpgradeCredit = 0;
-  if (billing.upgrade_source_billing_id && billing.upgrade_credit_amount > 0) {
+  if (billing.upgrade_source_billing_id) {
     const { data: sourceBilling } = await adminClient
       .from("billing_history")
-      .select("id, hospital_id, amount, billing_cycle, payment_status, created_at")
+      .select("id, hospital_id, amount, credit_used_amount, billing_cycle, payment_status, created_at")
       .eq("id", billing.upgrade_source_billing_id)
       .single();
 
@@ -331,9 +331,11 @@ Deno.serve(async (req: Request) => {
       const usedDays = Math.ceil((Date.now() - new Date(sourceBilling.created_at).getTime()) / (1000 * 60 * 60 * 24));
       const totalDays = sourceBilling.billing_cycle === "yearly" ? 360 : 30;
       if (usedDays < totalDays) {
-        const dailyRate = Math.ceil(sourceBilling.amount / totalDays / 10) * 10;
-        const usedCharge = Math.min(dailyRate * usedDays, sourceBilling.amount);
-        serverUpgradeCredit = Math.max(0, sourceBilling.amount - usedCharge);
+        // 실질 납입액 = 현금 + 크레딧 납입액 (클라이언트 calcUpgradeCredit과 동일)
+        const effectiveAmount = (sourceBilling.amount ?? 0) + ((sourceBilling as Record<string, unknown>).credit_used_amount as number ?? 0);
+        const dailyRate = Math.ceil(effectiveAmount / totalDays / 10) * 10;
+        const usedCharge = Math.min(dailyRate * usedDays, effectiveAmount);
+        serverUpgradeCredit = Math.max(0, effectiveAmount - usedCharge);
       }
     }
 
@@ -401,6 +403,16 @@ Deno.serve(async (req: Request) => {
   // VAT 포함 금액 → 업그레이드 크레딧 → 잔액 크레딧 차감 = 최종 청구금액
   const vatTotal = calcAmountWithVat(baseAmount, serverDiscountAmount);
   const expectedAmount = vatTotal - serverUpgradeCredit - serverCreditUsed;
+  console.log("[toss-payment-confirm] Amount check:", {
+    billingUpgradeCredit: billing.upgrade_credit_amount,
+    billingSourceId: billing.upgrade_source_billing_id,
+    serverUpgradeCredit,
+    serverCreditUsed,
+    vatTotal,
+    expectedAmount,
+    amountNum,
+    plan: billingPlan,
+  });
   if (expectedAmount !== amountNum) {
     console.error("[toss-payment-confirm] Amount mismatch:", {
       baseAmount,

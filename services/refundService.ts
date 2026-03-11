@@ -118,7 +118,9 @@ export function calcUpgradeCredit(currentBilling: DbBillingHistory): UpgradeCred
   if (remainingDays <= 0) return null;
 
   // 환불 정책과 동일: 일할 계산
-  const creditAmount = calcRemainingValue(currentBilling.amount, billingCycle, currentBilling.created_at);
+  // 실질 납입액 = 현금 납입액 + 크레딧 납입액 (credit_used_amount)
+  const effectivePaidAmount = (currentBilling.amount ?? 0) + (currentBilling.credit_used_amount ?? 0);
+  const creditAmount = calcRemainingValue(effectivePaidAmount, billingCycle, currentBilling.created_at);
 
   if (creditAmount <= 0) return null;
 
