@@ -298,7 +298,10 @@ Deno.serve(async (req: Request) => {
   //   dailyRate = ceil(amount / totalDays / 10) * 10  (10원 올림)
   //   serverCredit = amount - min(dailyRate × usedDays, amount)  (일할 계산)
   let serverUpgradeCredit = 0;
-  if (billing.upgrade_source_billing_id) {
+  // billing.upgrade_credit_amount = 0 이면 클라이언트가 크레딧을 적용하지 않은 것 (전액 결제 또는 0원 크레딧)
+  // 이 경우 서버가 강제로 크레딧을 적용하면 TossPayments 결제금액과 불일치(400) 발생
+  // → upgrade_credit_amount > 0인 경우에만 서버 재검증 실행
+  if (billing.upgrade_source_billing_id && Number(billing.upgrade_credit_amount) > 0) {
     const { data: sourceBilling } = await adminClient
       .from("billing_history")
       .select("id, hospital_id, amount, credit_used_amount, billing_cycle, payment_status, created_at")
