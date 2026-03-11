@@ -32,3 +32,4 @@
 | code-coupon-system | 97.4% | 2026-03-06 | [code-coupon-system/](./code-coupon-system/) |
 | pricing-overhaul | 97.8% | 2026-03-08 | [pricing-overhaul/](./pricing-overhaul/) |
 | security-hardening | 100% | 2026-03-12 | [security-hardening/](./security-hardening/) |
+| order-return-remodel | 94.1% | 2026-03-12 | [order-return-remodel/](./order-return-remodel/) |
