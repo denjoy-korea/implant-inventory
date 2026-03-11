@@ -304,7 +304,7 @@ Deno.serve(async (req: Request) => {
   if (billing.upgrade_source_billing_id && Number(billing.upgrade_credit_amount) > 0) {
     const { data: sourceBilling } = await adminClient
       .from("billing_history")
-      .select("id, hospital_id, amount, credit_used_amount, billing_cycle, payment_status, created_at")
+      .select("id, hospital_id, plan, amount, credit_used_amount, billing_cycle, payment_status, created_at")
       .eq("id", billing.upgrade_source_billing_id)
       .single();
 
