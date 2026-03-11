@@ -18,7 +18,7 @@ export const planService = {
   async getHospitalPlan(hospitalId: string): Promise<HospitalPlanState> {
     const { data, error } = await supabase
       .from('hospitals')
-      .select('plan, plan_expires_at, billing_cycle, trial_started_at, trial_used, base_stock_edit_count')
+      .select('plan, plan_expires_at, billing_cycle, trial_started_at, trial_used, base_stock_edit_count, credit_balance')
       .eq('id', hospitalId)
       .single();
 
@@ -32,6 +32,7 @@ export const planService = {
         isTrialActive: false,
         trialDaysRemaining: 0,
         daysUntilExpiry: UNLIMITED_DAYS,
+        creditBalance: 0,
       };
     }
 
@@ -608,6 +609,7 @@ export const planService = {
     trial_started_at: string | null;
     trial_used: boolean;
     base_stock_edit_count?: number; // G5: optional — RPC 반환값에 없을 수 있음
+    credit_balance?: number; // 다운그레이드 크레딧 잔액
   }): HospitalPlanState {
     const now = new Date();
     const trialStarted = data.trial_started_at ? new Date(data.trial_started_at) : null;
@@ -625,7 +627,7 @@ export const planService = {
 
     const expiresAt = data.plan_expires_at ? new Date(data.plan_expires_at) : null;
     const daysUntilExpiry = expiresAt
-      ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      ? Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
       : UNLIMITED_DAYS;
 
     // G4: retentionDaysLeft — 유료 만료 후 Free 전환 유저에게만 의미 있음
@@ -658,7 +660,118 @@ export const planService = {
       daysUntilExpiry,
       retentionDaysLeft,
       uploadLimitExceeded,
+      creditBalance: data.credit_balance ?? 0,
     };
+  },
+
+  /**
+   * 다운그레이드 + 크레딧 적립 (원자적)
+   * - 잔여 구독 금액을 credit_balance에 적립
+   * - 즉시 하위 플랜으로 전환 (plan_expires_at = NULL)
+   */
+  async executeDowngrade(
+    hospitalId: string,
+    toPlan: PlanType,
+    billingCycle: BillingCycle,
+  ): Promise<{ creditAdded: number; newCreditBalance: number }> {
+    const { data, error } = await supabase.rpc('execute_downgrade_with_credit', {
+      p_hospital_id: hospitalId,
+      p_to_plan: toPlan,
+      p_billing_cycle: billingCycle,
+    });
+
+    if (error) {
+      console.error('[planService] executeDowngrade failed:', error);
+      throw new Error('다운그레이드 처리 중 오류가 발생했습니다.');
+    }
+
+    const result = data as { credit_added: number; new_credit_balance: number };
+    return {
+      creditAdded: result.credit_added ?? 0,
+      newCreditBalance: result.new_credit_balance ?? 0,
+    };
+  },
+
+  /**
+   * 다운그레이드 시 적립될 크레딧 금액 미리 계산 (클라이언트 추정치)
+   * SQL execute_downgrade_with_credit 로직과 동일한 알고리즘 사용
+   */
+  async estimateDowngradeCredit(
+    hospitalId: string,
+    currentPlan: PlanType,
+    toPlan: PlanType,
+  ): Promise<number> {
+    try {
+      // 최근 완료 결제 조회
+      const billing = await this.getLatestCompletedBilling(hospitalId);
+      // 병원 플랜 상태 조회 (plan_expires_at, billing_cycle 필요)
+      const { data: hospital } = await supabase
+        .from('hospitals')
+        .select('plan_expires_at, billing_cycle')
+        .eq('id', hospitalId)
+        .single();
+
+      const now = Date.now();
+      let upperRemaining = 0;
+      let remainingDays = 0;
+      let totalDays = 30;
+
+      // M-1 수정: PLAN_PRICING에서 동적 계산 — 가격 변경 시 자동 동기화
+      const MONTHLY_VAT: Record<string, number> = Object.fromEntries(
+        Object.entries(PLAN_PRICING).map(([p, v]) => [p, Math.round(v.monthlyPrice * 1.1)])
+      );
+      const YEARLY_VAT: Record<string, number> = Object.fromEntries(
+        Object.entries(PLAN_PRICING).map(([p, v]) => [p, Math.round(v.yearlyPrice * 12 * 1.1)])
+      );
+
+      if (billing && billing.amount > 0) {
+        const hospitalCycle = hospital?.billing_cycle ?? 'monthly';
+
+        if (billing.plan === currentPlan) {
+          // Case A: 실제 결제 금액 기반
+          const billingCycle = (billing as { billing_cycle?: string }).billing_cycle ?? hospitalCycle;
+          totalDays = billingCycle === 'yearly' ? 360 : 30;
+          const createdAt = new Date((billing as { created_at?: string }).created_at ?? now).getTime();
+          const usedDays = Math.ceil((now - createdAt) / 86400000);
+          remainingDays = Math.max(0, totalDays - usedDays);
+
+          if (usedDays <= 7) {
+            upperRemaining = billing.amount;
+          } else if (usedDays < totalDays) {
+            const upperDaily = Math.ceil(billing.amount / totalDays / 10) * 10;
+            const upperUsed = Math.min(upperDaily * usedDays, billing.amount);
+            upperRemaining = Math.max(0, billing.amount - upperUsed);
+          }
+        } else if (hospital?.plan_expires_at) {
+          // Case B: 이미 다운그레이드된 상태 → plan_expires_at 기반
+          totalDays = hospitalCycle === 'yearly' ? 360 : 30;
+          const expiresAt = new Date(hospital.plan_expires_at).getTime();
+          remainingDays = Math.max(0, Math.ceil((expiresAt - now) / 86400000));
+          const vatTable = hospitalCycle === 'yearly' ? YEARLY_VAT : MONTHLY_VAT;
+          const currentPlanVat = vatTable[currentPlan] ?? 0;
+          if (currentPlanVat > 0 && remainingDays > 0) {
+            const upperDaily = Math.ceil(currentPlanVat / totalDays / 10) * 10;
+            upperRemaining = upperDaily * remainingDays;
+          }
+        }
+      }
+
+      // 하위 플랜 일할요금
+      if (upperRemaining <= 0) return 0;
+
+      const hospitalCycle = hospital?.billing_cycle ?? 'monthly';
+      const vatTable = hospitalCycle === 'yearly' ? YEARLY_VAT : MONTHLY_VAT;
+      const lowerVat = vatTable[toPlan] ?? 0;
+
+      if (lowerVat > 0 && remainingDays > 0) {
+        const lowerDaily = Math.ceil(lowerVat / totalDays / 10) * 10;
+        const lowerCost = lowerDaily * remainingDays;
+        return Math.max(0, upperRemaining - lowerCost);
+      }
+      return Math.max(0, upperRemaining);
+    } catch {
+      return 0;
+    }
   },
 
   /** 플랜별 가용 여부 조회 (품절 체크용, 비로그인도 호출 가능) */

@@ -4,7 +4,6 @@ import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
 import ErrorBoundary from '../ErrorBoundary';
 import PublicInfoFooter from '../shared/PublicInfoFooter';
-import KakaoChannelButton from '../KakaoChannelButton';
 import ConfirmModal from '../ConfirmModal';
 import DowngradeMemberSelectModal from '../settings/DowngradeMemberSelectModal';
 import { hospitalService } from '../../services/hospitalService';
@@ -138,6 +137,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
   const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
   const [downgradePending, setDowngradePending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
+  const [downgradeCreditPreview, setDowngradeCreditPreview] = useState<number>(0);
   const [memberSelectPending, setMemberSelectPending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const hasPublicMobileNav = publicViews.includes(currentView);
 
@@ -164,8 +164,32 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   const handlePlanSelect = user?.hospitalId
     ? async (plan: PlanType, billing: BillingCycle) => {
       const currentPlan = planState?.plan ?? 'free';
+
+      // 동일 플랜 갱신: 결제 필요 (DB 직접 업데이트 아님)
+      if (plan === currentPlan && currentPlan !== 'free') {
+        const result = await tossPaymentService.requestPayment({
+          hospitalId: user.hospitalId!,
+          plan,
+          billingCycle: billing,
+          customerName: user.name || '',
+          paymentMethod: 'card',
+          // H-2: 보유 크레딧 자동 적용 (0이면 무시됨)
+          creditUsedAmount: planState?.creditBalance ?? 0,
+        });
+        if (result.error && result.error !== 'user_cancel') {
+          showAlertToast(result.error, 'error');
+        }
+        return;
+      }
+
       const isDowngrade = PLAN_ORDER[plan] < PLAN_ORDER[currentPlan];
       if (isDowngrade) {
+        // M-3: 다운그레이드 전 크레딧 예상 금액 미리 계산
+        let creditPreview = 0;
+        if (user?.hospitalId) {
+          creditPreview = await planService.estimateDowngradeCredit(user.hospitalId, currentPlan, plan);
+        }
+        setDowngradeCreditPreview(creditPreview);
         setDowngradePending({ plan, billing });
         return;
       }
@@ -270,13 +294,17 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     ? getDowngradeLines(planState?.plan ?? 'free', downgradePending.plan)
     : null;
 
+  const downgradeCreditMsg = downgradeCreditPreview > 0
+    ? `잔여 구독료 약 ${downgradeCreditPreview.toLocaleString('ko-KR')}원이 크레딧으로 적립됩니다.`
+    : undefined;
+
   return (
     <div className="h-full flex flex-col">
       {downgradePending && downgradeDiff && (
         <ConfirmModal
           title={`${PLAN_NAMES[planState?.plan ?? 'free']} → ${PLAN_NAMES[downgradePending.plan]} 다운그레이드`}
           message={downgradeDiff.message}
-          tip={downgradeDiff.tip}
+          tip={[downgradeDiff.tip, downgradeCreditMsg].filter(Boolean).join('\n') || undefined}
           confirmLabel="다음"
           cancelLabel="취소"
           confirmColor="amber"
@@ -288,12 +316,22 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
             if (newMaxUsers !== Infinity && user?.hospitalId) {
               const count = await hospitalService.getActiveMemberCount(user.hospitalId);
               if (count > newMaxUsers) {
-                // 초과 멤버 있음 → 선택 모달
                 setMemberSelectPending({ plan, billing });
                 return;
               }
             }
-            void executePlanChange(plan, billing);
+            // 다운그레이드: 즉시 전환 + 잔여금 크레딧 적립
+            try {
+              const result = await planService.executeDowngrade(user!.hospitalId!, plan, billing);
+              const ps = await planService.getHospitalPlan(user!.hospitalId!);
+              onPlanStateActivated(ps);
+              const creditMsg = result.creditAdded > 0
+                ? ` ${result.creditAdded.toLocaleString('ko-KR')}원이 크레딧으로 적립되었습니다.`
+                : '';
+              showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.${creditMsg}`, 'success');
+            } catch {
+              showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+            }
           }}
           onCancel={() => setDowngradePending(null)}
         />
@@ -302,10 +340,25 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         <DowngradeMemberSelectModal
           hospitalId={user.hospitalId}
           newPlan={memberSelectPending.plan}
-          onConfirm={(memberIdsToSuspend) => {
+          onConfirm={async (memberIdsToSuspend) => {
             const { plan, billing } = memberSelectPending;
             setMemberSelectPending(null);
-            void executePlanChange(plan, billing, memberIdsToSuspend);
+            // C-4 수정: executeDowngrade로 크레딧 적립 후 선택된 멤버 접근 제한
+            try {
+              const result = await planService.executeDowngrade(user!.hospitalId!, plan, billing);
+              await planService.suspendMembersForDowngrade(user!.hospitalId!, memberIdsToSuspend);
+              const ps = await planService.getHospitalPlan(user!.hospitalId!);
+              onPlanStateActivated(ps);
+              const creditMsg = result.creditAdded > 0
+                ? ` ${result.creditAdded.toLocaleString('ko-KR')}원이 크레딧으로 적립되었습니다.`
+                : '';
+              const memberNote = memberIdsToSuspend.length > 0
+                ? ` ${memberIdsToSuspend.length}명의 멤버 접근이 제한되었습니다.`
+                : '';
+              showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.${creditMsg}${memberNote}`, 'success');
+            } catch {
+              showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+            }
           }}
           onCancel={() => setMemberSelectPending(null)}
         />
@@ -316,7 +369,6 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         <meta property="og:title" content={meta.title} />
         <meta property="og:description" content={meta.description} />
       </Helmet>
-      <KakaoChannelButton />
       <Header
         onHomeClick={() => (user ? handleNavigate('dashboard') : handleNavigate('landing'))}
         onLoginClick={() => handleNavigate('login')}

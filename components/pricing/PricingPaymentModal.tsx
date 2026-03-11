@@ -4,6 +4,7 @@ import LegalModal from '../shared/LegalModal';
 import ModalShell from '../shared/ModalShell';
 import { formatPrice } from './pricingData';
 import type { UserCoupon, DiscountPreview } from '../../services/couponService';
+import type { UpgradeCredit } from '../../services/refundService';
 
 type PaymentMethod = 'card' | 'transfer';
 type ReceiptType = 'cash_receipt' | 'tax_invoice';
@@ -32,6 +33,12 @@ interface PricingPaymentModalProps {
   selectedCouponId?: string | null;
   onSelectCoupon?: (couponId: string | null) => void;
   discountPreview?: DiscountPreview | null;
+  /** 업그레이드 크레딧 (선택) */
+  upgradeCredit?: UpgradeCredit | null;
+  /** 다운그레이드 크레딧 잔액 (선택) */
+  creditBalance?: number;
+  creditUsedAmount?: number;
+  onCreditUsedChange?: (amount: number) => void;
 }
 
 const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
@@ -57,6 +64,10 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
   selectedCouponId,
   onSelectCoupon,
   discountPreview,
+  upgradeCredit,
+  creditBalance = 0,
+  creditUsedAmount = 0,
+  onCreditUsedChange,
 }) => {
   const [agreedToPaymentPolicy, setAgreedToPaymentPolicy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -70,16 +81,23 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
 
   const monthlyPrice = isYearly ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice;
   const rawBase = isYearly ? monthlyPrice * 12 : monthlyPrice;
-  // 연간: 공급가액 천원 단위 절사
-  const basePrice = isYearly ? Math.floor(rawBase / 1000) * 1000 : rawBase;
+  const basePrice = rawBase;
   const vat = Math.round(basePrice * 0.1);
-  const rawTotal = basePrice + vat;
-  // 합계도 천원 단위 절사 (100원 단위 제거)
-  const finalTotal = isYearly ? Math.floor(rawTotal / 1000) * 1000 : rawTotal;
-  const cutAmount = rawTotal - finalTotal; // 절사된 금액
+  const finalTotal = basePrice + vat;
   // 월간 대비 절약 = 월간(VAT포함)/년 - 연간 합계
   const monthlyTotalPerYear = Math.round(PLAN_PRICING[selectedPlan].monthlyPrice * 12 * 1.1);
   const yearlySaving = monthlyTotalPerYear - finalTotal;
+
+  // C-3 수정: 쿠폰은 공급가액(base)에서 먼저 차감 후 VAT 적용 — tossPaymentService와 동일 순서
+  // (base - couponDiscount) * 1.1, NOT (base * 1.1) - couponDiscount
+  const couponDiscount = discountPreview?.discount_amount ?? 0;
+  const baseAfterCoupon = Math.max(0, basePrice - couponDiscount);
+  const totalAfterCoupon = Math.round(baseAfterCoupon * 1.1);
+  const creditAmount = upgradeCredit?.creditAmount ?? 0;
+  const maxCreditUsable = Math.max(0, Math.min(creditBalance, totalAfterCoupon - creditAmount));
+  const appliedCreditBalance = Math.min(creditUsedAmount, maxCreditUsable);
+  const hasDeduction = couponDiscount > 0 || creditAmount > 0 || appliedCreditBalance > 0;
+  const payableTotal = Math.max(0, totalAfterCoupon - creditAmount - appliedCreditBalance);
 
   return (
     <>
@@ -124,32 +142,38 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 <span>공급가액</span>
                 <span>{formatPrice(basePrice)}원</span>
               </div>
-              {isYearly && cutAmount > 0 && (
-                <div className="flex justify-between items-center text-xs text-emerald-500">
-                  <span>절사금액</span>
-                  <span>-{formatPrice(cutAmount)}원</span>
-                </div>
-              )}
               <div className="flex justify-between items-center text-xs text-slate-400">
                 <span>부가세 (10%)</span>
                 <span>{formatPrice(vat)}원</span>
               </div>
-              {discountPreview && discountPreview.discount_amount > 0 && (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-700">소계 (VAT 포함)</span>
-                    <span className="text-sm text-slate-500 line-through">{formatPrice(finalTotal)}원</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-violet-600 font-semibold">쿠폰 할인</span>
-                    <span className="text-sm font-bold text-violet-600">-{formatPrice(discountPreview.discount_amount)}원</span>
-                  </div>
-                </>
+              {hasDeduction && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-700">소계 (VAT 포함)</span>
+                  <span className="text-sm text-slate-500 line-through">{formatPrice(finalTotal)}원</span>
+                </div>
+              )}
+              {couponDiscount > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-violet-600 font-semibold">쿠폰 할인</span>
+                  <span className="text-sm font-bold text-violet-600">-{formatPrice(couponDiscount)}원</span>
+                </div>
+              )}
+              {creditAmount > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-emerald-600 font-semibold">업그레이드 크레딧</span>
+                  <span className="text-sm font-bold text-emerald-600">-{formatPrice(creditAmount)}원</span>
+                </div>
+              )}
+              {appliedCreditBalance > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-teal-600 font-semibold">크레딧 차감</span>
+                  <span className="text-sm font-bold text-teal-600">-{formatPrice(appliedCreditBalance)}원</span>
+                </div>
               )}
               <div className="flex justify-between items-center pt-1 border-t border-slate-100">
                 <span className="text-sm font-bold text-slate-700">합계 (VAT 포함)</span>
                 <span className="text-lg font-black text-indigo-600">
-                  {formatPrice(discountPreview ? finalTotal - discountPreview.discount_amount : finalTotal)}원
+                  {formatPrice(payableTotal)}원
                 </span>
               </div>
             </div>
@@ -176,6 +200,51 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* 크레딧 잔액 사용 */}
+          {creditBalance > 0 && onCreditUsedChange && (
+            <div className="bg-teal-50 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span className="text-sm font-bold text-teal-700">크레딧 잔액</span>
+                </div>
+                <span className="text-sm font-black text-teal-700">{formatPrice(creditBalance)}원</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCreditUsedChange(Math.max(0, creditUsedAmount - 1000))}
+                  className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 font-bold text-sm hover:bg-teal-200 transition-colors flex items-center justify-center"
+                >−</button>
+                <div className="flex-1 text-center">
+                  <span className="text-sm font-bold text-teal-800">
+                    {appliedCreditBalance > 0 ? `-${formatPrice(appliedCreditBalance)}원 차감` : '차감 안 함'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCreditUsedChange(Math.min(maxCreditUsable, creditUsedAmount + 1000))}
+                  disabled={creditUsedAmount >= maxCreditUsable}
+                  className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 font-bold text-sm hover:bg-teal-200 transition-colors flex items-center justify-center disabled:opacity-40"
+                >+</button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCreditUsedChange(0)}
+                  className={`flex-1 py-1 rounded-lg text-xs font-bold transition-colors ${appliedCreditBalance === 0 ? 'bg-teal-200 text-teal-800' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
+                >사용 안 함</button>
+                <button
+                  type="button"
+                  onClick={() => onCreditUsedChange(maxCreditUsable)}
+                  className={`flex-1 py-1 rounded-lg text-xs font-bold transition-colors ${appliedCreditBalance === maxCreditUsable && maxCreditUsable > 0 ? 'bg-teal-200 text-teal-800' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
+                >전액 사용</button>
+              </div>
             </div>
           )}
 
@@ -341,7 +410,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               disabled={isSubmitting || !contactName.trim() || !contactPhone.trim() || !agreedToPaymentPolicy}
               className="flex-1 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? '처리 중...' : paymentMethod === 'card' ? '카드로 결제하기' : '계좌이체로 결제하기'}
+              {isSubmitting ? '처리 중...' : payableTotal === 0 ? '크레딧으로 결제하기' : paymentMethod === 'card' ? '카드로 결제하기' : '계좌이체로 결제하기'}
             </button>
           </div>
         </div>

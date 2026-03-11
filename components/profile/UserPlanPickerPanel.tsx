@@ -1,5 +1,5 @@
 import React from 'react';
-import { BillingCycle, HospitalPlanState, PLAN_NAMES, PlanType } from '../../types';
+import { BillingCycle, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
 
 interface UserPlanPickerPanelProps {
   planState?: HospitalPlanState | null;
@@ -14,15 +14,12 @@ interface UserPlanPickerPanelProps {
 const PLAN_PICKER_ITEMS: {
   plan: PlanType;
   label: string;
-  monthlyPrice: number;
-  yearlyPrice: number;
   tag?: string;
   features: string[];
 }[] = [
-  { plan: 'basic', label: 'Basic', monthlyPrice: 29000, yearlyPrice: 23000, features: ['최대 200품목', '1인 사용', 'FAIL 교환 관리', '발주 생성·수령'] },
-  { plan: 'plus', label: 'Plus', monthlyPrice: 69000, yearlyPrice: 55000, features: ['최대 500품목', '5인 사용', '브랜드 분석', '발주 최적화'] },
-  { plan: 'business', label: 'Business', monthlyPrice: 129000, yearlyPrice: 103000, tag: '추천', features: ['무제한 품목', '무제한 인원', 'AI 예측 발주', '우선 지원'] },
-  { plan: 'ultimate', label: 'Ultimate', monthlyPrice: 0, yearlyPrice: 0, tag: '별도 문의', features: ['Business 전체', '감사 로그', '장기 보관', '전담 담당자'] },
+  { plan: 'basic', label: 'Basic', features: ['최대 150품목', '1인 사용', '브랜드 분석', '발주 생성·수령'] },
+  { plan: 'plus', label: 'Plus', features: ['최대 300품목', '5인 사용', 'FAIL 교환 관리', '발주 최적화'] },
+  { plan: 'business', label: 'Business', tag: '추천', features: ['무제한 품목', '최대 10인', 'AI 예측 발주', '감사 로그'] },
 ];
 
 const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
@@ -34,6 +31,32 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
   onSelectPlan,
   onRequestPlanChange,
 }) => {
+  const currentPlanId = planState?.plan ?? 'free';
+  const currentItem = PLAN_PICKER_ITEMS.find(i => i.plan === currentPlanId);
+  const otherItems = PLAN_PICKER_ITEMS.filter(i => i.plan !== currentPlanId);
+
+  const isCurrentCycle = pickerCycle === (planState?.billingCycle ?? 'monthly');
+  const daysLeft = planState?.daysUntilExpiry ?? null;
+  const expiresAt = planState?.expiresAt ?? null;
+
+  const expiryLabel = (() => {
+    if (!expiresAt) return null;
+    if (daysLeft === null) return null;
+    if (daysLeft <= 0) return '만료됨';
+    if (daysLeft === 0) return 'D-day';
+    return `D-${daysLeft}`;
+  })();
+
+  const expiryColor = daysLeft !== null && daysLeft <= 7
+    ? 'text-red-500'
+    : daysLeft !== null && daysLeft <= 30
+      ? 'text-amber-500'
+      : 'text-indigo-500';
+
+  const isRenewalSelected = pickerSelectedPlan !== null
+    && planState?.plan === pickerSelectedPlan
+    && isCurrentCycle;
+
   return (
     <div className="space-y-2.5">
       {/* 헤더 */}
@@ -46,6 +69,58 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
         <h4 className="text-xs font-bold text-slate-700">플랜 선택</h4>
       </div>
 
+      {/* 현재 구독 카드 (상단 가로형) */}
+      {currentItem && currentPlanId !== 'free' && (
+        <button
+          onClick={() => onSelectPlan(pickerSelectedPlan === currentPlanId ? null : currentPlanId)}
+          className={`w-full text-left rounded-xl border-2 transition-all overflow-hidden ${
+            pickerSelectedPlan === currentPlanId
+              ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
+              : 'border-indigo-400 bg-gradient-to-r from-indigo-50 to-white hover:border-indigo-500'
+          }`}
+        >
+          <div className="flex items-stretch">
+            {/* 왼쪽: 플랜 정보 */}
+            <div className="flex-1 p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-xs font-black text-slate-800">{currentItem.label}</span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">현재 · 갱신</span>
+              </div>
+              <ul className="space-y-0.5">
+                {currentItem.features.map((feature, index) => (
+                  <li key={index} className="flex items-center gap-1 text-[10px] text-slate-500">
+                    <svg className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 오른쪽: 구독 정보 */}
+            <div className="flex flex-col items-center justify-center px-3 border-l border-indigo-100 bg-indigo-50/60 min-w-[72px] gap-0.5">
+              <p className="text-[10px] font-bold text-slate-700">
+                {(pickerCycle === 'yearly'
+                  ? PLAN_PRICING[currentPlanId].yearlyPrice
+                  : PLAN_PRICING[currentPlanId].monthlyPrice
+                ).toLocaleString('ko-KR')}
+                <span className="font-normal text-slate-400">원</span>
+              </p>
+              <p className="text-[9px] text-slate-400">{planState?.billingCycle === 'yearly' ? '연간' : '월간'}</p>
+              {expiryLabel && (
+                <p className={`text-[11px] font-black mt-1 ${expiryColor}`}>{expiryLabel}</p>
+              )}
+              {expiresAt && (
+                <p className="text-[9px] text-slate-400 text-center leading-tight">
+                  {new Date(expiresAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 만료
+                </p>
+              )}
+            </div>
+          </div>
+        </button>
+      )}
+
       {/* 월간 / 연간 토글 */}
       <div className="flex items-center justify-center">
         <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
@@ -57,41 +132,29 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
         </div>
       </div>
 
-      {/* 플랜 카드 2x2 */}
-      <div className="grid grid-cols-2 gap-2">
-        {PLAN_PICKER_ITEMS.map(({ plan, label, monthlyPrice, yearlyPrice, tag, features }) => {
-          const isCurrent = planState?.plan === plan;
+      {/* 다른 플랜 카드들 */}
+      <div className={`grid gap-2 ${otherItems.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        {otherItems.map(({ plan, label, tag, features }) => {
           const isSelected = pickerSelectedPlan === plan;
-          const price = pickerCycle === 'yearly' ? yearlyPrice : monthlyPrice;
-          const isUltimateItem = plan === 'ultimate';
+          const price = pickerCycle === 'yearly' ? PLAN_PRICING[plan].yearlyPrice : PLAN_PRICING[plan].monthlyPrice;
           return (
             <button
               key={plan}
-              onClick={() => !isCurrent && onSelectPlan(isSelected ? null : plan)}
-              disabled={isCurrent}
+              onClick={() => onSelectPlan(isSelected ? null : plan)}
               className={`relative text-left p-2.5 rounded-xl border-2 transition-all ${
-                isCurrent
-                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
-                  : isSelected
-                    ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
-                    : 'border-slate-200 bg-white hover:border-indigo-300'
+                isSelected
+                  ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
+                  : 'border-slate-200 bg-white hover:border-indigo-300'
               }`}
             >
-              {tag && !isCurrent && (
+              {tag && (
                 <span className={`absolute top-1.5 right-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full ${tag === '추천' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>{tag}</span>
               )}
-              {isCurrent && (
-                <span className="absolute top-1.5 right-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">현재</span>
-              )}
               <p className="text-xs font-black text-slate-800 mb-0.5">{label}</p>
-              {isUltimateItem ? (
-                <p className="text-[10px] text-slate-400 font-medium mb-1">별도 문의</p>
-              ) : (
-                <p className="text-[10px] font-bold text-slate-700 mb-1">
-                  {price.toLocaleString('ko-KR')}
-                  <span className="font-normal text-slate-400">원/월</span>
-                </p>
-              )}
+              <p className="text-[10px] font-bold text-slate-700 mb-1">
+                {price.toLocaleString('ko-KR')}
+                <span className="font-normal text-slate-400">원/월</span>
+              </p>
               <ul className="space-y-0.5">
                 {features.map((feature, index) => (
                   <li key={index} className="flex items-center gap-1 text-[10px] text-slate-500">
@@ -112,13 +175,33 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
         <div>
           <button
             onClick={onRequestPlanChange}
-            className="w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-colors"
+            className={`w-full py-2 rounded-xl font-bold text-xs transition-colors ${
+              pickerSelectedPlan === 'free'
+                ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+            }`}
           >
-            {`${PLAN_NAMES[pickerSelectedPlan]} 플랜 결제하기`}
+            {isRenewalSelected
+              ? `${PLAN_NAMES[pickerSelectedPlan]} 플랜 갱신하기`
+              : pickerSelectedPlan === 'free'
+                ? '무료 플랜으로 전환하기'
+                : `${PLAN_NAMES[pickerSelectedPlan]} 플랜 결제하기`}
           </button>
         </div>
       ) : (
         <p className="text-[10px] text-slate-400 text-center">변경할 플랜을 선택해 주세요</p>
+      )}
+
+      {/* 무료 플랜 전환 */}
+      {currentPlanId !== 'free' && pickerSelectedPlan !== 'free' && (
+        <div className="pt-1 border-t border-slate-100">
+          <button
+            onClick={() => onSelectPlan('free')}
+            className="w-full py-1.5 text-[10px] text-slate-400 hover:text-slate-600 transition-colors text-center"
+          >
+            무료 플랜으로 전환 →
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState, BillingCycle, BillingProgram, DashboardTab,
-  ExcelData, FailCandidate, PLAN_LIMITS, PlanType, User,
+  ExcelData, FailCandidate, PLAN_LIMITS, PLAN_NAMES, PLAN_ORDER, PlanType, User,
 } from '../types';
 import { authService } from '../services/authService';
 import { hospitalService } from '../services/hospitalService';
@@ -299,11 +299,11 @@ export function useAppLogic({
     if (state.dashboardTab !== 'fixture_edit') return true;
     if (!state.user?.hospitalId) return true;
     if (!isHospitalAdmin) return true;
-    if (firstIncompleteStep !== 3 && firstIncompleteStep !== 4) return true;
+    if (firstIncompleteStep !== 5 && firstIncompleteStep !== 6) return true;
     onboardingService.markFixtureSaved(state.user.hospitalId);
     onboardingService.clearDismissed(state.user.hospitalId);
     setOnboardingDismissed(false);
-    setForcedOnboardingStep(4);
+    setForcedOnboardingStep(6);
     setState(prev => ({ ...prev, dashboardTab: 'overview' }));
     return true;
   }, [firstIncompleteStep, handleSaveSettings, isHospitalAdmin, setState, state.currentView, state.dashboardTab, state.user?.hospitalId]);
@@ -325,10 +325,21 @@ export function useAppLogic({
         onboardingService.clearDismissed(hid);
       }
       setOnboardingDismissed(false);
-      setForcedOnboardingStep(4);
+      setForcedOnboardingStep(6);
       setState(prev => ({ ...prev, dashboardTab: 'overview' }));
     },
   });
+
+  // FAIL 감지 모달 닫기 — 온보딩 미완료 상태이면 wizard 자동 재개
+  const handleFailDetectionClose = useCallback(() => {
+    setPendingFailCandidates([]);
+    if (firstIncompleteStep !== null) {
+      const hid = state.user?.hospitalId ?? '';
+      if (hid) onboardingService.clearDismissed(hid);
+      setOnboardingDismissed(false);
+      setForcedOnboardingStep(firstIncompleteStep);
+    }
+  }, [firstIncompleteStep, state.user?.hospitalId]);
 
   // ── Confirm callbacks ─────────────────────────────────────────
   const requestFixtureExcelDownload = useCallback(() => {
@@ -436,6 +447,10 @@ export function useAppLogic({
     onLoadHospitalData: loadHospitalData,
     onGoToPricing: () => setState(prev => ({ ...prev, currentView: 'pricing' })),
     onOpenPaymentModal: handleOpenDirectPayment,
+    onOpenProfilePlan: () => {
+      setProfileInitialTab('plan');
+      setState(prev => ({ ...prev, showProfile: true }));
+    },
     onDismissPlanLimitToast: () => setPlanLimitToast(null),
     onUpgradeFromPlanLimitToast: () => {
       setPlanLimitToast(null);
@@ -532,7 +547,46 @@ export function useAppLogic({
       setProfileInitialTab(undefined);
     },
     onDeleteAccount: handleDeleteAccount,
-    onChangePlan: (plan: PlanType, billing: BillingCycle) => {
+    onChangePlan: async (plan: PlanType, billing: BillingCycle) => {
+      const currentPlan = state.planState?.plan ?? 'free';
+      const isDowngrade = PLAN_ORDER[plan] < PLAN_ORDER[currentPlan] && currentPlan !== 'free';
+
+      if (isDowngrade) {
+        // 크레딧 예상 금액 미리 계산
+        let creditPreview = 0;
+        if (state.user?.hospitalId) {
+          creditPreview = await planService.estimateDowngradeCredit(state.user.hospitalId, currentPlan, plan);
+        }
+        const creditMsg = creditPreview > 0
+          ? `약 ${creditPreview.toLocaleString('ko-KR')}원이 크레딧으로 적립됩니다.\n다음 결제 시 원하는 금액만큼 사용할 수 있습니다.`
+          : '잔여 구독 금액은 크레딧으로 적립되어 다음 결제 시 사용할 수 있습니다.';
+
+        // 다운그레이드: 확인 후 즉시 전환 + 크레딧 적립
+        setConfirmModal({
+          title: `${PLAN_NAMES[currentPlan]} → ${PLAN_NAMES[plan]} 다운그레이드`,
+          message: `${PLAN_NAMES[plan]} 플랜으로 즉시 전환됩니다.\n${creditMsg}`,
+          confirmLabel: '다운그레이드',
+          confirmColor: 'amber',
+          onConfirm: async () => {
+            setConfirmModal(null);
+            setState(prev => ({ ...prev, showProfile: false }));
+            if (!state.user?.hospitalId) return;
+            try {
+              const result = await planService.executeDowngrade(state.user.hospitalId, plan, billing);
+              const ps = await planService.getHospitalPlan(state.user.hospitalId);
+              setState(prev => ({ ...prev, planState: ps }));
+              const creditMsg = result.creditAdded > 0
+                ? ` ${result.creditAdded.toLocaleString('ko-KR')}원이 크레딧으로 적립되었습니다.`
+                : '';
+              showAlertToast(`${PLAN_NAMES[plan]} 플랜으로 변경되었습니다.${creditMsg}`, 'success');
+            } catch {
+              showAlertToast('플랜 변경 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+            }
+          },
+        });
+        return;
+      }
+
       setState(prev => ({ ...prev, showProfile: false }));
       handleOpenDirectPayment(plan, billing);
     },
@@ -609,7 +663,7 @@ export function useAppLogic({
     showMobileDashboardNav,
     showMobilePublicNav,
     onClosePlanLimitModal: closePlanLimitModal,
-    onUpgradePlan: () => { closePlanLimitModal(); handleOpenDirectPayment('basic'); },
+    onUpgradePlan: (plan: PlanType, billing: BillingCycle) => { handleOpenDirectPayment(plan, billing); },
     onCloseConfirmModal: () => setConfirmModal(null),
     onConfirmInventoryCompare: handleConfirmApplyToInventory,
     onCancelInventoryCompare: cancelInventoryCompare,
@@ -641,7 +695,7 @@ export function useAppLogic({
     billingProgramSaving, billingProgramError,
     handleSelectBillingProgram, handleRefreshBillingProgram,
     // Fail candidates
-    pendingFailCandidates, setPendingFailCandidates,
+    pendingFailCandidates, setPendingFailCandidates, handleFailDetectionClose,
     // Common actions
     handleSignOut,
     handleOpenDirectPayment,

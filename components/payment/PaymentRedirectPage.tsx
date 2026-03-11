@@ -43,9 +43,13 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       return;
     }
 
-    // Supabase JS v2는 fresh page load 시 세션 복원이 비동기 → getSession()으로 먼저 대기
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
+    // Supabase JS v2는 fresh page load 시 세션 복원이 비동기.
+    // getSession()은 로컬스토리지에서 읽기만 해서 만료된 토큰도 반환할 수 있음.
+    // TossPayments 리다이렉트 후 새 페이지 로드 시 access token이 만료됐을 수 있으므로
+    // refreshSession()으로 강제 갱신하여 Edge Function의 getUser() 검증이 통과되도록 한다.
+    supabase.auth.refreshSession().then(({ data: { session }, error: refreshErr }) => {
+      if (refreshErr || !session) {
+        // refresh token도 만료된 경우 → 재로그인 필요
         setMessage('로그인 세션이 만료되었습니다. 다시 로그인 후 결제를 진행해주세요.');
         setPageState('fail');
         return;
@@ -61,6 +65,11 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
         setMessage(error || '결제 승인에 실패했습니다.');
         setPageState('fail');
       }
+    }).catch((err: unknown) => {
+      // H-3: .catch() 추가 — 네트워크 오류 등으로 unhandled rejection 시 무한 로딩 방지
+      const msg = err instanceof Error ? err.message : '결제 처리 중 오류가 발생했습니다.';
+      setMessage(msg);
+      setPageState('fail');
     });
   }, [isSuccessPath, onComplete]);
 
