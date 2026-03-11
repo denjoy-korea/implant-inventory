@@ -144,6 +144,18 @@ export interface RefundResult {
  * toss-payment-refund Edge Function 호출
  */
 export async function requestRefund(billingId: string): Promise<RefundResult> {
+  // access token이 만료됐을 수 있으므로 강제 갱신 (getUser()가 401 반환하는 경우 방어)
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    return {
+      ok: false,
+      refundAmount: 0,
+      refundType: 'none',
+      reason: '로그인 세션이 만료되었습니다. 다시 로그인 후 시도해주세요.',
+      error: '로그인 세션이 만료되었습니다. 다시 로그인 후 시도해주세요.',
+    };
+  }
+
   const { data, error } = await supabase.functions.invoke('toss-payment-refund', {
     body: { billingId },
   });
