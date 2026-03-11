@@ -47,6 +47,9 @@ async function createBillingRecordWithCoupon(params: {
   couponId: string | null;
   originalAmount: number | null;
   discountAmount: number;
+  upgradeCreditAmount: number;
+  upgradeSourceBillingId: string | null;
+  creditUsedAmount: number;
 }): Promise<{ billingId: string | null; error: unknown }> {
   const insertPayload: Record<string, unknown> = {
     hospital_id: params.hospitalId,
@@ -61,6 +64,13 @@ async function createBillingRecordWithCoupon(params: {
     insertPayload.coupon_id = params.couponId;
     insertPayload.original_amount = params.originalAmount;
     insertPayload.discount_amount = params.discountAmount;
+  }
+  if (params.upgradeCreditAmount > 0) {
+    insertPayload.upgrade_credit_amount = params.upgradeCreditAmount;
+    insertPayload.upgrade_source_billing_id = params.upgradeSourceBillingId;
+  }
+  if (params.creditUsedAmount > 0) {
+    insertPayload.credit_used_amount = params.creditUsedAmount;
   }
 
   const primary = await supabase
@@ -144,6 +154,12 @@ export interface TossPaymentRequest {
   couponId?: string;
   /** 쿠폰 할인 금액 (클라이언트 미리보기 값, 서버에서 재검증) */
   discountAmount?: number;
+  /** 업그레이드 크레딧: 기존 플랜 잔여 금액 (VAT 포함, 서버에서 재검증) */
+  upgradeCreditAmount?: number;
+  /** 크레딧 원천 billing_history.id */
+  upgradeSourceBillingId?: string;
+  /** 다운그레이드 크레딧 잔액에서 차감할 금액 (서버에서 잔액 재검증) */
+  creditUsedAmount?: number;
 }
 
 export interface TossPaymentResult {
@@ -171,7 +187,7 @@ export const tossPaymentService = {
    */
   calcTotalAmount(plan: PlanType, billingCycle: BillingCycle): number {
     const base = this.calcBaseAmount(plan, billingCycle);
-    return Math.floor((base + Math.round(base * 0.1)) / 1000) * 1000;
+    return Math.round(base * 1.1);
   },
 
   /**
@@ -182,23 +198,36 @@ export const tossPaymentService = {
    * (취소/오류 시 error를 반환)
    */
   async requestPayment(request: TossPaymentRequest): Promise<TossPaymentResult> {
-    const { hospitalId, plan, billingCycle, customerName, paymentMethod, couponId, discountAmount } = request;
+    const {
+      hospitalId, plan, billingCycle, customerName, paymentMethod,
+      couponId, discountAmount,
+      upgradeCreditAmount, upgradeSourceBillingId,
+      creditUsedAmount,
+    } = request;
     const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY as string | undefined;
 
     if (!clientKey) {
       return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의하세요.' };
     }
 
-    // 1. 금액 계산: 기본가 → 쿠폰 할인 → VAT
+    // 1. 금액 계산: 기본가 → 쿠폰 할인 → VAT → 업그레이드 크레딧 → 잔액 크레딧 차감
     const baseAmount = this.calcBaseAmount(plan, billingCycle);
     const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, baseAmount) : 0;
     const afterDiscount = baseAmount - appliedDiscount;
-    const totalAmount = Math.floor((afterDiscount + Math.round(afterDiscount * 0.1)) / 1000) * 1000;
+    const vatAmount = Math.round(afterDiscount * 1.1);
+    const appliedCredit = upgradeCreditAmount && upgradeSourceBillingId
+      ? Math.min(upgradeCreditAmount, vatAmount)
+      : 0;
+    const afterUpgradeCredit = vatAmount - appliedCredit;
+    const appliedCreditBalance = creditUsedAmount
+      ? Math.min(creditUsedAmount, afterUpgradeCredit) // 전액 차감 허용
+      : 0;
+    const totalAmount = afterUpgradeCredit - appliedCreditBalance;
     const originalAmount = this.calcTotalAmount(plan, billingCycle);
     const isTestPayment = resolveIsTestPayment();
 
-    if (totalAmount <= 0) {
-      return { error: '결제 금액이 0원 이하입니다. 쿠폰 적용을 확인해주세요.' };
+    if (totalAmount < 0) {
+      return { error: '결제 금액이 0원 미만입니다. 크레딧 적용을 확인해주세요.' };
     }
 
     // 2. billing_history 레코드 생성
@@ -212,11 +241,24 @@ export const tossPaymentService = {
       couponId: couponId || null,
       originalAmount: couponId ? originalAmount : null,
       discountAmount: appliedDiscount,
+      upgradeCreditAmount: appliedCredit,
+      upgradeSourceBillingId: appliedCredit > 0 ? (upgradeSourceBillingId ?? null) : null,
+      creditUsedAmount: appliedCreditBalance,
     });
 
     if (dbError || !billingId) {
       console.error('[tossPaymentService] billing_history insert failed:', dbError);
       return { error: '결제 이력 생성 실패. 다시 시도해주세요.' };
+    }
+
+    // 2-a. 크레딧 전액 결제: TossPayments 불필요
+    if (totalAmount === 0) {
+      const { error: rpcError } = await supabase.rpc('process_credit_payment', { p_billing_id: billingId });
+      if (rpcError) {
+        await supabase.from('billing_history').update({ payment_status: 'cancelled' }).eq('id', billingId).eq('payment_status', 'pending');
+        return { error: rpcError.message ?? '크레딧 결제 처리 중 오류가 발생했습니다.' };
+      }
+      return {};
     }
 
     // 3. TossPayments SDK 로드
@@ -286,8 +328,17 @@ export const tossPaymentService = {
       });
 
       if (error) {
-        console.error('[tossPaymentService] confirmPayment Edge Function error:', error);
-        return { ok: false, error: error.message || '결제 승인 중 오류가 발생했습니다.' };
+        // Edge Function 에러 응답 본문 파싱 (TossPayments 에러 코드/메시지 추출)
+        let parsed: Record<string, unknown> | null = null;
+        try {
+          parsed = typeof error.context?.json === 'function'
+            ? await error.context.json()
+            : null;
+        } catch { /* ignore */ }
+        const errMsg = (parsed?.error as string) ?? error.message ?? '결제 승인 중 오류가 발생했습니다.';
+        const errCode = parsed?.code as string | undefined;
+        console.error('[tossPaymentService] confirmPayment failed:', errCode, errMsg, parsed);
+        return { ok: false, error: errMsg };
       }
 
       const result = data as { ok?: boolean; error?: string; alreadyCompleted?: boolean };
