@@ -1,8 +1,8 @@
 /**
- * M-05: PLAN_BASE_PRICES (Edge Function) ↔ PLAN_PRICING (types/plan.ts) 동기화 검증
+ * M-05: FALLBACK_PRICES (Edge Function) ↔ PLAN_PRICING (types/plan.ts) 동기화 검증
  *
- * Edge Function의 서버사이드 정가 테이블이 클라이언트 types와 일치하는지 확인합니다.
- * 불일치 시 결제 금액 검증이 실패하거나 잘못된 금액이 승인될 수 있습니다.
+ * Edge Function의 서버사이드 정가 폴백 테이블이 클라이언트 types와 일치하는지 확인합니다.
+ * 불일치 시 DB 조회 실패 시 폴백 금액이 틀려 결제 승인 오류가 발생할 수 있습니다.
  *
  * 실행: node scripts/price-sync-contract.test.mjs
  */
@@ -15,14 +15,14 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 
-// ── 1. Edge Function에서 PLAN_BASE_PRICES 추출 ──
+// ── 1. Edge Function에서 FALLBACK_PRICES 추출 ──
 const edgeFnPath = resolve(root, 'supabase/functions/toss-payment-confirm/index.ts');
 const edgeFnSrc = readFileSync(edgeFnPath, 'utf-8');
 
 const edgePriceBlock = edgeFnSrc.match(
-  /const PLAN_BASE_PRICES[^=]*=\s*(\{[\s\S]*?\n\};)/
+  /const FALLBACK_PRICES[^=]*=\s*(\{[\s\S]*?\n\};)/
 );
-assert.ok(edgePriceBlock, 'PLAN_BASE_PRICES block not found in Edge Function');
+assert.ok(edgePriceBlock, 'FALLBACK_PRICES block not found in Edge Function (renamed from PLAN_BASE_PRICES)');
 
 // Parse each plan line: plan: { monthly: N, yearly: N }
 const edgePrices = {};
@@ -32,7 +32,7 @@ while ((match = planLineRe.exec(edgePriceBlock[1])) !== null) {
   edgePrices[match[1]] = { monthly: Number(match[2]), yearly: Number(match[3]) };
 }
 
-assert.ok(Object.keys(edgePrices).length > 0, 'No plans parsed from PLAN_BASE_PRICES');
+assert.ok(Object.keys(edgePrices).length > 0, 'No plans parsed from FALLBACK_PRICES');
 
 // ── 2. types/plan.ts에서 PLAN_PRICING 추출 ──
 const planTsPath = resolve(root, 'types/plan.ts');
@@ -79,7 +79,7 @@ const clientPaidPlans = Object.entries(clientPrices)
 for (const plan of clientPaidPlans) {
   assert.ok(
     edgePrices[plan],
-    `Plan "${plan}" is paid in types/plan.ts (monthly=${clientPrices[plan].monthly}) but missing in Edge Function PLAN_BASE_PRICES`
+    `Plan "${plan}" is paid in types/plan.ts (monthly=${clientPrices[plan].monthly}) but missing in Edge Function FALLBACK_PRICES`
   );
 }
 

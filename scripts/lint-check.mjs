@@ -337,11 +337,62 @@ function checkBannedEnvPatterns() {
   }
 }
 
+function checkEdgeFunctionPricingSync() {
+  const planTs = read('types/plan.ts');
+  const edgeFn = read('supabase/functions/toss-payment-confirm/index.ts');
+  if (!planTs || !edgeFn) return;
+
+  // FALLBACK_PRICES must exist (renamed from PLAN_BASE_PRICES)
+  if (!edgeFn.includes('FALLBACK_PRICES')) {
+    failures.push(
+      'supabase/functions/toss-payment-confirm/index.ts: FALLBACK_PRICES constant is missing (was PLAN_BASE_PRICES)',
+    );
+    return;
+  }
+
+  const extractClientPrice = (plan, cycle) => {
+    const re = new RegExp(`${plan}:\\s*\\{[^}]*${cycle}Price:\\s*(\\d+)`);
+    const m = planTs.match(re);
+    return m ? Number.parseInt(m[1], 10) : null;
+  };
+
+  const extractFallbackPrice = (plan, cycle) => {
+    // e.g. basic:    { monthly: 27000,  yearly: 21000  },
+    const re = new RegExp(`${plan}:\\s*\\{[^}]*${cycle}:\\s*(\\d+)`);
+    const m = edgeFn.match(re);
+    return m ? Number.parseInt(m[1], 10) : null;
+  };
+
+  for (const [plan] of [['basic'], ['plus'], ['business']]) {
+    for (const cycle of ['monthly', 'yearly']) {
+      const clientPrice = extractClientPrice(plan, cycle);
+      const fallbackPrice = extractFallbackPrice(plan, cycle);
+
+      if (clientPrice === null) {
+        failures.push(`types/plan.ts: missing PLAN_PRICING.${plan}.${cycle}Price`);
+        continue;
+      }
+      if (fallbackPrice === null) {
+        failures.push(
+          `supabase/functions/toss-payment-confirm/index.ts: missing FALLBACK_PRICES.${plan}.${cycle}`,
+        );
+        continue;
+      }
+      if (clientPrice !== fallbackPrice) {
+        failures.push(
+          `Price mismatch for ${plan}/${cycle}: types/plan.ts=${clientPrice} vs FALLBACK_PRICES=${fallbackPrice}`,
+        );
+      }
+    }
+  }
+}
+
 checkDangerouslySetInnerHTML();
 checkInnerHtmlAssignments();
 checkSecurityMigrationGuards();
 checkPlanLimitConsistency();
 checkDataroomPricingConsistency();
+checkEdgeFunctionPricingSync();
 checkLegacyPlanLabelsInActiveSurface();
 checkMaintenanceServiceWiring();
 checkTypeSafetyGuardrails();

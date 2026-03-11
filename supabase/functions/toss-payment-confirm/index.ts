@@ -15,20 +15,36 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-/** 서버사이드 정가 테이블 (types.ts PLAN_PRICING와 동기화 필요) */
-const PLAN_BASE_PRICES: Record<string, Record<string, number>> = {
+/** 서버사이드 정가 폴백 테이블 (DB 조회 실패 시 사용, types/plan.ts PLAN_PRICING와 동기화 필요) */
+const FALLBACK_PRICES: Record<string, Record<string, number>> = {
   basic:    { monthly: 27000,  yearly: 21000  },
   plus:     { monthly: 59000,  yearly: 47000  },
   business: { monthly: 129000, yearly: 103000 },
 };
 
-/** VAT 제외 기본 금액 */
-function calcBaseAmount(plan: string, billingCycle: string): number | null {
-  const prices = PLAN_BASE_PRICES[plan];
+/** VAT 제외 기본 금액 — 1차: DB 조회, 2차: 폴백 상수 */
+async function calcBaseAmount(
+  adminClient: ReturnType<typeof createClient>,
+  plan: string,
+  billingCycle: string,
+): Promise<number | null> {
+  // 1차: plan_pricing 테이블에서 조회
+  const { data, error } = await adminClient.rpc("get_plan_price", {
+    p_plan: plan,
+    p_billing_cycle: billingCycle,
+  });
+  if (!error && data !== null) {
+    const unitPrice = Number(data);
+    return billingCycle === "yearly" ? unitPrice * 12 : unitPrice;
+  }
+  // 2차: 폴백 (plan_pricing 마이그레이션 미적용 환경 대비)
+  console.error(
+    "[toss-payment-confirm] DB price lookup failed, using fallback:",
+    error?.message,
+  );
+  const prices = FALLBACK_PRICES[plan];
   if (!prices) return null;
-  return billingCycle === "yearly"
-    ? prices.yearly * 12
-    : prices.monthly;
+  return billingCycle === "yearly" ? prices.yearly * 12 : prices.monthly;
 }
 
 /** VAT 포함 최종 금액 (할인 후 기본가에 VAT 10% 적용) */
@@ -203,7 +219,7 @@ Deno.serve(async (req: Request) => {
   // 순서: 기본가 → 쿠폰 할인 → VAT
   const billingPlan = billing.plan;
   const billingCycleVal = billing.billing_cycle;
-  const baseAmount = calcBaseAmount(billingPlan, billingCycleVal);
+  const baseAmount = await calcBaseAmount(adminClient, billingPlan, billingCycleVal);
 
   if (baseAmount === null) {
     console.error("[toss-payment-confirm] Unknown plan or billing_cycle:", billingPlan, billingCycleVal);
