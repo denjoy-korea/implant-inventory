@@ -9,11 +9,27 @@
 import { BillingCycle, DbBillingHistory, PLAN_PRICING, PlanType, RefundType } from '../types/plan';
 import { supabase } from './supabaseClient';
 
-const FULL_REFUND_DAYS = 7;
+/** 10원 단위 올림 일요금 (환불/크레딧 공용) */
+export function calcDailyRate(paidAmount: number, billingCycle: BillingCycle): number {
+  const totalDays = billingCycle === 'yearly' ? 360 : 30;
+  return Math.ceil(paidAmount / totalDays / 10) * 10;
+}
 
-/** VAT 포함 금액 (천원 단위 절사) */
-function withVat(base: number): number {
-  return Math.floor((base + Math.round(base * 0.1)) / 1000) * 1000;
+/**
+ * 잔여 가치 계산 (환불/크레딧 공용)
+ * - 일할 계산: paidAmount - ceil(dailyRate × usedDays) (월간 30일, 연간 360일)
+ */
+export function calcRemainingValue(
+  paidAmount: number,
+  billingCycle: BillingCycle,
+  paidAt: string,
+): number {
+  const totalDays = billingCycle === 'yearly' ? 360 : 30;
+  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / 86400000);
+  if (usedDays >= totalDays) return 0;
+  const dailyRate = calcDailyRate(paidAmount, billingCycle);
+  const usedCharge = Math.min(dailyRate * usedDays, paidAmount);
+  return Math.max(0, paidAmount - usedCharge);
 }
 
 export interface RefundPreview {
@@ -36,20 +52,7 @@ export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
   const billingCycle = (billing.billing_cycle ?? 'monthly') as BillingCycle;
   const paidAt = billing.created_at;
 
-  const now = Date.now();
-  const paidMs = new Date(paidAt).getTime();
-  const usedDays = Math.ceil((now - paidMs) / (1000 * 60 * 60 * 24));
-
-  // 케이스 1: 7일 이내 전액 환불
-  if (usedDays <= FULL_REFUND_DAYS) {
-    return {
-      refundAmount: paidAmount,
-      refundType: 'full',
-      reason: `결제 후 ${usedDays}일 이내 전액 환불`,
-      usedDays,
-      summary: `전액 환불 (결제 ${usedDays}일 이내)`,
-    };
-  }
+  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / 86400000);
 
   const prices = PLAN_PRICING[plan];
   if (!prices || plan === 'free' || plan === 'ultimate') {
@@ -62,38 +65,10 @@ export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
     };
   }
 
-  // 케이스 2: 연간 구독 → 이용 월수 × 월간 정가 차감
-  if (billingCycle === 'yearly') {
-    const usedMonths = Math.ceil(usedDays / 30);
-    const monthlyVat = withVat(prices.monthlyPrice);
-    const charged = usedMonths * monthlyVat;
-    const refundAmount = Math.max(0, paidAmount - charged);
-
-    if (refundAmount <= 0) {
-      return {
-        refundAmount: 0,
-        refundType: 'none',
-        reason: `이용 ${usedMonths}개월의 월간 정가 합산이 결제금액을 초과합니다.`,
-        usedDays,
-        summary: '환불금 없음 (이용 기간 초과)',
-      };
-    }
-
-    return {
-      refundAmount,
-      refundType: 'prorata_yearly',
-      reason: `연간 구독 중도 해지: 이용 ${usedMonths}개월 × 월간 정가 ${monthlyVat.toLocaleString('ko-KR')}원 차감`,
-      usedDays,
-      summary: `부분 환불 (이용 ${usedMonths}개월 차감)`,
-    };
-  }
-
-  // 케이스 3: 월간 구독 → 일할 계산
-  const totalDays = 30;
-  const dailyRate = paidAmount / totalDays;
-  const usedCapped = Math.min(usedDays, totalDays);
-  const charged = Math.ceil(dailyRate * usedCapped);
-  const refundAmount = Math.max(0, paidAmount - charged);
+  // 일할 계산 (월간 30일, 연간 360일) — 환불/크레딧 통합 공식
+  const refundAmount = calcRemainingValue(paidAmount, billingCycle, paidAt);
+  const dailyRate = calcDailyRate(paidAmount, billingCycle);
+  const refundType: RefundType = billingCycle === 'yearly' ? 'prorata_yearly' : 'prorata_monthly';
 
   if (refundAmount <= 0) {
     return {
@@ -107,10 +82,51 @@ export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
 
   return {
     refundAmount,
-    refundType: 'prorata_monthly',
-    reason: `월간 구독 일할 환불: ${usedCapped}일 이용 차감`,
+    refundType,
+    reason: `일할 환불: ${usedDays}일 이용, 일할 ${dailyRate.toLocaleString('ko-KR')}원 × ${usedDays}일 차감`,
     usedDays,
-    summary: `부분 환불 (${usedCapped}일 이용 차감)`,
+    summary: `부분 환불 (${usedDays}일 이용 차감)`,
+  };
+}
+
+// ── 업그레이드 크레딧 ──────────────────────────────────────────────────────────
+
+export interface UpgradeCredit {
+  /** VAT 포함 잔여 금액 (결제 최종 금액에서 직접 차감) */
+  creditAmount: number;
+  remainingDays: number;
+  totalDays: number;
+  sourceBillingId: string;
+}
+
+/**
+ * 현재 구독의 잔여 금액 계산 (업그레이드 시 새 플랜에서 차감)
+ *
+ * 계산식: 환불 공식과 동일 (일할 계산, 10원 올림)
+ *
+ * @param currentBilling  현재 진행 중인 completed billing_history row
+ */
+export function calcUpgradeCredit(currentBilling: DbBillingHistory): UpgradeCredit | null {
+  if (currentBilling.payment_status !== 'completed') return null;
+  if (!currentBilling.amount || currentBilling.amount <= 0) return null;
+
+  const billingCycle = (currentBilling.billing_cycle ?? 'monthly') as BillingCycle;
+  const totalDays = billingCycle === 'yearly' ? 360 : 30;
+  const usedDays = Math.ceil((Date.now() - new Date(currentBilling.created_at).getTime()) / 86400000);
+  const remainingDays = Math.max(0, totalDays - usedDays);
+
+  if (remainingDays <= 0) return null;
+
+  // 환불 정책과 동일: 일할 계산
+  const creditAmount = calcRemainingValue(currentBilling.amount, billingCycle, currentBilling.created_at);
+
+  if (creditAmount <= 0) return null;
+
+  return {
+    creditAmount,
+    remainingDays,
+    totalDays,
+    sourceBillingId: currentBilling.id,
   };
 }
 

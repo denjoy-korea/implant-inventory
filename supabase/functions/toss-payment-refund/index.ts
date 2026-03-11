@@ -2,9 +2,7 @@
  * toss-payment-refund
  *
  * 약관 제7조 기준 환불 처리:
- *   - 결제 후 7일 이내: 전액 환불
- *   - 월간 구독 중도 해지: 일할 계산 환불
- *   - 연간 구독 중도 해지: 이용 월수를 월간 정가로 재계산 후 차액 환불
+ *   - 월간/연간 구독 중도 해지: 일할 계산 환불 (월간 30일, 연간 360일, 10원 올림)
  *
  * 보안 모델:
  *   - JWT 인증 필수 (config.toml: verify_jwt = true)
@@ -17,18 +15,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// ── 서버사이드 정가 테이블 (types/plan.ts PLAN_PRICING와 동기화 필요) ──
-const PLAN_BASE_PRICES: Record<string, { monthly: number; yearly: number }> = {
-  basic:    { monthly: 27000,  yearly: 21000  },
-  plus:     { monthly: 59000,  yearly: 47000  },
-  business: { monthly: 129000, yearly: 103000 },
-};
+// 유효 플랜 목록 (free/ultimate는 billing_history가 생기지 않지만 방어적으로 처리)
+const VALID_PAID_PLANS = new Set(["basic", "plus", "business"]);
 
-const FULL_REFUND_DAYS = 7; // 전액 환불 기준일
-
-/** VAT 포함 금액 (천원 단위 절사) */
-function withVat(base: number): number {
-  return Math.floor((base + Math.round(base * 0.1)) / 1000) * 1000;
+/** 10원 단위 올림 일요금 */
+function calcDailyRate(paidAmount: number, totalDays: number): number {
+  return Math.ceil(paidAmount / totalDays / 10) * 10;
 }
 
 type RefundType = "full" | "prorata_monthly" | "prorata_yearly" | "none";
@@ -41,7 +33,7 @@ interface RefundCalcResult {
 }
 
 /**
- * 약관 제7조 환불 금액 계산
+ * 약관 제7조 환불 금액 계산 (클라이언트 refundService와 동일 공식)
  *
  * @param paidAmount  실제 결제금액 (VAT 포함)
  * @param plan        결제 플랜
@@ -55,23 +47,9 @@ function calcRefund(params: {
   paidAt: string;
 }): RefundCalcResult {
   const { paidAmount, plan, billingCycle, paidAt } = params;
-  const now = Date.now();
-  const paidMs = new Date(paidAt).getTime();
-  const usedDays = Math.ceil((now - paidMs) / (1000 * 60 * 60 * 24));
+  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / (1000 * 60 * 60 * 24));
 
-  // 케이스 1: 7일 이내 → 전액 환불
-  if (usedDays <= FULL_REFUND_DAYS) {
-    return {
-      refundAmount: paidAmount,
-      refundType: "full",
-      reason: `결제 후 ${usedDays}일 이내 전액 환불`,
-      usedDays,
-    };
-  }
-
-  const prices = PLAN_BASE_PRICES[plan];
-  if (!prices) {
-    // 알 수 없는 플랜 → 환불 불가
+  if (!VALID_PAID_PLANS.has(plan)) {
     return {
       refundAmount: 0,
       refundType: "none",
@@ -80,35 +58,12 @@ function calcRefund(params: {
     };
   }
 
-  // 케이스 2: 연간 구독 → 이용 완료 월수 × 월간 정가 VAT 차감
-  if (billingCycle === "yearly") {
-    const usedMonths = Math.ceil(usedDays / 30);
-    const monthlyVat = withVat(prices.monthly);
-    const charged = usedMonths * monthlyVat;
-    const refundAmount = Math.max(0, paidAmount - charged);
-
-    if (refundAmount <= 0) {
-      return {
-        refundAmount: 0,
-        refundType: "none",
-        reason: `이용 기간(${usedMonths}개월)의 월간 정가 합산이 결제금액을 초과하여 환불금이 없습니다.`,
-        usedDays,
-      };
-    }
-
-    return {
-      refundAmount,
-      refundType: "prorata_yearly",
-      reason: `연간 구독 중도 해지: 이용 ${usedMonths}개월 × 월간 정가 ${monthlyVat.toLocaleString()}원 차감 후 환불`,
-      usedDays,
-    };
-  }
-
-  // 케이스 3: 월간 구독 → 일할 계산
-  const totalDays = 30;
-  const dailyRate = paidAmount / totalDays;
-  const charged = Math.ceil(dailyRate * Math.min(usedDays, totalDays));
-  const refundAmount = Math.max(0, paidAmount - charged);
+  // 일할 계산 (월간 30일, 연간 360일) — 환불/크레딧 통합 공식
+  const totalDays = billingCycle === "yearly" ? 360 : 30;
+  const dailyRate = calcDailyRate(paidAmount, totalDays);
+  const usedCharge = Math.min(dailyRate * usedDays, paidAmount);
+  const refundAmount = Math.max(0, paidAmount - usedCharge);
+  const refundType: RefundType = billingCycle === "yearly" ? "prorata_yearly" : "prorata_monthly";
 
   if (refundAmount <= 0) {
     return {
@@ -121,8 +76,8 @@ function calcRefund(params: {
 
   return {
     refundAmount,
-    refundType: "prorata_monthly",
-    reason: `월간 구독 일할 환불: ${usedDays}일 이용, 일할 ${Math.ceil(dailyRate).toLocaleString()}원 × ${Math.min(usedDays, totalDays)}일 차감`,
+    refundType,
+    reason: `일할 환불: ${usedDays}일 이용, 일할 ${dailyRate.toLocaleString()}원 × ${usedDays}일 차감`,
     usedDays,
   };
 }

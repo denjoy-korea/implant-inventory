@@ -735,9 +735,7 @@ export const planService = {
           const usedDays = Math.ceil((now - createdAt) / 86400000);
           remainingDays = Math.max(0, totalDays - usedDays);
 
-          if (usedDays <= 7) {
-            upperRemaining = billing.amount;
-          } else if (usedDays < totalDays) {
+          if (usedDays < totalDays) {
             const upperDaily = Math.ceil(billing.amount / totalDays / 10) * 10;
             const upperUsed = Math.min(upperDaily * usedDays, billing.amount);
             upperRemaining = Math.max(0, billing.amount - upperUsed);

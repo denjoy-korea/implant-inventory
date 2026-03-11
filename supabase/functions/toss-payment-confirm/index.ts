@@ -31,10 +31,10 @@ function calcBaseAmount(plan: string, billingCycle: string): number | null {
     : prices.monthly;
 }
 
-/** VAT 포함 최종 금액 (할인 후 기본가에 VAT 적용, 천원 단위 절사) */
+/** VAT 포함 최종 금액 (할인 후 기본가에 VAT 10% 적용) */
 function calcAmountWithVat(base: number, discount: number): number {
   const afterDiscount = base - discount;
-  return Math.floor((afterDiscount + Math.round(afterDiscount * 0.1)) / 1000) * 1000;
+  return Math.round(afterDiscount * 1.1);
 }
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
@@ -48,6 +48,9 @@ type BillingRow = {
   coupon_id: string | null;
   original_amount: number | null;
   discount_amount: number;
+  upgrade_credit_amount: number;
+  upgrade_source_billing_id: string | null;
+  credit_used_amount: number;
 };
 
 async function fetchBillingRowWithCompatibility(
@@ -56,7 +59,7 @@ async function fetchBillingRowWithCompatibility(
 ): Promise<{ billing: BillingRow | null; billingError: { message: string } | null }> {
   const primary = await adminClient
     .from("billing_history")
-    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment, coupon_id, original_amount, discount_amount")
+    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment, coupon_id, original_amount, discount_amount, upgrade_credit_amount, upgrade_source_billing_id, credit_used_amount")
     .eq("id", billingId)
     .single();
 
@@ -82,11 +85,14 @@ async function fetchBillingRowWithCompatibility(
 
   return {
     billing: {
-      ...(fallback.data as Omit<BillingRow, "is_test_payment" | "coupon_id" | "original_amount" | "discount_amount">),
+      ...(fallback.data as Omit<BillingRow, "is_test_payment" | "coupon_id" | "original_amount" | "discount_amount" | "upgrade_credit_amount" | "upgrade_source_billing_id">),
       is_test_payment: true,
       coupon_id: null,
       original_amount: null,
       discount_amount: 0,
+      upgrade_credit_amount: 0,
+      upgrade_source_billing_id: null,
+      credit_used_amount: 0,
     },
     billingError: null,
   };
@@ -250,7 +256,7 @@ Deno.serve(async (req: Request) => {
         const notExpired = !coupon.expires_at || new Date(coupon.expires_at) > new Date();
         if (notExpired) {
           if (coupon.discount_type === "percentage") {
-            serverDiscountAmount = Math.floor(baseAmount * coupon.discount_value / 100);
+            serverDiscountAmount = Math.round(baseAmount * coupon.discount_value / 100);
           } else {
             serverDiscountAmount = Math.min(coupon.discount_value, baseAmount);
           }
@@ -286,11 +292,121 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const expectedAmount = calcAmountWithVat(baseAmount, serverDiscountAmount);
+  // ── 업그레이드 크레딧 서버사이드 재검증 ──────────────────────────────────
+  // 계산식 (클라이언트 refundService.calcUpgradeCredit / calcRemainingValue와 동일):
+  //   totalDays = yearly ? 360 : 30
+  //   dailyRate = ceil(amount / totalDays / 10) * 10  (10원 올림)
+  //   serverCredit = amount - min(dailyRate × usedDays, amount)  (일할 계산)
+  let serverUpgradeCredit = 0;
+  if (billing.upgrade_source_billing_id && billing.upgrade_credit_amount > 0) {
+    const { data: sourceBilling } = await adminClient
+      .from("billing_history")
+      .select("id, hospital_id, amount, billing_cycle, payment_status, created_at")
+      .eq("id", billing.upgrade_source_billing_id)
+      .single();
+
+    // 현재 병원 플랜 조회 (다운그레이드 후 재업그레이드 방어용)
+    const { data: hospitalPlanData } = await adminClient
+      .from("hospitals")
+      .select("plan")
+      .eq("id", billing.hospital_id)
+      .single();
+    const currentHospitalPlan = (hospitalPlanData as { plan: string } | null)?.plan ?? null;
+
+    if (!sourceBilling) {
+      console.warn("[toss-payment-confirm] upgrade_source_billing not found, ignoring credit:", billing.upgrade_source_billing_id);
+    } else if (sourceBilling.hospital_id !== billing.hospital_id) {
+      console.error("[toss-payment-confirm] upgrade_source_billing hospital mismatch — possible tampering");
+      return jsonResponse({ error: "Upgrade credit source does not belong to this hospital" }, 403);
+    } else if (sourceBilling.payment_status !== "completed") {
+      console.warn("[toss-payment-confirm] upgrade_source_billing not completed, ignoring credit");
+    } else if (currentHospitalPlan && sourceBilling.plan !== currentHospitalPlan) {
+      // 다운그레이드 후 재업그레이드: source billing 플랜이 현재 플랜과 다름
+      // (예: Business 결제 건을 Plus 사용자가 업그레이드 크레딧으로 사용 시도)
+      // 잔여 금액은 이미 credit_balance에 적립됨 → 업그레이드 크레딧 무효화
+      console.warn("[toss-payment-confirm] upgrade_source_billing plan mismatch — ignoring (post-downgrade upgrade):", {
+        sourcePlan: sourceBilling.plan, currentPlan: currentHospitalPlan,
+      });
+    } else {
+      const usedDays = Math.ceil((Date.now() - new Date(sourceBilling.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      const totalDays = sourceBilling.billing_cycle === "yearly" ? 360 : 30;
+      if (usedDays < totalDays) {
+        const dailyRate = Math.ceil(sourceBilling.amount / totalDays / 10) * 10;
+        const usedCharge = Math.min(dailyRate * usedDays, sourceBilling.amount);
+        serverUpgradeCredit = Math.max(0, sourceBilling.amount - usedCharge);
+      }
+    }
+
+    // 서버 크레딧으로 billing_history 보정 (클라이언트 값 불신)
+    if (serverUpgradeCredit !== billing.upgrade_credit_amount) {
+      const vatBase = calcAmountWithVat(baseAmount, serverDiscountAmount);
+      const correctedCredit = Math.min(serverUpgradeCredit, vatBase - 100);
+      const correctedAmount = vatBase - correctedCredit;
+      console.warn("[toss-payment-confirm] Overwriting upgrade_credit with server values:", {
+        serverCredit: serverUpgradeCredit,
+        billingCredit: billing.upgrade_credit_amount,
+        correctedCredit,
+      });
+      const { error: updateErr } = await adminClient
+        .from("billing_history")
+        .update({
+          upgrade_credit_amount: correctedCredit,
+          amount: correctedAmount,
+        })
+        .eq("id", orderId.trim())
+        .eq("payment_status", "pending");
+
+      if (updateErr) {
+        console.error("[toss-payment-confirm] Failed to overwrite upgrade_credit:", updateErr.message);
+        return jsonResponse({ error: "Failed to correct upgrade credit record" }, 500);
+      }
+      serverUpgradeCredit = correctedCredit;
+    }
+  }
+
+  // ── 잔액 크레딧 서버사이드 재검증 ───────────────────────────────────────────
+  let serverCreditUsed = 0;
+  if (billing.credit_used_amount > 0) {
+    const { data: hospitalData } = await adminClient
+      .from("hospitals")
+      .select("credit_balance")
+      .eq("id", billing.hospital_id)
+      .single();
+
+    const availableBalance = (hospitalData as { credit_balance: number } | null)?.credit_balance ?? 0;
+
+    if (billing.credit_used_amount > availableBalance) {
+      console.error("[toss-payment-confirm] credit_used_amount exceeds balance:", {
+        creditUsed: billing.credit_used_amount,
+        availableBalance,
+        hospitalId: billing.hospital_id,
+      });
+      return jsonResponse({ error: "Insufficient credit balance" }, 400);
+    }
+
+    const vatBase = calcAmountWithVat(baseAmount, serverDiscountAmount);
+    const afterUpgradeCredit = vatBase - serverUpgradeCredit;
+    serverCreditUsed = Math.min(billing.credit_used_amount, afterUpgradeCredit - 100);
+
+    if (serverCreditUsed !== billing.credit_used_amount) {
+      const correctedAmount = afterUpgradeCredit - serverCreditUsed;
+      await adminClient
+        .from("billing_history")
+        .update({ credit_used_amount: serverCreditUsed, amount: correctedAmount })
+        .eq("id", orderId.trim())
+        .eq("payment_status", "pending");
+    }
+  }
+
+  // VAT 포함 금액 → 업그레이드 크레딧 → 잔액 크레딧 차감 = 최종 청구금액
+  const vatTotal = calcAmountWithVat(baseAmount, serverDiscountAmount);
+  const expectedAmount = vatTotal - serverUpgradeCredit - serverCreditUsed;
   if (expectedAmount !== amountNum) {
     console.error("[toss-payment-confirm] Amount mismatch:", {
       baseAmount,
       discount: serverDiscountAmount,
+      upgradeCredit: serverUpgradeCredit,
+      creditUsed: serverCreditUsed,
       expected: expectedAmount,
       received: amountNum,
       plan: billingPlan,

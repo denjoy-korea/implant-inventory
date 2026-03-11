@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BillingCycle, PlanType, User } from '../types';
+import { BillingCycle, HospitalPlanState, PlanType, User, PLAN_ORDER } from '../types';
 import PricingPaymentModal from './pricing/PricingPaymentModal';
 import { tossPaymentService } from '../services/tossPaymentService';
 import { couponService, UserCoupon, DiscountPreview } from '../services/couponService';
+import { planService } from '../services/planService';
+import { calcUpgradeCredit, UpgradeCredit } from '../services/refundService';
 
 interface DirectPaymentModalProps {
   plan: PlanType | null;
   billing: BillingCycle;
   user: User | null;
   hospitalName: string;
+  planState?: HospitalPlanState | null;
   onDismiss: () => void;
 }
 
@@ -17,6 +20,7 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   billing,
   user,
   hospitalName,
+  planState,
   onDismiss,
 }) => {
   const [contactName, setContactName] = useState(user?.name || '');
@@ -31,6 +35,13 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   const [discountPreview, setDiscountPreview] = useState<DiscountPreview | null>(null);
 
+  // 업그레이드 크레딧 상태
+  const [upgradeCredit, setUpgradeCredit] = useState<UpgradeCredit | null>(null);
+
+  // 잔액 크레딧 (다운그레이드로 적립된 잔액)
+  const creditBalance = planState?.creditBalance ?? 0;
+  const [creditUsedAmount, setCreditUsedAmount] = useState(0);
+
   const loadCoupons = useCallback(async () => {
     if (!user?.hospitalId) return;
     try {
@@ -41,13 +52,35 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
     }
   }, [user?.hospitalId, plan]);
 
+  // 업그레이드 크레딧 계산: 현재 유료 플랜 → 상위 플랜으로 변경하는 경우에만
+  const loadUpgradeCredit = useCallback(async () => {
+    if (!user?.hospitalId || !plan || plan === 'free') { setUpgradeCredit(null); return; }
+    const currentPlan = planState?.plan;
+    if (!currentPlan || currentPlan === 'free' || currentPlan === 'ultimate') { setUpgradeCredit(null); return; }
+    if (PLAN_ORDER[plan] <= PLAN_ORDER[currentPlan]) { setUpgradeCredit(null); return; }
+
+    try {
+      const billing = await planService.getLatestCompletedBilling(user.hospitalId);
+      if (!billing) { setUpgradeCredit(null); return; }
+      // 다운그레이드 후 재업그레이드 방어:
+      // 최신 결제 건이 현재 플랜과 다르면(e.g. Business 결제 후 Plus로 다운그레이드)
+      // 이전 결제 건을 업그레이드 크레딧으로 쓸 수 없음 — 크레딧은 credit_balance에 이미 적립됨
+      if (billing.plan !== currentPlan) { setUpgradeCredit(null); return; }
+      setUpgradeCredit(calcUpgradeCredit(billing));
+    } catch {
+      setUpgradeCredit(null);
+    }
+  }, [user?.hospitalId, plan, planState?.plan]);
+
   useEffect(() => {
     void loadCoupons();
-  }, [loadCoupons]);
+    void loadUpgradeCredit();
+  }, [loadCoupons, loadUpgradeCredit]);
 
-  // 플랜/billing 변경 시 쿠폰 선택 초기화
+  // 플랜/billing 변경 시 쿠폰 선택 + 크레딧 사용 초기화
   useEffect(() => {
     setSelectedCouponId(null);
+    setCreditUsedAmount(0);
   }, [plan, billing]);
 
   // 쿠폰 선택 시 할인 미리보기 계산
@@ -80,6 +113,9 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
         paymentMethod,
         couponId: selectedCouponId || undefined,
         discountAmount: discountPreview?.discount_amount,
+        upgradeCreditAmount: upgradeCredit?.creditAmount,
+        upgradeSourceBillingId: upgradeCredit?.sourceBillingId,
+        creditUsedAmount: creditUsedAmount > 0 ? creditUsedAmount : undefined,
       });
       if (result.error && result.error !== 'user_cancel') {
         setRequestError(result.error);
@@ -113,6 +149,10 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       selectedCouponId={selectedCouponId}
       onSelectCoupon={setSelectedCouponId}
       discountPreview={discountPreview}
+      upgradeCredit={upgradeCredit}
+      creditBalance={creditBalance}
+      creditUsedAmount={creditUsedAmount}
+      onCreditUsedChange={setCreditUsedAmount}
     />
   );
 };
