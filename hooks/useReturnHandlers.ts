@@ -176,27 +176,65 @@ export function useReturnHandlers({
     return result;
   }, [loadReturnRequests, returnRequests, inventory, user?.name, setState]);
 
-  const handleCompleteReturn = useCallback(async (returnId: string): Promise<ReturnMutationResult> => {
+  const handleCompleteReturn = useCallback(async (
+    returnId: string,
+    actualQties?: Record<string, number>
+  ): Promise<ReturnMutationResult> => {
     if (!hospitalId) return { ok: false, reason: 'error' };
 
-    // 낙관적 업데이트
+    const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
+
+    // 낙관적 업데이트 (actualReceivedQty 반영)
     setReturnRequests(prev =>
       prev.map(r => r.id === returnId ? {
         ...r,
         status: 'completed' as ReturnStatus,
         completedDate: new Date().toISOString().split('T')[0],
+        items: actualQties
+          ? r.items.map(item => ({
+              ...item,
+              actualReceivedQty: actualQties[item.id] ?? item.quantity,
+            }))
+          : r.items,
       } : r)
     );
 
-    const result = await returnService.completeReturn(returnId, hospitalId);
+    // 재고 보정: 신청 수량 > 실수령 수량이면 차이분 복구
+    if (actualQties && returnReq) {
+      for (const item of returnReq.items) {
+        const actualQty = actualQties[item.id] ?? item.quantity;
+        const diff = item.quantity - actualQty;
+        if (diff > 0) {
+          const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+          const invItem = inventory.find(inv =>
+            inv.manufacturer === returnReq.manufacturer &&
+            inv.brand === item.brand &&
+            getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
+          );
+          if (invItem) {
+            await inventoryService.adjustStock(invItem.id, diff);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === invItem.id
+                  ? { ...i, currentStock: i.currentStock + diff, stockAdjustment: i.stockAdjustment + diff }
+                  : i
+              ),
+            }));
+          }
+        }
+      }
+    }
+
+    const result = await returnService.completeReturn(returnId, hospitalId, actualQties);
 
     if (!result.ok) {
-      // 롤백 (재고는 신청 시점에 이미 차감됐으므로 완료 실패 시 재고 변동 없음)
+      // 롤백 (재고 보정도 서버 재조회로 복구)
       await loadReturnRequests();
     }
 
     return result;
-  }, [hospitalId, loadReturnRequests]);
+  }, [hospitalId, loadReturnRequests, inventory, setState]);
 
   const handleDeleteReturn = useCallback(async (returnId: string) => {
     // ref로 최신 배열을 참조 — 낙관적 제거 전에 항목 확보 (stale closure 방지)

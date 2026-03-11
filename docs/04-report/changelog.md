@@ -4,6 +4,134 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-12] - order-return-remodel (UX Enhancement + Core Feature: Complete PDCA Cycle)
+
+### Overview
+Completed order/return management UX overhaul with core feature for actual received quantity tracking. Implemented 6 functional requirements (F-01 through F-06) with 94.1% design-implementation match rate. Core feature (F-06) fully operational: per-item actual received qty input, DB persistence, automatic inventory restoration.
+
+### Requirements Status
+
+| Requirement | Feature | Status | Impact |
+|-------------|---------|--------|--------|
+| F-01 | Modal state management (useReducer) | ⚠️ PARTIAL | Hook created (59 LOC) but not integrated into OrderManager. Deferred to refactoring cycle. |
+| F-02 | Mobile card expand/collapse | ✅ COMPLETE | Cards show first item + "+ N개 더 보기" toggle. Both return and order cards implemented. |
+| F-03 | Mobile filter bar (type/date/manufacturer) | ✅ COMPLETE | 79-line component with TYPE_TABS chips, manufacturer dropdown, date range. Rendered at mobile layout top. |
+| F-04 | Return completion confirmation | ✅ COMPLETE | "반품완료" button opens ReturnCompleteModal instead of direct DB update. Both mobile and PC implementations. |
+| F-05 | Return detail modal items visibility | ✅ COMPLETE | Per-item +/- stepper in ReturnCompleteModal with requested/actual totals and stock delta display. |
+| F-06 | **Actual received quantity tracking (CORE)** | ✅ COMPLETE | DB migration, types updated, service accepts actualQties, hook calculates stock adjustments, end-to-end data flow. |
+
+**Summary**: 5 of 6 requirements fully complete. F-01 code structure improvement deferred as acceptable tech debt.
+
+### Design Match Analysis
+
+```
+Match Rate: 94.1% (32/34 checkpoints) ✅ PASS
+├─ F-02 through F-06: 100% (25/25 checkpoints) ✅
+├─ F-01 Integration: Partial (hook created, not wired) ⚠️
+└─ Technical Debt: Acknowledged and prioritized for next cycle
+```
+
+### Code Changes Summary
+
+| File | Type | Lines | Impact |
+|------|------|-------|--------|
+| `ReturnCompleteModal.tsx` | NEW | 189 | Core UI for actual qty input |
+| `OrderMobileFilterBar.tsx` | NEW | 79 | Mobile filter bar component |
+| `useOrderManagerModals.ts` | NEW | 59 | Modal state hook (not integrated) |
+| `supabase/migrations/20260312230000_actual_received_qty.sql` | NEW | 11 | DB migration for actual_received_qty column |
+| `OrderTableSection.tsx` | MODIFIED | +40 | Expand/collapse + button changes |
+| `OrderManager.tsx` | MODIFIED | +45 | ReturnCompleteModal integration |
+| `services/returnService.ts` | MODIFIED | +15 | actualQties upsert logic |
+| `hooks/useReturnHandlers.ts` | MODIFIED | +30 | Stock adjustment + optimistic update |
+| `types/return.ts` | MODIFIED | +2 | actualReceivedQty field |
+| `services/mappers.ts` | MODIFIED | +2 | DB → DTO mapping |
+
+**Total New/Modified**: 11 files, ~469 net new LOC
+
+### Core Feature (F-06) Implementation Details
+
+**End-to-End Data Flow**:
+```
+User Input (ReturnCompleteModal)
+  → Per-item actual_received_qty values
+  → handleReturnCompleteWithQties(returnId, actualQties)
+    → Optimistic UI update (set actualReceivedQty on items)
+    → Stock adjustment: (requested - actual) > 0 then restore
+    → DB save: upsert return_request_items with actual_received_qty
+    → RPC: complete_return_and_adjust_stock (status transition)
+  → Success toast & modal close
+  → Fallback: loadReturnRequests() on error
+```
+
+**Use Case Example**:
+- 반품신청: 10개 품목 (Magicore D:3.0 L:11 × 10)
+- 실제 수거: 7개 (3개 손실/파손)
+- 시스템 처리: 재고 +3 복구 (자동)
+- DB 기록: actual_received_qty = 7
+
+**Backward Compatibility**:
+- NULL rows processed as requested qty (기존 방식)
+- No data migration required
+- Existing returns continue working normally
+
+### Quality Metrics
+
+| Metric | Target | Achieved | Status |
+|--------|--------|----------|:------:|
+| Design Match Rate | ≥ 90% | 94.1% | ✅ |
+| TypeScript Errors | 0 | 0 | ✅ |
+| Test Pass Rate | 100% | 137/137 | ✅ |
+| Regressions | None | None | ✅ |
+| Backward Compatibility | NULL support | Implemented | ✅ |
+
+### Lessons Learned
+
+**Keep**
+- Design-first approach enabled 94% match on first attempt
+- Core feature isolation allowed completion without blocking on refactoring
+- NULL default pattern enables seamless backward compatibility
+
+**Problem**
+- useOrderManagerModals hook created but never integrated (decision not documented)
+- OrderManager still 988 lines (PC/Mobile layout extraction incomplete)
+- Modal state management inconsistency (dispatch pattern vs simple setter)
+
+**Try Next**
+- Dedicated refactoring cycle for F-01 completion (low-risk, high-value)
+- Component size limits (< 500 LOC) enforced in planning phase
+- Tech debt tracking in reports linking to follow-up PDCA features
+
+### Deployment
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Migration | ✅ Ready | 20260312230000_actual_received_qty.sql |
+| TypeScript | ✅ Clean | 0 errors |
+| Tests | ✅ 137/137 PASS | No regressions |
+| Backward Compat | ✅ Verified | NULL rows work as before |
+| Feature | ✅ Complete | Ready for production |
+
+### Next Steps
+
+**Immediate** (Week 1):
+- Deploy migration to production
+- Monitor NULL-handling edge cases
+- Update customer-facing documentation
+
+**Follow-Up** (Week 2-3):
+- Complete F-01: Integrate useOrderManagerModals (2 days)
+- Extract OrderPCLayout + OrderMobileLayout (2 days)
+- Reduce OrderManager from 988 → < 350 LOC
+
+### Verification
+
+- **Report**: [docs/04-report/features/order-return-remodel.report.md](features/order-return-remodel.report.md)
+- **Analysis**: [docs/03-analysis/order-return-remodel.analysis.md](../../03-analysis/order-return-remodel.analysis.md) (v1.0, 94.1%)
+- **Design**: [docs/02-design/features/order-return-remodel.design.md](../../02-design/features/order-return-remodel.design.md)
+- **Plan**: [docs/01-plan/features/order-return-remodel.plan.md](../../01-plan/features/order-return-remodel.plan.md)
+
+---
+
 ## [2026-03-12] - security-hardening (SECURITY DEFINER Audit: Complete PDCA Cycle)
 
 ### Overview

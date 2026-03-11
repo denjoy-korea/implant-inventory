@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Order, ReturnStatus, RETURN_STATUS_LABELS } from '../../types';
 import { displayMfr, formatManagerCell } from '../../hooks/useOrderManagerData';
 import { GroupedOrder, GroupedReturnRequest, UnifiedRow } from '../../hooks/useOrderManager';
@@ -10,6 +11,7 @@ interface Props {
   setSelectedGroupModal: (g: GroupedOrder | null) => void;
   setCancelModalOrder: (orders: Order[] | null) => void;
   setReturnDetailGroup: (g: GroupedReturnRequest | null) => void;
+  onOpenReturnComplete: (g: GroupedReturnRequest) => void;
   setShowHistoryPanel: (b: boolean) => void;
   handleReturnUpdateStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => void;
   onDeleteOrder: (orderId: string) => void;
@@ -23,10 +25,20 @@ export function OrderTableSection({
   setSelectedGroupModal,
   setCancelModalOrder,
   setReturnDetailGroup,
+  onOpenReturnComplete,
   setShowHistoryPanel,
   handleReturnUpdateStatus,
   onDeleteOrder,
 }: Props) {
+  // 접기/펴기 상태 (card id → expanded)
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) =>
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
   return (
     <div className={`bg-white rounded-[32px] border border-slate-200 shadow-sm ring-1 ring-slate-100/50 overflow-hidden relative ${!historyOnly ? 'hidden md:block' : ''}`}>
       <div className="absolute top-0 left-1/2 w-full h-8 bg-gradient-to-r from-transparent via-indigo-50/50 to-transparent -translate-x-1/2"></div>
@@ -57,7 +69,6 @@ export function OrderTableSection({
           if (row.kind === 'return') {
             const g = row.data;
             const allItems = g.requests.flatMap(r => r.items);
-            const first = allItems[0];
             const isActing = g.requests.some(r => returnActionLoadingId === r.id);
             const statusBadgeClass =
               g.overallStatus === 'requested' ? 'bg-yellow-50 border border-yellow-200 text-yellow-700' :
@@ -80,15 +91,22 @@ export function OrderTableSection({
                     <span className="text-[11px] font-bold text-slate-500">{g.totalItems}개 품목</span>
                     <span className="text-sm font-black text-slate-900 tabular-nums">총 {g.totalQty}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                   </div>
-                  {first && (
-                    <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
-                        <span className="text-[11px] text-slate-400">×{first.quantity}</span>
-                        {allItems.length > 1 && <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>}
+                  <div className="mt-1.5 pt-1.5 border-t border-slate-100">
+                    {(expandedCards.has(g.id) ? allItems : allItems.slice(0, 1)).map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-1 flex-wrap py-0.5">
+                        <span className="text-[11px] text-slate-600 font-medium">{item.brand} {item.size === '기타' || item.size === '-' ? '규격정보없음' : item.size}</span>
+                        <span className="text-[11px] text-slate-400">×{item.quantity}</span>
                       </div>
-                    </div>
-                  )}
+                    ))}
+                    {allItems.length > 1 && (
+                      <button
+                        onClick={() => toggleExpand(g.id)}
+                        className="mt-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
+                      >
+                        {expandedCards.has(g.id) ? '▴ 접기' : `▾ +${allItems.length - 1}개 더 보기`}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${statusBadgeClass}`}>{statusLabel}</span>
@@ -98,7 +116,7 @@ export function OrderTableSection({
                         <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'requested').forEach(r => handleReturnUpdateStatus(r.id, 'picked_up', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-blue-50 border border-blue-200 text-blue-700 active:scale-95">수거완료</button>
                       )}
                       {g.requests.some(r => r.status === 'picked_up') && (
-                        <button disabled={isActing} onClick={() => g.requests.filter(r => r.status === 'picked_up').forEach(r => handleReturnUpdateStatus(r.id, 'completed', 'picked_up'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>
+                        <button disabled={isActing} onClick={() => onOpenReturnComplete(g)} className="px-3 py-2 rounded-xl text-[11px] font-black bg-emerald-50 border border-emerald-200 text-emerald-700 active:scale-95">반품완료</button>
                       )}
                       {g.overallStatus === 'requested' && (
                         <button disabled={isActing} onClick={() => g.requests.forEach(r => handleReturnUpdateStatus(r.id, 'rejected', 'requested'))} className="px-3 py-2 rounded-xl text-[11px] font-black bg-slate-100 text-slate-500 active:scale-95">거절</button>
@@ -143,18 +161,25 @@ export function OrderTableSection({
                   <span className="text-sm font-black text-slate-900 tabular-nums">총 {group.totalQuantity}<span className="ml-0.5 text-[10px] text-slate-500">개</span></span>
                 </div>
                 {(() => {
-                  const allItems = group.orders.flatMap(o => o.items);
-                  const first = allItems[0];
-                  if (!first) return null;
+                  const allOrderItems = group.orders.flatMap(o => o.items);
+                  if (!allOrderItems[0]) return null;
+                  const isExp = expandedCards.has(group.id);
                   return (
                     <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[11px] text-slate-600 font-medium">{first.brand} {first.size === '기타' || first.size === '-' ? '규격정보없음' : first.size}</span>
-                        <span className="text-[11px] text-slate-400">×{first.quantity}</span>
-                        {allItems.length > 1 && (
-                          <span className="text-[10px] text-slate-400 font-medium">외 {allItems.length - 1}종</span>
-                        )}
-                      </div>
+                      {(isExp ? allOrderItems : allOrderItems.slice(0, 1)).map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-1 flex-wrap py-0.5">
+                          <span className="text-[11px] text-slate-600 font-medium">{item.brand} {item.size === '기타' || item.size === '-' ? '규격정보없음' : item.size}</span>
+                          <span className="text-[11px] text-slate-400">×{item.quantity}</span>
+                        </div>
+                      ))}
+                      {allOrderItems.length > 1 && (
+                        <button
+                          onClick={() => toggleExpand(group.id)}
+                          className="mt-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
+                        >
+                          {isExp ? '▴ 접기' : `▾ +${allOrderItems.length - 1}개 더 보기`}
+                        </button>
+                      )}
                     </div>
                   );
                 })()}
@@ -280,7 +305,7 @@ export function OrderTableSection({
                             <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'requested').forEach(req => handleReturnUpdateStatus(req.id, 'picked_up', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-all active:scale-95">수거완료</button>
                           )}
                           {g.requests.some(req => req.status === 'picked_up') && (
-                            <button disabled={isActing} onClick={() => g.requests.filter(req => req.status === 'picked_up').forEach(req => handleReturnUpdateStatus(req.id, 'completed', 'picked_up'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>
+                            <button disabled={isActing} onClick={() => onOpenReturnComplete(g)} className="px-2 py-1 rounded-lg text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95">반품완료</button>
                           )}
                           {g.overallStatus === 'requested' && (
                             <button disabled={isActing} onClick={() => g.requests.forEach(req => handleReturnUpdateStatus(req.id, 'rejected', 'requested'))} className="px-2 py-1 rounded-lg text-[10px] font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">거절</button>

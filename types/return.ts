@@ -32,6 +32,7 @@ export interface ReturnRequestItem {
   brand: string;
   size: string;
   quantity: number;
+  actualReceivedQty?: number | null;
 }
 
 export interface ReturnRequest {
@@ -73,6 +74,7 @@ export interface DbReturnRequestItem {
   brand: string;
   size: string;
   quantity: number;
+  actual_received_qty?: number | null;
 }
 
 export type ReturnMutationResult =

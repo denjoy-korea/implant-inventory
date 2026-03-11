@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-11T16:37:14.114Z",
+  "lastUpdated": "2026-03-11T17:04:58.434Z",
   "activeFeatures": [
     "implant-inventory",
     "surgery-dashboard",
@@ -124,7 +124,7 @@
       },
       "timestamps": {
         "started": "2026-02-16T07:42:26.745Z",
-        "lastUpdated": "2026-03-11T16:37:14.114Z"
+        "lastUpdated": "2026-03-11T17:04:58.434Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/OrderManager.tsx"
     },
@@ -888,9 +888,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-28T14:47:15.011Z",
-        "lastUpdated": "2026-03-11T16:36:21.044Z"
+        "lastUpdated": "2026-03-11T17:02:19.962Z"
       },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/order/OrderTableSection.tsx"
+      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/order/OrderMobileFilterBar.tsx"
     },
     "returnService.ts": {
       "phase": "do",
@@ -1458,6 +1458,12 @@
         "lastUpdated": "2026-03-11T12:57:29.807Z"
       },
       "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/services/refundService.ts"
+    },
+    "security-hardening": {
+      "phase": "archived",
+      "matchRate": 100,
+      "archivedAt": "2026-03-12",
+      "archivedTo": "docs/archive/2026-03/security-hardening/"
     }
   },
   "pipeline": {
@@ -1475,7 +1481,7 @@
   "session": {
     "startedAt": "2026-02-15T02:05:59.134Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-03-11T16:37:14.114Z"
+    "lastActivity": "2026-03-11T17:04:58.434Z"
   },
   "history": [
     {
@@ -30561,6 +30567,78 @@
     },
     {
       "timestamp": "2026-03-11T16:37:14.114Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:37:51.167Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:38:21.275Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:38:52.430Z",
+      "feature": "order",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:38:58.483Z",
+      "feature": "order",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:39:41.906Z",
+      "feature": "order",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:54:03.971Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:54:05.865Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:56:43.894Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T16:56:47.298Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T17:02:19.962Z",
+      "feature": "order",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T17:02:28.141Z",
+      "feature": "implant-inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T17:04:58.434Z",
       "feature": "implant-inventory",
       "phase": "do",
       "action": "updated"

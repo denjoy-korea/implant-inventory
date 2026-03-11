@@ -114,11 +114,29 @@ export const returnService = {
     return { ok: false, reason: 'conflict', currentStatus };
   },
 
-  /** 반품 완료 + 재고 차감 (picked_up → completed) */
+  /** 반품 완료 + 재고 차감 (picked_up → completed)
+   * @param actualQties - 품목별 실수령 수량 (key: return_request_items.id). 미전달 시 기존 방식
+   */
   async completeReturn(
     returnId: string,
-    hospitalId: string
+    hospitalId: string,
+    actualQties?: Record<string, number>
   ): Promise<ReturnMutationResult> {
+    // 실수령 수량 저장 (전달된 경우에만)
+    if (actualQties && Object.keys(actualQties).length > 0) {
+      const updates = Object.entries(actualQties).map(([id, qty]) => ({
+        id,
+        actual_received_qty: qty,
+      }));
+      const { error: updateError } = await supabase
+        .from('return_request_items')
+        .upsert(updates, { onConflict: 'id' });
+      if (updateError) {
+        console.error('[returnService] actual_received_qty save failed:', updateError);
+        return { ok: false, reason: 'error' };
+      }
+    }
+
     const { error } = await supabase.rpc('complete_return_and_adjust_stock', {
       p_return_id: returnId,
       p_hospital_id: hospitalId,

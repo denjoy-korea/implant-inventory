@@ -58,7 +58,7 @@ interface UseOrderManagerParams {
   returnRequests: ReturnRequest[];
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onCreateReturn: (params: CreateReturnParams) => Promise<void>;
-  onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
+  onCompleteReturn: (returnId: string, actualQties?: Record<string, number>) => Promise<ReturnMutationResult>;
   onUpdateReturnStatus: (
     returnId: string,
     status: ReturnStatus,
@@ -133,9 +133,6 @@ export function useOrderManager({
   const [returnCandidateCategory, setReturnCandidateCategory] = useState<ReturnCategory>('overstock');
   const [showBulkReturnConfirm, setShowBulkReturnConfirm] = useState(false);
   const [isBulkReturning, setIsBulkReturning] = useState(false);
-
-  // ── 반품 신청 상세 보기 state ──
-  const [returnDetailGroup, setReturnDetailGroup] = useState<GroupedReturnRequest | null>(null);
 
   // ── 교환 권장 품목 반품 처리 모달 state ──
   const [exchangeReturnTarget, setExchangeReturnTarget] = useState<ExchangeReturnTarget | null>(null);
@@ -391,6 +388,28 @@ export function useOrderManager({
     }
   };
 
+  // ── 핸들러: 반품 완료 (실수령 수량 포함) ─────────────────────
+  const handleReturnCompleteWithQties = async (
+    returnId: string,
+    actualQties: Record<string, number>
+  ) => {
+    setReturnActionLoadingId(returnId);
+    try {
+      const result = await onCompleteReturn(returnId, actualQties);
+      if (result.ok) showAlertToast('반품 완료 처리되었습니다.', 'success');
+      else
+        showAlertToast(
+          result.reason === 'conflict'
+            ? '상태가 변경되어 반영할 수 없습니다.'
+            : '처리 중 오류가 발생했습니다.',
+          'error'
+        );
+      return result;
+    } finally {
+      setReturnActionLoadingId(null);
+    }
+  };
+
   // ── 핸들러: 일괄 반품 ─────────────────────────────────────────
   const handleBulkReturn = async () => {
     setIsBulkReturning(true);
@@ -537,8 +556,6 @@ export function useOrderManager({
     returnCandidateCategory, setReturnCandidateCategory,
     showBulkReturnConfirm, setShowBulkReturnConfirm,
     isBulkReturning,
-    // 반품 상세 모달
-    returnDetailGroup, setReturnDetailGroup,
     // 교환 반품 모달
     exchangeReturnTarget, setExchangeReturnTarget,
     exchangeItemQuantities,
@@ -573,6 +590,7 @@ export function useOrderManager({
     // 핸들러
     handleReturnCreate,
     handleReturnUpdateStatus,
+    handleReturnCompleteWithQties,
     handleBulkReturn,
     handleMobileBulkOrder,
     handleExchangeCandidateClick,

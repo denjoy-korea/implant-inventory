@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest, ReturnStatus, ReturnMutationResult, ExcelRow, CreateReturnParams } from '../types';
 import FeatureGate from './FeatureGate';
 import OrderCancelModal from './order/OrderCancelModal';
@@ -19,6 +19,8 @@ import { OrderReturnSection } from './order/OrderReturnSection';
 import { OrderTableSection } from './order/OrderTableSection';
 import { OrderReturnDetailModal } from './order/OrderReturnDetailModal';
 import { OrderExchangeReturnModal } from './order/OrderExchangeReturnModal';
+import { ReturnCompleteModal } from './order/ReturnCompleteModal';
+import { OrderMobileFilterBar } from './order/OrderMobileFilterBar';
 export type { GroupedOrder, GroupedReturnRequest, UnifiedRow } from '../hooks/useOrderManager';
 
 interface OrderManagerProps {
@@ -34,7 +36,7 @@ interface OrderManagerProps {
   onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
   onCreateReturn: (params: CreateReturnParams) => Promise<void>;
   onUpdateReturnStatus: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<ReturnMutationResult>;
-  onCompleteReturn: (returnId: string) => Promise<ReturnMutationResult>;
+  onCompleteReturn: (returnId: string, actualQties?: Record<string, number>) => Promise<ReturnMutationResult>;
   onDeleteReturn: (returnId: string) => Promise<void>;
   returnRequests: ReturnRequest[];
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -67,6 +69,10 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   plan,
   onUpgradePlan,
 }) => {
+  const [returnCompleteGroup, setReturnCompleteGroup] = useState<import('../hooks/useOrderManager').GroupedReturnRequest | null>(null);
+  const [isReturnCompleting, setIsReturnCompleting] = useState(false);
+  const [returnDetailGroup, setReturnDetailGroup] = useState<import('../hooks/useOrderManager').GroupedReturnRequest | null>(null);
+
   const {
     isMobileViewport,
     filterType, setFilterType,
@@ -90,7 +96,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     returnCandidateCategory, setReturnCandidateCategory,
     showBulkReturnConfirm, setShowBulkReturnConfirm,
     isBulkReturning,
-    returnDetailGroup, setReturnDetailGroup,
     exchangeReturnTarget, setExchangeReturnTarget,
     exchangeItemQuantities,
     isExchangeReturnSubmitting,
@@ -114,6 +119,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
     animTotal,
     handleReturnCreate,
     handleReturnUpdateStatus,
+    handleReturnCompleteWithQties,
     handleBulkReturn,
     handleMobileBulkOrder,
     handleExchangeCandidateClick,
@@ -276,6 +282,26 @@ const OrderManager: React.FC<OrderManagerProps> = ({
               })();
             }}
             onCancel={() => setShowBulkOrderModal(false)}
+          />
+        )}
+
+        {/* 모달: 주문 히스토리 패널 */}
+        {showHistoryPanel && (
+          <OrderHistoryPanel
+            orders={orders}
+            returnRequests={returnRequests}
+            isReadOnly={isReadOnly}
+            plan={plan}
+            onUpgrade={onUpgradePlan}
+            onClose={() => setShowHistoryPanel(false)}
+            onReceiptConfirm={(order) => {
+              const group = groupedOrders.find(g =>
+                g.date === order.date &&
+                g.manufacturer === order.manufacturer &&
+                g.type === order.type
+              );
+              if (group) setSelectedGroupModal(group);
+            }}
           />
         )}
       </div>
@@ -748,6 +774,19 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           />
         )}
 
+        <OrderMobileFilterBar
+          filterType={filterType}
+          setFilterType={setFilterType}
+          filterManufacturer={filterManufacturer}
+          setFilterManufacturer={setFilterManufacturer}
+          filterDateFrom={filterDateFrom}
+          setFilterDateFrom={setFilterDateFrom}
+          filterDateTo={filterDateTo}
+          setFilterDateTo={setFilterDateTo}
+          manufacturerOptions={manufacturerOptions}
+          totalCount={unifiedRows.length}
+        />
+
         <OrderTableSection
           unifiedRows={unifiedRows}
           isReadOnly={isReadOnly}
@@ -756,6 +795,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           setSelectedGroupModal={setSelectedGroupModal}
           setCancelModalOrder={setCancelModalOrder}
           setReturnDetailGroup={setReturnDetailGroup}
+          onOpenReturnComplete={setReturnCompleteGroup}
           setShowHistoryPanel={setShowHistoryPanel}
           handleReturnUpdateStatus={handleReturnUpdateStatus}
           onDeleteOrder={onDeleteOrder}
@@ -775,6 +815,28 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         <OrderReturnDetailModal
           returnDetailGroup={returnDetailGroup}
           setReturnDetailGroup={setReturnDetailGroup}
+        />
+
+        {/* 반품 완료 처리 모달 (실수령 수량 입력) */}
+        <ReturnCompleteModal
+          group={returnCompleteGroup}
+          isLoading={isReturnCompleting}
+          onClose={() => setReturnCompleteGroup(null)}
+          onConfirm={async (actualQties) => {
+            if (!returnCompleteGroup) return;
+            setIsReturnCompleting(true);
+            try {
+              const pickedUpIds = returnCompleteGroup.requests
+                .filter(r => r.status === 'picked_up')
+                .map(r => r.id);
+              if (pickedUpIds.length > 0) {
+                await handleReturnCompleteWithQties(pickedUpIds[0], actualQties);
+              }
+              setReturnCompleteGroup(null);
+            } finally {
+              setIsReturnCompleting(false);
+            }
+          }}
         />
 
         {/* 취소 모달 */}

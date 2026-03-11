@@ -441,6 +441,7 @@ export function dbToReturnRequest(
     brand: item.brand,
     size: item.size,
     quantity: item.quantity,
+    actualReceivedQty: item.actual_received_qty ?? undefined,
   }));
 
   return {
