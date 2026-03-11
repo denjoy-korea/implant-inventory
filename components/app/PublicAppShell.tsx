@@ -138,6 +138,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
   const [downgradePending, setDowngradePending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [downgradeCreditPreview, setDowngradeCreditPreview] = useState<number>(0);
+  const [downgradeCreditDetail, setDowngradeCreditDetail] = useState<Awaited<ReturnType<typeof planService.estimateDowngradeCreditDetail>>>(null);
   const [memberSelectPending, setMemberSelectPending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const hasPublicMobileNav = publicViews.includes(currentView);
 
@@ -184,12 +185,15 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
 
       const isDowngrade = PLAN_ORDER[plan] < PLAN_ORDER[currentPlan];
       if (isDowngrade) {
-        // M-3: 다운그레이드 전 크레딧 예상 금액 미리 계산
+        // M-3: 다운그레이드 전 크레딧 예상 금액 + 상세 내역 미리 계산
         let creditPreview = 0;
+        let creditDetail = null;
         if (user?.hospitalId) {
-          creditPreview = await planService.estimateDowngradeCredit(user.hospitalId, currentPlan, plan);
+          creditDetail = await planService.estimateDowngradeCreditDetail(user.hospitalId, currentPlan, plan);
+          creditPreview = creditDetail?.creditAmount ?? 0;
         }
         setDowngradeCreditPreview(creditPreview);
+        setDowngradeCreditDetail(creditDetail);
         setDowngradePending({ plan, billing });
         return;
       }
@@ -294,9 +298,23 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     ? getDowngradeLines(planState?.plan ?? 'free', downgradePending.plan)
     : null;
 
-  const downgradeCreditMsg = downgradeCreditPreview > 0
-    ? `잔여 구독료 약 ${downgradeCreditPreview.toLocaleString('ko-KR')}원이 크레딧으로 적립됩니다.`
-    : undefined;
+  const downgradeCreditMsg = (() => {
+    if (!downgradeCreditDetail || downgradeCreditDetail.creditAmount <= 0) return undefined;
+    const d = downgradeCreditDetail;
+    const fmt = (n: number) => n.toLocaleString('ko-KR');
+    const cycleLabel = d.billingCycle === 'yearly' ? '연간' : '월간';
+    const lines: string[] = [`크레딧 계산 내역 (${cycleLabel} · ${d.totalDays}일 기준)`];
+    if (d.actualPaidAmount !== null) {
+      lines.push(`· 결제 금액: ${fmt(d.actualPaidAmount)}원`);
+    }
+    lines.push(`· 이용 기간: ${d.usedDays}일 / ${d.totalDays}일 → 잔여 ${d.remainingDays}일`);
+    lines.push(`· 현재 플랜 잔여: ${fmt(d.upperRemaining)}원 (${fmt(d.upperDailyRate)}원/일 × ${d.remainingDays}일)`);
+    if (d.lowerDailyRate > 0) {
+      lines.push(`· ${PLAN_NAMES[downgradePending?.plan ?? 'free']} 사용료 차감: -${fmt(d.lowerCost)}원 (${fmt(d.lowerDailyRate)}원/일 × ${d.remainingDays}일)`);
+    }
+    lines.push(`· 적립 크레딧: ${fmt(d.creditAmount)}원`);
+    return lines.join('\n');
+  })();
 
   return (
     <div className="h-full flex flex-col">

@@ -707,7 +707,7 @@ export const planService = {
       // 병원 플랜 상태 조회 (plan_expires_at, billing_cycle 필요)
       const { data: hospital } = await supabase
         .from('hospitals')
-        .select('plan_expires_at, billing_cycle')
+        .select('plan_expires_at, billing_cycle, plan_changed_at')
         .eq('id', hospitalId)
         .single();
 
@@ -741,15 +741,24 @@ export const planService = {
             upperRemaining = Math.max(0, billing.amount - upperUsed);
           }
         } else if (hospital?.plan_expires_at) {
-          // Case B: 이미 다운그레이드된 상태 → plan_expires_at 기반
+          // Case B: 이미 다운그레이드된 상태
+          // plan_changed_at 기반으로 usedDays 계산 (plan_expires_at 방식은 달력 31일 문제로 totalDays 초과 가능)
           totalDays = hospitalCycle === 'yearly' ? 360 : 30;
-          const expiresAt = new Date(hospital.plan_expires_at).getTime();
-          remainingDays = Math.max(0, Math.ceil((expiresAt - now) / 86400000));
+          const planChangedAtStr = (hospital as Record<string, unknown>).plan_changed_at as string | undefined;
+          if (planChangedAtStr) {
+            const planChangedAt = new Date(planChangedAtStr).getTime();
+            const usedDays = Math.max(0, Math.ceil((now - planChangedAt) / 86400000));
+            remainingDays = Math.max(0, totalDays - usedDays);
+          } else {
+            // Fallback: plan_expires_at 기반, totalDays 캡
+            const expiresAt = new Date(hospital.plan_expires_at).getTime();
+            remainingDays = Math.min(totalDays, Math.max(0, Math.ceil((expiresAt - now) / 86400000)));
+          }
           const vatTable = hospitalCycle === 'yearly' ? YEARLY_VAT : MONTHLY_VAT;
           const currentPlanVat = vatTable[currentPlan] ?? 0;
           if (currentPlanVat > 0 && remainingDays > 0) {
             const upperDaily = Math.ceil(currentPlanVat / totalDays / 10) * 10;
-            upperRemaining = upperDaily * remainingDays;
+            upperRemaining = Math.min(upperDaily * remainingDays, currentPlanVat);
           }
         }
       }
@@ -769,6 +778,119 @@ export const planService = {
       return Math.max(0, upperRemaining);
     } catch {
       return 0;
+    }
+  },
+
+  /**
+   * 다운그레이드 크레딧 상세 계산 내역 (미리보기 UI용)
+   * estimateDowngradeCredit과 동일 알고리즘, 중간 값 모두 반환
+   */
+  async estimateDowngradeCreditDetail(
+    hospitalId: string,
+    currentPlan: PlanType,
+    toPlan: PlanType,
+  ): Promise<{
+    creditAmount: number;
+    billingCycle: BillingCycle;
+    totalDays: number;
+    usedDays: number;
+    remainingDays: number;
+    upperDailyRate: number;
+    upperRemaining: number;
+    lowerDailyRate: number;
+    lowerCost: number;
+    actualPaidAmount: number | null;
+  } | null> {
+    try {
+      const billing = await this.getLatestCompletedBilling(hospitalId);
+      const { data: hospital } = await supabase
+        .from('hospitals')
+        .select('plan_expires_at, billing_cycle, plan_changed_at')
+        .eq('id', hospitalId)
+        .single();
+
+      const now = Date.now();
+      const hospitalCycle = (hospital?.billing_cycle ?? 'monthly') as BillingCycle;
+      const MONTHLY_VAT: Record<string, number> = Object.fromEntries(
+        Object.entries(PLAN_PRICING).map(([p, v]) => [p, Math.round(v.monthlyPrice * 1.1)])
+      );
+      const YEARLY_VAT: Record<string, number> = Object.fromEntries(
+        Object.entries(PLAN_PRICING).map(([p, v]) => [p, Math.round(v.yearlyPrice * 12 * 1.1)])
+      );
+
+      let totalDays = hospitalCycle === 'yearly' ? 360 : 30;
+      let usedDays = 0;
+      let remainingDays = 0;
+      let upperDailyRate = 0;
+      let upperRemaining = 0;
+      let actualPaidAmount: number | null = null;
+
+      if (billing && billing.amount > 0) {
+        const billingCycle = (billing.billing_cycle ?? hospitalCycle) as BillingCycle;
+        if (billing.plan === currentPlan) {
+          // Case A: 실제 결제 금액 기반
+          totalDays = billingCycle === 'yearly' ? 360 : 30;
+          const createdAt = new Date(billing.created_at ?? now).getTime();
+          usedDays = Math.ceil((now - createdAt) / 86400000);
+          remainingDays = Math.max(0, totalDays - usedDays);
+          actualPaidAmount = billing.amount;
+          if (usedDays < totalDays) {
+            upperDailyRate = Math.ceil(billing.amount / totalDays / 10) * 10;
+            const upperUsed = Math.min(upperDailyRate * usedDays, billing.amount);
+            upperRemaining = Math.max(0, billing.amount - upperUsed);
+          }
+        } else if (hospital?.plan_expires_at) {
+          // Case B: 이미 다운그레이드 상태
+          totalDays = hospitalCycle === 'yearly' ? 360 : 30;
+          const planChangedAtStr = (hospital as Record<string, unknown>).plan_changed_at as string | undefined;
+          if (planChangedAtStr) {
+            const planChangedAt = new Date(planChangedAtStr).getTime();
+            usedDays = Math.max(0, Math.ceil((now - planChangedAt) / 86400000));
+            remainingDays = Math.max(0, totalDays - usedDays);
+          } else {
+            const expiresAt = new Date(hospital.plan_expires_at).getTime();
+            remainingDays = Math.min(totalDays, Math.max(0, Math.ceil((expiresAt - now) / 86400000)));
+            usedDays = totalDays - remainingDays;
+          }
+          const vatTable = hospitalCycle === 'yearly' ? YEARLY_VAT : MONTHLY_VAT;
+          const currentPlanVat = vatTable[currentPlan] ?? 0;
+          if (currentPlanVat > 0 && remainingDays > 0) {
+            upperDailyRate = Math.ceil(currentPlanVat / totalDays / 10) * 10;
+            upperRemaining = Math.min(upperDailyRate * remainingDays, currentPlanVat);
+          }
+        }
+      }
+
+      if (upperRemaining <= 0) return null;
+
+      const vatTable = hospitalCycle === 'yearly' ? YEARLY_VAT : MONTHLY_VAT;
+      const lowerVat = vatTable[toPlan] ?? 0;
+      let lowerDailyRate = 0;
+      let lowerCost = 0;
+      let creditAmount = 0;
+
+      if (lowerVat > 0 && remainingDays > 0) {
+        lowerDailyRate = Math.ceil(lowerVat / totalDays / 10) * 10;
+        lowerCost = lowerDailyRate * remainingDays;
+        creditAmount = Math.max(0, upperRemaining - lowerCost);
+      } else {
+        creditAmount = upperRemaining;
+      }
+
+      return {
+        creditAmount,
+        billingCycle: hospitalCycle,
+        totalDays,
+        usedDays,
+        remainingDays,
+        upperDailyRate,
+        upperRemaining,
+        lowerDailyRate,
+        lowerCost,
+        actualPaidAmount,
+      };
+    } catch {
+      return null;
     }
   },
 
