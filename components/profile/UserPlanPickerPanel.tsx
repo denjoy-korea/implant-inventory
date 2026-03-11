@@ -53,9 +53,19 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
       ? 'text-amber-500'
       : 'text-indigo-500';
 
-  const isRenewalSelected = pickerSelectedPlan !== null
-    && planState?.plan === pickerSelectedPlan
-    && isCurrentCycle;
+  // 동일 플랜 선택 여부
+  const isSamePlanSelected = pickerSelectedPlan === currentPlanId;
+  // 갱신: 동일 플랜 + 동일 사이클
+  const isRenewalSelected = isSamePlanSelected && isCurrentCycle;
+  // 사이클 전환: 동일 플랜 + 다른 사이클 (월간→연간 또는 연간→월간)
+  const isCycleSwitch = isSamePlanSelected && !isCurrentCycle;
+
+  // 만료 임박 강조 스타일
+  const urgencyStyle = (() => {
+    if (daysLeft !== null && daysLeft <= 7)  return { border: 'border-red-400',   bg: 'from-red-50',   badge: 'bg-red-100 text-red-700' };
+    if (daysLeft !== null && daysLeft <= 30) return { border: 'border-amber-400', bg: 'from-amber-50', badge: 'bg-amber-100 text-amber-700' };
+    return { border: 'border-indigo-400', bg: 'from-indigo-50', badge: 'bg-indigo-100 text-indigo-700' };
+  })();
 
   return (
     <div className="space-y-2.5">
@@ -75,8 +85,8 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
           onClick={() => onSelectPlan(pickerSelectedPlan === currentPlanId ? null : currentPlanId)}
           className={`w-full text-left rounded-xl border-2 transition-all overflow-hidden ${
             pickerSelectedPlan === currentPlanId
-              ? 'border-indigo-500 bg-indigo-50/50 shadow-sm'
-              : 'border-indigo-400 bg-gradient-to-r from-indigo-50 to-white hover:border-indigo-500'
+              ? `${urgencyStyle.border} bg-indigo-50/50 shadow-sm`
+              : `${urgencyStyle.border} bg-gradient-to-r ${urgencyStyle.bg} to-white hover:shadow-sm`
           }`}
         >
           <div className="flex items-stretch">
@@ -84,7 +94,7 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
             <div className="flex-1 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-xs font-black text-slate-800">{currentItem.label}</span>
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">현재 · 갱신</span>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${urgencyStyle.badge}`}>현재 · 갱신</span>
               </div>
               <ul className="space-y-0.5">
                 {currentItem.features.map((feature, index) => (
@@ -114,6 +124,11 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
               {expiresAt && (
                 <p className="text-[9px] text-slate-400 text-center leading-tight">
                   {new Date(expiresAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 만료
+                </p>
+              )}
+              {daysLeft !== null && daysLeft <= 30 && daysLeft > 0 && (
+                <p className={`text-[9px] font-bold mt-0.5 text-center ${daysLeft <= 7 ? 'text-red-500' : 'text-amber-600'}`}>
+                  {daysLeft <= 7 ? '곧 만료!' : '갱신 권장'}
                 </p>
               )}
             </div>
@@ -182,10 +197,14 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
             }`}
           >
             {isRenewalSelected
-              ? `${PLAN_NAMES[pickerSelectedPlan]} 플랜 갱신하기`
-              : pickerSelectedPlan === 'free'
-                ? '무료 플랜으로 전환하기'
-                : `${PLAN_NAMES[pickerSelectedPlan]} 플랜 결제하기`}
+              ? `${PLAN_NAMES[pickerSelectedPlan!]} 플랜 갱신하기`
+              : isCycleSwitch
+                ? pickerCycle === 'yearly'
+                  ? `${PLAN_NAMES[pickerSelectedPlan!]} 플랜 연간으로 전환하기`
+                  : `${PLAN_NAMES[pickerSelectedPlan!]} 플랜 월간으로 전환하기`
+                : pickerSelectedPlan === 'free'
+                  ? '무료 플랜으로 전환하기'
+                  : `${PLAN_NAMES[pickerSelectedPlan!]} 플랜으로 변경하기`}
           </button>
         </div>
       ) : (

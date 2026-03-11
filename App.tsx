@@ -4,6 +4,7 @@ import { useToast } from './hooks/useToast';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import { useAppLogic } from './hooks/useAppLogic';
 import { canAccessTab } from './types';
+import { PLAN_NAMES } from './types/plan';
 import { securityMaintenanceService } from './services/securityMaintenanceService';
 import { authService } from './services/authService';
 import { getDashboardTabTitle } from './components/dashboard/dashboardTabTitle';
@@ -147,6 +148,7 @@ const App: React.FC = () => {
           userName={state.user?.name}
           onProfileClick={() => setState(prev => ({ ...prev, showProfile: true }))}
           onUpgrade={workspaceProps.onOpenProfilePlan}
+          onOpenSupportChat={() => setSupportChatOpenRequest((prev) => prev + 1)}
         />
       )}
 
@@ -263,7 +265,13 @@ const App: React.FC = () => {
             hospitalName={state.hospitalName}
             planState={state.planState}
             onDismiss={() => setDirectPayment(null)}
-            onSuccess={async () => { await refreshPlanState(); setDirectPayment(null); }}
+            onSuccess={async () => {
+              await refreshPlanState();
+              if (directPayment?.isRenewal && directPayment.plan) {
+                showAlertToast(`${PLAN_NAMES[directPayment.plan]} 플랜이 갱신되었습니다.`, 'success');
+              }
+              setDirectPayment(null);
+            }}
           />
         </Suspense>
       )}

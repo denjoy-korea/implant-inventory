@@ -56,7 +56,7 @@ export function useAppLogic({
   const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
   const [profileInitialTab, setProfileInitialTab] = useState<'info' | 'plan' | 'security' | 'reviews' | undefined>(undefined);
   const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
-  const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
+  const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle; isRenewal?: boolean } | null>(null);
   const [billingProgramSaving, setBillingProgramSaving] = useState(false);
   const [billingProgramError, setBillingProgramError] = useState('');
   const [pendingFailCandidates, setPendingFailCandidates] = useState<FailCandidate[]>([]);
@@ -280,8 +280,8 @@ export function useAppLogic({
       surgeryMaster: state.surgeryMaster, user: state.user, setState, showAlertToast, handleCreateReturn,
     });
 
-  const handleOpenDirectPayment = useCallback((plan: PlanType, billing: BillingCycle = 'monthly') => {
-    setDirectPayment({ plan, billing });
+  const handleOpenDirectPayment = useCallback((plan: PlanType, billing: BillingCycle = 'monthly', isRenewal = false) => {
+    setDirectPayment({ plan, billing, isRenewal });
   }, []);
 
   // ── Fixture edit ──────────────────────────────────────────────
@@ -597,7 +597,7 @@ export function useAppLogic({
       }
 
       setState(prev => ({ ...prev, showProfile: false }));
-      handleOpenDirectPayment(plan, billing);
+      handleOpenDirectPayment(plan, billing, plan === currentPlan);
     },
     onReviewSubmitted: () => {
       setReviewPopupType(null);
