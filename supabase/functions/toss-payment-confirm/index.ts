@@ -332,7 +332,9 @@ Deno.serve(async (req: Request) => {
       const totalDays = sourceBilling.billing_cycle === "yearly" ? 360 : 30;
       if (usedDays < totalDays) {
         // 실질 납입액 = 현금 + 크레딧 납입액 (클라이언트 calcUpgradeCredit과 동일)
-        const effectiveAmount = (sourceBilling.amount ?? 0) + ((sourceBilling as Record<string, unknown>).credit_used_amount as number ?? 0);
+        // NUMERIC 컬럼(credit_used_amount)은 Supabase JS가 문자열로 반환 → Number() 명시적 변환 필수
+        const sourceCreditUsed = Number((sourceBilling as Record<string, unknown>).credit_used_amount ?? 0);
+        const effectiveAmount = (sourceBilling.amount ?? 0) + sourceCreditUsed;
         const dailyRate = Math.ceil(effectiveAmount / totalDays / 10) * 10;
         const usedCharge = Math.min(dailyRate * usedDays, effectiveAmount);
         serverUpgradeCredit = Math.max(0, effectiveAmount - usedCharge);
@@ -340,7 +342,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // 서버 크레딧으로 billing_history 보정 (클라이언트 값 불신)
-    if (serverUpgradeCredit !== billing.upgrade_credit_amount) {
+    // NUMERIC 컬럼은 Supabase JS가 문자열로 반환 → Number() 변환 후 비교
+    if (serverUpgradeCredit !== Number(billing.upgrade_credit_amount)) {
       const vatBase = calcAmountWithVat(baseAmount, serverDiscountAmount);
       const correctedCredit = Math.min(serverUpgradeCredit, vatBase - 100);
       const correctedAmount = vatBase - correctedCredit;
@@ -367,8 +370,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 잔액 크레딧 서버사이드 재검증 ───────────────────────────────────────────
+  // NUMERIC 컬럼 → Number() 명시적 변환
+  const billingCreditUsed = Number(billing.credit_used_amount ?? 0);
   let serverCreditUsed = 0;
-  if (billing.credit_used_amount > 0) {
+  if (billingCreditUsed > 0) {
     const { data: hospitalData } = await adminClient
       .from("hospitals")
       .select("credit_balance")
@@ -377,9 +382,9 @@ Deno.serve(async (req: Request) => {
 
     const availableBalance = (hospitalData as { credit_balance: number } | null)?.credit_balance ?? 0;
 
-    if (billing.credit_used_amount > availableBalance) {
+    if (billingCreditUsed > availableBalance) {
       console.error("[toss-payment-confirm] credit_used_amount exceeds balance:", {
-        creditUsed: billing.credit_used_amount,
+        creditUsed: billingCreditUsed,
         availableBalance,
         hospitalId: billing.hospital_id,
       });
@@ -388,9 +393,9 @@ Deno.serve(async (req: Request) => {
 
     const vatBase = calcAmountWithVat(baseAmount, serverDiscountAmount);
     const afterUpgradeCredit = vatBase - serverUpgradeCredit;
-    serverCreditUsed = Math.min(billing.credit_used_amount, afterUpgradeCredit - 100);
+    serverCreditUsed = Math.min(billingCreditUsed, afterUpgradeCredit - 100);
 
-    if (serverCreditUsed !== billing.credit_used_amount) {
+    if (serverCreditUsed !== billingCreditUsed) {
       const correctedAmount = afterUpgradeCredit - serverCreditUsed;
       await adminClient
         .from("billing_history")
