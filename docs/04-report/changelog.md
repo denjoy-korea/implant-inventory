@@ -4,6 +4,48 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-12] - security-hardening (SECURITY DEFINER Audit: Complete PDCA Cycle)
+
+### Overview
+Completed critical security hardening audit of Supabase SECURITY DEFINER functions. Identified and remediated 5 vulnerabilities (3 Critical, 1 High, 1 Medium) across payment, admin, and analytics functions with 100% design compliance.
+
+### Critical Issues Fixed (3/3)
+- **C-1**: `process_payment_callback` regression — Fixed `authenticated` → `service_role` permission
+- **C-2**: `process_credit_payment` — Added missing `REVOKE ALL FROM PUBLIC`
+- **C-3**: `execute_downgrade_with_credit` — Added missing `REVOKE ALL FROM PUBLIC`
+
+### High Priority Fixed (1/1)
+- **H-1**: `get_coupon_stats` / `get_redemption_stats` — Added admin role verification (prevents data exposure to non-admin users)
+
+### Medium Priority Fixed (1/1)
+- **M-1**: `admin_enter_user_view` — Added audit log to `operation_logs` table for compliance tracking
+
+### Deployment
+- **Migration**: `20260312220000_security_definer_revoke_hardening.sql` (182 lines)
+- **Functions Updated**: 6 (all SECURITY DEFINER pattern fixes)
+- **Design Compliance**: 100% (5/5 items match specification)
+- **Status**: Production-ready, ready for deployment
+
+### Quality Metrics
+| Metric | Target | Achieved | Status |
+|--------|:------:|:--------:|:------:|
+| Vulnerability Remediation | 100% | 5/5 | ✅ |
+| Design Compliance | ≥90% | 100% | ✅ |
+| TypeScript Errors | 0 | 0 | ✅ |
+| SQL Validation | Pass | Pass | ✅ |
+
+### Code Changes
+| File | Type | Impact |
+|------|:----:|:------:|
+| `supabase/migrations/20260312220000_security_definer_revoke_hardening.sql` | New | HIGH (6 functions) |
+
+### Report
+- **Report**: [docs/04-report/features/security-hardening.report.md](features/security-hardening.report.md)
+- **Design**: [docs/02-design/security-spec.md](../02-design/security-spec.md)
+- **Analysis**: [docs/03-analysis/security-vulnerability-audit.md](../03-analysis/security-vulnerability-audit.md)
+
+---
+
 ## [2026-03-06] - tech-debt-remediation (Code Quality: Complete PDCA Cycle)
 
 ### Overview

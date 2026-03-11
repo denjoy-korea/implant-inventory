@@ -91,9 +91,31 @@ Used for `/pdca report {feature}` after Check phase (Match Rate ≥90%).
 
 **Test Results**: 138/138 PASS, TypeScript clean, verify:premerge ✅
 
+## security-hardening Report Pattern (2026-03-12)
+
+**Scope**: SECURITY DEFINER function audit (5 functions, 5 vulnerabilities: 3 Critical, 1 High, 1 Medium)
+- Match Rate: 100% (5/5 vulnerabilities remediated, 6/6 design requirements)
+- Single migration: `20260312220000_security_definer_revoke_hardening.sql` (182 lines)
+- Pattern enforcement: REVOKE ALL → explicit GRANT to role (standard SECURITY DEFINER pattern)
+
+**Vulnerability Remediation Matrix Format**:
+- P-level priority (P0=immediate, P1=short-term, P2=deferred)
+- C/H/M severity codes (Critical/High/Medium)
+- Function name, Issue, Fix Applied, Verification columns
+- Root cause analysis for each item
+
+**Key insights**:
+- Permission regressions caught by function signature audit (post-migration review)
+- SECURITY DEFINER pattern: REVOKE ALL → explicit GRANT prevents accidental permission creep
+- Admin role check in plpgsql wrapper (for aggregates, not row-based functions)
+- Audit logging via operation_logs table (centralized trail, not separate tables)
+
+**Next cycle action**: Add `checkSecurityDefinerPattern()` lint rule to catch REVOKE omissions automatically
+
 ## Files to Reference
 - Report template: `/Users/mac/.claude/plugins/cache/bkit-marketplace/bkit/1.5.8/templates/report.template.md`
 - Plan: `docs/01-plan/features/{feature}.plan.md`
 - Analysis: `docs/03-analysis/features/{feature}.analysis.md`
 - Output: `docs/04-report/features/{feature}.report.md`
 - pricing-overhaul Report: `docs/04-report/features/pricing-overhaul.report.md`
+- security-hardening Report: `docs/04-report/features/security-hardening.report.md`
