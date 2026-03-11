@@ -48,10 +48,12 @@ npx supabase functions deploy notify-withdrawal --no-verify-jwt
 npx supabase functions deploy holiday-proxy --no-verify-jwt
 npx supabase functions deploy dentweb-automation --no-verify-jwt
 npx supabase functions deploy dentweb-upload --no-verify-jwt
+npx supabase functions deploy toss-payment-confirm --no-verify-jwt
+npx supabase functions deploy toss-payment-refund --no-verify-jwt
 ```
 - 이유: `verify_jwt = false`가 config.toml에 있어도 클라우드 배포 시 CLI 플래그로 명시해야 반영됨
 - 플래그 누락 시 Supabase 게이트웨이가 모든 요청을 401 차단 (함수 코드가 실행되지 않음)
-- 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`, `holiday-proxy`, `dentweb-automation`, `dentweb-upload`
+- 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`, `holiday-proxy`, `dentweb-automation`, `dentweb-upload`, `toss-payment-confirm`, `toss-payment-refund`
 
 ## 도메인 맥락
 - 치과 임플란트 재고 관리 SaaS (DenJOY / DentWeb)
