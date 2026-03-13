@@ -3,7 +3,7 @@
 - **Feature**: 주문/교환/반품 버그 수정
 - **Analyzed**: 2026-03-14
 - **Phase**: Check
-- **Match Rate**: 100% (13/13)
+- **Match Rate**: 100% (13/13 — 갭 1 추가 수정 후 최종)
 
 ---
 
@@ -24,7 +24,7 @@
 
 | # | 플랜 항목 | 실제 구현 | 판정 |
 |---|-----------|-----------|------|
-| 1 | `useFailManager.ts` brand: activeM → 의미있는 값 | `useReturnHandlers.ts` 에 제조사 단위 폴백 추가 (brand 불일치 시 currentStock 많은 품목부터 차감) | ✅ 대안 구현 |
+| 1 | `useFailManager.ts` brand: activeM → 의미있는 값 | `buildReturnItems()` 추가 — inventory에서 실제 brand/size 조회 후 수량 분배. DB에 정확한 품목 데이터 저장. 폴백도 유지 | ✅ |
 | 2 | `FailReturnModal.tsx` onSubmit 시그니처 동기화 | 코드 확인 결과 false positive — `onSubmit: (exchangeQty, failQty)` 시그니처 이미 정확 | ✅ 불필요 (원래 정상) |
 | 3 | `ReturnCompleteModal.tsx` render 내 setState → useEffect | `useEffect(() => { setRejectedQty(0); }, [group?.id])` 적용 확인 | ✅ |
 | 4 | `ReturnResultModal.tsx` 동일 | `useEffect(() => { setApprovedTotal(totalRequested); }, [group?.id])` 적용 확인 | ✅ |
@@ -36,7 +36,7 @@
 | 5 | `handleCreateReturn` invItem 매칭 실패 시 console.warn | `useReturnHandlers.ts:139` `console.warn('[handleCreateReturn] 재고 부족: ...')` | ✅ |
 | 6 | `handleCompleteReturn` 성공 시 syncInventoryWithUsageAndOrders() | `useReturnHandlers.ts:275` `if (result.ok) { syncInventoryWithUsageAndOrders(); }` | ✅ |
 | 7 | actualQties 없어도 반품 완료 후 inventory 재갱신 | syncInventory는 result.ok 조건에서 actualQties 유무 무관하게 항상 호출됨 | ✅ |
-| 8 | useFailManager.ts brand/size 파라미터 정확히 전달 | 폴백 접근 채택: handleCreateReturn에서 invItem 미발견 시 제조사 전체 품목 중 재고 多 순 차감 | ✅ 폴백 구현 |
+| 8 | useFailManager.ts brand/size 파라미터 정확히 전달 | `buildReturnItems()`로 실제 inventory brand/size 분배. exact match 경로 정상 동작. 폴백도 유지 | ✅ |
 
 ### Phase 3 — 로직 오류 수정 ✅ 3/3
 
@@ -71,13 +71,15 @@
 
 ## 주요 발견 사항
 
-### 설계 대비 구현 차이 (Gap 없음, 대안 채택)
+### 설계 대비 구현 차이 (Gap 없음)
 
 **brand/size 처리 전략**
-- 플랜: `useFailManager.ts`의 `brand: activeM` 값 자체를 수정 (A/B/C안 중 B안 권고)
-- 실제: `useReturnHandlers.ts`에 제조사 단위 폴백을 추가하는 방식 채택
-- 이유: FAIL 트랙과 반품 트랙 모두 처리, 데이터 소스 변경 최소화
-- 영향: 기능 목표 동일하게 달성. `brand: activeM` 값은 DB에 그대로 저장되지만 재고 차감은 정확히 동작
+- 플랜: B안 권고 — "제조사의 inventory 항목 중 수량 많은 순으로 품목 선택"
+- 실제: `buildReturnItems()` 유틸 추가 (B안 채택)
+  - inventory에서 해당 제조사 품목을 currentStock 내림차순 정렬
+  - totalQty를 품목별 재고에 맞게 분배 → 실제 brand/size 사용
+  - DB에 정확한 품목 데이터 저장, exact match 경로 정상 동작
+- 1차 수정(폴백 추가)에서 2차 수정(데이터 정확성 확보)으로 완전 해결
 
 ### False Positive (에이전트 오진단 3건)
 
