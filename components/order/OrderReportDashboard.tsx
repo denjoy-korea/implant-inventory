@@ -83,8 +83,8 @@ const OrderDetailModal: React.FC<{
   const isOrder = row.kind === 'order';
   const orderData = isOrder ? (row.data as GroupedOrder) : null;
   const returnData = !isOrder ? (row.data as GroupedReturnRequest) : null;
-  // g: 공통 필드(date, manufacturer, managers, overallStatus) 접근용 — kind 확인 후 사용
-  const g = row.data as GroupedOrder | GroupedReturnRequest;
+  // g: 공통 필드(date, manufacturer, managers, overallStatus) 접근용
+  const g = orderData ?? returnData!;
 
   const totalRequested = returnData
     ? returnData.requests.flatMap(r => r.items).reduce((s, i) => s + i.quantity, 0)
@@ -208,8 +208,7 @@ const OrderDetailModal: React.FC<{
 
         {/* 날짜 처리 이력 (반품만) */}
         {!isOrder && (() => {
-          const rg = g as GroupedReturnRequest;
-          const req0 = rg.requests[0];
+          const req0 = returnData!.requests[0];
           if (!req0) return null;
           const steps = [
             { label: '반품 신청', date: req0.requestedDate, activeColor: 'text-orange-600', dotColor: 'bg-orange-400' },
@@ -251,7 +250,7 @@ const OrderDetailModal: React.FC<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {(g as GroupedOrder).orders.flatMap((order) =>
+                {orderData!.orders.flatMap((order) =>
                   order.items.map((item, itemIdx) => (
                     <tr key={`${order.id}-${itemIdx}`} className="hover:bg-slate-50/60 transition-colors">
                       <td className="px-4 py-2.5 font-semibold text-slate-700">{item.brand}</td>
@@ -267,10 +266,9 @@ const OrderDetailModal: React.FC<{
             <>
             {/* 완료된 경우 인정/불인정 요약 표시 */}
             {(() => {
-              const rg = g as GroupedReturnRequest;
-              const totalReq = rg.requests.flatMap(r => r.items).reduce((s, i) => s + i.quantity, 0);
-              const totalApproved = rg.requests.flatMap(r => r.items).reduce((s, i) => s + (i.actualReceivedQty ?? 0), 0);
-              const hasResult = rg.overallStatus === 'completed' && rg.requests.flatMap(r => r.items).some(i => i.actualReceivedQty != null);
+              const totalReq = returnData!.requests.flatMap(r => r.items).reduce((s, i) => s + i.quantity, 0);
+              const totalApproved = returnData!.requests.flatMap(r => r.items).reduce((s, i) => s + (i.actualReceivedQty ?? 0), 0);
+              const hasResult = returnData!.overallStatus === 'completed' && returnData!.requests.flatMap(r => r.items).some(i => i.actualReceivedQty != null);
               if (!hasResult) return null;
               const rejected = totalReq - totalApproved;
               const rate = totalReq > 0 ? Math.round((totalApproved / totalReq) * 100) : 0;
@@ -305,7 +303,7 @@ const OrderDetailModal: React.FC<{
             })()}
             {(() => {
               const brandTotals = Object.entries(
-                (g as GroupedReturnRequest).requests
+                returnData!.requests
                   .flatMap(r => r.items)
                   .reduce<Record<string, number>>((acc, item) => {
                     acc[item.brand] = (acc[item.brand] ?? 0) + item.quantity;
@@ -336,18 +334,18 @@ const OrderDetailModal: React.FC<{
         </div>
 
         {/* 메모 (있을 경우) */}
-        {isOrder && (g as GroupedOrder).orders.some(o => o.memo) && (
+        {orderData && orderData.orders.some(o => o.memo) && (
           <div className="px-5 py-3 border-t border-slate-100 shrink-0">
-            {(g as GroupedOrder).orders.filter(o => o.memo).map(o => (
+            {orderData.orders.filter(o => o.memo).map(o => (
               <p key={o.id} className="text-[11px] text-slate-500">
                 <span className="font-bold text-slate-400">메모: </span>{o.memo}
               </p>
             ))}
           </div>
         )}
-        {!isOrder && (g as GroupedReturnRequest).requests.some(r => r.memo) && (
+        {returnData && returnData.requests.some(r => r.memo) && (
           <div className="px-5 py-3 border-t border-slate-100 shrink-0">
-            {(g as GroupedReturnRequest).requests.filter(r => r.memo).map(r => (
+            {returnData.requests.filter(r => r.memo).map(r => (
               <p key={r.id} className="text-[11px] text-slate-500">
                 <span className="font-bold text-slate-400">메모: </span>{r.memo}
               </p>
@@ -356,7 +354,7 @@ const OrderDetailModal: React.FC<{
         )}
 
         {/* 상태 변경 버튼 (requested 상태의 반품만) */}
-        {!isOrder && (g as GroupedReturnRequest).overallStatus === 'requested' && onUpdateReturnStatus && (
+        {returnData && returnData.overallStatus === 'requested' && onUpdateReturnStatus && (
           <div className="px-5 py-3.5 border-t border-slate-100 bg-blue-50/40 shrink-0">
             <p className="text-[10px] font-black text-slate-500 mb-2.5">상태 변경</p>
             <div className="flex gap-2">
@@ -364,7 +362,7 @@ const OrderDetailModal: React.FC<{
                 onClick={async () => {
                   setIsStatusChanging(true);
                   try {
-                    const reqs = (g as GroupedReturnRequest).requests.filter(r => r.status === 'requested');
+                    const reqs = returnData.requests.filter(r => r.status === 'requested');
                     for (const req of reqs) {
                       await onUpdateReturnStatus(req.id, 'picked_up', 'requested');
                     }
@@ -386,7 +384,7 @@ const OrderDetailModal: React.FC<{
                 onClick={async () => {
                   setIsStatusChanging(true);
                   try {
-                    const reqs = (g as GroupedReturnRequest).requests.filter(r => r.status === 'requested');
+                    const reqs = returnData.requests.filter(r => r.status === 'requested');
                     for (const req of reqs) {
                       await onUpdateReturnStatus(req.id, 'rejected', 'requested');
                     }
@@ -405,7 +403,7 @@ const OrderDetailModal: React.FC<{
         )}
 
         {/* 수거 후 처리 섹션 (picked_up 상태의 반품만) */}
-        {!isOrder && (g as GroupedReturnRequest).overallStatus === 'picked_up' && onCompleteReturn && (
+        {returnData && returnData.overallStatus === 'picked_up' && onCompleteReturn && (
           <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 shrink-0">
             <p className="text-[11px] font-black text-slate-500 mb-2.5">수거 후 처리</p>
             <div className="flex items-center gap-2">
@@ -440,7 +438,7 @@ const OrderDetailModal: React.FC<{
                 onClick={async () => {
                   setIsSubmitting(true);
                   try {
-                    await onCompleteReturn(g as GroupedReturnRequest, approvedCount);
+                    await onCompleteReturn(returnData!, approvedCount);
                     onClose();
                   } finally {
                     setIsSubmitting(false);
