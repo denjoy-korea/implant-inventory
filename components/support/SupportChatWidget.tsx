@@ -24,6 +24,7 @@ interface SupportChatWidgetProps {
   liftForBottomNav?: boolean;
   onOpenContactForm?: () => void;
   openRequestToken?: number;
+  hideLauncher?: boolean;
 }
 
 const SUPPORT_OPERATING_HOURS = [
@@ -95,6 +96,7 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
   liftForBottomNav = false,
   onOpenContactForm,
   openRequestToken = 0,
+  hideLauncher = false,
 }) => {
   const isRealtimeEnabled = PLAN_ORDER[plan] >= PLAN_ORDER.business;
   const [isOpen, setIsOpen] = useState(false);
@@ -689,48 +691,50 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
         </div>
       )}
 
-      <div className="pointer-events-auto hidden md:flex justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setIsOpen((prev) => !prev);
-          }}
-          className="group relative flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-[1.45rem] border border-white/12 bg-[#06111f] text-white shadow-[0_20px_44px_rgba(6,17,31,0.38)] transition-all hover:-translate-y-0.5 hover:bg-[#091727]"
-          aria-label={isRealtimeEnabled
-            ? `${hospitalName || '워크스페이스'} 실시간 상담 열기`
-            : `${hospitalName || '워크스페이스'} 챗봇 상담 열기`}
-          title={hospitalName || (isRealtimeEnabled ? '실시간 상담' : '챗봇 상담')}
-        >
-          {!isRealtimeEnabled && (
-            <span className="pointer-events-none absolute bottom-full right-0 mb-3 w-max max-w-[calc(100vw-1.5rem)] rounded-[1.35rem] border border-white/10 bg-[#071526] px-4 py-3 text-left opacity-0 shadow-[0_18px_40px_rgba(2,8,23,0.34)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 sm:min-w-[22rem]">
-              <span className="block text-[12px] font-black leading-5 text-white sm:whitespace-nowrap">
-                실시간 문의는
-                <span className="text-teal-300"> Business </span>
-                계정부터 사용 가능합니다.
+      {!hideLauncher && (
+        <div className="pointer-events-auto hidden md:flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen((prev) => !prev);
+            }}
+            className="group relative flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-[1.45rem] border border-white/12 bg-[#06111f] text-white shadow-[0_20px_44px_rgba(6,17,31,0.38)] transition-all hover:-translate-y-0.5 hover:bg-[#091727]"
+            aria-label={isRealtimeEnabled
+              ? `${hospitalName || '워크스페이스'} 실시간 상담 열기`
+              : `${hospitalName || '워크스페이스'} 챗봇 상담 열기`}
+            title={hospitalName || (isRealtimeEnabled ? '실시간 상담' : '챗봇 상담')}
+          >
+            {!isRealtimeEnabled && (
+              <span className="pointer-events-none absolute bottom-full right-0 mb-3 w-max max-w-[calc(100vw-1.5rem)] rounded-[1.35rem] border border-white/10 bg-[#071526] px-4 py-3 text-left opacity-0 shadow-[0_18px_40px_rgba(2,8,23,0.34)] transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 sm:min-w-[22rem]">
+                <span className="block text-[12px] font-black leading-5 text-white sm:whitespace-nowrap">
+                  실시간 문의는
+                  <span className="text-teal-300"> Business </span>
+                  계정부터 사용 가능합니다.
+                </span>
+                <span className="mt-1.5 block text-[11px] font-semibold leading-[1.15rem] text-slate-300">
+                  클릭하면 챗봇 상담창이 열리고, 문의하기 버튼으로 접수할 수 있습니다.
+                </span>
               </span>
-              <span className="mt-1.5 block text-[11px] font-semibold leading-[1.15rem] text-slate-300">
-                클릭하면 챗봇 상담창이 열리고, 문의하기 버튼으로 접수할 수 있습니다.
-              </span>
+            )}
+            <span className="absolute inset-0 rounded-[1.45rem] bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_54%)] opacity-0 transition-opacity group-hover:opacity-100" />
+            <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-teal-400 text-slate-950 shadow-[0_0_0_10px_rgba(45,212,191,0.1)]">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {isRealtimeEnabled ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8.5A2.5 2.5 0 016.5 6h11A2.5 2.5 0 0120 8.5v7A2.5 2.5 0 0117.5 18h-11A2.5 2.5 0 014 15.5v-7zm1.5.5L12 13l6.5-4" />
+                )}
+              </svg>
             </span>
-          )}
-          <span className="absolute inset-0 rounded-[1.45rem] bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_54%)] opacity-0 transition-opacity group-hover:opacity-100" />
-          <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-teal-400 text-slate-950 shadow-[0_0_0_10px_rgba(45,212,191,0.1)]">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              {isRealtimeEnabled ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8.5A2.5 2.5 0 016.5 6h11A2.5 2.5 0 0120 8.5v7A2.5 2.5 0 0117.5 18h-11A2.5 2.5 0 014 15.5v-7zm1.5.5L12 13l6.5-4" />
-              )}
-            </svg>
-          </span>
 
-          {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </button>
-      </div>
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

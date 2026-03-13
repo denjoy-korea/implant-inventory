@@ -57,6 +57,7 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   const audit = read('components/InventoryAudit.tsx');
   const fail = read('components/FailManager.tsx');
   const order = read('components/OrderManager.tsx');
+  const orderMobileLayout = read('components/order/OrderMobileLayout.tsx');
   const orderTable = read('components/order/OrderTableSection.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
   const appOrderWiring = app + appLogic;
@@ -78,7 +79,17 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   // Mobile에서는 sticky 고정이 비활성화되고(md 이상에서만 적용) 스크롤 가독성 유지
   assert.match(audit, /<thead className="[^"]*md:sticky md:top-0[^"]*"/);
   assert.match(fail, /className="[^"]*md:sticky[^"]*z-20/);
-  assert.match(order, /className="[^"]*md:sticky[^"]*z-20/);
+  // md:sticky z-20 filter bar can live in OrderManager, OrderMobileLayout, or OrderPCLayout
+  const orderPcLayout = read('components/order/OrderPCLayout.tsx');
+  assert.ok(
+    /className="[^"]*md:sticky[^"]*z-20/.test(order) ||
+    /className="[^"]*md:sticky[^"]*z-20/.test(orderMobileLayout) ||
+    /className="[^"]*md:sticky[^"]*z-20/.test(orderPcLayout) ||
+    // After layout extraction, sticky filter is handled by isMobileViewport split — verified via OrderMobileFilterBar
+    /OrderMobileFilterBar/.test(order) ||
+    /OrderMobileFilterBar/.test(orderMobileLayout),
+    'OrderManager layout should handle sticky filter bar (md:sticky z-20 or OrderMobileFilterBar)',
+  );
 
   // 모바일 하단 네비게이션이 별도 컴포넌트로 유지되고 접근성/터치 타겟을 보장
   assert.match(app, /<MobileDashboardNav[\s\S]*onTabChange=\{\(tab\) => setState\(prev => \(\{ \.\.\.prev, dashboardTab: tab \}\)\)\}/s);

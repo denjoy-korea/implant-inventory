@@ -296,6 +296,7 @@ const App: React.FC = () => {
             liftForBottomNav={showMobileDashboardNav || showMobilePublicNav}
             onOpenContactForm={() => setState(prev => ({ ...prev, currentView: 'contact' }))}
             openRequestToken={supportChatOpenRequest}
+            hideLauncher
           />
         </Suspense>
       )}

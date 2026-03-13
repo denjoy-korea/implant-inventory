@@ -39,6 +39,7 @@
 | dentweb-automation-refactor | 2026-03-06 | 95.2% | 57 items, 52 PASS, 3 CHANGED, 2 MISSING. Missing: file_watcher.py (absorbed by dentweb_runner), images/ dir (deployment-time asset). Changed: ConfirmModal->inline warning for token regen, STATUS_LABELS minor wording. 4 positive additions: idempotent migration, os.path.basename, warn() log level, ALLOWED_PLANS in upload. |
 | code-coupon-system | 2026-03-06 | 97.4% | 78 items, 74 PASS, 3 CHANGED, 1 PARTIAL, 0 FAIL. All 4 phases implemented. C-1: showPartnerCodeInput not explicit field (conditional render equivalent). C-2: redeem_coupon inside process_payment_callback (better atomicity). C-3: Migration 210000 MCP stub. 6 positive additions: stats types early, channel sanitization, backward compat fallbacks. |
 | pricing-overhaul | 2026-03-08 | 97.8% (full M1-M4) | v3: 23 items, 22 PASS, 1 CHANGED, 0 FAIL, 0 DEFERRED. v2 DEFERREDs resolved: SO-01 SimpleOrderCopyButton (83 LOC, clipboard+fallback), BU-03 DowngradeMemberSelectModal (183 LOC, ModalShell+master fixed+staff toggle). IM-01 CHANGED->PASS (brand_analytics now in InventoryManager L397). Remaining: BU-01 yearlyPrice 4000 missing (low impact). 10 positive additions. |
+| order-return-remodel | 2026-03-12 | 83.3% (v2) | 42 items, 35 PASS, 7 FAIL. FAIL: useOrderManagerModals built but not wired (dead code), OrderManager 1013 LOC (target <350), 4 layout files not created (OrderPCLayout, OrderMobileLayout, OrderUnifiedCard, OrderUnifiedTable). F-02~F-06 all PASS: expand/collapse, mobile filter bar, ReturnCompleteModal+DB+types+services+hooks+mapper. |
 
 ### Key File Paths
 - Types: `/types.ts` (root level), `/types/plan.ts` (plan types extracted)
@@ -64,3 +65,6 @@
 - ModalShell: `/components/shared/ModalShell.tsx` (138 LOC, Portal+ARIA+focus trap+ESC+focus restore, backdropClassName prop for mobile bottom-sheet)
 - SimpleOrderCopy: `/components/order/SimpleOrderCopyButton.tsx` (83 LOC), `/components/order/OrderLowStockSection.tsx` (integration)
 - DowngradeMember: `/components/settings/DowngradeMemberSelectModal.tsx` (183 LOC), `/components/app/PublicAppShell.tsx` (integration L140-312)
+- OrderManagerModals: `/hooks/useOrderManagerModals.ts` (59 LOC, useReducer, 13 ModalState kinds)
+- ReturnCompleteModal: `/components/order/ReturnCompleteModal.tsx` (189 LOC, ModalShell, actualQties)
+- OrderMobileFilterBar: `/components/order/OrderMobileFilterBar.tsx` (79 LOC, filterType+manufacturer chips)

@@ -124,16 +124,15 @@ export const returnService = {
   ): Promise<ReturnMutationResult> {
     // 실수령 수량 저장 (전달된 경우에만)
     if (actualQties && Object.keys(actualQties).length > 0) {
-      const updates = Object.entries(actualQties).map(([id, qty]) => ({
-        id,
-        actual_received_qty: qty,
-      }));
-      const { error: updateError } = await supabase
-        .from('return_request_items')
-        .upsert(updates, { onConflict: 'id' });
-      if (updateError) {
-        console.error('[returnService] actual_received_qty save failed:', updateError);
-        return { ok: false, reason: 'error' };
+      for (const [itemId, qty] of Object.entries(actualQties)) {
+        const { error: updateError } = await supabase
+          .from('return_request_items')
+          .update({ actual_received_qty: qty })
+          .eq('id', itemId);
+        if (updateError) {
+          console.error('[returnService] actual_received_qty save failed:', updateError);
+          return { ok: false, reason: 'error' };
+        }
       }
     }
 

@@ -112,10 +112,30 @@ Used for `/pdca report {feature}` after Check phase (Match Rate ≥90%).
 
 **Next cycle action**: Add `checkSecurityDefinerPattern()` lint rule to catch REVOKE omissions automatically
 
-## Files to Reference
+## order-return-remodel Report Pattern (2026-03-12)
+
+**Scope**: 6 functional requirements (F-01 through F-06) — UX enhancement + core feature
+- Match Rate: 94.1% (32/34: 25 PASS [F-02-F-06], 2 FAIL [F-01 integration/LOC], 7 PASS [F-06 deep])
+- Core feature F-06: actual_received_qty tracking (100% complete end-to-end)
+- F-01 deferred: useOrderManagerModals hook exists but not wired (tech debt accepted)
+- Code growth: +469 LOC net (11 files modified/created)
+
+**Key insights**:
+- F-06 works independently from F-01 code structure refactoring (feature isolation principle)
+- Design-first rigor → 94% match on first implementation attempt
+- Tech debt acknowledged in report: deferred F-01 and OrderManager LOC (< 350 target not met)
+- Partial completion acceptable when core feature 100% complete (gate: ≥90% match)
+- NULL default on DB column enables backward compatibility (no migration needed for legacy data)
+
+**Stock adjustment formula**: `diff = requested - actual; if diff > 0, restore diff to inventory`
+- Counterintuitive at first but correct semantics: "how much surplus did we recover?"
+- Implementation uses positive number = surplus restored (matches use case)
+
+**Files to Reference**
 - Report template: `/Users/mac/.claude/plugins/cache/bkit-marketplace/bkit/1.5.8/templates/report.template.md`
 - Plan: `docs/01-plan/features/{feature}.plan.md`
 - Analysis: `docs/03-analysis/features/{feature}.analysis.md`
 - Output: `docs/04-report/features/{feature}.report.md`
 - pricing-overhaul Report: `docs/04-report/features/pricing-overhaul.report.md`
 - security-hardening Report: `docs/04-report/features/security-hardening.report.md`
+- order-return-remodel Report: `docs/04-report/features/order-return-remodel.report.md`

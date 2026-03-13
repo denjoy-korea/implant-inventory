@@ -26,10 +26,13 @@ const PAYMENT_STATUS_LABELS: Record<string, { label: string; color: string }> = 
 };
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  card: '신용카드',
-  transfer: '계좌이체',
-  free: '무료',
-  trial: '체험',
+  card:         '신용카드',
+  transfer:     '계좌이체',
+  free:         '무료',
+  trial:        '체험',
+  credit:       '크레딧',
+  plan_change:  '플랜 변경',
+  admin_manual: '어드민 수동',
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -225,7 +228,8 @@ const AdminPanel: React.FC = () => {
                       <th className="px-5 py-3">결제 수단</th>
                       <th className="px-5 py-3 text-right">금액</th>
                       <th className="px-5 py-3">상태</th>
-                      <th className="px-5 py-3">결제 참조번호</th>
+                      <th className="px-5 py-3">참조번호</th>
+                      <th className="px-5 py-3">비고</th>
                       <th className="px-5 py-3">일시</th>
                     </tr>
                   </thead>
@@ -247,7 +251,14 @@ const AdminPanel: React.FC = () => {
                           <td className="px-5 py-3 text-xs text-slate-400 font-mono">
                             {row.payment_ref ? (
                               <span title={row.payment_ref}>{row.payment_ref.slice(0, 16)}{row.payment_ref.length > 16 ? '…' : ''}</span>
-                            ) : (row.description ?? '-')}
+                            ) : '-'}
+                          </td>
+                          <td className="px-5 py-3 text-xs text-slate-400 max-w-[140px]">
+                            {row.description ? (
+                              <span title={row.description} className="truncate block">
+                                {row.description.length > 20 ? row.description.slice(0, 20) + '…' : row.description}
+                              </span>
+                            ) : '-'}
                           </td>
                           <td className="px-5 py-3 text-xs text-slate-400 whitespace-nowrap">
                             {new Date(row.created_at).toLocaleString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -256,7 +267,7 @@ const AdminPanel: React.FC = () => {
                       );
                     })}
                     {billingRows.length === 0 && (
-                      <tr><td colSpan={8} className="py-20 text-center text-slate-400">결제 내역이 없습니다.</td></tr>
+                      <tr><td colSpan={9} className="py-20 text-center text-slate-400">결제 내역이 없습니다.</td></tr>
                     )}
                   </tbody>
                 </table>

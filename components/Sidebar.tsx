@@ -23,6 +23,7 @@ interface SidebarProps {
   userName?: string;
   onProfileClick?: () => void;
   onUpgrade?: () => void;
+  onOpenSupportChat?: () => void;
 }
 
 /** 탭에 매핑되는 기능 식별자 (해당 기능이 없으면 잠금 아이콘 표시) */
@@ -64,6 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   userName,
   onProfileClick,
   onUpgrade,
+  onOpenSupportChat,
 }) => {
   const unregisteredBadgeText = surgeryUnregisteredCount > 99 ? '99+' : String(surgeryUnregisteredCount);
 
@@ -327,6 +329,33 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
       </div>
+
+      {onOpenSupportChat && (
+        <div className="px-6 pb-4">
+          <button
+            type="button"
+            onClick={() => {
+              onOpenSupportChat();
+              if (isMobile) onRequestClose?.();
+            }}
+            className="group flex w-full items-center gap-3 rounded-[1.15rem] border border-teal-400/18 bg-[linear-gradient(135deg,rgba(45,212,191,0.18),rgba(8,18,30,0.9))] px-4 py-3 text-left shadow-[0_18px_40px_rgba(8,18,30,0.28)] transition-all hover:-translate-y-0.5 hover:border-teal-300/30 hover:bg-[linear-gradient(135deg,rgba(45,212,191,0.22),rgba(8,18,30,0.96))]"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-400 text-slate-950 shadow-[0_0_0_10px_rgba(45,212,191,0.12)]">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1 text-sm font-black text-white">
+              상담하기
+            </span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/8 text-white transition-transform group-hover:translate-x-0.5">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Bottom logo area */}
       <div className="px-6 py-4 border-t border-slate-800">
