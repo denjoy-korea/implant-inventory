@@ -164,6 +164,7 @@ export const planService = {
       p_email_hash:  emailHash,
       p_phone_hash:  phoneHash,
       p_name_hash:   nameHash,
+      p_consent_at:  new Date().toISOString(),
     });
 
     if (!error) {
