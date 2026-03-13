@@ -42,6 +42,7 @@ export interface ReturnRequest {
   reason: ReturnReason;
   status: ReturnStatus;
   requestedDate: string;
+  pickedUpDate?: string | null;
   completedDate?: string | null;
   manager: string;
   confirmedBy?: string | null;
@@ -59,6 +60,7 @@ export interface DbReturnRequest {
   reason: ReturnReason;
   status: ReturnStatus;
   requested_date: string;
+  picked_up_date: string | null;
   completed_date: string | null;
   manager: string;
   confirmed_by: string | null;

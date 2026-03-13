@@ -8,7 +8,6 @@ import DateRangeSlider from './surgery-dashboard/DateRangeSlider';
 import FailKpiStrip from './fail/FailKpiStrip';
 import FailMonthlyTrendChartCard from './fail/FailMonthlyTrendChartCard';
 import FailReturnModal from './fail/FailReturnModal';
-import FailAllReturnConfirmModal from './fail/FailAllReturnConfirmModal';
 import FailOrderHistorySection from './fail/FailOrderHistorySection';
 import { useFailManager } from '../hooks/useFailManager';
 import ConfirmModal from './ConfirmModal';
@@ -48,35 +47,29 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     // period filter
     allMonths, periodStartIdx, periodEndIdx, handlePeriodChange,
     // fail data
-    filteredHistoryFailList, pendingFailList, manufacturers, availableManufacturers,
-    pendingByManufacturer, pendingByManufacturerMap,
+    filteredHistoryFailList, manufacturers, availableManufacturers,
+    pendingByManufacturer,
     // UI state
     activeM, setActiveM,
     isModalOpen, setIsModalOpen, isOrderSubmitting,
     isBulkModalOpen, setIsBulkModalOpen,
     showBulkInfo, setShowBulkInfo,
-    isAllReturnConfirmOpen, setIsAllReturnConfirmOpen, isAllReturnSubmitting,
     hoveredChartIdx, setHoveredChartIdx,
     isMobileViewport,
     chartMonthOffset, setChartMonthOffset,
     chartTouchStartX, chartTouchStartY,
-    recommendedScrollRef,
-    recommendedScrollPct, setRecommendedScrollPct,
     // stats
     mStats, currentStats, currentRemainingFails,
     returnPendingByMfr, totalReturnPending, returnPendingCount, actualPendingFails, globalPendingFails,
-    mPendingList,
     // chart data
     monthlyFailData, allMonthlyFailData, filteredMonthlyMap,
     failSparkline, exchangeSparkline, totalPlacements, failRate, monthlyAvgFail,
     manufacturerDonut, topFailSizes,
     // animated KPIs
     animTotal, animProcessed, animPending, animFailRate, animMonthlyAvg,
-    // modal data
-    recommendedExchangeItems,
     // handlers
     handleOpenOrderModal, handleBulkInitialize, handleBulkReconcile,
-    handleReturnSubmit, handleAllReturnSubmit,
+    handleReturnSubmit,
     // donut chart
     donutPaths,
     // chart render
@@ -146,16 +139,16 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   </div>
                 </div>
               )}
-              {(() => {
-                const allDisabled = isReadOnly || (activeM === 'all' ? globalPendingFails <= 0 : currentRemainingFails <= 0);
+              {activeM !== 'all' && (() => {
+                const btnDisabled = isReadOnly || currentRemainingFails <= 0;
                 return (
                   <button
-                    onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
-                    disabled={allDisabled}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${allDisabled ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
+                    onClick={handleOpenOrderModal}
+                    disabled={btnDisabled}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${btnDisabled ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98]'}`}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                    {activeM === 'all' ? '전체 일괄 반품' : '반품 신청'}
+                    반품 신청
                   </button>
                 );
               })()}
@@ -262,15 +255,15 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
             </select>
           </div>
 
-          {(() => {
-            const mobileDisabled = isReadOnly || (activeM === 'all' ? globalPendingFails <= 0 : currentRemainingFails <= 0);
+          {activeM !== 'all' && (() => {
+            const mobileDisabled = isReadOnly || currentRemainingFails <= 0;
             return (
               <button
-                onClick={activeM === 'all' ? () => setIsAllReturnConfirmOpen(true) : handleOpenOrderModal}
+                onClick={handleOpenOrderModal}
                 disabled={mobileDisabled}
                 className={`w-full min-h-11 rounded-xl text-sm font-black transition-all ${mobileDisabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white active:scale-[0.98]'}`}
               >
-                {activeM === 'all' ? '전체 일괄 반품' : '반품 신청'}
+                반품 신청
               </button>
             );
           })()}
@@ -603,17 +596,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
         </div>
       )}
 
-      <FailAllReturnConfirmModal
-        isOpen={isAllReturnConfirmOpen}
-        isSubmitting={isAllReturnSubmitting}
-        manufacturers={manufacturers}
-        pendingByManufacturerMap={pendingByManufacturerMap}
-        returnPendingByMfr={returnPendingByMfr}
-        globalPendingFails={globalPendingFails}
-        pendingFailCount={pendingFailList.length}
-        onClose={() => setIsAllReturnConfirmOpen(false)}
-        onSubmit={() => void handleAllReturnSubmit()}
-      />
 
       {/* ========================================= */}
       {/* ORDER MODAL                               */}
@@ -624,10 +606,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           currentRemainingFails={currentRemainingFails}
           currentUserName={currentUserName}
           isOrderSubmitting={isOrderSubmitting}
-          recommendedExchangeItems={recommendedExchangeItems}
-          recommendedScrollPct={recommendedScrollPct}
-          setRecommendedScrollPct={setRecommendedScrollPct}
-          recommendedScrollRef={recommendedScrollRef}
           onClose={() => setIsModalOpen(false)}
           onSubmit={handleReturnSubmit}
         />

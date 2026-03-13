@@ -328,7 +328,9 @@ export function useOrderManager({
     if (expandedMfrs.size === 0 && groupedLowStock.length > 0) {
       setExpandedMfrs(new Set([groupedLowStock[0][0]]));
     }
-  }, [groupedLowStock.length]);
+  // expandedMfrs.size를 읽지만 set 트리거 조건으로만 사용 — 객체 참조 대신 size로 비교
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedLowStock.length, expandedMfrs.size]);
 
   // ── 카운트업 애니메이션 ────────────────────────────────────────
   const animPendingRep = useCountUp(kpiData.pendingRepCount);

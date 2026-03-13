@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Order, OrderStatus, InventoryItem, PlanType, ReturnRequest } from '../../types';
+import type { ReturnStatus } from '../../types/return';
 import type { LowStockEntry } from '../../hooks/useOrderManagerData';
 import { ReceiptConfirmationModal, ReceiptUpdate } from '../ReceiptConfirmationModal';
 import OrderCancelModal from './OrderCancelModal';
@@ -61,6 +62,7 @@ interface OrderPCLayoutProps {
   onDeleteReturn?: (returnId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
   onCompleteReturn?: (returnId: string, actualQties?: Record<string, number>) => Promise<void>;
+  onUpdateReturnStatus?: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onUpgradePlan?: () => void;
   setFilterType: (t: Order['type'] | 'all' | 'fail_and_return') => void;
@@ -99,6 +101,7 @@ export function OrderPCLayout({
   onDeleteReturn,
   onQuickOrder,
   onCompleteReturn,
+  onUpdateReturnStatus,
   showAlertToast,
   onUpgradePlan,
   setFilterType,
@@ -119,6 +122,7 @@ export function OrderPCLayout({
         onCompleteReturn={onCompleteReturn}
         onDeleteOrder={onDeleteOrder}
         onDeleteReturn={onDeleteReturn}
+        onUpdateReturnStatus={onUpdateReturnStatus}
       />
 
       {/* 모달: 취소 */}

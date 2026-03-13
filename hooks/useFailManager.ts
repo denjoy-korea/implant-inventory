@@ -164,9 +164,6 @@ export function useFailManager({
   const chartTouchStartY = useRef<number>(0);
   const orderModalRef = useRef<HTMLDivElement>(null);
   const orderModalCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const recommendedScrollRef = useRef<HTMLDivElement>(null);
-  const [recommendedScrollPct, setRecommendedScrollPct] = useState(0);
-
   // 제조사별 통계
   const mStats = useMemo(() => {
     const stats: Record<string, { total: number; processed: number; pending: number }> = {};
@@ -204,10 +201,6 @@ export function useFailManager({
     : (returnPendingByMfr[activeM] || 0);
   const actualPendingFails = Math.max(0, currentRemainingFails - returnPendingCount);
   const globalPendingFails = Math.max(0, pendingFailList.length - totalReturnPending);
-
-  const mPendingList = activeM === 'all'
-    ? pendingFailList
-    : pendingFailList.filter(f => normalizeMfrName(String(f['제조사'] || '기타')) === activeM);
 
   // 월별 교환 추세 데이터
   const monthlyFailData = useMemo<MonthlyFailDatum[]>(() => {
@@ -316,45 +309,6 @@ export function useFailManager({
   const animMonthlyAvg = useCountUp(Math.round(monthlyAvgFail * 10));
 
   // 팝업 상단: 교환 권장 품목 추출
-  const recommendedExchangeItems = useMemo(() => {
-    if (!activeM || !isModalOpen) return [];
-    const failCounts: Record<string, { brand: string, size: string, count: number }> = {};
-    mPendingList.forEach(f => {
-      const b = String(f['브랜드'] || '기타');
-      const s = String(f['규격(SIZE)'] || '기타');
-      const key = `${simpleNormalize(b)}|${getSizeMatchKey(s, activeM)}`;
-      if (!failCounts[key]) failCounts[key] = { brand: b, size: s, count: 0 };
-      failCounts[key].count++;
-    });
-    const result = Object.values(failCounts).map(item => {
-      let alreadyOrderedQty = 0;
-      failOrders
-        .filter(o => o.status === 'ordered' && simpleNormalize(o.manufacturer) === simpleNormalize(activeM))
-        .forEach(order => {
-          order.items.forEach(oi => {
-            if (simpleNormalize(oi.brand) === simpleNormalize(item.brand) &&
-              getSizeMatchKey(oi.size, activeM) === getSizeMatchKey(item.size, activeM)) {
-              alreadyOrderedQty += oi.quantity;
-            }
-          });
-        });
-      const invItem = inventory.find(i =>
-        simpleNormalize(i.brand) === simpleNormalize(item.brand) &&
-        getSizeMatchKey(i.size, activeM) === getSizeMatchKey(item.size, activeM)
-      );
-      const dailyMaxUsage = invItem?.dailyMaxUsage ?? 0;
-      const monthlyAvgUsage = invItem?.monthlyAvgUsage ?? 0;
-      return { ...item, remainingToOrder: item.count - alreadyOrderedQty, dailyMaxUsage, monthlyAvgUsage };
-    }).filter(item => item.remainingToOrder > 0);
-    result.sort((a, b) => {
-      const scoreA = a.dailyMaxUsage * a.monthlyAvgUsage;
-      const scoreB = b.dailyMaxUsage * b.monthlyAvgUsage;
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      return b.remainingToOrder - a.remainingToOrder;
-    });
-    return result;
-  }, [activeM, mPendingList, failOrders, isModalOpen, inventory]);
-
   const handleOpenOrderModal = () => {
     if (activeM === 'all') {
       showToast('제조사를 먼저 선택해주세요.', 'error');
@@ -437,24 +391,29 @@ export function useFailManager({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
-  const handleReturnSubmit = () => {
-    if (currentRemainingFails === 0) return;
-    const returnItems = recommendedExchangeItems.length > 0
-      ? recommendedExchangeItems.map(item => ({
-        brand: item.brand,
-        size: item.size,
-        quantity: item.remainingToOrder,
-      }))
-      : [{ brand: activeM, size: '기타', quantity: currentRemainingFails }];
-
+  const handleReturnSubmit = (exchangeQty: number, failQty: number) => {
+    if (exchangeQty <= 0 && failQty <= 0) return;
     setIsOrderSubmitting(true);
-    void onCreateReturn({
-      manufacturer: activeM,
-      reason: 'exchange',
-      manager: currentUserName,
-      memo: `수술중교환 ${currentRemainingFails}건`,
-      items: returnItems,
-    })
+    const requests: Promise<void>[] = [];
+    if (exchangeQty > 0) {
+      requests.push(onCreateReturn({
+        manufacturer: activeM,
+        reason: 'exchange',
+        manager: currentUserName,
+        memo: `수술중교환 ${exchangeQty}건`,
+        items: [{ brand: activeM, size: '기타', quantity: exchangeQty }],
+      }));
+    }
+    if (failQty > 0) {
+      requests.push(onCreateReturn({
+        manufacturer: activeM,
+        reason: 'defective',
+        manager: currentUserName,
+        memo: `수술후FAIL 반품 ${failQty}건`,
+        items: [{ brand: activeM, size: '기타', quantity: failQty }],
+      }));
+    }
+    void Promise.all(requests)
       .then(() => {
         setIsModalOpen(false);
         showToast('반품 신청이 등록되었습니다. 주문 관리 > 반품 탭에서 진행 상태를 확인하세요.', 'success');
@@ -582,9 +541,6 @@ export function useFailManager({
     chartTouchStartY,
     orderModalRef,
     orderModalCloseButtonRef,
-    recommendedScrollRef,
-    recommendedScrollPct,
-    setRecommendedScrollPct,
     // stats
     mStats,
     currentStats,
@@ -594,7 +550,6 @@ export function useFailManager({
     returnPendingCount,
     actualPendingFails,
     globalPendingFails,
-    mPendingList,
     // chart data
     monthlyFailData,
     allMonthlyFailData,
@@ -612,8 +567,6 @@ export function useFailManager({
     animPending,
     animFailRate,
     animMonthlyAvg,
-    // modal data
-    recommendedExchangeItems,
     // handlers
     handleOpenOrderModal,
     handleBulkInitialize,

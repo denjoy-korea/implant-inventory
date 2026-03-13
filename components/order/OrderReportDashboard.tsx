@@ -4,7 +4,7 @@ import type { Order } from '../../types';
 import { UnifiedRow, GroupedOrder, GroupedReturnRequest } from '../../hooks/useOrderManager';
 import { displayMfr } from '../../hooks/useOrderManagerData';
 import OrderMobileQrPanel from './OrderMobileQrPanel';
-import { RETURN_REASON_LABELS } from '../../types/return';
+import { RETURN_REASON_LABELS, type ReturnStatus } from '../../types/return';
 
 const ORDER_URL = `${window.location.origin}/#/dashboard/orders`;
 
@@ -39,6 +39,7 @@ interface Props {
   onCompleteReturn?: (returnId: string, actualQties?: Record<string, number>) => Promise<void>;
   onDeleteOrder?: (orderId: string) => void | Promise<void>;
   onDeleteReturn?: (returnId: string) => Promise<void>;
+  onUpdateReturnStatus?: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<void>;
 }
 
 // ── 상태 뱃지 ────────────────────────────────────────────────────
@@ -77,31 +78,36 @@ const OrderDetailModal: React.FC<{
   onCompleteReturn?: (group: GroupedReturnRequest, approvedTotal: number) => Promise<void>;
   onDeleteOrder?: (orderId: string) => void | Promise<void>;
   onDeleteReturn?: (returnId: string) => Promise<void>;
-}> = ({ row, onClose, onCompleteReturn, onDeleteOrder, onDeleteReturn }) => {
+  onUpdateReturnStatus?: (returnId: string, status: ReturnStatus, currentStatus: ReturnStatus) => Promise<void>;
+}> = ({ row, onClose, onCompleteReturn, onDeleteOrder, onDeleteReturn, onUpdateReturnStatus }) => {
   const isOrder = row.kind === 'order';
-  const g = row.data as (GroupedOrder & GroupedReturnRequest);
+  const orderData = isOrder ? (row.data as GroupedOrder) : null;
+  const returnData = !isOrder ? (row.data as GroupedReturnRequest) : null;
+  // g: 공통 필드(date, manufacturer, managers, overallStatus) 접근용 — kind 확인 후 사용
+  const g = row.data as GroupedOrder | GroupedReturnRequest;
 
-  const totalRequested = !isOrder
-    ? (g as GroupedReturnRequest).requests.flatMap(r => r.items).reduce((s, i) => s + i.quantity, 0)
+  const totalRequested = returnData
+    ? returnData.requests.flatMap(r => r.items).reduce((s, i) => s + i.quantity, 0)
     : 0;
   const [approvedCount, setApprovedCount] = useState(totalRequested);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const canDelete = isOrder
-    ? (g as GroupedOrder).overallStatus === 'ordered' && !!onDeleteOrder
-    : (g as GroupedReturnRequest).overallStatus === 'requested' && !!onDeleteReturn;
+    ? orderData!.overallStatus === 'ordered' && !!onDeleteOrder
+    : returnData!.overallStatus === 'requested' && !!onDeleteReturn;
 
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
       if (isOrder) {
-        for (const order of (g as GroupedOrder).orders) {
+        for (const order of orderData!.orders) {
           if (order.status === 'ordered') await onDeleteOrder!(order.id);
         }
       } else {
-        for (const req of (g as GroupedReturnRequest).requests) {
+        for (const req of returnData!.requests) {
           if (req.status === 'requested') await onDeleteReturn!(req.id);
         }
       }
@@ -156,7 +162,7 @@ const OrderDetailModal: React.FC<{
             <div>
               <p className="text-sm font-black text-slate-900">
                 {isOrder
-                  ? `${typeLabelFull((g as GroupedOrder).type)} 상세`
+                  ? `${typeLabelFull(orderData!.type)} 상세`
                   : '반품신청 상세'}
               </p>
               <p className="text-[11px] text-slate-400">{g.date} · {displayMfr(g.manufacturer)}</p>
@@ -184,21 +190,53 @@ const OrderDetailModal: React.FC<{
               {g.managers.length > 0 ? g.managers.join(', ') : '—'}
             </span>
           </div>
-          {isOrder && (g as GroupedOrder).confirmers.length > 0 && (
+          {orderData && orderData.confirmers.length > 0 && (
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="text-slate-400 font-semibold">수령자</span>
-              <span className="text-emerald-600 font-semibold">{(g as GroupedOrder).confirmers.join(', ')}</span>
+              <span className="text-emerald-600 font-semibold">{orderData.confirmers.join(', ')}</span>
             </div>
           )}
-          {!isOrder && (g as GroupedReturnRequest).requests[0]?.reason && (
+          {returnData && returnData.requests[0]?.reason && (
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="text-slate-400 font-semibold">반품사유</span>
               <span className="text-slate-700 font-semibold">
-                {RETURN_REASON_LABELS[(g as GroupedReturnRequest).requests[0].reason]}
+                {RETURN_REASON_LABELS[returnData.requests[0].reason]}
               </span>
             </div>
           )}
         </div>
+
+        {/* 날짜 처리 이력 (반품만) */}
+        {!isOrder && (() => {
+          const rg = g as GroupedReturnRequest;
+          const req0 = rg.requests[0];
+          if (!req0) return null;
+          const steps = [
+            { label: '반품 신청', date: req0.requestedDate, activeColor: 'text-orange-600', dotColor: 'bg-orange-400' },
+            { label: '수거 완료', date: req0.pickedUpDate, activeColor: 'text-blue-600', dotColor: 'bg-blue-400' },
+            { label: '반품 완료', date: req0.completedDate, activeColor: 'text-emerald-600', dotColor: 'bg-emerald-400' },
+          ];
+          return (
+            <div className="px-5 py-3 bg-slate-50/60 border-b border-slate-100 shrink-0">
+              <div className="flex items-center justify-between">
+                {steps.map((step, i) => (
+                  <React.Fragment key={step.label}>
+                    <div className={`flex flex-col items-center gap-1 ${step.date ? 'opacity-100' : 'opacity-30'}`}>
+                      <div className={`w-2 h-2 rounded-full ${step.date ? step.dotColor : 'bg-slate-300'}`} />
+                      <p className="text-[10px] font-bold text-slate-500">{step.label}</p>
+                      <p className={`text-[11px] font-black tabular-nums ${step.date ? step.activeColor : 'text-slate-300'}`}>
+                        {step.date ?? '—'}
+                      </p>
+                    </div>
+                    {i < steps.length - 1 && (
+                      <div className="flex-1 border-t border-dashed border-slate-300 mx-2 mb-4" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 품목 테이블 */}
         <div className="overflow-y-auto flex-1 min-h-0">
@@ -265,26 +303,34 @@ const OrderDetailModal: React.FC<{
                 </div>
               );
             })()}
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr className="border-b border-slate-100">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">브랜드</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">사이즈</th>
-                  <th className="text-right px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">수량</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {(g as GroupedReturnRequest).requests.flatMap((req) =>
-                  req.items.map((item, itemIdx) => (
-                    <tr key={`${req.id}-${itemIdx}`} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-2.5 font-semibold text-slate-700">{item.brand}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{item.size}</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-slate-800 tabular-nums">{item.quantity}개</td>
+            {(() => {
+              const brandTotals = Object.entries(
+                (g as GroupedReturnRequest).requests
+                  .flatMap(r => r.items)
+                  .reduce<Record<string, number>>((acc, item) => {
+                    acc[item.brand] = (acc[item.brand] ?? 0) + item.quantity;
+                    return acc;
+                  }, {})
+              );
+              return (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white z-10">
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">브랜드</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">총 반품 수량</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {brandTotals.map(([brand, qty]) => (
+                      <tr key={brand} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-2.5 font-semibold text-slate-700">{brand}</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-slate-800 tabular-nums">{qty}개</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
             </>
           )}
         </div>
@@ -306,6 +352,55 @@ const OrderDetailModal: React.FC<{
                 <span className="font-bold text-slate-400">메모: </span>{r.memo}
               </p>
             ))}
+          </div>
+        )}
+
+        {/* 상태 변경 버튼 (requested 상태의 반품만) */}
+        {!isOrder && (g as GroupedReturnRequest).overallStatus === 'requested' && onUpdateReturnStatus && (
+          <div className="px-5 py-3.5 border-t border-slate-100 bg-blue-50/40 shrink-0">
+            <p className="text-[10px] font-black text-slate-500 mb-2.5">상태 변경</p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  setIsStatusChanging(true);
+                  try {
+                    const reqs = (g as GroupedReturnRequest).requests.filter(r => r.status === 'requested');
+                    for (const req of reqs) {
+                      await onUpdateReturnStatus(req.id, 'picked_up', 'requested');
+                    }
+                    onClose();
+                  } finally {
+                    setIsStatusChanging(false);
+                  }
+                }}
+                disabled={isStatusChanging}
+                className="flex-1 py-2 rounded-lg text-xs font-bold bg-blue-500 hover:bg-blue-600 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isStatusChanging
+                  ? <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                  : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                }
+                수거 완료
+              </button>
+              <button
+                onClick={async () => {
+                  setIsStatusChanging(true);
+                  try {
+                    const reqs = (g as GroupedReturnRequest).requests.filter(r => r.status === 'requested');
+                    for (const req of reqs) {
+                      await onUpdateReturnStatus(req.id, 'rejected', 'requested');
+                    }
+                    onClose();
+                  } finally {
+                    setIsStatusChanging(false);
+                  }
+                }}
+                disabled={isStatusChanging}
+                className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors disabled:opacity-50"
+              >
+                거절
+              </button>
+            </div>
           </div>
         )}
 
@@ -427,6 +522,7 @@ const OrderReportDashboard: React.FC<Props> = ({
   onCompleteReturn,
   onDeleteOrder,
   onDeleteReturn,
+  onUpdateReturnStatus,
 }) => {
   const recentRows = unifiedRows.slice(0, 10);
   const [detailRow, setDetailRow] = useState<UnifiedRow | null>(null);
@@ -713,6 +809,7 @@ const OrderReportDashboard: React.FC<Props> = ({
           onClose={() => setDetailRow(null)}
           onDeleteOrder={onDeleteOrder}
           onDeleteReturn={onDeleteReturn}
+          onUpdateReturnStatus={onUpdateReturnStatus}
           onCompleteReturn={onCompleteReturn ? async (group, approvedTotal) => {
             const allItems = group.requests.flatMap(r => r.items);
             const totalReq = allItems.reduce((s, i) => s + i.quantity, 0);

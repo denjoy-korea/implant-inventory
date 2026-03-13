@@ -45,7 +45,6 @@ export const plans: Plan[] = [
       `재고 품목 최대 ${PLAN_LIMITS['basic'].maxItems}개`,
       `수술기록 ${PLAN_LIMITS['basic'].viewMonths}개월 조회 · 주 1회 업로드`,
       '재고 마스터 대시보드',
-      'FAIL(교환) 관리',
       '발주 생성 및 수령 처리',
       '재고실사',
       '수술차트 기본 (월별추세·요일별 패턴)',
@@ -116,7 +115,7 @@ export const comparisonCategories = [
   {
     name: '재고 관리',
     features: [
-      { label: 'FAIL(교환) 관리', desc: '교환 발생 이력, 원인 분석, 자동 발주 연동', values: [false, true, true, true] },
+      { label: 'FAIL(교환) 관리', desc: '교환 발생 이력, 원인 분석, 자동 발주 연동', values: [false, false, true, true] },
       { label: '교환 분석', desc: '전체 교환현황, 제조사 분석, 월별 추세, 다빈도 규격', values: [false, false, true, true] },
       { label: '발주 생성 및 수령 처리', values: [false, true, true, true] },
       { label: '재고실사', values: [false, true, true, true] },
@@ -206,7 +205,7 @@ export const faqs = [
   },
   {
     q: '어떤 결제 수단을 지원하나요?',
-    a: '신용카드, 체크카드, 계좌이체를 지원합니다. 월간·연간 결제 모두 세금계산서 발행이 가능합니다.',
+    a: '신용카드, 체크카드를 지원합니다. 계좌이체는 추후 지원 예정입니다. 월간·연간 결제 모두 세금계산서 발행이 가능합니다.',
   },
   {
     q: '사용자 추가나 변경은 어떻게 하나요?',

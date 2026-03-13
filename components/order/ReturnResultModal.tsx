@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import ModalShell from '../shared/ModalShell';
 import { RETURN_REASON_LABELS } from '../../types';
 import { displayMfr } from '../../hooks/useOrderManagerData';
@@ -22,11 +22,11 @@ export function ReturnResultModal({ group, isLoading, onConfirm, onClose }: Prop
 
   const [approvedTotal, setApprovedTotal] = useState(totalRequested);
 
-  const [lastGroupId, setLastGroupId] = useState<string | null>(null);
-  if (group && group.id !== lastGroupId) {
-    setLastGroupId(group.id);
+  // group이 바뀔 때 초기화
+  useEffect(() => {
     setApprovedTotal(totalRequested);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group?.id]);
 
   const rejectedTotal = totalRequested - approvedTotal;
   const approvedRate = totalRequested > 0 ? Math.round((approvedTotal / totalRequested) * 100) : 0;

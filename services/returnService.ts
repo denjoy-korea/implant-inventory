@@ -84,6 +84,7 @@ export const returnService = {
   ): Promise<ReturnMutationResult> {
     const payload: Record<string, string | null> = { status };
     if (status === 'completed' && confirmedBy) payload.confirmed_by = confirmedBy;
+    if (status === 'picked_up') payload.picked_up_date = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('return_requests')
       .update(payload)

@@ -27,9 +27,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
 }) => {
   const displayMfr = isIbsImplantManufacturer(mfr) ? 'IBS Implant' : mfr;
 
-  const allIds = entries.map(e => e.item.id);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(allIds));
-  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [quantityOverrides, setQuantityOverrides] = useState<Record<string, number>>({});
 
   const getQty = (id: string, defaultQty: number) =>
@@ -37,17 +35,17 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
 
   const setQty = (id: string, value: number) => {
     setQuantityOverrides(prev => ({ ...prev, [id]: Math.max(1, value) }));
+    setSelectedIds(prev => { const next = new Set(prev); next.add(id); return next; });
   };
 
-  const undoneEntries = entries.filter(e => !doneIds.has(e.item.id));
-  const allSelected = undoneEntries.length > 0 && undoneEntries.every(e => selectedIds.has(e.item.id));
-  const someSelected = undoneEntries.some(e => selectedIds.has(e.item.id));
+  const allSelected = entries.length > 0 && entries.every(e => selectedIds.has(e.item.id));
+  const someSelected = entries.some(e => selectedIds.has(e.item.id));
 
   const toggleAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(undoneEntries.map(e => e.item.id)));
+      setSelectedIds(new Set(entries.map(e => e.item.id)));
     }
   };
 
@@ -60,26 +58,16 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
     });
   };
 
-  const handleSingleOrder = (entry: BrandOrderEntry) => {
-    if (isReadOnly || doneIds.has(entry.item.id)) return;
-    onOrder(entry.item, getQty(entry.item.id, entry.remainingDeficit));
-    setDoneIds(prev => new Set(prev).add(entry.item.id));
-    setSelectedIds(prev => { const next = new Set(prev); next.delete(entry.item.id); return next; });
-  };
-
   const handleBulkOrder = () => {
     if (isReadOnly) return;
-    const targets = entries.filter(e => selectedIds.has(e.item.id) && !doneIds.has(e.item.id));
+    const targets = entries.filter(e => selectedIds.has(e.item.id));
     if (targets.length === 0) return;
     targets.forEach(e => onOrder(e.item, getQty(e.item.id, e.remainingDeficit)));
-    const newDone = new Set(doneIds);
-    targets.forEach(e => newDone.add(e.item.id));
-    setDoneIds(newDone);
     setSelectedIds(new Set());
     showAlertToast(`${targets.length}품목 발주 목록에 추가되었습니다.`, 'success');
   };
 
-  const selectedCount = [...selectedIds].filter(id => !doneIds.has(id)).length;
+  const selectedCount = selectedIds.size;
   const totalDeficit = entries.reduce((s, e) => s + e.remainingDeficit, 0);
 
   const checkboxRef = (el: HTMLInputElement | null, indeterminate: boolean) => {
@@ -110,6 +98,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="닫기"
               className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -139,34 +128,27 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                 <th className="hidden sm:table-cell px-2 py-2.5 text-right text-[11px] font-bold text-slate-500 whitespace-nowrap">권장</th>
                 <th className="px-2 py-2.5 text-right text-[11px] font-bold text-rose-400 whitespace-nowrap">부족</th>
                 <th className="px-2 py-2.5 text-center text-[11px] font-bold text-indigo-500 whitespace-nowrap">수량</th>
-                <th className="px-2 py-2.5 text-center text-[11px] font-bold text-slate-500 whitespace-nowrap">발주</th>
+                <th className="px-2 py-2.5 text-center text-[11px] font-bold text-slate-500 whitespace-nowrap">확인</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {entries.map(entry => {
                 const { item, remainingDeficit } = entry;
-                const isDone = doneIds.has(item.id);
                 const isSelected = selectedIds.has(item.id);
                 return (
                   <tr
                     key={item.id}
-                    className={`cursor-pointer transition-colors ${isDone ? 'bg-emerald-50/50 opacity-60' : isSelected ? 'bg-rose-50/40 hover:bg-rose-50/60' : 'hover:bg-slate-50/60'}`}
-                    onClick={() => { if (!isDone) toggleId(item.id); }}
+                    className={`cursor-pointer transition-colors ${isSelected ? 'bg-rose-50/40 hover:bg-rose-50/60' : 'hover:bg-slate-50/60'}`}
+                    onClick={() => toggleId(item.id)}
                   >
                     <td className="pl-4 pr-1 py-2.5">
-                      {isDone ? (
-                        <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleId(item.id)}
-                          onClick={e => e.stopPropagation()}
-                          className="w-3.5 h-3.5 rounded border-slate-300 accent-rose-500"
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleId(item.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="w-3.5 h-3.5 rounded border-slate-300 accent-rose-500"
+                      />
                     </td>
                     <td className="px-2 py-2.5 font-semibold text-slate-700 whitespace-nowrap">
                       {item.brand || item.manufacturer}
@@ -184,40 +166,37 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                       +{remainingDeficit}
                     </td>
                     <td className="px-1 py-2" onClick={e => e.stopPropagation()}>
-                      {isDone ? null : (
-                        <div className="flex items-center justify-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) - 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
-                          >−</button>
-                          <input
-                            type="number"
-                            min={1}
-                            value={getQty(item.id, remainingDeficit)}
-                            onChange={e => setQty(item.id, parseInt(e.target.value) || 1)}
-                            className="w-8 text-center text-xs font-bold text-indigo-700 tabular-nums bg-indigo-50 rounded border border-indigo-100 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) + 1)}
-                            className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
-                          >+</button>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label="수량 감소"
+                          onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) - 1)}
+                          className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
+                        >−</button>
+                        <input
+                          type="number"
+                          min={1}
+                          aria-label="발주 수량"
+                          value={getQty(item.id, remainingDeficit)}
+                          onChange={e => setQty(item.id, parseInt(e.target.value) || 1)}
+                          className="w-8 text-center text-xs font-bold text-indigo-700 tabular-nums bg-indigo-50 rounded border border-indigo-100 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                        />
+                        <button
+                          type="button"
+                          aria-label="수량 증가"
+                          onClick={() => setQty(item.id, getQty(item.id, remainingDeficit) + 1)}
+                          className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors leading-none"
+                        >+</button>
+                      </div>
                     </td>
                     <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                      {isDone ? (
-                        <span className="text-[10px] font-bold text-emerald-500">완료</span>
-                      ) : (
-                        <button
-                          onClick={() => handleSingleOrder(entry)}
-                          disabled={isReadOnly}
-                          className="px-3 py-1 rounded-lg bg-rose-500 text-white text-[10px] font-bold hover:bg-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
-                        >
-                          발주
-                        </button>
-                      )}
+                      <button
+                        onClick={() => toggleId(item.id)}
+                        disabled={isReadOnly}
+                        className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${isSelected ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      >
+                        확인
+                      </button>
                     </td>
                   </tr>
                 );
@@ -229,13 +208,10 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4">
           <p className="text-xs text-slate-500">
-            {doneIds.size > 0 && (
-              <span className="text-emerald-600 font-bold mr-1.5">{doneIds.size}종 발주 완료 ·</span>
-            )}
             {selectedCount > 0 ? (
               <><span className="font-bold text-rose-600">{selectedCount}종</span> 선택됨</>
             ) : (
-              doneIds.size === entries.length ? '모두 발주 완료' : '항목을 선택하세요'
+              '항목을 선택하세요'
             )}
           </p>
           <button

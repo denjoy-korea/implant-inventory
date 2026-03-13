@@ -175,6 +175,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           if (!actualQties) return;
           await handleReturnCompleteWithQties(returnId, actualQties);
         }}
+        onUpdateReturnStatus={handleReturnUpdateStatus}
         onDeleteReturn={onDeleteReturn}
         showAlertToast={showAlertToast}
         onUpgradePlan={onUpgradePlan}

@@ -89,8 +89,10 @@ export function useAdminBilling() {
   const refundedRows = liveRows.filter(r => r.payment_status === 'refunded');
   const pendingRows = liveRows.filter(r => r.payment_status === 'pending');
 
-  const grossRevenue = completedRows.reduce((s, r) => s + r.amount, 0);
-  const totalRefunds = liveRows.reduce((s, r) => s + (r.refund_amount ?? 0), 0);
+  // grossRevenue: completed + refunded 행 모두 포함 (환불 전 실결제 총액)
+  // totalRefunds: refunded 행의 refund_amount 합산만 사용 (이중 차감 방지)
+  const grossRevenue = [...completedRows, ...refundedRows].reduce((s, r) => s + r.amount, 0);
+  const totalRefunds = refundedRows.reduce((s, r) => s + (r.refund_amount ?? 0), 0);
 
   const kpi: BillingKpi = {
     totalCount: liveRows.length,

@@ -27,6 +27,22 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
         setMessage(raw);
       }
       setPageState('fail');
+
+      // [C-8] pending billing_history 정리: fail 경로에서는 취소 처리가 없으므로
+      // 세션이 유효한 경우 orphaned pending 레코드를 cancelled로 업데이트
+      const orderId = params.get('orderId');
+      if (orderId) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            supabase
+              .from('billing_history')
+              .update({ payment_status: 'cancelled', updated_at: new Date().toISOString() })
+              .eq('id', orderId)
+              .eq('payment_status', 'pending')
+              .then(() => {}); // fire-and-forget
+          }
+        });
+      }
       return;
     }
 

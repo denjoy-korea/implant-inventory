@@ -451,6 +451,7 @@ export function dbToReturnRequest(
     reason: db.reason,
     status: db.status,
     requestedDate: db.requested_date,
+    pickedUpDate: db.picked_up_date,
     completedDate: db.completed_date,
     manager: db.manager,
     confirmedBy: db.confirmed_by || undefined,

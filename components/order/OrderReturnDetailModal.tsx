@@ -10,9 +10,18 @@ interface Props {
 
 export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup }: Props) {
   const g = returnDetailGroup;
-  const allItems = g ? g.requests.flatMap(r => r.items) : [];
   const reason = g?.requests[0]?.reason;
   const memo = g?.requests[0]?.memo;
+
+  // 브랜드별 수량 합산
+  const brandTotals = g
+    ? Object.entries(
+        g.requests.flatMap(r => r.items).reduce<Record<string, number>>((acc, item) => {
+          acc[item.brand] = (acc[item.brand] ?? 0) + item.quantity;
+          return acc;
+        }, {})
+      )
+    : [];
 
   return (
     <ModalShell
@@ -59,16 +68,14 @@ export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
                     <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">브랜드</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-500">규격</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-500">수량</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-bold text-slate-500">총 반품 수량</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {allItems.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="px-3 py-2 font-semibold text-slate-700">{item.brand}</td>
-                      <td className="px-3 py-2 text-slate-500">{(!item.size || item.size === '기타') ? '-' : item.size}</td>
-                      <td className="px-3 py-2 text-right font-black text-slate-800 tabular-nums">{item.quantity}</td>
+                  {brandTotals.map(([brand, qty]) => (
+                    <tr key={brand}>
+                      <td className="px-3 py-2 font-semibold text-slate-700">{brand}</td>
+                      <td className="px-3 py-2 text-right font-black text-slate-800 tabular-nums">{qty}개</td>
                     </tr>
                   ))}
                 </tbody>
@@ -76,7 +83,7 @@ export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup
             </div>
           </div>
           <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
-            <span className="text-xs text-slate-500">총 <span className="font-black text-slate-700">{g.totalQty}개</span> · {allItems.length}종</span>
+            <span className="text-xs text-slate-500">총 <span className="font-black text-slate-700">{g.totalQty}개</span> · {brandTotals.length}종</span>
             <button onClick={() => setReturnDetailGroup(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-300 transition-colors">닫기</button>
           </div>
         </>

@@ -366,6 +366,23 @@ Deno.serve(async (req: Request) => {
       const vatBase = calcAmountWithVat(baseAmount, serverDiscountAmount);
       const correctedCredit = Math.min(serverUpgradeCredit, vatBase - 100);
       const correctedAmount = vatBase - correctedCredit;
+
+      // [H-1] Fix: DB 업데이트 전에 amountNum과 일치 여부를 먼저 확인
+      // 보정된 금액이 클라이언트 결제 금액과 다르면 DB 수정 없이 400 반환
+      // (TossPayments는 이미 클라이언트 금액으로 결제 대기 상태 — 수정 불가)
+      if (correctedAmount !== amountNum) {
+        console.error("[toss-payment-confirm] Upgrade credit correction would cause amount mismatch:", {
+          correctedAmount,
+          amountNum,
+          serverCredit: serverUpgradeCredit,
+          billingCredit: billing.upgrade_credit_amount,
+        });
+        return jsonResponse(
+          { error: "Amount mismatch after credit correction", expected: correctedAmount, received: amountNum },
+          400,
+        );
+      }
+
       console.warn("[toss-payment-confirm] Overwriting upgrade_credit with server values:", {
         serverCredit: serverUpgradeCredit,
         billingCredit: billing.upgrade_credit_amount,
@@ -489,41 +506,28 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: message, code }, tossResponse.status >= 400 ? tossResponse.status : 400);
   }
 
-  // 결제 승인 성공 → 쿠폰 사용 처리 (atomic redeem)
-  if (billing.coupon_id && serverDiscountAmount > 0) {
-    const { data: redeemResult, error: redeemError } = await adminClient.rpc("redeem_coupon", {
-      p_coupon_id: billing.coupon_id,
-      p_user_id: user.id,
-      p_hospital_id: billing.hospital_id,
-      p_billing_id: orderId.trim(),
-      p_billing_cycle: billingCycleVal,
-      p_original_amount: baseAmount,
-    });
+  // [C-4] 쿠폰 사용 처리는 process_payment_callback 내부에서 동일 트랜잭션으로 실행
+  // (기존 별도 redeem_coupon 호출 제거 — 원자성 보장)
 
-    if (redeemError) {
-      console.error("[toss-payment-confirm] redeem_coupon RPC failed:", redeemError.message);
-      // 결제는 이미 승인됨 — 쿠폰 처리 실패를 로그하되 결제 흐름은 계속 진행
-      // (운영팀이 수동으로 쿠폰 사용 처리 필요)
-    } else {
-      const result = redeemResult as { ok?: boolean; error?: string } | null;
-      if (result && !result.ok) {
-        console.warn("[toss-payment-confirm] redeem_coupon rejected:", result.error, {
-          couponId: billing.coupon_id, userId: user.id,
-        });
-      }
-    }
-  }
-
-  // process_payment_callback RPC 호출
+  // process_payment_callback RPC 호출 (쿠폰 redeem 포함)
   const paymentRef = typeof tossData.paymentKey === "string"
     ? tossData.paymentKey
     : paymentKey.trim();
 
-  const { data: rpcData, error: rpcError } = await adminClient.rpc("process_payment_callback", {
+  const rpcParams: Record<string, unknown> = {
     p_billing_id: orderId.trim(),
     p_payment_ref: paymentRef,
     p_status: "completed",
-  });
+  };
+
+  // 쿠폰이 적용된 경우 동일 트랜잭션 내에서 redeem 처리
+  if (billing.coupon_id && serverDiscountAmount > 0) {
+    rpcParams.p_coupon_id = billing.coupon_id;
+    rpcParams.p_user_id = user.id;
+    rpcParams.p_original_amount = baseAmount;
+  }
+
+  const { data: rpcData, error: rpcError } = await adminClient.rpc("process_payment_callback", rpcParams);
 
   if (rpcError) {
     console.error("[toss-payment-confirm] process_payment_callback RPC failed:", rpcError.message);

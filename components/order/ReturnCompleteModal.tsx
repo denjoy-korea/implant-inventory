@@ -1,9 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import ModalShell from '../shared/ModalShell';
 import { RETURN_REASON_LABELS } from '../../types';
 import { displayMfr } from '../../hooks/useOrderManagerData';
 import { GroupedReturnRequest } from '../../hooks/useOrderManager';
-import { ReturnRequestItem } from '../../types/return';
 
 interface Props {
   group: GroupedReturnRequest | null;
@@ -13,36 +12,36 @@ interface Props {
 }
 
 export function ReturnCompleteModal({ group, isLoading, onConfirm, onClose }: Props) {
-  const allItems: ReturnRequestItem[] = useMemo(
+  const allItems = useMemo(
     () => (group ? group.requests.flatMap(r => r.items) : []),
     [group]
   );
+  const totalRequested = allItems.reduce((s, i) => s + i.quantity, 0);
 
-  // 초기값 = 신청 수량 그대로
-  const [actualQties, setActualQties] = useState<Record<string, number>>(
-    () => Object.fromEntries(allItems.map(item => [item.id, item.quantity]))
-  );
+  const [rejectedQty, setRejectedQty] = useState(0);
 
   // group이 바뀔 때 초기화
-  const [lastGroupId, setLastGroupId] = useState<string | null>(null);
-  if (group && group.id !== lastGroupId) {
-    setLastGroupId(group.id);
-    setActualQties(Object.fromEntries(
-      group.requests.flatMap(r => r.items).map(item => [item.id, item.quantity])
-    ));
-  }
+  useEffect(() => {
+    setRejectedQty(0);
+  }, [group?.id]);
 
-  const totalRequested = allItems.reduce((s, i) => s + i.quantity, 0);
-  const totalActual = allItems.reduce((s, i) => s + (actualQties[i.id] ?? i.quantity), 0);
-  const stockDelta = totalRequested - totalActual; // 양수 = 재고 복구할 수량
+  const completedQty = Math.max(0, totalRequested - rejectedQty);
 
-  const handleQtyChange = (id: string, value: number) => {
-    setActualQties(prev => ({ ...prev, [id]: Math.max(0, value) }));
+  // 완료 수량을 각 품목에 앞에서부터 채워서 분배
+  const buildActualQties = (): Record<string, number> => {
+    let remaining = completedQty;
+    const result: Record<string, number> = {};
+    for (const item of allItems) {
+      const give = Math.min(item.quantity, remaining);
+      result[item.id] = give;
+      remaining -= give;
+    }
+    return result;
   };
 
   const handleConfirm = async () => {
     if (!group) return;
-    await onConfirm(actualQties);
+    await onConfirm(buildActualQties());
   };
 
   const reason = group?.requests[0]?.reason;
@@ -52,13 +51,13 @@ export function ReturnCompleteModal({ group, isLoading, onConfirm, onClose }: Pr
       isOpen={!!group}
       onClose={onClose}
       title="반품 완료 처리"
-      maxWidth="sm:max-w-lg"
+      maxWidth="sm:max-w-md"
       className="flex flex-col max-h-[90vh]"
       backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0"
     >
       {group && (
         <>
-          {/* 헤더 정보 */}
+          {/* 헤더 */}
           <div className="px-5 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <span className="text-base font-black text-slate-800">{displayMfr(group.manufacturer)}</span>
@@ -71,89 +70,54 @@ export function ReturnCompleteModal({ group, isLoading, onConfirm, onClose }: Pr
             <p className="text-xs text-slate-500 mt-0.5">{group.date}</p>
           </div>
 
-          {/* 안내 */}
-          <div className="px-5 pt-4 pb-2">
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
-              <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-xs text-amber-700 leading-relaxed">
-                실제 수거된 수량을 입력해주세요. 신청 수량과 다를 경우 재고가 자동 보정됩니다.
-              </p>
-            </div>
-          </div>
-
-          {/* 품목 목록 */}
-          <div className="flex-1 overflow-y-auto px-5 py-3">
-            {/* 헤더 */}
-            <div className="flex items-center gap-2 px-2 pb-1.5 border-b border-slate-100">
-              <span className="flex-1 text-[11px] font-bold text-slate-400">품목</span>
-              <span className="w-14 text-[11px] font-bold text-slate-400 text-center">신청</span>
-              <span className="w-20 text-[11px] font-bold text-slate-500 text-center">실수령</span>
+          <div className="px-5 py-5 space-y-5">
+            {/* 총 신청 개수 */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-500">총 신청 개수</span>
+              <span className="text-2xl font-black text-slate-800 tabular-nums">{totalRequested}<span className="text-sm font-bold text-slate-400 ml-1">개</span></span>
             </div>
 
-            <div className="space-y-1 mt-1">
-              {allItems.map(item => {
-                const actual = actualQties[item.id] ?? item.quantity;
-                const diff = item.quantity - actual;
-                return (
-                  <div key={item.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-slate-50">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-700 truncate">{item.brand}</p>
-                      <p className="text-[11px] text-slate-400 truncate">{item.size}</p>
-                    </div>
-                    <span className="w-14 text-xs text-slate-500 text-center font-mono">{item.quantity}</span>
-                    <div className="w-20 flex items-center gap-1">
-                      <div className={`flex items-center gap-1 rounded-lg border px-2 py-1 w-full ${
-                        diff > 0 ? 'border-amber-300 bg-amber-50' :
-                        diff < 0 ? 'border-rose-300 bg-rose-50' :
-                        'border-slate-200 bg-white'
-                      }`}>
-                        <button
-                          onClick={() => handleQtyChange(item.id, actual - 1)}
-                          className="text-slate-400 hover:text-slate-600 leading-none text-sm font-bold"
-                          disabled={isLoading}
-                        >−</button>
-                        <input
-                          type="number"
-                          min={0}
-                          value={actual}
-                          onChange={e => handleQtyChange(item.id, parseInt(e.target.value, 10) || 0)}
-                          className="w-8 text-xs font-mono font-bold text-center bg-transparent outline-none"
-                          disabled={isLoading}
-                        />
-                        <button
-                          onClick={() => handleQtyChange(item.id, actual + 1)}
-                          className="text-slate-400 hover:text-slate-600 leading-none text-sm font-bold"
-                          disabled={isLoading}
-                        >+</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 합계 및 보정 정보 */}
-          <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-slate-500">신청 <strong className="text-slate-700 font-mono">{totalRequested}</strong>개</span>
-                <span className="text-slate-300">→</span>
-                <span className={`font-bold font-mono ${stockDelta !== 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  실수령 {totalActual}개
-                </span>
+            {/* 불인정 개수 입력 */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 space-y-3">
+              <p className="text-sm font-bold text-slate-600">불인정 개수</p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="수량 감소"
+                  onClick={() => setRejectedQty(prev => Math.max(0, prev - 1))}
+                  disabled={isLoading || rejectedQty <= 0}
+                  className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors active:scale-95"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" /></svg>
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  max={totalRequested}
+                  value={rejectedQty}
+                  onChange={e => setRejectedQty(Math.min(totalRequested, Math.max(0, parseInt(e.target.value) || 0)))}
+                  aria-label="불인정 개수"
+                  disabled={isLoading}
+                  className={`flex-1 text-center text-3xl font-black tabular-nums bg-white border rounded-xl py-2 focus:outline-none focus:ring-2 disabled:opacity-50 ${rejectedQty > 0 ? 'text-rose-600 border-rose-300 focus:ring-rose-300' : 'text-slate-400 border-slate-200 focus:ring-slate-300'}`}
+                />
+                <button
+                  type="button"
+                  aria-label="수량 증가"
+                  onClick={() => setRejectedQty(prev => Math.min(totalRequested, prev + 1))}
+                  disabled={isLoading || rejectedQty >= totalRequested}
+                  className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors active:scale-95"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                </button>
               </div>
-              {stockDelta !== 0 && (
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${
-                  stockDelta > 0
-                    ? 'bg-amber-50 border border-amber-200 text-amber-700'
-                    : 'bg-rose-50 border border-rose-200 text-rose-700'
-                }`}>
-                  재고 {stockDelta > 0 ? `+${stockDelta}` : stockDelta} 보정
-                </span>
-              )}
+            </div>
+
+            {/* 반품완료 자동 계산 */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3.5 flex items-center justify-between">
+              <span className="text-sm font-bold text-emerald-700">반품완료 개수</span>
+              <span className="text-2xl font-black text-emerald-600 tabular-nums">
+                {completedQty}<span className="text-sm font-bold ml-1">개</span>
+              </span>
             </div>
           </div>
 

@@ -84,6 +84,7 @@ export function useReturnHandlers({
         reason: params.reason,
         status: 'requested',
         requested_date: new Date().toISOString().split('T')[0],
+        picked_up_date: null,
         completed_date: null,
         manager: params.manager,
         confirmed_by: null,
@@ -103,6 +104,7 @@ export function useReturnHandlers({
           getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
         );
         if (invItem) {
+          // 정확한 품목 매칭 성공
           await inventoryService.adjustStock(invItem.id, -item.quantity);
           setState(prev => ({
             ...prev,
@@ -112,6 +114,30 @@ export function useReturnHandlers({
                 : i
             ),
           }));
+        } else {
+          // 폴백: 제조사 단위 자동 차감 (FAIL 트랙 등 brand/size 미지정 케이스)
+          // 해당 제조사의 재고를 수량 많은 품목부터 순차 차감
+          const mfrItems = [...inventory]
+            .filter(inv => inv.manufacturer === params.manufacturer && inv.currentStock > 0)
+            .sort((a, b) => b.currentStock - a.currentStock);
+          let remaining = item.quantity;
+          for (const mfrItem of mfrItems) {
+            if (remaining <= 0) break;
+            const deduct = Math.min(remaining, mfrItem.currentStock);
+            await inventoryService.adjustStock(mfrItem.id, -deduct);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === mfrItem.id
+                  ? { ...i, currentStock: i.currentStock - deduct, stockAdjustment: i.stockAdjustment - deduct }
+                  : i
+              ),
+            }));
+            remaining -= deduct;
+          }
+          if (remaining > 0) {
+            console.warn(`[handleCreateReturn] 재고 부족: ${params.manufacturer} ${remaining}개 미처리`);
+          }
         }
       }
     } else {
@@ -221,6 +247,22 @@ export function useReturnHandlers({
                   : i
               ),
             }));
+          } else {
+            // 폴백: 제조사 단위 복원 (FAIL 트랙 등 brand 미지정 케이스)
+            const mfrItem = [...inventory]
+              .filter(inv => inv.manufacturer === returnReq.manufacturer)
+              .sort((a, b) => b.currentStock - a.currentStock)[0];
+            if (mfrItem) {
+              await inventoryService.adjustStock(mfrItem.id, diff);
+              setState(prev => ({
+                ...prev,
+                inventory: prev.inventory.map(i =>
+                  i.id === mfrItem.id
+                    ? { ...i, currentStock: i.currentStock + diff, stockAdjustment: i.stockAdjustment + diff }
+                    : i
+                ),
+              }));
+            }
           }
         }
       }
@@ -228,13 +270,16 @@ export function useReturnHandlers({
 
     const result = await returnService.completeReturn(returnId, hospitalId, actualQties);
 
-    if (!result.ok) {
+    if (result.ok) {
+      // 완료 후 재고 UI 갱신 (신청 시 차감 이후 상태 동기화)
+      syncInventoryWithUsageAndOrders();
+    } else {
       // 롤백 (재고 보정도 서버 재조회로 복구)
       await loadReturnRequests();
     }
 
     return result;
-  }, [hospitalId, loadReturnRequests, inventory, setState]);
+  }, [hospitalId, loadReturnRequests, inventory, setState, syncInventoryWithUsageAndOrders]);
 
   const handleDeleteReturn = useCallback(async (returnId: string) => {
     // ref로 최신 배열을 참조 — 낙관적 제거 전에 항목 확보 (stale closure 방지)
@@ -269,6 +314,26 @@ export function useReturnHandlers({
                 : i
             ),
           }));
+        } else {
+          // 폴백: 제조사 단위 복원 (FAIL 트랙 등 brand 미지정 케이스)
+          // 신청 시 수량 많은 순으로 차감했으므로, 복원도 수량 많은 품목에 추가
+          const mfrItems = [...inventory]
+            .filter(inv => inv.manufacturer === returnReq.manufacturer)
+            .sort((a, b) => b.currentStock - a.currentStock);
+          let remaining = item.quantity;
+          for (const mfrItem of mfrItems) {
+            if (remaining <= 0) break;
+            await inventoryService.adjustStock(mfrItem.id, remaining);
+            setState(prev => ({
+              ...prev,
+              inventory: prev.inventory.map(i =>
+                i.id === mfrItem.id
+                  ? { ...i, currentStock: i.currentStock + remaining, stockAdjustment: i.stockAdjustment + remaining }
+                  : i
+              ),
+            }));
+            remaining = 0;
+          }
         }
       }
     }
