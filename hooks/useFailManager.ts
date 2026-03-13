@@ -36,6 +36,42 @@ interface UseFailManagerParams {
   onInitialModalOpened?: () => void;
 }
 
+/**
+ * FAIL/교환 트랙: 제조사 재고에서 currentStock 많은 순으로 반품 품목 분배.
+ * brand 필드에 제조사명 대신 실제 inventory 브랜드/사이즈를 사용해 DB 데이터 정합성 확보.
+ */
+function buildReturnItems(
+  inventory: InventoryItem[],
+  manufacturer: string,
+  totalQty: number
+): { brand: string; size: string; quantity: number }[] {
+  const mfrItems = inventory
+    .filter(inv => inv.manufacturer === manufacturer && inv.currentStock > 0)
+    .sort((a, b) => b.currentStock - a.currentStock);
+
+  if (mfrItems.length === 0) {
+    // 재고 없음 — 빈 값으로 기록 (handleCreateReturn 폴백이 처리)
+    return [{ brand: '', size: '', quantity: totalQty }];
+  }
+
+  const result: { brand: string; size: string; quantity: number }[] = [];
+  let remaining = totalQty;
+
+  for (const item of mfrItems) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, item.currentStock);
+    result.push({ brand: item.brand, size: item.size, quantity: take });
+    remaining -= take;
+  }
+
+  // 전체 재고 < 반품 수량인 경우 첫 항목에 나머지 추가
+  if (remaining > 0) {
+    result[0].quantity += remaining;
+  }
+
+  return result;
+}
+
 export function useFailManager({
   surgeryMaster,
   inventory,
@@ -401,7 +437,7 @@ export function useFailManager({
         reason: 'exchange',
         manager: currentUserName,
         memo: `수술중교환 ${exchangeQty}건`,
-        items: [{ brand: activeM, size: '기타', quantity: exchangeQty }],
+        items: buildReturnItems(inventory, activeM, exchangeQty),
       }));
     }
     if (failQty > 0) {
@@ -410,7 +446,7 @@ export function useFailManager({
         reason: 'defective',
         manager: currentUserName,
         memo: `수술후FAIL 반품 ${failQty}건`,
-        items: [{ brand: activeM, size: '기타', quantity: failQty }],
+        items: buildReturnItems(inventory, activeM, failQty),
       }));
     }
     void Promise.all(requests)
