@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BillingCycle, HospitalPlanState, PlanType, User, PLAN_ORDER } from '../types';
 import PricingPaymentModal from './pricing/PricingPaymentModal';
 import { tossPaymentService } from '../services/tossPaymentService';
@@ -31,6 +31,8 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   const [receiptType, setReceiptType] = useState<'cash_receipt' | 'tax_invoice'>('cash_receipt');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  // [M-4] React state 비동기 특성으로 인한 더블클릭 중복 제출 방지용 ref
+  const submittingRef = useRef(false);
 
   // 쿠폰 관련 상태
   const [availableCoupons, setAvailableCoupons] = useState<UserCoupon[]>([]);
@@ -103,6 +105,9 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   const handleSubmit = async () => {
     if (!plan || plan === 'free') return;
     if (!user?.hospitalId) return;
+    // [M-4] React state re-render 전 중복 호출 차단
+    if (submittingRef.current) return;
+    submittingRef.current = true;
 
     setIsSubmitting(true);
     setRequestError(null);
@@ -129,6 +134,7 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
     } catch (err) {
       setRequestError(err instanceof Error ? err.message : '결제 중 오류가 발생했습니다.');
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };

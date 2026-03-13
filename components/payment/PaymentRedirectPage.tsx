@@ -76,7 +76,9 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       const { ok, error } = result;
       if (ok) {
         setPageState('success');
-        setTimeout(onComplete, 2500);
+        // [LOW] clearTimeout으로 컴포넌트 언마운트 시 navigate 누수 방지
+        const timer = setTimeout(onComplete, 2500);
+        return () => clearTimeout(timer);
       } else {
         setMessage(error || '결제 승인에 실패했습니다.');
         setPageState('fail');
@@ -135,7 +137,7 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
               onClick={onComplete}
               className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
             >
-              다시 시도하기
+              결제 페이지로 돌아가기
             </button>
           </>
         )}

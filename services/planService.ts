@@ -776,7 +776,9 @@ export const planService = {
         return Math.max(0, upperRemaining - lowerCost);
       }
       return Math.max(0, upperRemaining);
-    } catch {
+    } catch (err) {
+      // [M-11] 에러 무음 실패 방지 — 디버깅용 로그 추가
+      console.error('[planService] estimateDowngradeCredit failed:', err);
       return 0;
     }
   },

@@ -54,7 +54,7 @@ export function useAdminBilling() {
         .from('billing_history')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(500),
+        .limit(1000),
       supabase.from('hospitals').select('id, name'),
     ]);
 
