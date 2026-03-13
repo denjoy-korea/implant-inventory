@@ -37,6 +37,8 @@ interface Props {
   setFilterType: (type: Order['type'] | 'all' | 'fail_and_return') => void;
   setShowHistoryPanel: (v: boolean) => void;
   onCompleteReturn?: (returnId: string, actualQties?: Record<string, number>) => Promise<void>;
+  onDeleteOrder?: (orderId: string) => void | Promise<void>;
+  onDeleteReturn?: (returnId: string) => Promise<void>;
 }
 
 // ── 상태 뱃지 ────────────────────────────────────────────────────
@@ -73,7 +75,9 @@ const OrderDetailModal: React.FC<{
   row: UnifiedRow;
   onClose: () => void;
   onCompleteReturn?: (group: GroupedReturnRequest, approvedTotal: number) => Promise<void>;
-}> = ({ row, onClose, onCompleteReturn }) => {
+  onDeleteOrder?: (orderId: string) => void | Promise<void>;
+  onDeleteReturn?: (returnId: string) => Promise<void>;
+}> = ({ row, onClose, onCompleteReturn, onDeleteOrder, onDeleteReturn }) => {
   const isOrder = row.kind === 'order';
   const g = row.data as (GroupedOrder & GroupedReturnRequest);
 
@@ -82,6 +86,30 @@ const OrderDetailModal: React.FC<{
     : 0;
   const [approvedCount, setApprovedCount] = useState(totalRequested);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const canDelete = isOrder
+    ? (g as GroupedOrder).overallStatus === 'ordered' && !!onDeleteOrder
+    : (g as GroupedReturnRequest).overallStatus === 'requested' && !!onDeleteReturn;
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      if (isOrder) {
+        for (const order of (g as GroupedOrder).orders) {
+          if (order.status === 'ordered') await onDeleteOrder!(order.id);
+        }
+      } else {
+        for (const req of (g as GroupedReturnRequest).requests) {
+          if (req.status === 'requested') await onDeleteReturn!(req.id);
+        }
+      }
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const typeLabelFull = (type: string) => {
     const map: Record<string, string> = {
@@ -341,7 +369,39 @@ const OrderDetailModal: React.FC<{
         )}
 
         {/* 푸터 */}
-        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end shrink-0">
+        <div className="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between shrink-0">
+          <div>
+            {canDelete && !isConfirmingDelete && (
+              <button
+                onClick={() => setIsConfirmingDelete(true)}
+                className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition-colors border border-rose-100"
+              >
+                신청 취소
+              </button>
+            )}
+            {canDelete && isConfirmingDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-rose-600 font-semibold">정말 삭제할까요?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isDeleting
+                    ? <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    : '삭제'
+                  }
+                </button>
+                <button
+                  onClick={() => setIsConfirmingDelete(false)}
+                  disabled={isDeleting}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-colors"
@@ -365,6 +425,8 @@ const OrderReportDashboard: React.FC<Props> = ({
   setFilterType,
   setShowHistoryPanel,
   onCompleteReturn,
+  onDeleteOrder,
+  onDeleteReturn,
 }) => {
   const recentRows = unifiedRows.slice(0, 10);
   const [detailRow, setDetailRow] = useState<UnifiedRow | null>(null);
@@ -649,6 +711,8 @@ const OrderReportDashboard: React.FC<Props> = ({
           key={detailRow.kind === 'order' ? detailRow.data.id : detailRow.data.id}
           row={detailRow}
           onClose={() => setDetailRow(null)}
+          onDeleteOrder={onDeleteOrder}
+          onDeleteReturn={onDeleteReturn}
           onCompleteReturn={onCompleteReturn ? async (group, approvedTotal) => {
             const allItems = group.requests.flatMap(r => r.items);
             const totalReq = allItems.reduce((s, i) => s + i.quantity, 0);

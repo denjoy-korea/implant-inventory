@@ -58,6 +58,7 @@ interface OrderPCLayoutProps {
   onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteOrder: (orderId: string) => void;
+  onDeleteReturn?: (returnId: string) => Promise<void>;
   onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
   onCompleteReturn?: (returnId: string, actualQties?: Record<string, number>) => Promise<void>;
   showAlertToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -95,6 +96,7 @@ export function OrderPCLayout({
   onConfirmReceipt,
   onUpdateOrderStatus,
   onDeleteOrder,
+  onDeleteReturn,
   onQuickOrder,
   onCompleteReturn,
   showAlertToast,
@@ -115,6 +117,8 @@ export function OrderPCLayout({
         setFilterType={setFilterType}
         setShowHistoryPanel={setShowHistoryPanel}
         onCompleteReturn={onCompleteReturn}
+        onDeleteOrder={onDeleteOrder}
+        onDeleteReturn={onDeleteReturn}
       />
 
       {/* 모달: 취소 */}

@@ -45,7 +45,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
   onCreateReturn,
   onUpdateReturnStatus,
   onCompleteReturn,
-  onDeleteReturn: _onDeleteReturn,
+  onDeleteReturn,
   returnRequests,
   showAlertToast,
   isReadOnly,
@@ -175,6 +175,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
           if (!actualQties) return;
           await handleReturnCompleteWithQties(returnId, actualQties);
         }}
+        onDeleteReturn={onDeleteReturn}
         showAlertToast={showAlertToast}
         onUpgradePlan={onUpgradePlan}
         setFilterType={setFilterType}
