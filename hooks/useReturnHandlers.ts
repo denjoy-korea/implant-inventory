@@ -151,9 +151,15 @@ export function useReturnHandlers({
     currentStatus: ReturnStatus
   ): Promise<ReturnMutationResult> => {
     const confirmedBy = status === 'completed' ? (user?.name || undefined) : undefined;
+    const today = new Date().toISOString().split('T')[0];
     // 낙관적 업데이트
     setReturnRequests(prev =>
-      prev.map(r => r.id === returnId ? { ...r, status, ...(confirmedBy ? { confirmedBy } : {}) } : r)
+      prev.map(r => r.id === returnId ? {
+        ...r,
+        status,
+        ...(status === 'picked_up' ? { pickedUpDate: today } : {}),
+        ...(confirmedBy ? { confirmedBy } : {}),
+      } : r)
     );
 
     const result = await returnService.updateStatus(returnId, status, currentStatus, confirmedBy);

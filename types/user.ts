@@ -23,6 +23,9 @@ export interface MemberPermissions {
   canManageFails: boolean;     // 실패 관리
   canManageVendors: boolean;   // 거래처 관리
   canManageWorkDays: boolean;  // 진료 요일 설정
+  canManageOptimizer: boolean; // 권장재고산출설정
+  canViewAuditLog: boolean;    // 감사 로그
+  canManageDentweb: boolean;   // 덴트웹 자동화
 }
 
 /** 권한 레벨 프리셋 */
@@ -38,6 +41,9 @@ export const DEFAULT_STAFF_PERMISSIONS: MemberPermissions = {
   canManageFails: true,
   canManageVendors: true,
   canManageWorkDays: true,
+  canManageOptimizer: true,
+  canViewAuditLog: true,
+  canManageDentweb: true,
 };
 
 export const READONLY_PERMISSIONS: MemberPermissions = {
@@ -50,6 +56,9 @@ export const READONLY_PERMISSIONS: MemberPermissions = {
   canManageFails: false,
   canManageVendors: false,
   canManageWorkDays: false,
+  canManageOptimizer: false,
+  canViewAuditLog: false,
+  canManageDentweb: false,
 };
 
 export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
@@ -62,6 +71,9 @@ export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
   canManageFails: '실패 관리',
   canManageVendors: '거래처 관리',
   canManageWorkDays: '진료 요일 설정',
+  canManageOptimizer: '권장재고산출설정',
+  canViewAuditLog: '감사 로그',
+  canManageDentweb: '덴트웹 자동화',
 };
 
 export interface User {

@@ -49,6 +49,11 @@ const RETURN_STATUS_COLOR: Record<string, string> = {
 };
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
+const dayDiff = (a: string | null | undefined, b: string | null | undefined): number | null => {
+    if (!a || !b) return null;
+    return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+};
+
 type HistoryEntry =
     | { kind: 'order'; data: Order; date: string }
     | { kind: 'return'; data: ReturnRequest; date: string };
@@ -336,6 +341,12 @@ export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptCo
                             (e.kind === 'order' && e.data.status === 'received') ||
                             (e.kind === 'return' && e.data.status === 'completed')
                         );
+                        const retCompletedQty = dayEntries
+                            .filter(e => e.kind === 'return' && e.data.status === 'completed')
+                            .reduce((s: number, e) => s + e.data.items.reduce((is: number, i: { quantity: number }) => is + i.quantity, 0), 0);
+                        const retRejectedQty = dayEntries
+                            .filter(e => e.kind === 'return' && e.data.status === 'rejected')
+                            .reduce((s: number, e) => s + e.data.items.reduce((is: number, i: { quantity: number }) => is + i.quantity, 0), 0);
 
                         return (
                             <div key={date}>
@@ -355,95 +366,190 @@ export function OrderHistoryPanel({ orders, returnRequests, onClose, onReceiptCo
                                         <span className="tabular-nums">{dayEntries.length}건</span>
                                         <span className="text-slate-200">·</span>
                                         <span className="tabular-nums">{dayTotal}개</span>
+                                        {(retCompletedQty > 0 || retRejectedQty > 0) && (
+                                            <>
+                                                <span className="text-slate-200 hidden sm:inline">·</span>
+                                                {retCompletedQty > 0 && <span className="text-emerald-500 font-bold tabular-nums hidden sm:inline">반품성공 {retCompletedQty}개</span>}
+                                                {retRejectedQty > 0 && <span className="text-rose-400 font-bold tabular-nums hidden sm:inline">반품실패 {retRejectedQty}개</span>}
+                                            </>
+                                        )}
                                     </div>
                                 </button>
 
-                                {isExpanded && (
-                                    <div className="pb-2">
-                                        {dayEntries
-                                            .sort((a, b) => a.data.manufacturer.localeCompare(b.data.manufacturer))
-                                            .map(entry => {
-                                                const totalQty = entry.data.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
-
-                                                if (entry.kind === 'order') {
-                                                    const order = entry.data;
-                                                    if (!order.items[0]) return null;
-                                                    return (
-                                                        <div key={`order-${order.id}`} className={`mx-3 sm:mx-5 mb-1.5 rounded-xl border px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 ${
-                                                            order.status === 'received' ? 'bg-emerald-50/30 border-emerald-100'
-                                                            : (order.status as string) === 'cancelled' ? 'bg-slate-50 border-slate-100 opacity-60'
-                                                            : 'bg-white border-slate-200'
-                                                        }`}>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${ORDER_TYPE_COLOR[order.type]}`}>{ORDER_TYPE_LABEL[order.type]}</span>
-                                                                <span className="text-xs font-black text-slate-700 w-[80px] truncate">{displayMfr(order.manufacturer)}</span>
-                                                            </div>
-                                                            <span className="font-mono text-[10px] font-bold text-slate-300 shrink-0 hidden sm:inline">{order.id.slice(0, 8)}</span>
-                                                            <div className="flex-1 flex flex-wrap items-center gap-1.5 min-w-0">
-                                                                {order.items.map((item, idx) => (
-                                                                    <span key={idx} className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
-                                                                        <span className="font-black">{item.brand}</span>
-                                                                        <span className="text-slate-400">{item.size}</span>
-                                                                        <span className="font-bold text-slate-500">×{item.quantity}</span>
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                                                                {order.manager && (
-                                                                    <span className="text-[10px] text-slate-400 hidden sm:inline">
-                                                                        주문: <span className="font-semibold text-slate-600">{order.manager}</span>
-                                                                    </span>
-                                                                )}
-                                                                {order.confirmedBy && (
-                                                                    <span className="text-[10px] text-emerald-600 hidden sm:inline">
-                                                                        수령: <span className="font-semibold">{order.confirmedBy}</span>
-                                                                    </span>
-                                                                )}
-                                                                <span className="text-xs font-black text-slate-700 tabular-nums">{totalQty}개</span>
-                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${ORDER_STATUS_COLOR[order.status] || ''}`}>{ORDER_STATUS_LABEL[order.status] || order.status}</span>
-                                                                {order.receivedDate && <span className="text-[10px] font-semibold text-emerald-600 hidden sm:inline">→ {order.receivedDate.slice(0, 10)}</span>}
-                                                                {order.status === 'ordered' && !isReadOnly && onReceiptConfirm && (
-                                                                    <button onClick={() => onReceiptConfirm(order)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors active:scale-95">
-                                                                        입고 확인
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                }
-
-                                                const rr = entry.data;
-                                                return (
-                                                    <div key={`return-${rr.id}`} className={`mx-3 sm:mx-5 mb-1.5 rounded-xl border px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 ${
-                                                        rr.status === 'completed' ? 'bg-emerald-50/30 border-emerald-100'
-                                                        : rr.status === 'rejected' ? 'bg-slate-50 border-slate-100 opacity-60'
-                                                        : 'bg-white border-slate-200'
-                                                    }`}>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${RETURN_REASON_COLOR[rr.reason] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>{RETURN_REASON_LABEL[rr.reason] || '반품'}</span>
-                                                            <span className="text-xs font-black text-slate-700 w-[80px] truncate">{displayMfr(rr.manufacturer)}</span>
-                                                        </div>
-                                                        <span className="font-mono text-[10px] font-bold text-slate-300 shrink-0 hidden sm:inline">{rr.id.slice(0, 8)}</span>
-                                                        <div className="flex-1 flex flex-wrap items-center gap-1.5 min-w-0">
-                                                            {rr.items.map((item: { brand: string; size: string; quantity: number }, idx: number) => (
-                                                                <span key={idx} className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
-                                                                    <span className="font-black">{item.brand}</span>
-                                                                    <span className="text-slate-400">{(!item.size || item.size === '기타') ? '-' : item.size}</span>
-                                                                    <span className="font-bold text-slate-500">×{item.quantity}</span>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-xs font-black text-slate-700 tabular-nums">{totalQty}개</span>
-                                                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${RETURN_STATUS_COLOR[rr.status] || ''}`}>{RETURN_STATUS_LABEL[rr.status] || rr.status}</span>
-                                                            {rr.completedDate && <span className="text-[10px] font-semibold text-emerald-600 hidden sm:inline">→ {rr.completedDate.slice(0, 10)}</span>}
-                                                            {rr.memo && <span className="text-[10px] text-slate-400 hidden sm:inline truncate max-w-[120px]" title={rr.memo}>{rr.memo}</span>}
-                                                        </div>
+                                {isExpanded && (() => {
+                                    const RET_COLS = '76px 88px 1fr 38px 60px 82px 82px 46px 82px 46px';
+                                    const ORD_COLS = '76px 88px 1fr 38px 60px 82px 82px 54px';
+                                    const durationCls = (d: number | null) =>
+                                        d === null ? 'text-slate-200' : d === 0 ? 'text-slate-400' : d <= 3 ? 'text-emerald-600' : d <= 7 ? 'text-amber-500' : 'text-rose-500';
+                                    const retEntries = dayEntries
+                                        .filter(e => e.kind === 'return')
+                                        .sort((a, b) => a.data.manufacturer.localeCompare(b.data.manufacturer));
+                                    const ordEntries = dayEntries
+                                        .filter(e => e.kind === 'order')
+                                        .sort((a, b) => a.data.manufacturer.localeCompare(b.data.manufacturer));
+                                    return (
+                                        <div className="pb-2">
+                                            {/* ── 반품 섹션 ── */}
+                                            {retEntries.length > 0 && (
+                                                <div className="mx-3 sm:mx-5 mb-2">
+                                                    {/* 데스크톱 헤더 */}
+                                                    <div className="hidden sm:grid items-center gap-x-2 px-3 py-1.5 mb-1 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-[9px] font-black uppercase tracking-wider text-slate-400"
+                                                         style={{ gridTemplateColumns: RET_COLS }}>
+                                                        <span>유형</span>
+                                                        <span>제조사</span>
+                                                        <span>품목</span>
+                                                        <span className="text-right">수량</span>
+                                                        <span className="text-center">상태</span>
+                                                        <span className="text-center">신청일</span>
+                                                        <span className="text-center">수거일</span>
+                                                        <span className="text-center">신→수</span>
+                                                        <span className="text-center">완료일</span>
+                                                        <span className="text-center">수→완</span>
                                                     </div>
-                                                );
-                                            })}
-                                    </div>
-                                )}
+                                                    {retEntries.map(entry => {
+                                                        const rr = entry.data;
+                                                        const totalQty = rr.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
+                                                        const reqDate = rr.requestedDate?.slice(0, 10) ?? null;
+                                                        const pickDate = rr.pickedUpDate?.slice(0, 10) ?? null;
+                                                        const compDate = rr.completedDate?.slice(0, 10) ?? null;
+                                                        const d1 = dayDiff(reqDate, pickDate);
+                                                        const d2 = dayDiff(pickDate, compDate);
+                                                        const rowCls = rr.status === 'completed' ? 'bg-emerald-50/30 border-emerald-100'
+                                                            : rr.status === 'rejected' ? 'bg-slate-50 border-slate-100 opacity-60'
+                                                            : 'bg-white border-slate-200';
+                                                        return (
+                                                            <>
+                                                                {/* 모바일 */}
+                                                                <div key={`return-mob-${rr.id}`} className={`sm:hidden mb-1.5 rounded-xl border px-3 py-2.5 flex flex-col gap-1.5 ${rowCls}`}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${RETURN_REASON_COLOR[rr.reason] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>{RETURN_REASON_LABEL[rr.reason] || '반품'}</span>
+                                                                        <span className="text-xs font-black text-slate-700">{displayMfr(rr.manufacturer)}</span>
+                                                                        <span className="ml-auto text-xs font-black text-slate-700 tabular-nums">{totalQty}개</span>
+                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${RETURN_STATUS_COLOR[rr.status] || ''}`}>{RETURN_STATUS_LABEL[rr.status] || rr.status}</span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {rr.items.map((item: { brand: string; size: string; quantity: number }, idx: number) => (
+                                                                            <span key={idx} className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                                                                                <span className="font-black">{item.brand}</span>
+                                                                                <span className="text-slate-400">{(!item.size || item.size === '기타') ? '' : ` ${item.size}`}</span>
+                                                                                <span className="font-bold text-slate-500"> ×{item.quantity}</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-3 text-[10px] text-slate-400">
+                                                                        {reqDate && <span>신청 <span className="font-bold text-slate-600">{reqDate}</span></span>}
+                                                                        {pickDate && <span>수거 <span className="font-bold text-blue-600">{pickDate}</span>{d1 !== null && <span className="ml-1">(+{d1}일)</span>}</span>}
+                                                                        {compDate && <span>완료 <span className="font-bold text-emerald-600">{compDate}</span>{d2 !== null && <span className="ml-1">(+{d2}일)</span>}</span>}
+                                                                    </div>
+                                                                </div>
+                                                                {/* 데스크톱 */}
+                                                                <div key={`return-${rr.id}`} className={`hidden sm:grid mb-1 rounded-xl border px-3 py-2 gap-x-2 items-center ${rowCls}`}
+                                                                     style={{ gridTemplateColumns: RET_COLS }}>
+                                                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border w-fit ${RETURN_REASON_COLOR[rr.reason] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>{RETURN_REASON_LABEL[rr.reason] || '반품'}</span>
+                                                                    <span className="text-xs font-black text-slate-700 truncate">{displayMfr(rr.manufacturer)}</span>
+                                                                    <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+                                                                        {rr.items.map((item: { brand: string; size: string; quantity: number }, idx: number) => (
+                                                                            <span key={idx} className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                                                                                <span className="font-black">{item.brand}</span>
+                                                                                {item.size && item.size !== '기타' && <span className="text-slate-400"> {item.size}</span>}
+                                                                                <span className="font-bold text-slate-400"> ×{item.quantity}</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <span className="text-xs font-black text-slate-700 tabular-nums text-right">{totalQty}</span>
+                                                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border w-fit justify-self-center ${RETURN_STATUS_COLOR[rr.status] || ''}`}>{RETURN_STATUS_LABEL[rr.status] || rr.status}</span>
+                                                                    <span className="text-[11px] font-semibold tabular-nums text-center text-slate-600">{reqDate ?? '—'}</span>
+                                                                    <span className={`text-[11px] font-semibold tabular-nums text-center ${pickDate ? 'text-blue-600' : 'text-slate-200'}`}>{pickDate ?? '—'}</span>
+                                                                    <span className={`text-[10px] font-bold text-center ${durationCls(d1)}`}>{d1 !== null ? `${d1}일` : '—'}</span>
+                                                                    <span className={`text-[11px] font-semibold tabular-nums text-center ${compDate ? 'text-emerald-600' : 'text-slate-200'}`}>{compDate ?? '—'}</span>
+                                                                    <span className={`text-[10px] font-bold text-center ${durationCls(d2)}`}>{d2 !== null ? `${d2}일` : '—'}</span>
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* ── 발주 섹션 ── */}
+                                            {ordEntries.length > 0 && (
+                                                <div className="mx-3 sm:mx-5 mb-2">
+                                                    {/* 데스크톱 헤더 */}
+                                                    <div className="hidden sm:grid items-center gap-x-2 px-3 py-1.5 mb-1 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-[9px] font-black uppercase tracking-wider text-slate-400"
+                                                         style={{ gridTemplateColumns: ORD_COLS }}>
+                                                        <span>유형</span>
+                                                        <span>제조사</span>
+                                                        <span>품목</span>
+                                                        <span className="text-right">수량</span>
+                                                        <span className="text-center">상태</span>
+                                                        <span className="text-center">주문일</span>
+                                                        <span className="text-center">입고일</span>
+                                                        <span className="text-center">소요일</span>
+                                                    </div>
+                                                    {ordEntries.map(entry => {
+                                                        const order = entry.data;
+                                                        if (!order.items[0]) return null;
+                                                        const totalQty = order.items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0);
+                                                        const ordDate = order.date?.slice(0, 10) ?? null;
+                                                        const recDate = order.receivedDate?.slice(0, 10) ?? null;
+                                                        const elapsed = dayDiff(ordDate, recDate);
+                                                        const rowCls = order.status === 'received' ? 'bg-emerald-50/30 border-emerald-100'
+                                                            : (order.status as string) === 'cancelled' ? 'bg-slate-50 border-slate-100 opacity-60'
+                                                            : 'bg-white border-slate-200';
+                                                        return (
+                                                            <>
+                                                                {/* 모바일 */}
+                                                                <div key={`order-mob-${order.id}`} className={`sm:hidden mb-1.5 rounded-xl border px-3 py-2.5 flex flex-col gap-1.5 ${rowCls}`}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${ORDER_TYPE_COLOR[order.type]}`}>{ORDER_TYPE_LABEL[order.type]}</span>
+                                                                        <span className="text-xs font-black text-slate-700">{displayMfr(order.manufacturer)}</span>
+                                                                        <span className="ml-auto text-xs font-black text-slate-700 tabular-nums">{totalQty}개</span>
+                                                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${ORDER_STATUS_COLOR[order.status] || ''}`}>{ORDER_STATUS_LABEL[order.status] || order.status}</span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {order.items.map((item, idx) => (
+                                                                            <span key={idx} className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                                                                                <span className="font-black">{item.brand}</span>
+                                                                                <span className="text-slate-400">{item.size}</span>
+                                                                                <span className="font-bold text-slate-500"> ×{item.quantity}</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                                {/* 데스크톱 */}
+                                                                <div key={`order-${order.id}`} className={`hidden sm:grid mb-1 rounded-xl border px-3 py-2 gap-x-2 items-center ${rowCls}`}
+                                                                     style={{ gridTemplateColumns: ORD_COLS }}>
+                                                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border w-fit ${ORDER_TYPE_COLOR[order.type]}`}>{ORDER_TYPE_LABEL[order.type]}</span>
+                                                                    <span className="text-xs font-black text-slate-700 truncate">{displayMfr(order.manufacturer)}</span>
+                                                                    <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+                                                                        {order.items.map((item, idx) => (
+                                                                            <span key={idx} className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                                                                                <span className="font-black">{item.brand}</span>
+                                                                                <span className="text-slate-400"> {item.size}</span>
+                                                                                <span className="font-bold text-slate-400"> ×{item.quantity}</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <span className="text-xs font-black text-slate-700 tabular-nums text-right">{totalQty}</span>
+                                                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border w-fit justify-self-center ${ORDER_STATUS_COLOR[order.status] || ''}`}>{ORDER_STATUS_LABEL[order.status] || order.status}</span>
+                                                                    <span className="text-[11px] font-semibold tabular-nums text-center text-slate-600">{ordDate ?? '—'}</span>
+                                                                    <span className={`text-[11px] font-semibold tabular-nums text-center ${recDate ? 'text-emerald-600' : 'text-slate-200'}`}>{recDate ?? '—'}</span>
+                                                                    <span className={`text-[10px] font-bold text-center ${durationCls(elapsed)}`}>{elapsed !== null ? `${elapsed}일` : '—'}</span>
+                                                                </div>
+                                                                {order.status === 'ordered' && !isReadOnly && onReceiptConfirm && (
+                                                                    <div key={`order-btn-${order.id}`} className="hidden sm:flex justify-end mb-1 px-1">
+                                                                        <button onClick={() => onReceiptConfirm(order)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors active:scale-95">
+                                                                            입고 확인
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         );
                     })}

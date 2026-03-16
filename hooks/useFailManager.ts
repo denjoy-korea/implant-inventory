@@ -218,11 +218,24 @@ export function useFailManager({
     : (mStats[activeM] || { total: 0, processed: 0, pending: 0 });
   const currentRemainingFails = currentStats.pending;
 
-  // 반품 대기중 건수 (ReturnRequest 기반: requested 또는 picked_up 상태)
+  // 반품 대기중 건수 (교환 반품만: requested 또는 picked_up 상태)
   const returnPendingByMfr = useMemo(() => {
     const counts: Record<string, number> = {};
     returnRequests
-      .filter(r => r.status === 'requested' || r.status === 'picked_up')
+      .filter(r => r.reason === 'exchange' && (r.status === 'requested' || r.status === 'picked_up'))
+      .forEach(r => {
+        const m = normalizeMfrName(r.manufacturer);
+        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        counts[m] = (counts[m] || 0) + qty;
+      });
+    return counts;
+  }, [returnRequests]);
+
+  // 반품 완료 건수 (교환 반품만: completed 상태)
+  const returnCompletedByMfr = useMemo(() => {
+    const counts: Record<string, number> = {};
+    returnRequests
+      .filter(r => r.reason === 'exchange' && r.status === 'completed')
       .forEach(r => {
         const m = normalizeMfrName(r.manufacturer);
         const qty = r.items.reduce((s, i) => s + i.quantity, 0);
@@ -232,11 +245,15 @@ export function useFailManager({
   }, [returnRequests]);
 
   const totalReturnPending = Object.values(returnPendingByMfr).reduce((s, v) => s + v, 0);
+  const totalReturnCompleted = Object.values(returnCompletedByMfr).reduce((s, v) => s + v, 0);
   const returnPendingCount = activeM === 'all'
     ? totalReturnPending
     : (returnPendingByMfr[activeM] || 0);
-  const actualPendingFails = Math.max(0, currentRemainingFails - returnPendingCount);
-  const globalPendingFails = Math.max(0, pendingFailList.length - totalReturnPending);
+  const returnCompletedCount = activeM === 'all'
+    ? totalReturnCompleted
+    : (returnCompletedByMfr[activeM] || 0);
+  const actualPendingFails = Math.max(0, currentRemainingFails - returnPendingCount - returnCompletedCount);
+  const globalPendingFails = Math.max(0, pendingFailList.length - totalReturnPending - totalReturnCompleted);
 
   // 월별 교환 추세 데이터
   const monthlyFailData = useMemo<MonthlyFailDatum[]>(() => {
@@ -350,7 +367,7 @@ export function useFailManager({
       showToast('제조사를 먼저 선택해주세요.', 'error');
       return;
     }
-    if (currentRemainingFails <= 0) {
+    if (actualPendingFails <= 0) {
       showToast('현재 제조사에 반품 가능한 교환 잔여 건수가 없습니다.', 'error');
       return;
     }
@@ -581,7 +598,11 @@ export function useFailManager({
     mStats,
     currentStats,
     currentRemainingFails,
+    filteredReturnRequests: activeM === 'all'
+      ? returnRequests
+      : returnRequests.filter(r => normalizeMfrName(r.manufacturer) === activeM),
     returnPendingByMfr,
+    returnCompletedByMfr,
     totalReturnPending,
     returnPendingCount,
     actualPendingFails,

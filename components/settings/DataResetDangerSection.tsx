@@ -106,7 +106,7 @@ const DataResetDangerSection: React.FC<DataResetDangerSectionProps> = ({
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-bold text-slate-800">데이터 초기화</h3>
               <p className="text-xs mt-1 leading-relaxed text-slate-500">
-                이직 등의 사유로 워크스페이스 데이터를 초기화합니다. 관리자 승인 후 데이터가 삭제되며 계정은 일시정지 상태로 전환됩니다.
+                워크스페이스 데이터 초기화를 요청합니다. 관리자 승인 후 데이터가 삭제되며 계정은 일시정지 상태로 전환됩니다.
               </p>
             </div>
             <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -4,6 +4,52 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-16] - return-pending-fix (Return Quantity Calculation: Bug Fix)
+
+### Overview
+Fixed 3 critical bugs in return quantity calculation affecting exchange pending/completed state tracking. Added `returnCompletedByMfr` tracking, corrected calculation formula to include both pending and completed returns, and enhanced UI feedback with pending count display.
+
+### Bug Fixes
+
+| Bug | Root Cause | Solution | Impact |
+|-----|-----------|----------|--------|
+| Bug 1 | `returnPendingByMfr` missing reason filter | Added `reason === 'exchange'` filter | Prevent FAIL/other returns from incorrect deduction |
+| Bug 2 | Completed returns never deducted | Created `returnCompletedByMfr` useMemo | UI now reflects completed returns correctly |
+| Bug 3 | Modal re-open shows stale pending count | Added `returnCompletedCount` to formula | Pending count decreases after modal reopen |
+
+### Requirements Status
+
+```
+Match Rate: 100% (11/11 requirements) ✅ PASS
+├─ R-01: returnPendingByMfr filter: PASS
+├─ R-02: returnCompletedByMfr added: PASS
+├─ R-03: actualPendingFails formula: PASS
+├─ R-04: returnPendingCount calc: PASS
+├─ R-05: returnCompletedCount calc: PASS
+├─ R-06: globalPendingFails formula: PASS
+├─ R-07: Button disable logic: PASS
+├─ R-08: Modal props updated: PASS
+├─ R-09: Header pending display: PASS
+├─ R-10: Card pending display: PASS
+└─ R-11: Input max validation: PASS
+```
+
+### Code Changes Summary
+
+| File | Changes | Impact |
+|------|---------|--------|
+| `hooks/useFailManager.ts` | R-01~R-06: Added reason filter, returnCompletedByMfr, formula fix | Core logic fix |
+| `components/FailManager.tsx` | R-07: Updated button disable condition | UI fix |
+| `components/fail/FailReturnModal.tsx` | R-08~R-11: Added returnPendingCount prop, display pending count | UX improvement |
+
+### Test Results
+- TypeScript compilation: ✅ PASS (0 errors)
+- All 11 requirements: ✅ PASS
+- Side effects: ✅ None detected
+- Existing functionality: ✅ Unaffected
+
+---
+
 ## [2026-03-12] - order-return-remodel (Return Order Refactoring: Complete PDCA Cycle)
 
 ### Overview

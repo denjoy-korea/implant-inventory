@@ -67,12 +67,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
 
     // 활성 초기화 요청 조회
     useEffect(() => {
-        if (isMaster && user.hospitalId) {
+        if ((isMaster || isSystemAdmin) && user.hospitalId) {
             resetService.getActiveRequest(user.hospitalId).then(req => {
                 if (req) setActiveResetRequest({ id: req.id, status: req.status, created_at: req.created_at });
             });
         }
-    }, [isMaster, user.hospitalId]);
+    }, [isMaster, isSystemAdmin, user.hospitalId]);
 
     const handleRequestReset = async () => {
         if (!user.hospitalId || !resetReason.trim()) return;
@@ -465,10 +465,10 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                 </div>
                             </div>
 
-                            {/* 이직 데이터 초기화 — master(개인 워크스페이스 소유자)만 */}
-                            {isMaster && user.hospitalId && (
+                            {/* 데이터 초기화 — master 또는 운영자 */}
+                            {(isMaster || isSystemAdmin) && user.hospitalId && (
                                 <div>
-                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">이직 시 데이터 초기화</h4>
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">데이터 초기화</h4>
 
                                     {activeResetRequest ? (
                                         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
@@ -505,7 +505,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 <div>
                                                     <p className="text-[10px] font-bold text-rose-700">다음 데이터가 모두 삭제됩니다</p>
                                                     <p className="text-[10px] text-rose-600 mt-0.5 leading-relaxed">
-                                                        수술기록 · 재고 마스터 · 주문/발주 · 교환 내역 · 재고실사 · 활동로그
+                                                        수술기록 · 재고 마스터 · 주문/발주 · 반품/교환 · 재고실사 · FAIL 내역 · 활동로그
                                                     </p>
                                                     <p className="text-[10px] text-slate-500 mt-0.5">계정 정보와 구독 플랜은 유지됩니다.</p>
                                                 </div>
@@ -516,7 +516,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                     type="text"
                                                     value={resetReason}
                                                     onChange={e => setResetReason(e.target.value)}
-                                                    placeholder="예: 이직으로 인한 데이터 초기화"
+                                                    placeholder="예: 데이터 초기화 요청"
                                                     className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
                                                 />
                                             </div>
@@ -550,8 +550,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                             </div>
                                             <div className="text-left">
-                                                <p className="text-xs font-bold text-slate-700 group-hover:text-rose-700 transition-colors">이직으로 인한 데이터 초기화</p>
-                                                <p className="text-[10px] text-slate-400">수술기록, 재고, 주문, 교환, 재고실사 정보를 초기화합니다</p>
+                                                <p className="text-xs font-bold text-slate-700 group-hover:text-rose-700 transition-colors">데이터 초기화</p>
+                                                <p className="text-[10px] text-slate-400">수술기록, 재고, 주문, 반품/교환, FAIL, 실사 등을 초기화합니다</p>
                                             </div>
                                         </button>
                                     )}

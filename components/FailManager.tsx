@@ -60,7 +60,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     chartTouchStartX, chartTouchStartY,
     // stats
     mStats, currentStats, currentRemainingFails,
-    returnPendingByMfr, totalReturnPending, returnPendingCount, actualPendingFails, globalPendingFails,
+    filteredReturnRequests,
+    returnPendingByMfr, returnCompletedByMfr, totalReturnPending, returnPendingCount, actualPendingFails, globalPendingFails,
     // chart data
     monthlyFailData, allMonthlyFailData, filteredMonthlyMap,
     failSparkline, exchangeSparkline, totalPlacements, failRate, monthlyAvgFail,
@@ -74,7 +75,6 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
     donutPaths,
     // chart render
     visibleMonthlyData, maxOffset, chartYMax, chartTicks,
-    activeOrders,
   } = useFailManager({
     surgeryMaster, inventory, failOrders,
     returnRequests, onCreateReturn, currentUserName,
@@ -140,7 +140,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                 </div>
               )}
               {activeM !== 'all' && (() => {
-                const btnDisabled = isReadOnly || currentRemainingFails <= 0;
+                const btnDisabled = isReadOnly || actualPendingFails <= 0;
                 return (
                   <button
                     onClick={handleOpenOrderModal}
@@ -191,8 +191,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
                   className={`flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeM === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                 >
                   {m}
-                  {Math.max(0, stats.pending - (returnPendingByMfr[m] || 0)) > 0 && (
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === m ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{Math.max(0, stats.pending - (returnPendingByMfr[m] || 0))}</span>
+                  {Math.max(0, stats.pending - (returnPendingByMfr[m] || 0) - (returnCompletedByMfr[m] || 0)) > 0 && (
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeM === m ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-500'}`}>{Math.max(0, stats.pending - (returnPendingByMfr[m] || 0) - (returnCompletedByMfr[m] || 0))}</span>
                   )}
                 </button>
               );
@@ -256,7 +256,7 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           </div>
 
           {activeM !== 'all' && (() => {
-            const mobileDisabled = isReadOnly || currentRemainingFails <= 0;
+            const mobileDisabled = isReadOnly || actualPendingFails <= 0;
             return (
               <button
                 onClick={handleOpenOrderModal}
@@ -583,9 +583,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
           )}
 
           <FailOrderHistorySection
-            activeOrders={activeOrders}
+            returnRequests={filteredReturnRequests}
             isReadOnly={isReadOnly}
-            onDeleteOrder={onDeleteOrder}
             onRequestDelete={setConfirmDeleteOrderId}
           />
         </div>
@@ -603,7 +602,8 @@ const FailManager: React.FC<FailManagerProps> = ({ surgeryMaster, inventory, fai
       {isModalOpen && (
         <FailReturnModal
           activeM={activeM}
-          currentRemainingFails={currentRemainingFails}
+          currentRemainingFails={actualPendingFails}
+          returnPendingCount={returnPendingCount}
           currentUserName={currentUserName}
           isOrderSubmitting={isOrderSubmitting}
           onClose={() => setIsModalOpen(false)}

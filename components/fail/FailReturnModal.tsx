@@ -5,6 +5,7 @@ import ModalShell from '../shared/ModalShell';
 interface FailReturnModalProps {
   activeM: string;
   currentRemainingFails: number;
+  returnPendingCount: number;
   currentUserName: string;
   isOrderSubmitting: boolean;
   onClose: () => void;
@@ -14,6 +15,7 @@ interface FailReturnModalProps {
 const FailReturnModal: React.FC<FailReturnModalProps> = ({
   activeM,
   currentRemainingFails,
+  returnPendingCount,
   currentUserName,
   isOrderSubmitting,
   onClose,
@@ -45,7 +47,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
         <div>
           <h3 id="fail-order-modal-title" className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">반품 처리</h3>
           <p id="fail-order-modal-desc" className="text-sm text-slate-500 mt-1">
-            {activeM} / 반품 가능 잔량: <span className="font-bold text-slate-700">{currentRemainingFails}건</span>
+            {activeM} / 반품 가능 잔량: <span className="font-bold text-slate-700">{currentRemainingFails}건</span>{returnPendingCount > 0 && <span className="text-amber-500 font-semibold ml-1">(대기중 {returnPendingCount}건)</span>}
           </p>
         </div>
         <button
@@ -73,6 +75,9 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
               <p className="text-2xl font-black text-slate-800 tabular-nums leading-tight">
                 {currentRemainingFails}<span className="text-sm font-bold text-slate-400 ml-1">건</span>
               </p>
+              {returnPendingCount > 0 && (
+                <p className="text-[9px] font-bold text-amber-500 mt-0.5">대기중 {returnPendingCount}건</p>
+              )}
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">반품 처리 수량</p>

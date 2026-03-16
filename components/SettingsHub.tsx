@@ -43,6 +43,8 @@ interface SettingsCard {
   icon: React.ReactNode;
   requireMaster?: boolean;
   feature?: PlanFeature;
+  /** staff에게 허용할 세부 권한 키 (해당 키가 true면 requireMaster 무시) */
+  staffPermission?: keyof MemberPermissions;
 }
 
 /** 해당 기능에 접근 가능한 최소 플랜 찾기 */
@@ -113,9 +115,11 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
 
   // 거래처 데이터 로딩 (master 또는 canManageVendors 권한 보유 staff, Business 플랜 이상)
   const canVendorPlan = planService.canAccess(plan, 'supplier_management');
-  const canAccessVendors = canVendorPlan && ((isMaster && !isStaff) || (!!isStaff && !!permissions?.canManageVendors));
-  const canAccessWorkDays = isMaster || (!!isStaff && !!permissions?.canManageWorkDays);
+  const canAccessVendors = canVendorPlan && ((isMaster && !isStaff) || (!isMaster && !!permissions?.canManageVendors));
+  const canAccessWorkDays = isMaster || !!permissions?.canManageWorkDays;
   const canAccessIntegrations = isMaster && !isStaff && planService.canAccess(plan, 'integrations');
+  const canAccessOptimizer = (isMaster && !isStaff) || (!isMaster && !!permissions?.canManageOptimizer);
+  const canAccessDentweb = ((isMaster && !isStaff) || (!isMaster && !!permissions?.canManageDentweb)) && planService.canAccess(plan, 'integrations');
 
   // 인테그레이션 연결 수 초기 로드
   useEffect(() => {
@@ -337,6 +341,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         </svg>
       ),
       requireMaster: true,
+      staffPermission: 'canViewAuditLog',
       feature: 'audit_log',
     },
   ];
@@ -348,7 +353,8 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
 
   const renderCardItem = (card: SettingsCard) => {
     const isPlanLocked = card.feature ? !planService.canAccess(plan, card.feature) : false;
-    const isRoleLocked = card.requireMaster ? (!isMaster || !!isStaff) : false;
+    const staffHasPerm = card.staffPermission ? !!permissions?.[card.staffPermission] : false;
+    const isRoleLocked = card.requireMaster ? ((!isMaster || !!isStaff) && !staffHasPerm) : false;
     const isLocked = isPlanLocked || isRoleLocked;
     const minPlan = card.feature ? getMinPlanForFeature(card.feature) : null;
     const minPlanLabel = minPlan ? PLAN_NAMES[minPlan] : '';
@@ -423,7 +429,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         {renderCardItem(cards[1])}
 
         {/* 권장재고 산출 설정 (Free) */}
-        {isMaster && !isStaff && hospitalId && onStockCalcSettingsChange && (
+        {canAccessOptimizer && hospitalId && onStockCalcSettingsChange && (
           <button
             onClick={() => setShowCalcSettingsModal(true)}
             className="group relative text-left p-6 rounded-2xl border bg-white border-slate-200 hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200"
@@ -551,19 +557,19 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         )}
 
         {/* 덴트웹 자동화 카드 */}
-        {isMaster && !isStaff && hospitalId && (
+        {((isMaster && !isStaff) || (!isMaster && !!permissions?.canManageDentweb)) && hospitalId && (
           <button
-            onClick={() => { if (canAccessIntegrations) setShowAutomationModal(true); }}
-            disabled={!canAccessIntegrations}
+            onClick={() => { if (canAccessDentweb) setShowAutomationModal(true); }}
+            disabled={!canAccessDentweb}
             className={`group relative text-left p-6 rounded-2xl border bg-white transition-all duration-200 ${
-              canAccessIntegrations
+              canAccessDentweb
                 ? 'border-slate-200 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
                 : 'border-slate-200 cursor-not-allowed opacity-70'
             }`}
           >
             <div className="flex items-start gap-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
-                canAccessIntegrations ? 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-400'
+                canAccessDentweb ? 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100' : 'bg-slate-100 text-slate-400'
               }`}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3a6.75 6.75 0 100 13.5h4.5A5.25 5.25 0 1014.25 6h-.25A6.73 6.73 0 009.75 3z" />
@@ -571,15 +577,15 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className={`text-base font-bold ${canAccessIntegrations ? 'text-slate-800' : 'text-slate-500'}`}>덴트웹 자동화</h3>
-                  {canAccessIntegrations && automationState?.hasAgentToken && (
+                  <h3 className={`text-base font-bold ${canAccessDentweb ? 'text-slate-800' : 'text-slate-500'}`}>덴트웹 자동화</h3>
+                  {canAccessDentweb && automationState?.hasAgentToken && (
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${
                       automationState.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {automationState.enabled ? '자동 실행 ON' : '자동 실행 OFF'}
                     </span>
                   )}
-                  {!canAccessIntegrations && (
+                  {!canAccessDentweb && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-700">
                       Business 이상 이용 가능
                     </span>
@@ -589,7 +595,7 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
                   병원 PC 에이전트와 연동해 수술기록을 자동으로 업로드합니다.
                 </p>
               </div>
-              {canAccessIntegrations ? (
+              {canAccessDentweb ? (
                 <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
