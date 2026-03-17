@@ -8,6 +8,7 @@ import {
   Order,
   SurgeryUnregisteredItem,
 } from '../types';
+import type { ReturnRequest } from '../types/return';
 import { buildSparklinePath } from '../utils/chartUtils';
 import FailThresholdModal from './dashboard/FailThresholdModal';
 import AuditSessionDetailModal from './dashboard/AuditSessionDetailModal';
@@ -20,6 +21,7 @@ interface DashboardOverviewProps {
   orders: Order[];
   surgeryMaster: Record<string, ExcelRow[]>;
   surgeryUnregisteredItems?: SurgeryUnregisteredItem[];
+  returnRequests?: ReturnRequest[];
   hospitalId?: string;
   hospitalWorkDays?: number[];
   onNavigate: (tab: DashboardTab) => void;
@@ -62,6 +64,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   orders,
   surgeryMaster,
   surgeryUnregisteredItems = [],
+  returnRequests = [],
   hospitalId,
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   onNavigate,
@@ -117,6 +120,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     orders,
     surgeryMaster,
     surgeryUnregisteredItems,
+    returnRequests,
     hospitalId,
     hospitalWorkDays,
     planState,
@@ -324,7 +328,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </div>
                 <div>
                   <p className="text-sm font-bold text-emerald-800">모든 항목 정상</p>
-                  <p className="text-[11px] text-emerald-600 mt-0.5">실사 · 입고 · 교환 · 미등록 이상 없음</p>
+                  <p className="text-[11px] text-emerald-600 mt-0.5">실사 · 입고 · 교환 · 미등록 · 반품 이상 없음</p>
                 </div>
               </div>
             );

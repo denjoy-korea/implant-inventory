@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
 import { InventoryItem, OrderItem, type OrderStatus } from '../types';
 import { parseSize } from '../services/sizeNormalizer';
@@ -307,7 +307,7 @@ export function ReceiptConfirmationModal({
         });
 
         return (
-            <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title="규격 오배송 처리" titleId="wrong-delivery-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 pb-20 sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
+            <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title="규격 오배송 처리" titleId="wrong-delivery-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
                     {/* Header */}
                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50 shrink-0">
                         <div>
@@ -538,19 +538,19 @@ export function ReceiptConfirmationModal({
 
     // ─── 주문별 입고 확인 단계 UI ─────────────────────────────────────────────
     return (
-        <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title={modalTitle} titleId="receipt-confirm-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-start sm:items-center justify-center pt-2 sm:pt-0 sm:p-4 pb-20 sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 -translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
+        <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title={modalTitle} titleId="receipt-confirm-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                     <div>
-                        <div className="flex items-center gap-2.5">
-                            <h3 id="receipt-confirm-title" className="text-xl font-black text-slate-800 tracking-tight">{modalTitle}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 id="receipt-confirm-title" className="text-base font-black text-slate-800">{modalTitle}</h3>
                             {hasMultipleOrders && (
-                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 tabular-nums">
+                                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 tabular-nums">
                                     {processedCount + 1} / {initialTotal}
                                 </span>
                             )}
                         </div>
-                        <p className="text-sm font-semibold text-slate-500 mt-1">
+                        <p className="text-xs text-slate-500 mt-0.5">
                             {groupedOrder.date} · {groupedOrder.manufacturer} · {groupedOrder.type === 'replenishment' ? '발주' : groupedOrder.type === 'return' ? '반품' : '교환'}내역
                         </p>
                     </div>
@@ -666,32 +666,36 @@ export function ReceiptConfirmationModal({
                                                         </div>
                                                     </div>
 
-                                                    <div className="flex items-center gap-3 sm:gap-6">
+                                                    <div className="flex items-center gap-4 sm:gap-6">
                                                         <div className="text-right">
                                                             <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '반품 수량' : isExchange ? '교환 수량' : '발주 수량'}</span>
-                                                            <span className="text-sm font-black text-slate-800">{item.quantity}개</span>
+                                                            <span className="text-xl font-black tabular-nums text-slate-800">{item.quantity}<span className="text-sm font-bold text-slate-400 ml-0.5">개</span></span>
                                                         </div>
-                                                        <div className="w-[1px] h-8 bg-slate-200" />
+                                                        <div className="w-[1px] h-10 bg-slate-200" />
                                                         <div className="text-center">
                                                             <span className="block text-[10px] font-bold text-slate-400 mb-1">{isReturn ? '실제 반품' : isExchange ? '실제 교환' : '실제 입고'}</span>
-                                                            <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-1 bg-white shadow-sm">
+                                                            <div className="flex items-center gap-2">
                                                                 <button
+                                                                    type="button"
+                                                                    aria-label="수량 감소"
                                                                     onClick={() => handleQuantityChange(key, String(Math.max(0, currentQty - 1)))}
-                                                                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                                                                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors active:scale-95 shadow-sm"
                                                                 >
-                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" /></svg>
                                                                 </button>
                                                                 <input
                                                                     type="number"
-                                                                    className="w-10 text-center text-sm font-black text-slate-800 focus:outline-none appearance-none"
+                                                                    className="w-12 text-center text-xl font-black tabular-nums text-slate-800 focus:outline-none appearance-none bg-transparent"
                                                                     value={currentQty}
                                                                     onChange={(e) => handleQuantityChange(key, e.target.value)}
                                                                 />
                                                                 <button
+                                                                    type="button"
+                                                                    aria-label="수량 증가"
                                                                     onClick={() => handleQuantityChange(key, String(currentQty + 1))}
-                                                                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                                                                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors active:scale-95 shadow-sm"
                                                                 >
-                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -790,21 +794,21 @@ export function ReceiptConfirmationModal({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
                     <button
                         onClick={onClose}
                         disabled={isLoading}
-                        className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50"
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
                     >
                         닫기
                     </button>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-[2]">
                         {hasMultipleOrders && safeIdx > 0 && (
                             <button
                                 onClick={() => goToStep(safeIdx - 1)}
                                 disabled={isLoading}
-                                className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                                className="py-2.5 px-3 rounded-xl text-sm font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 flex items-center gap-1"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                                 이전
@@ -815,13 +819,13 @@ export function ReceiptConfirmationModal({
                             <button
                                 onClick={handleStepConfirm}
                                 disabled={isLoading}
-                                className={`px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-sm flex items-center gap-2 ${
+                                className={`flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-sm flex items-center justify-center gap-2 ${
                                     isLoading ? 'bg-slate-400 cursor-not-allowed' :
-                                    !isLastStep ? 'bg-indigo-500 hover:bg-indigo-600 hover:shadow-md' :
-                                    isLastStep && wrongDeliveryItemList.length > 0 ? 'bg-rose-500 hover:bg-rose-600 hover:shadow-md' :
+                                    !isLastStep ? 'bg-indigo-500 hover:bg-indigo-600' :
+                                    isLastStep && wrongDeliveryItemList.length > 0 ? 'bg-rose-500 hover:bg-rose-600' :
                                     isCurrentChanged
-                                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 hover:shadow-md'
-                                        : 'bg-emerald-500 hover:bg-emerald-600 hover:shadow-md'
+                                        ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700'
+                                        : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600'
                                 } disabled:opacity-50`}
                             >
                                 {isLoading ? (

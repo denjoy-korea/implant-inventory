@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 import type { InventoryItem, Order, ExcelRow, SurgeryUnregisteredItem } from '../types';
-import { getSizeMatchKey } from '../services/sizeNormalizer';
+import type { ReturnRequest } from '../types/return';
+import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { manufacturerAliasKey, isExchangePrefix } from '../services/appUtils';
+
+function normalizeMfrName(raw: string): string {
+  const s = String(raw || '기타');
+  return isIbsImplantManufacturer(s) ? 'IBS Implant' : s;
+}
 
 // ── Utilities (also used in component) ──
 
@@ -60,6 +66,7 @@ interface UseDashboardOverviewDataParams {
   orders: Order[];
   surgeryMaster: Record<string, ExcelRow[]>;
   surgeryUnregisteredItems: SurgeryUnregisteredItem[];
+  returnRequests?: ReturnRequest[];
 }
 
 export function useDashboardOverviewData({
@@ -67,6 +74,7 @@ export function useDashboardOverviewData({
   orders,
   surgeryMaster,
   surgeryUnregisteredItems,
+  returnRequests = [],
 }: UseDashboardOverviewDataParams) {
   const visibleInventory = useMemo(
     () =>
@@ -189,13 +197,49 @@ export function useDashboardOverviewData({
       .sort((a, b) => b.remainingToExchange - a.remainingToExchange);
   }, [pendingFailRows, pendingFailExchangeQtyByKey]);
 
+  // 교환 반품 신청된 수량 (제조사별, rejected 제외)
+  const exchangeReturnDeductionByMfr = useMemo(() => {
+    const counts: Record<string, number> = {};
+    returnRequests
+      .filter(r => r.reason === 'exchange' && r.status !== 'rejected')
+      .forEach(r => {
+        const m = normalizeMfrName(r.manufacturer);
+        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        counts[m] = (counts[m] || 0) + qty;
+      });
+    return counts;
+  }, [returnRequests]);
+
+  // 제조사별 미처리 교환 수 (반품 차감 후) — 교환관리 페이지와 동일한 로직
+  const adjustedPendingByMfr = useMemo(() => {
+    const rawByMfr: Record<string, number> = {};
+    pendingFailRows.forEach(row => {
+      const m = normalizeMfrName(String(row['제조사'] || '기타'));
+      rawByMfr[m] = (rawByMfr[m] || 0) + 1;
+    });
+    const result: Record<string, number> = {};
+    Object.entries(rawByMfr).forEach(([mfr, count]) => {
+      const deduction = exchangeReturnDeductionByMfr[mfr] || 0;
+      const adjusted = Math.max(0, count - deduction);
+      if (adjusted > 0) result[mfr] = adjusted;
+    });
+    return result;
+  }, [pendingFailRows, exchangeReturnDeductionByMfr]);
+
+  const totalExchangeReturnDeduction = useMemo(
+    () => Object.values(exchangeReturnDeductionByMfr).reduce((s, v) => s + v, 0),
+    [exchangeReturnDeductionByMfr]
+  );
+
   const failSummary = useMemo(
     () => ({
       pendingRows: pendingFailRows.length,
+      adjustedPendingRows: Math.max(0, pendingFailRows.length - totalExchangeReturnDeduction),
       pendingQty: pendingFailRows.reduce((sum, row) => sum + parseQty(row['갯수']), 0),
       remainingExchangeQty: failExchangeEntries.reduce((sum, entry) => sum + entry.remainingToExchange, 0),
+      adjustedPendingByMfr,
     }),
-    [failExchangeEntries, pendingFailRows]
+    [failExchangeEntries, pendingFailRows, totalExchangeReturnDeduction, adjustedPendingByMfr]
   );
 
   const unregisteredSummary = useMemo(

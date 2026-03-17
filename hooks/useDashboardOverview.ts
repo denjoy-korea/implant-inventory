@@ -7,6 +7,7 @@ import type {
   Order,
   SurgeryUnregisteredItem,
 } from '../types';
+import type { ReturnRequest } from '../types/return';
 import { planService } from '../services/planService';
 import { auditService, AuditHistoryItem } from '../services/auditService';
 import { useWorkDaysMap } from '../components/surgery-dashboard/useWorkDaysMap';
@@ -102,6 +103,7 @@ interface UseDashboardOverviewParams {
   orders: Order[];
   surgeryMaster: Record<string, ExcelRow[]>;
   surgeryUnregisteredItems?: SurgeryUnregisteredItem[];
+  returnRequests?: ReturnRequest[];
   hospitalId?: string;
   hospitalWorkDays?: number[];
   planState: HospitalPlanState | null;
@@ -115,6 +117,7 @@ export function useDashboardOverview({
   orders,
   surgeryMaster,
   surgeryUnregisteredItems = [],
+  returnRequests = [],
   hospitalId,
   hospitalWorkDays = [],
   planState,
@@ -183,7 +186,7 @@ export function useDashboardOverview({
     recentMonthKeys,
     manufacturerUsageSummary,
     hasBaseStockSet,
-  } = useDashboardOverviewData({ inventory, orders, surgeryMaster, surgeryUnregisteredItems });
+  } = useDashboardOverviewData({ inventory, orders, surgeryMaster, surgeryUnregisteredItems, returnRequests });
 
   const latestAuditSummary = useMemo<LatestAuditSummary>(() => {
     if (auditHistory.length === 0) {
@@ -390,13 +393,20 @@ export function useDashboardOverview({
     };
   }, [surgeryStaleDays, latestSurgeryDate]);
 
+  const returnPendingSummary = useMemo(() => {
+    const pending = returnRequests.filter(r => r.status === 'requested' || r.status === 'picked_up');
+    const requestCount = pending.length;
+    const itemQty = pending.reduce((sum, r) => sum + r.items.reduce((s, i) => s + i.quantity, 0), 0);
+    return { requestCount, itemQty };
+  }, [returnRequests]);
+
   const alertCards = useMemo<AlertCard[]>(() => {
     const shortageSeverity: PriorityLevel =
       shortageSummary.deficitQty >= 30 || shortageSummary.itemCount >= 12 ? 'critical'
         : shortageSummary.itemCount > 0 ? 'warning' : 'ok';
-    const failSeverity: PriorityLevel =
-      failSummary.remainingExchangeQty >= 15 || failSummary.pendingRows >= 10 ? 'critical'
-        : failSummary.pendingRows > 0 ? 'warning' : 'ok';
+    const exchangeSeverity: PriorityLevel =
+      failSummary.adjustedPendingRows >= 10 ? 'critical'
+        : failSummary.adjustedPendingRows > 0 ? 'warning' : 'ok';
     const auditSeverity: PriorityLevel =
       latestAuditSummary.mismatchQty >= 15 || latestAuditSummary.mismatchCount >= 8 ? 'critical'
         : latestAuditSummary.mismatchCount > 0 ? 'warning' : 'ok';
@@ -422,17 +432,19 @@ export function useDashboardOverview({
         score: (shortageSummary.deficitQty * 2) + (shortageSummary.itemCount * 4),
       },
       {
-        key: 'fail-exchange',
-        title: '교환 미처리',
-        value: `${failSummary.pendingRows}건`,
-        sub: `${failSummary.remainingExchangeQty}개`,
-        tone: failSeverity === 'critical' ? 'border-rose-300 bg-rose-50 text-rose-700'
-          : failSeverity === 'warning' ? 'border-amber-200 bg-amber-50/70 text-amber-700'
+        key: 'exchange-status',
+        title: '교환 현황',
+        value: `${failSummary.adjustedPendingRows}개`,
+        sub: returnPendingSummary.requestCount > 0
+          ? `반품 진행 ${returnPendingSummary.requestCount}건 · ${returnPendingSummary.itemQty}개`
+          : '반품 신청 전',
+        tone: exchangeSeverity === 'critical' ? 'border-amber-300 bg-amber-50 text-amber-800'
+          : exchangeSeverity === 'warning' ? 'border-amber-200 bg-amber-50/70 text-amber-700'
           : 'border-slate-200 bg-slate-50 text-slate-600',
         tab: 'fail_management',
-        hint: '수술 중 교환 미처리 건',
-        severity: failSeverity,
-        score: (failSummary.remainingExchangeQty * 3) + (failSummary.pendingRows * 4),
+        hint: '교환 미처리 · 반품 진행 현황',
+        severity: exchangeSeverity,
+        score: failSummary.adjustedPendingRows * 4,
       },
       {
         key: 'audit-mismatch',
@@ -481,11 +493,12 @@ export function useDashboardOverview({
       return b.score - a.score;
     });
   }, [
-    failSummary.pendingRows, failSummary.remainingExchangeQty,
+    failSummary.pendingQty, failSummary.adjustedPendingRows,
     isAuditLoading, latestAuditSummary.date, latestAuditSummary.mismatchCount, latestAuditSummary.mismatchQty,
     pendingOrderSummary.replenishmentCount, pendingOrderSummary.replenishmentQty,
     shortageSummary.deficitQty, shortageSummary.itemCount,
     unregisteredSummary.count, unregisteredSummary.usageQty,
+    returnPendingSummary.requestCount, returnPendingSummary.itemQty,
   ]);
 
   const todayActionItems = useMemo<ActionItem[]>(() => {
@@ -532,22 +545,18 @@ export function useDashboardOverview({
       });
     }
 
-    if (failSummary.remainingExchangeQty > 0) {
-      const failByManufacturer = failExchangeEntries.reduce<Record<string, number>>((acc, e) => {
-        acc[e.manufacturer] = (acc[e.manufacturer] || 0) + e.remainingToExchange;
-        return acc;
-      }, {});
-      const failMetaItems = Object.entries(failByManufacturer)
+    if (failSummary.adjustedPendingRows > 0) {
+      const failMetaItems = Object.entries(failSummary.adjustedPendingByMfr)
         .sort(([, a], [, b]) => b - a)
         .map(([label, count]) => ({ label, count }));
-      const computedSeverity = getFailSeverity(failByManufacturer, failThresholds) ?? 'warning';
+      const computedSeverity = getFailSeverity(failSummary.adjustedPendingByMfr, failThresholds) ?? 'warning';
       items.push({
         key: 'action-fail',
-        title: '교환 발주',
-        description: `미교환 ${failSummary.pendingRows}건 / ${failSummary.remainingExchangeQty}개`,
+        title: '교환 반품',
+        description: `미처리 ${failSummary.adjustedPendingRows}개`,
         tab: 'fail_management',
         severity: computedSeverity,
-        score: (failSummary.remainingExchangeQty * 3) + (failSummary.pendingRows * 4),
+        score: failSummary.adjustedPendingRows * 4,
         metaItems: failMetaItems.length > 0 ? failMetaItems : undefined,
       });
     }
@@ -629,7 +638,7 @@ export function useDashboardOverview({
       return b.score - a.score;
     });
   }, [
-    auditStaleDays, failExchangeEntries, failSummary.pendingRows, failSummary.remainingExchangeQty,
+    auditStaleDays, failSummary.adjustedPendingRows, failSummary.adjustedPendingByMfr,
     failThresholds, hasBaseStockSet, latestAuditSummary.date, latestAuditSummary.mismatchCount,
     latestAuditSummary.mismatchQty, latestAuditSummary.topMismatches,
     pendingOrderSummary.replenishmentCount, pendingOrderSummary.replenishmentQty,

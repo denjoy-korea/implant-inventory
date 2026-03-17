@@ -244,6 +244,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
             orders={state.orders}
             surgeryMaster={state.surgeryMaster}
             surgeryUnregisteredItems={surgeryUnregisteredItems}
+            returnRequests={returnRequests}
             hospitalId={state.user?.hospitalId}
             hospitalWorkDays={state.hospitalWorkDays}
             onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
