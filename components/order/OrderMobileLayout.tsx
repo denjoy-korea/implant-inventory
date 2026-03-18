@@ -115,7 +115,7 @@ interface OrderMobileLayoutProps {
   setReturnDetailGroup: (g: GroupedReturnRequest | null) => void;
   // Handlers
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
-  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[], silent?: boolean) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteOrder: (orderId: string) => void;
   onQuickOrder: (item: InventoryItem, quantity?: number) => Promise<void>;
@@ -489,7 +489,7 @@ export function OrderMobileLayout({
               onConfirmStep={async (updates, orderIds) => {
                 setIsReceiptConfirming(true);
                 try {
-                  await onConfirmReceipt(updates, orderIds);
+                  await onConfirmReceipt(updates, orderIds, true);
                 } finally {
                   setIsReceiptConfirming(false);
                 }

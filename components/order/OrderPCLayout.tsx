@@ -56,7 +56,7 @@ interface OrderPCLayoutProps {
   setShowHistoryPanel: (v: boolean) => void;
   // Callbacks
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
-  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[], silent?: boolean) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteOrder: (orderId: string) => void;
   onDeleteReturn?: (returnId: string) => Promise<void>;
@@ -176,7 +176,7 @@ export function OrderPCLayout({
             onConfirmStep={async (updates, orderIds) => {
               setIsReceiptConfirming(true);
               try {
-                await onConfirmReceipt(updates, orderIds);
+                await onConfirmReceipt(updates, orderIds, true);
               } finally {
                 setIsReceiptConfirming(false);
               }

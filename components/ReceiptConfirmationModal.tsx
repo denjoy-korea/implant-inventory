@@ -538,7 +538,7 @@ export function ReceiptConfirmationModal({
 
     // ─── 주문별 입고 확인 단계 UI ─────────────────────────────────────────────
     return (
-        <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title={modalTitle} titleId="receipt-confirm-title" zIndex={300} closeable={!isLoading} backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
+        <ModalShell isOpen={true} onClose={() => !isLoading && onClose()} title={modalTitle} titleId="receipt-confirm-title" closeable={!isLoading} backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0 backdrop-blur-sm" maxWidth="w-full sm:max-w-4xl" className={`sm:rounded-3xl flex flex-col max-h-[calc(100dvh-5.5rem)] sm:max-h-[90vh] transition-all duration-300 ease-out ${visible ? 'opacity-100 translate-y-0 sm:scale-100' : 'opacity-0 translate-y-3 sm:scale-95 sm:translate-y-0'}`}>
                 {/* Header */}
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                     <div>

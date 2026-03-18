@@ -359,7 +359,7 @@ export function useOrderHandlers({
     }
   }, [hospitalId, surgeryMaster, showAlertToast, setState, normalize]);
 
-  const handleConfirmReceipt = useCallback(async (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => {
+  const handleConfirmReceipt = useCallback(async (updates: ReceiptUpdate[], orderIdsToReceive: string[], silent = false) => {
     // 1. 수량 업데이트 및 재발주 처리
     let reorderCount = 0;
     for (const update of updates) {
@@ -451,13 +451,15 @@ export function useOrderHandlers({
       }
     }
 
-    const isReturnOrder = returnOrderIds.length > 0;
-    const msg = isReturnOrder
-      ? `반품 처리가 완료되었습니다. (${returnOrderIds.length}건 반품, 재고 차감 완료)`
-      : updates.length > 0
-        ? `상세 입고 처리가 완료되었습니다. (수정 ${updates.length}건${reorderCount > 0 ? `, 자동 재발주 ${reorderCount}건` : ''})`
-        : '전체 입고 처리가 완료되었습니다.';
-    showAlertToast(msg, 'success');
+    if (!silent) {
+      const isReturnOrder = returnOrderIds.length > 0;
+      const msg = isReturnOrder
+        ? `반품 처리가 완료되었습니다. (${returnOrderIds.length}건 반품, 재고 차감 완료)`
+        : updates.length > 0
+          ? `상세 입고 처리가 완료되었습니다. (수정 ${updates.length}건${reorderCount > 0 ? `, 자동 재발주 ${reorderCount}건` : ''})`
+          : '전체 입고 처리가 완료되었습니다.';
+      showAlertToast(msg, 'success');
+    }
   }, [handleAddOrder, handleUpdateOrderStatus, handleCreateReturn, orders, inventory, user?.name, showAlertToast, setState]);
 
   return {

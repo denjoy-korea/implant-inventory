@@ -114,7 +114,7 @@ export interface DashboardWorkspaceSectionProps {
   onFailAuditDone?: () => void;
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
-  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[]) => Promise<void>;
+  onConfirmReceipt: (updates: ReceiptUpdate[], orderIdsToReceive: string[], silent?: boolean) => Promise<void>;
   orderHistoryOnly?: boolean;
   stockCalcSettings?: StockCalcSettings;
   onStockCalcSettingsChange?: (settings: StockCalcSettings) => Promise<void>;
