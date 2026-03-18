@@ -125,7 +125,7 @@ const AuthSignupPlanSelect: React.FC<AuthSignupPlanSelectProps> = ({
                         <span className="text-[15px] font-bold text-slate-900">{plan.label}</span>
                         {plan.tag && (
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${plan.tag === '추천' ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-sm'
-                              : plan.tag === '팀용' ? 'bg-violet-50 text-violet-600 border border-violet-200'
+                              : plan.tag === '기업용' ? 'bg-violet-50 text-violet-600 border border-violet-200'
                                 : 'bg-slate-100 text-slate-600'
                             }`}>{plan.tag}</span>
                         )}

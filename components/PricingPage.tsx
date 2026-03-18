@@ -71,6 +71,9 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
     planNames,
   } = usePricingPage({ onGetStarted, onSelectPlan, onRequestPayment, userName, userPhone });
 
+  const basicMonthly = PLAN_PRICING['basic'].monthlyPrice;
+  const dailyPrice = Math.round(basicMonthly / 30);
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
       <SectionNavigator sections={[
@@ -149,7 +152,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
             전부 해결하세요
           </h1>
           <p className="text-base md:text-lg text-slate-500 max-w-xl mx-auto leading-relaxed mb-3">
-            월 29,000원 — <strong className="text-slate-700">하루 967원</strong>이면 충분합니다.
+            월 {basicMonthly.toLocaleString('ko-KR')}원 — <strong className="text-slate-700">하루 {dailyPrice.toLocaleString('ko-KR')}원</strong>이면 충분합니다.
           </p>
           {/* 앵커링: 일 단위 프레이밍 */}
           <p className="text-xs text-slate-400 mb-8 font-medium">자판기 음료 한 캔보다 저렴한 금액으로 재고 관리의 모든 고민을 해결하세요</p>
@@ -458,12 +461,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                           {t.trim()}
                         </span>
                       ))}
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${plan.highlight
-                        ? 'bg-white/20 text-white'
-                        : 'bg-rose-50 text-rose-600 border border-rose-200'
-                        }`}>
-                        한정 {plan.limit}곳
-                      </span>
+
                     </div>
                     <p className={`text-xs whitespace-nowrap ${plan.highlight ? 'text-indigo-200' : 'text-slate-500'}`}>
                       {plan.description}

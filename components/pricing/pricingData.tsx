@@ -10,7 +10,6 @@ export interface Plan {
   highlight: boolean;
   cta: string;
   features: string[];
-  limit: number;
   tag?: string;
 }
 
@@ -22,7 +21,6 @@ export const plans: Plan[] = [
     yearlyPrice: PLAN_PRICING['free'].yearlyPrice,
     highlight: false,
     cta: '무료로 시작하기',
-    limit: PLAN_LIMITS['free'].maxItems,
     features: [
       `재고 품목 최대 ${PLAN_LIMITS['free'].maxItems}개`,
       `수술기록 ${PLAN_LIMITS['free'].viewMonths}개월 조회`,
@@ -39,7 +37,6 @@ export const plans: Plan[] = [
     yearlyPrice: PLAN_PRICING['basic'].yearlyPrice,
     highlight: false,
     cta: TRIAL_OFFER_LABEL,
-    limit: PLAN_LIMITS['basic'].maxItems,
     tag: '개인용',
     features: [
       `재고 품목 최대 ${PLAN_LIMITS['basic'].maxItems}개`,
@@ -57,7 +54,6 @@ export const plans: Plan[] = [
     yearlyPrice: PLAN_PRICING['plus'].yearlyPrice,
     highlight: true,
     cta: TRIAL_OFFER_LABEL,
-    limit: PLAN_LIMITS['plus'].maxItems,
     tag: '치과의원',
     features: [
       `재고 품목 최대 ${PLAN_LIMITS['plus'].maxItems}개`,
@@ -77,7 +73,6 @@ export const plans: Plan[] = [
     yearlyPrice: PLAN_PRICING['business'].yearlyPrice,
     highlight: false,
     cta: TRIAL_OFFER_LABEL,
-    limit: Infinity,
     tag: '치과의원, 치과병원',
     features: [
       '재고 품목 무제한',

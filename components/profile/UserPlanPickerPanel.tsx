@@ -19,7 +19,7 @@ const PLAN_PICKER_ITEMS: {
 }[] = [
   { plan: 'basic', label: 'Basic', features: ['최대 150품목', '1인 사용', '브랜드 분석', '발주 생성·수령'] },
   { plan: 'plus', label: 'Plus', features: ['최대 300품목', '5인 사용', 'FAIL 교환 관리', '발주 최적화'] },
-  { plan: 'business', label: 'Business', tag: '추천', features: ['무제한 품목', '최대 10인', 'AI 예측 발주', '감사 로그'] },
+  { plan: 'business', label: 'Business', features: ['무제한 품목', '기본 10인 + 추가 가능', 'AI 예측 발주', '감사 로그'] },
 ];
 
 const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
@@ -111,13 +111,13 @@ const UserPlanPickerPanel: React.FC<UserPlanPickerPanelProps> = ({
             {/* 오른쪽: 구독 정보 */}
             <div className="flex flex-col items-center justify-center px-3 border-l border-indigo-100 bg-indigo-50/60 min-w-[72px] gap-0.5">
               <p className="text-[10px] font-bold text-slate-700">
-                {(pickerCycle === 'yearly'
+                {((planState?.billingCycle ?? 'monthly') === 'yearly'
                   ? PLAN_PRICING[currentPlanId].yearlyPrice
                   : PLAN_PRICING[currentPlanId].monthlyPrice
                 ).toLocaleString('ko-KR')}
-                <span className="font-normal text-slate-400">원</span>
+                <span className="font-normal text-slate-400">원/월</span>
               </p>
-              <p className="text-[9px] text-slate-400">{planState?.billingCycle === 'yearly' ? '연간' : '월간'}</p>
+              <p className="text-[9px] text-slate-400">{planState?.billingCycle === 'yearly' ? '연간 구독' : '월간 구독'}</p>
               {expiryLabel && (
                 <p className={`text-[11px] font-black mt-1 ${expiryColor}`}>{expiryLabel}</p>
               )}

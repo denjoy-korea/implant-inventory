@@ -1,7 +1,7 @@
 # Data Room Index
 
 - 작성일: 2026-03-04
-- 최종 업데이트: 2026-03-06
+- 최종 업데이트: 2026-03-18
 - 목적: 투자/파트너 검토 시 필요한 증빙의 위치와 최신 상태를 단일 문서에서 확인
 
 ## 01-contracts
@@ -53,4 +53,6 @@
 - 실행 추적: `docs/05-dataroom/execution-tracker-2026-03-04.md`
 - 증빙 수집 체크리스트: `docs/05-dataroom/evidence-collection-checklist-2026-03-04.md`
 - 계획 대비 갭 분석: `docs/05-dataroom/99-index/2026-03-05_plan-gap-analysis_v1.md`
+- 가치평가 에이전트 팀 구성안: `docs/05-dataroom/99-index/2026-03-18_valuation-agent-team_v1.md`
+- 1차 실사·가치평가 보고서: `docs/05-dataroom/99-index/2026-03-18_valuation-diligence-report_v1.md`
 - 자동 트리거 워크플로: `.github/workflows/mrr-unblock-auto-trigger.yml` ✅

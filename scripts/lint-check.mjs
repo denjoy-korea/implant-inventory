@@ -263,6 +263,26 @@ function checkDataroomPricingConsistency() {
       );
     }
   }
+
+  // investor-pack 가격 검증
+  const investorPack = read('docs/05-dataroom/06-investor-pack/redacted/2026-03-05_investor-pack-redacted-summary_v1.md');
+  if (investorPack) {
+    for (const [plan, label] of [['basic', 'Basic'], ['plus', 'Plus'], ['business', 'Business']]) {
+      const monthly = extractClientPrice(plan, 'monthly');
+      const yearly = extractClientPrice(plan, 'yearly');
+      if (monthly === null || yearly === null) continue;
+
+      const yearlyTotal = yearly * 12;
+      const rowPattern = new RegExp(
+        `\\|\\s*${label}\\s*\\|\\s*${formatKrw(monthly)}원\\s*\\|\\s*${formatKrw(yearly)}원\\s*\\|\\s*${formatKrw(yearlyTotal)}원\\s*\\|`,
+      );
+      if (!rowPattern.test(investorPack)) {
+        failures.push(
+          `docs/05-dataroom/06-investor-pack/redacted/2026-03-05_investor-pack-redacted-summary_v1.md: ${label} row must match PLAN_PRICING (${formatKrw(monthly)} / ${formatKrw(yearly)} / ${formatKrw(yearlyTotal)})`,
+        );
+      }
+    }
+  }
 }
 
 function checkLegacyPlanLabelsInActiveSurface() {
@@ -387,6 +407,35 @@ function checkEdgeFunctionPricingSync() {
   }
 }
 
+function checkPlanDisplayConsistency() {
+  // 1. authSignupConfig must use viewMonths, not retentionMonths
+  const signupConfig = read('components/auth/authSignupConfig.ts');
+  if (signupConfig) {
+    if (/retentionMonths/.test(signupConfig)) {
+      failures.push('components/auth/authSignupConfig.ts: must use viewMonths instead of retentionMonths for plan summary');
+    }
+    if (!signupConfig.includes('viewMonths')) {
+      failures.push('components/auth/authSignupConfig.ts: viewMonths not found in plan summary builder');
+    }
+  }
+
+  // 2. PricingPage must not contain "한정.*곳" pattern
+  const pricingPage = read('components/PricingPage.tsx');
+  if (pricingPage && /한정.*곳/.test(pricingPage)) {
+    failures.push('components/PricingPage.tsx: "한정 N곳" label must not appear (confuses 병원 count with 품목 count)');
+  }
+
+  // 3. UserPlanPickerPanel current card must use billingCycle for price, not pickerCycle
+  const pickerPanel = read('components/profile/UserPlanPickerPanel.tsx');
+  if (pickerPanel) {
+    // Detect the bug pattern: pickerCycle used directly to select price inside the current-card block
+    // The current card section uses planState?.billingCycle for the label — price must match
+    if (/pickerCycle\s*===\s*'yearly'\s*\?\s*PLAN_PRICING\[currentPlanId\]/.test(pickerPanel)) {
+      failures.push('components/profile/UserPlanPickerPanel.tsx: current subscription card price must use billingCycle (not pickerCycle)');
+    }
+  }
+}
+
 checkDangerouslySetInnerHTML();
 checkInnerHtmlAssignments();
 checkSecurityMigrationGuards();
@@ -397,6 +446,7 @@ checkLegacyPlanLabelsInActiveSurface();
 checkMaintenanceServiceWiring();
 checkTypeSafetyGuardrails();
 checkBannedEnvPatterns();
+checkPlanDisplayConsistency();
 
 if (failures.length > 0) {
   console.error('Custom lint failed with the following issues:');
