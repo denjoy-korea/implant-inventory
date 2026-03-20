@@ -1,6 +1,12 @@
 import { TRIAL_OFFER_LABEL } from '../../utils/trialPolicy';
 import { PLAN_LIMITS, PLAN_PRICING } from '../../types/plan';
 
+export type FeatureStatus = 'live' | 'beta' | 'soon';
+
+export interface PlanFeature {
+  text: string;
+  status: FeatureStatus;
+}
 
 export interface Plan {
   name: string;
@@ -9,7 +15,7 @@ export interface Plan {
   yearlyPrice: number | null;
   highlight: boolean;
   cta: string;
-  features: string[];
+  features: PlanFeature[];
   tag?: string;
 }
 
@@ -22,12 +28,12 @@ export const plans: Plan[] = [
     highlight: false,
     cta: '무료로 시작하기',
     features: [
-      `재고 품목 최대 ${PLAN_LIMITS['free'].maxItems}개`,
-      `수술기록 ${PLAN_LIMITS['free'].viewMonths}개월 조회`,
-      '수술기록 월 1회 업로드',
-      '수술 통계 기본 카드',
-      '엑셀 업로드/다운로드',
-      '1명 사용자',
+      { text: `재고 품목 최대 ${PLAN_LIMITS['free'].maxItems}개`, status: 'live' },
+      { text: `수술기록 ${PLAN_LIMITS['free'].viewMonths}개월 조회`, status: 'live' },
+      { text: '수술기록 월 1회 업로드', status: 'live' },
+      { text: '수술 통계 기본 카드', status: 'live' },
+      { text: '엑셀 업로드/다운로드', status: 'live' },
+      { text: '1명 사용자', status: 'live' },
     ],
   },
   {
@@ -39,12 +45,12 @@ export const plans: Plan[] = [
     cta: TRIAL_OFFER_LABEL,
     tag: '개인용',
     features: [
-      `재고 품목 최대 ${PLAN_LIMITS['basic'].maxItems}개`,
-      `수술기록 ${PLAN_LIMITS['basic'].viewMonths}개월 조회 · 주 1회 업로드`,
-      '재고 마스터 대시보드',
-      '발주 생성 및 수령 처리',
-      '재고실사',
-      '수술차트 기본 (월별추세·요일별 패턴)',
+      { text: `재고 품목 최대 ${PLAN_LIMITS['basic'].maxItems}개`, status: 'live' },
+      { text: `수술기록 ${PLAN_LIMITS['basic'].viewMonths}개월 조회 · 주 1회 업로드`, status: 'live' },
+      { text: '재고 마스터 대시보드', status: 'live' },
+      { text: '발주 생성 및 수령 처리', status: 'live' },
+      { text: '재고실사', status: 'live' },
+      { text: '수술차트 기본 (월별추세·요일별 패턴)', status: 'live' },
     ],
   },
   {
@@ -56,14 +62,14 @@ export const plans: Plan[] = [
     cta: TRIAL_OFFER_LABEL,
     tag: '치과의원',
     features: [
-      `재고 품목 최대 ${PLAN_LIMITS['plus'].maxItems}개`,
-      `원장 포함 최대 ${PLAN_LIMITS['plus'].maxUsers}명 사용자`,
-      '24개월 조회 · 무제한 업로드',
-      '고급 대시보드 · 제조사 분석',
-      '교환 분석 · 수술기록 고급 분석',
-      '자동 재고 알림 · 발주 최적화',
-      '간편발주 (카톡) · 역할별 권한',
-      '이메일 지원',
+      { text: `재고 품목 최대 ${PLAN_LIMITS['plus'].maxItems}개`, status: 'live' },
+      { text: `원장 포함 최대 ${PLAN_LIMITS['plus'].maxUsers}명 사용자`, status: 'live' },
+      { text: '24개월 조회 · 무제한 업로드', status: 'live' },
+      { text: '고급 대시보드 · 제조사 분석', status: 'live' },
+      { text: '교환 분석 · 수술기록 고급 분석', status: 'live' },
+      { text: '자동 재고 알림 · 발주 최적화', status: 'live' },
+      { text: '간편발주 (카톡) · 역할별 권한', status: 'live' },
+      { text: '이메일 지원', status: 'live' },
     ],
   },
   {
@@ -75,14 +81,16 @@ export const plans: Plan[] = [
     cta: TRIAL_OFFER_LABEL,
     tag: '치과의원, 치과병원',
     features: [
-      '재고 품목 무제한',
-      '기본 10명 · 추가 인원 5,000원/인',
-      '원클릭 발주 시스템 · AI 기반 수요 예측',
-      '월간·연간 리포트 · 감사 로그',
-      '거래처 관리 · Notion·Slack·솔라피 연동',
-      '수술기록지 자동 업로드 에이전트',
-      '자동 발주 · 자동 반품 시스템',
-      '우선 지원 (채팅 + 전화)',
+      { text: '재고 품목 무제한', status: 'live' },
+      { text: '기본 10명 · 추가 인원 5,000원/인', status: 'live' },
+      { text: '감사 로그 · 거래처 관리', status: 'live' },
+      { text: 'Notion · Slack · 솔라피 연동', status: 'live' },
+      { text: '수술기록지 자동 업로드 에이전트', status: 'beta' },
+      { text: '월간 리포트', status: 'live' },
+      { text: '원클릭 발주 · AI 기반 수요 예측', status: 'soon' },
+      { text: '연간 리포트', status: 'soon' },
+      { text: '자동 발주 · 자동 반품 시스템', status: 'soon' },
+      { text: '우선 지원 (채팅 + 전화)', status: 'live' },
     ],
   },
 ];

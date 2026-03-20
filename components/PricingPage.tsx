@@ -267,7 +267,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                             <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
-                            {f}
+                            {f.text}
                           </li>
                         ))}
                       </ul>
@@ -573,21 +573,62 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
                     </button>
                   )}
 
-                  <ul className="space-y-2.5 flex-1">
+                  <ul className="space-y-3 flex-1">
                     {plan.features.map((f, i) => (
                       <li key={i} className="flex items-start gap-2.5">
-                        <svg
-                          className={`w-4 h-4 flex-shrink-0 mt-0.5 ${plan.highlight ? 'text-indigo-200' : 'text-indigo-600'}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2.5}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className={`text-sm leading-snug ${plan.highlight ? 'text-indigo-100' : 'text-slate-600'}`}>
-                          {f}
-                        </span>
+                        {f.status === 'soon' ? (
+                          <svg
+                            className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-300"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <circle cx="12" cy="12" r="9" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
+                          </svg>
+                        ) : (
+                          <svg
+                            className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                              f.status === 'beta'
+                                ? plan.highlight ? 'text-amber-300' : 'text-amber-500'
+                                : plan.highlight ? 'text-indigo-200' : 'text-indigo-600'
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2.5}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                          <span className={`text-sm leading-relaxed ${
+                            f.status === 'soon'
+                              ? plan.highlight ? 'text-indigo-300' : 'text-slate-400'
+                              : plan.highlight ? 'text-indigo-100' : 'text-slate-600'
+                          }`}>
+                            {f.text}
+                          </span>
+                          {f.status === 'beta' && (
+                            <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none flex-shrink-0 ${
+                              plan.highlight
+                                ? 'bg-amber-300/20 text-amber-200 border border-amber-300/30'
+                                : 'bg-amber-50 text-amber-600 border border-amber-200'
+                            }`}>
+                              베타
+                            </span>
+                          )}
+                          {f.status === 'soon' && (
+                            <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none flex-shrink-0 ${
+                              plan.highlight
+                                ? 'bg-white/10 text-indigo-300 border border-white/10'
+                                : 'bg-slate-100 text-slate-400 border border-slate-200'
+                            }`}>
+                              출시예정
+                            </span>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

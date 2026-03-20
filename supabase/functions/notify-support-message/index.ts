@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { requireAuth, createAdminClient } from "../_shared/authUtils.ts";
 import { getSlackWebhookUrl } from "../_shared/slackUtils.ts";
+import { safeDecrypt } from "../_shared/cryptoUtils.ts";
 import { jsonError, jsonOk } from "../_shared/responseUtils.ts";
 
 function formatTimestampKst(value: string): string {
@@ -101,6 +102,13 @@ Deno.serve(async (req: Request) => {
       .eq("id", thread.hospital_id)
       .maybeSingle();
 
+    const patientDataKey = Deno.env.get("PATIENT_DATA_KEY") ?? "";
+    const decryptedSenderName = await safeDecrypt(
+      message.sender_name || thread.created_by_name,
+      patientDataKey,
+      "—",
+    );
+
     const webhookUrl = await getSlackWebhookUrl("문의알림");
     if (!webhookUrl) {
       return jsonOk({ success: true, skipped: true, reason: "not_configured" }, corsHeaders);
@@ -121,7 +129,7 @@ Deno.serve(async (req: Request) => {
           type: "section",
           fields: [
             { type: "mrkdwn", text: `*병원명*\n${hospital?.name || "—"}` },
-            { type: "mrkdwn", text: `*회원명*\n${message.sender_name || thread.created_by_name || "—"}` },
+            { type: "mrkdwn", text: `*회원명*\n${decryptedSenderName}` },
             { type: "mrkdwn", text: `*상담 상태*\n${thread.status === "closed" ? "해결됨" : "응대중"}` },
             { type: "mrkdwn", text: `*미확인 메시지*\n${thread.admin_unread_count ?? 0}건` },
           ],

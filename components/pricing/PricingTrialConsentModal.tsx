@@ -7,6 +7,7 @@ import {
   TRIAL_CONSENT_LABEL_TEXT,
   TRIAL_DATA_DELETION_POLICY_TEXT,
   TRIAL_NO_CARD_REQUIRED_TEXT,
+  TRIAL_ONCE_PER_ACCOUNT_TEXT,
   TRIAL_START_BUTTON_TEXT,
   TRIAL_START_TITLE_TEXT,
 } from '../../utils/trialPolicy';
@@ -86,6 +87,9 @@ const PricingTrialConsentModal: React.FC<PricingTrialConsentModalProps> = ({
               {TRIAL_DATA_DELETION_POLICY_TEXT}
             </p>
           </div>
+          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 leading-relaxed">
+            {TRIAL_ONCE_PER_ACCOUNT_TEXT}
+          </p>
           <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 leading-relaxed">
             {SUBSCRIPTION_DATA_RETENTION_POLICY_TEXT}
           </p>

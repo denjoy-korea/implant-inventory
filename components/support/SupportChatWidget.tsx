@@ -89,6 +89,34 @@ function SupportNoticeCard({
   );
 }
 
+type CallbackStep = 'idle' | 'form' | 'sending' | 'done' | 'error';
+
+const PREFERRED_TIME_OPTIONS = [
+  '오전 9시–10시',
+  '오전 10시–11시',
+  '오전 11시–12시',
+  '오후 1시–2시',
+  '오후 2시–3시',
+  '오후 3시–4시',
+  '오후 4시–5시',
+  '오후 5시–6시',
+];
+
+const CALLBACK_COOLDOWN_MS = 10 * 60 * 1000; // 10분
+
+function formatPhoneInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  if (digits.startsWith('02')) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
 const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
   user,
   hospitalName,
@@ -107,6 +135,11 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [callbackStep, setCallbackStep] = useState<CallbackStep>('idle');
+  const [callbackPhone, setCallbackPhone] = useState('');
+  const [callbackTime, setCallbackTime] = useState('');
+  const [callbackNote, setCallbackNote] = useState('');
+  const [callbackLastSentAt, setCallbackLastSentAt] = useState<number | null>(null);
   const isComposingRef = useRef(false);
   const lastResetAtRef = useRef<string | null>(null);
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
@@ -386,6 +419,36 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
     }
   };
 
+  const handleCallbackSubmit = async () => {
+    const phone = callbackPhone.trim();
+    if (!phone) return;
+
+    if (callbackLastSentAt && Date.now() - callbackLastSentAt < CALLBACK_COOLDOWN_MS) {
+      setCallbackStep('done');
+      return;
+    }
+
+    setCallbackStep('sending');
+    try {
+      const res = await supabase.functions.invoke('request-callback', {
+        body: {
+          phone,
+          preferred_time: callbackTime || undefined,
+          note: callbackNote.trim() || undefined,
+        },
+      });
+      if (res.error) throw res.error;
+      setCallbackLastSentAt(Date.now());
+      setCallbackPhone('');
+      setCallbackTime('');
+      setCallbackNote('');
+      setCallbackStep('done');
+    } catch (err) {
+      console.error('[SupportChatWidget] handleCallbackSubmit failed:', err);
+      setCallbackStep('error');
+    }
+  };
+
   return (
     <div className={`pointer-events-none fixed right-4 z-[210] md:right-8 ${positionClassName}`}>
       {isOpen && (
@@ -520,6 +583,104 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({
                     body="문의 내용을 확인한 뒤 운영팀이 채팅에 합류합니다. 잠시만 기다려 주세요."
                   />
                 )}
+
+                {/* 전화 상담 신청 카드 */}
+                <div className="rounded-[1.35rem] border border-white/10 bg-white/[0.045]">
+                  {callbackStep === 'done' ? (
+                    <div className="flex items-start gap-3 px-4 py-3">
+                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-300/10">
+                        <svg className="h-4 w-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-black leading-5 text-white">전화 상담 신청 완료</p>
+                        <p className="mt-1 text-[12px] leading-5 text-slate-300">운영팀이 확인 후 연락드립니다.</p>
+                        <button
+                          type="button"
+                          onClick={() => setCallbackStep('idle')}
+                          className="mt-2 text-[11px] text-slate-400 underline hover:text-slate-200"
+                        >
+                          다시 신청하기
+                        </button>
+                      </div>
+                    </div>
+                  ) : callbackStep === 'form' || callbackStep === 'sending' || callbackStep === 'error' ? (
+                    <div className="px-4 py-3 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-4 w-4 text-teal-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <p className="text-[13px] font-black text-white">전화 상담 신청</p>
+                      </div>
+                      <input
+                        type="tel"
+                        value={callbackPhone}
+                        onChange={(e) => setCallbackPhone(formatPhoneInput(e.target.value))}
+                        placeholder="010-1234-5678"
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder:text-slate-500 outline-none focus:border-teal-400/40 focus:bg-white/8"
+                        maxLength={13}
+                      />
+                      <select
+                        value={callbackTime}
+                        onChange={(e) => setCallbackTime(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-[#0a1929] px-3 py-2 text-[13px] text-slate-300 outline-none focus:border-teal-400/40"
+                      >
+                        <option value="">희망 통화 시간 (선택)</option>
+                        {PREFERRED_TIME_OPTIONS.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      <textarea
+                        value={callbackNote}
+                        onChange={(e) => setCallbackNote(e.target.value)}
+                        placeholder="문의 내용 (선택)"
+                        rows={2}
+                        className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder:text-slate-500 outline-none focus:border-teal-400/40 focus:bg-white/8"
+                        maxLength={300}
+                      />
+                      {callbackStep === 'error' && (
+                        <p className="text-[12px] text-rose-300">전송에 실패했습니다. 다시 시도해 주세요.</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCallbackStep('idle')}
+                          className="flex-1 rounded-xl border border-white/10 py-2 text-[12px] font-bold text-slate-400 hover:bg-white/5 transition-colors"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleCallbackSubmit()}
+                          disabled={!callbackPhone.trim() || callbackStep === 'sending'}
+                          className="flex-1 rounded-xl bg-teal-400 py-2 text-[12px] font-black text-slate-950 shadow-[0_8px_20px_rgba(45,212,191,0.2)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none"
+                        >
+                          {callbackStep === 'sending' ? '전송 중…' : '신청하기'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCallbackStep('form')}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5 rounded-[1.35rem] transition-colors"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/10">
+                        <svg className="h-4 w-4 text-teal-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-black leading-5 text-white">전화 상담 신청</p>
+                        <p className="text-[12px] leading-5 text-slate-400">연락처를 남기면 운영팀이 직접 전화드립니다</p>
+                      </div>
+                      <svg className="ml-auto h-4 w-4 shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </>
             ) : (
               <>
