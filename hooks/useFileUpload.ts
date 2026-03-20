@@ -90,6 +90,7 @@ export function useFileUpload({
             if (desc.includes('[GBR Only]')) classification = "골이식만";
             else if (desc.includes('수술중교환_') || desc.includes('수술중FAIL_')) classification = "수술중교환";
             else if (desc.includes('보험임플란트')) classification = "청구";
+            else if (desc.startsWith('z수술후FAIL') || desc.startsWith('수술후FAIL')) classification = "수술후FAIL";
 
             if (classification === "골이식만") {
               const mMatch = desc.match(/\[(.*?)\]/);
