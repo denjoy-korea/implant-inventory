@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import ModalShell from '../shared/ModalShell';
+import ConfirmModal from '../ConfirmModal';
 import { InventoryItem, SurgeryUnregisteredItem } from '../../types';
 import { fixIbsImplant } from '../../services/mappers';
 import { getSizeMatchKey, toCanonicalSize, parseSize } from '../../services/sizeNormalizer';
@@ -51,7 +52,9 @@ interface UnregisteredDetailModalProps {
     targetBrand: string;
     targetSize: string;
     verifyOnly?: boolean;
+    forceApply?: boolean;
   }) => Promise<ManualFixCheckResult>;
+  onAdjustBaseStock?: (inventoryId: string, delta: number) => Promise<void>;
   onClose: () => void;
   initialViewMode: 'not_in_inventory' | 'non_list_input';
 }
@@ -63,6 +66,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
   isReadOnly,
   onAddInventoryItem,
   onResolveManualInput,
+  onAdjustBaseStock,
   onClose,
   initialViewMode,
 }) => {
@@ -75,6 +79,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
   const [manualFixTarget, setManualFixTarget] = useState<UnregisteredReviewItem | null>(null);
   const [showDentwebGuide, setShowDentwebGuide] = useState(false);
   const [showConsistencyPanel, setShowConsistencyPanel] = useState(true);
+  const [registerConfirmTarget, setRegisterConfirmTarget] = useState<UnregisteredReviewItem | null>(null);
 
   // 브랜드별 기존 재고 치수 프로파일 (직경·길이·커프 집합)
   const brandDimensionProfiles = useMemo(() => {
@@ -169,13 +174,17 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
       const normalizedManufacturer = normalizeSurgery(resolvedManufacturer);
       const normalizedSize = canonicalSize.toLowerCase();
       const groupKey = `${normalizedManufacturer}|${normalizedBrand}`;
-      const rowKey = `${groupKey}|${normalizedSize}`;
+      // rowKey는 원본 제조사를 포함해 유일성 보장 (resolved 제조사가 같아도 원본이 다르면 별도 행)
+      const rawNormManufacturer = normalizeSurgery(String(item.manufacturer || '').trim());
+      const rowKey = `${rawNormManufacturer}|${normalizedBrand}|${normalizedSize}`;
+      // isDuplicate 체크는 resolved 제조사 기준 (기존 재고와 비교)
+      const resolvedRowKey = `${groupKey}|${normalizedSize}`;
 
       const baseline = existingPatternBaseline.get(groupKey) ?? null;
       const actualPattern = detectSizePattern(canonicalSize);
       const hasBaseline = !!baseline;
       const isConsistent = !hasBaseline || actualPattern === baseline.dominantPattern;
-      const isDuplicate = existingInventoryKeySet.has(rowKey);
+      const isDuplicate = existingInventoryKeySet.has(resolvedRowKey);
       const canonicalSizeKey = getSizeMatchKey(canonicalSize, resolvedManufacturer);
       const preferredInventorySize = visibleInventory.find(inv => {
         const invFixed = fixIbsImplant(inv.manufacturer, inv.brand);
@@ -361,8 +370,13 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
   );
 
   const bulkRegisterTargets = useMemo(
-    () => filteredUnregistered.filter(item => item.canRegister && !registeringUnregistered[item.rowKey]),
+    () => filteredUnregistered.filter(item => item.canRegister && item.dimensionalMatchInfo !== 'new_dim' && !registeringUnregistered[item.rowKey]),
     [filteredUnregistered, registeringUnregistered]
+  );
+
+  const newDimCount = useMemo(
+    () => filteredUnregistered.filter(item => item.canRegister && item.dimensionalMatchInfo === 'new_dim').length,
+    [filteredUnregistered]
   );
 
   useEffect(() => {
@@ -375,7 +389,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     }
   }, [unregisteredViewMode, unregisteredBreakdown.missingCount, unregisteredBreakdown.manualCount]);
 
-  const registerUnregisteredItem = async (item: UnregisteredReviewItem): Promise<void> => {
+  const registerUnregisteredItem = async (item: UnregisteredReviewItem, sharedKeySet?: Set<string>): Promise<void> => {
     if (!item.canRegister) return;
     if (registeringUnregistered[item.rowKey]) return;
 
@@ -422,7 +436,8 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     try {
       let insertedAny = false;
       let allSkippedAsDuplicates = true; // 모든 후보가 이미 등록된 경우 추적
-      const runtimeKeySet = new Set(allInventoryDuplicateKeySet);
+      // 일괄 등록 시 sharedKeySet을 공유해 워커 간 중복 삽입 방지, 개별 등록 시 독립 복사본 사용
+      const runtimeKeySet = sharedKeySet ?? new Set(allInventoryDuplicateKeySet);
       const candidates = [mainItem, failItem];
 
       for (const candidate of candidates) {
@@ -456,8 +471,8 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     }
   };
 
-  const handleRegisterUnregistered = async (item: UnregisteredReviewItem) => {
-    await registerUnregisteredItem(item);
+  const handleRegisterUnregistered = (item: UnregisteredReviewItem) => {
+    setRegisterConfirmTarget(item);
   };
 
   const handleBulkRegisterUnregistered = async () => {
@@ -469,12 +484,14 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     setBulkRegisterProgress({ done: 0, total: targets.length });
     const queue = [...targets];
     const workerCount = Math.min(BULK_REGISTER_CONCURRENCY, queue.length);
+    // 모든 워커가 동일한 Set을 공유 → 동시 등록 시 중복 삽입 방지
+    const sharedKeySet = new Set(allInventoryDuplicateKeySet);
 
     const runWorker = async () => {
       while (true) {
         const item = queue.shift();
         if (!item) return;
-        await registerUnregisteredItem(item);
+        await registerUnregisteredItem(item, sharedKeySet);
         setBulkRegisterProgress(prev => {
           if (!prev) return prev;
           return { ...prev, done: Math.min(prev.done + 1, prev.total) };
@@ -487,6 +504,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
     );
 
     setIsBulkRegistering(false);
+    setBulkRegisterProgress(null);
   };
 
   const handleClose = () => {
@@ -546,6 +564,9 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
               </div>
               <span className="text-xs font-bold text-slate-500">
                 {filteredUnregistered.length}건 표시 · 등록 가능 {filteredUnregisteredRegistrableCount}건
+                {newDimCount > 0 && (
+                  <span className="ml-1 text-amber-600">· 신규치수 {newDimCount}건(개별확인)</span>
+                )}
               </span>
               {!isReadOnly && (
                 <button
@@ -559,7 +580,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
                 >
                   {isBulkRegistering
                     ? `일괄 등록 중 (${bulkRegisterProgress?.done ?? 0}/${bulkRegisterProgress?.total ?? 0})`
-                    : `등록 가능 ${bulkRegisterTargets.length}건 한번에 등록`}
+                    : `안전 등록 ${bulkRegisterTargets.length}건 한번에 등록`}
                 </button>
               )}
             </div>
@@ -693,10 +714,16 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
       {manualFixTarget && (
         <ManualFixModal
           target={manualFixTarget}
+          mode={manualFixTarget.reason === 'not_in_inventory' ? 'brand_fix' : 'manual_input'}
+          visibleInventory={visibleInventory}
           onResolveManualInput={onResolveManualInput}
+          onAdjustBaseStock={onAdjustBaseStock}
           onClose={() => setManualFixTarget(null)}
           onResolved={(rowKey) => {
-            setResolvedUnregisteredRows(prev => ({ ...prev, [rowKey]: true }));
+            // not_in_inventory 항목은 수술기록 수정 후에도 재고 등록이 별도이므로 행 유지
+            if (manualFixTarget.reason !== 'not_in_inventory') {
+              setResolvedUnregisteredRows(prev => ({ ...prev, [rowKey]: true }));
+            }
             setManualFixTarget(null);
           }}
         />
@@ -704,6 +731,27 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
 
       {showDentwebGuide && (
         <DentwebGuideModal onClose={() => setShowDentwebGuide(false)} />
+      )}
+
+      {registerConfirmTarget && (
+        <ConfirmModal
+          title={registerConfirmTarget.dimensionalMatchInfo === 'new_dim' ? '신규 치수 확인 후 등록' : '재고 목록 등록 확인'}
+          message={
+            registerConfirmTarget.dimensionalMatchInfo === 'new_dim'
+              ? `이 치수(${registerConfirmTarget.canonicalSize})는 기존 재고에 없는 조합입니다. 실제 존재하는 규격인지 확인하셨나요?`
+              : `아래 정보로 재고 목록에 등록합니다. 제조사·브랜드·규격이 정확한지 확인해 주세요.`
+          }
+          tip={`${registerConfirmTarget.canonicalManufacturer} · ${registerConfirmTarget.canonicalBrand} · ${registerConfirmTarget.canonicalSize}`}
+          confirmLabel="등록"
+          cancelLabel="취소"
+          confirmColor={registerConfirmTarget.dimensionalMatchInfo === 'new_dim' ? 'amber' : 'indigo'}
+          onConfirm={() => {
+            const target = registerConfirmTarget;
+            setRegisterConfirmTarget(null);
+            void registerUnregisteredItem(target);
+          }}
+          onCancel={() => setRegisterConfirmTarget(null)}
+        />
       )}
     </>
   );

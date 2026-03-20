@@ -15,7 +15,7 @@ export const TAB_HASH: Record<DashboardTab, string> = {
   surgery_database: 'surgery', fail_management: 'fail',
   order_management: 'orders', member_management: 'members',
   surgery_upload: 'surgery-upload', settings: 'settings',
-  audit_log: 'audit-log',
+  audit_log: 'audit-log', lectures: 'lectures',
 };
 
 export const HASH_TO_VIEW = Object.fromEntries(

@@ -38,6 +38,7 @@ export function useSurgeryManualFix(
     targetBrand: string;
     targetSize: string;
     verifyOnly?: boolean;
+    forceApply?: boolean;
   }): Promise<ManualFixResult> => {
     const sheetName = '수술기록지';
     const rows = surgeryMaster[sheetName] || [];
@@ -72,25 +73,32 @@ export function useSurgeryManualFix(
     let notFound = 0;
     const applicableIds: string[] = [];
 
-    for (const id of idSet) {
-      const row = rows.find(r => String(r._id || '') === id);
-      if (!row) {
-        notFound += 1;
-        continue;
-      }
-      found += 1;
+    if (params.forceApply) {
+      // forceApply: state 조회 없이 recordId 기반으로 DB 직접 수정
+      // (state에 _id가 없어도 DB UUID가 있으면 동작)
+      applicableIds.push(...idSet);
+      found = idSet.length;
+    } else {
+      for (const id of idSet) {
+        const row = rows.find(r => String(r._id || '') === id);
+        if (!row) {
+          notFound += 1;
+          continue;
+        }
+        found += 1;
 
-      const rowManufacturer = String(row['제조사'] || '').trim();
-      const rowBrand = String(row['브랜드'] || '').trim();
-      const rowSize = String(row['규격(SIZE)'] || '').trim();
-      const rowHasRegisteredCombo = hasRegisteredBrandSize(formatIndex, rowManufacturer, rowBrand, rowSize);
-      const rowIsListBased = isListBasedSurgeryInput(formatIndex, rowManufacturer, rowBrand, rowSize);
+        const rowManufacturer = String(row['제조사'] || '').trim();
+        const rowBrand = String(row['브랜드'] || '').trim();
+        const rowSize = String(row['규격(SIZE)'] || '').trim();
+        const rowHasRegisteredCombo = hasRegisteredBrandSize(formatIndex, rowManufacturer, rowBrand, rowSize);
+        const rowIsListBased = isListBasedSurgeryInput(formatIndex, rowManufacturer, rowBrand, rowSize);
 
-      if (rowIsListBased || !rowHasRegisteredCombo) {
-        alreadyFixed += 1;
-        continue;
+        if (rowIsListBased || !rowHasRegisteredCombo) {
+          alreadyFixed += 1;
+          continue;
+        }
+        applicableIds.push(id);
       }
-      applicableIds.push(id);
     }
 
     if (params.verifyOnly) {

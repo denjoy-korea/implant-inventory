@@ -356,6 +356,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
     return list;
   }, [groups]);
 
+  // 수술기록에 등장했지만 픽스처에 없는 항목 (교차검사) — new_dim / parse_fail 판정
   // 현재 브랜드 전체 승인 시 → 다음 미완료 브랜드로 자동 이동 (500ms 딜레이)
   useEffect(() => {
     if (allAnomalousBrands.length === 0) return;
@@ -521,6 +522,7 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
               </div>
             )}
           </div>
+
 
           {totalAnomalous > 0 ? (
             /* ── 이상 항목 진단 뷰 (브랜드별 페이지네이션) ── */
@@ -752,6 +754,29 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
           const k = (s: string) => `${entry.manufacturer}:${entry.brand}:${s}`;
           return Array.from(entry.brandData.anomalousSizes).some(s => !approvedItems.has(k(s)));
         });
+        // corrections 계산 (파일 필요 여부 판단에도 사용)
+        const buildCorrections = () => {
+          const corrections = new Map<string, string>();
+          for (const g of groups) {
+            for (const b of g.brands) {
+              for (const s of Array.from(b.anomalousSizes)) {
+                const key = `${g.manufacturer}:${b.brand}:${s}`;
+                if (!approvedItems.has(key)) continue;
+                if (b.isNumericCode) {
+                  const d = conversionEdits.get(key)?.d ?? s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
+                  if (d) corrections.set(s, d);
+                } else {
+                  const edit = conversionEdits.get(key) ?? computeDefaultEdit(s, b.dominantPattern);
+                  const sample = b.normalSamples[0];
+                  if (sample && edit.d) corrections.set(s, reconstructCorrectedSize(edit, sample));
+                }
+              }
+            }
+          }
+          return corrections;
+        };
+        // 적용할 수정 내역이 있으면 File 객체 필요, 없으면 없어도 진행 가능
+        const needsFileForCorrections = !uploadedFile && approvedItems.size > 0;
         return (
           <button
             onClick={() => {
@@ -759,41 +784,24 @@ export default function Step2FixtureUpload({ onGoToDataSetup }: Props) {
                 if (firstIncompleteIdx !== -1) setCurrentBrandIdx(firstIncompleteIdx);
                 return;
               }
-              // 페이지 새로고침 시 File 객체는 직렬화 불가 → uploadedFile=null로 복원됨
-              // 같은 파일을 다시 선택하면 processFile의 name+size 비교로 corrections 보존
-              if (!uploadedFile) {
+              // 수정 내역이 있는데 File이 없으면 재선택 요구 (corrections 적용에 File 필요)
+              if (needsFileForCorrections) {
                 fileInputRef.current?.click();
                 return;
               }
-              const corrections = new Map<string, string>();
-              for (const g of groups) {
-                for (const b of g.brands) {
-                  for (const s of Array.from(b.anomalousSizes)) {
-                    const key = `${g.manufacturer}:${b.brand}:${s}`;
-                    if (!approvedItems.has(key)) continue;
-                    if (b.isNumericCode) {
-                      const d = conversionEdits.get(key)?.d ?? s.replace(/[xX×*\-\s./]/g, '').replace(/[^0-9A-Z]/g, '');
-                      if (d) corrections.set(s, d);
-                    } else {
-                      const edit = conversionEdits.get(key) ?? computeDefaultEdit(s, b.dominantPattern);
-                      const sample = b.normalSamples[0];
-                      if (sample && edit.d) corrections.set(s, reconstructCorrectedSize(edit, sample));
-                    }
-                  }
-                }
-              }
+              const corrections = buildCorrections();
               sessionStorage.removeItem(SESSION_KEY);
               onGoToDataSetup(uploadedFile ?? undefined, corrections.size > 0 ? corrections : undefined);
             }}
-            className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${(isBlocked || !uploadedFile)
+            className={`w-full py-3.5 text-sm font-bold rounded-2xl transition-all shrink-0 ${(isBlocked || needsFileForCorrections)
                 ? 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 active:scale-[0.98]'
                 : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98]'
               }`}
           >
             {isBlocked
               ? `사이즈 오류 ${totalAnomalous}개 승인 필요`
-              : !uploadedFile
-              ? '파일을 다시 선택해주세요'
+              : needsFileForCorrections
+              ? '수정 내역 적용을 위해 파일을 다시 선택해주세요'
               : '데이터 설정 페이지에서 저장하기'
             }
           </button>

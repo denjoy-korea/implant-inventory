@@ -3,7 +3,7 @@ import { InventoryItem } from '../types';
 import { auditService, AuditEntry, AuditHistoryItem } from '../services/auditService';
 import { operationLogService } from '../services/operationLogService';
 import { useToast } from './useToast';
-import { isExchangePrefix } from '../services/appUtils';
+import { isVirtualManufacturer } from '../services/appUtils';
 
 const MISMATCH_REASONS = ['기록 누락', '수술기록 오입력', '분실', '입고 수량 오류', '기타'] as const;
 
@@ -94,7 +94,7 @@ export function useInventoryAudit({
 
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
-      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
+      !isVirtualManufacturer(item.manufacturer) && item.brand !== '보험임플란트'
     );
   }, [inventory]);
 

@@ -119,7 +119,7 @@ const UnregisteredItemsTable: React.FC<UnregisteredItemsTableProps> = ({
         {filteredUnregistered.map((item, idx) => (
           <tr
             key={item.rowKey}
-            className={`hover:bg-amber-50/40 transition-colors ${item.dimensionalMatchInfo === 'parse_fail' ? 'bg-rose-50/20' : ''}`}
+            className={`hover:bg-amber-50/40 transition-colors ${item.dimensionalMatchInfo === 'parse_fail' ? 'bg-rose-50/20' : item.dimensionalMatchInfo === 'new_dim' ? 'bg-amber-50/30' : ''}`}
           >
             <td className="px-3 py-3 text-xs font-black text-slate-400 text-center tabular-nums whitespace-nowrap align-top">{idx + 1}</td>
             <td className="px-3 py-3 whitespace-nowrap align-top">
@@ -159,6 +159,11 @@ const UnregisteredItemsTable: React.FC<UnregisteredItemsTableProps> = ({
                   : item.dimensionalMatchInfo === 'parse_fail' ? '파싱 불가'
                   : '기준 없음'}
               </span>
+              {item.dimensionalMatchInfo === 'new_dim' && (
+                <p className="text-[10px] font-semibold text-amber-600 mt-0.5 break-keep whitespace-normal leading-tight">
+                  일괄 등록 제외 — 개별 확인 필요
+                </p>
+              )}
               {item.dimensionalMatchInfo === 'parse_fail' ? (
                 <p className="text-[10px] font-semibold text-rose-500 mt-1 break-keep whitespace-normal leading-tight">
                   규격 형식 미인식
@@ -181,19 +186,21 @@ const UnregisteredItemsTable: React.FC<UnregisteredItemsTableProps> = ({
             </td>
             <td className="px-3 py-3 text-right align-top">
               <div className="flex flex-col items-end gap-1">
-                {item.reason === 'non_list_input' && !item.canRegister && (
+                {(item.reason === 'non_list_input' && !item.canRegister) || item.reason === 'not_in_inventory' ? (
                   <button
                     onClick={() => onOpenManualFix(item)}
                     disabled={isReadOnly || !hasManualResolver}
                     className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
                       !isReadOnly && hasManualResolver
-                        ? 'bg-rose-600 text-white hover:bg-rose-700'
+                        ? item.reason === 'non_list_input'
+                          ? 'bg-rose-600 text-white hover:bg-rose-700'
+                          : 'bg-slate-600 text-white hover:bg-slate-700'
                         : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                     }`}
                   >
                     수정
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={() => onRegister(item)}
                   disabled={
@@ -203,14 +210,16 @@ const UnregisteredItemsTable: React.FC<UnregisteredItemsTableProps> = ({
                   }
                   className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
                     item.canRegister && !registeringUnregistered[item.rowKey] && !(item.reason === 'non_list_input' && !hasManualResolver)
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      ? item.dimensionalMatchInfo === 'new_dim'
+                        ? 'bg-amber-600 text-white hover:bg-amber-700'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                   }`}
                 >
                   {registeringUnregistered[item.rowKey]
                     ? (item.reason === 'non_list_input' ? '수정 중...' : '등록 중...')
                     : item.canRegister
-                    ? (item.reason === 'non_list_input' ? '일괄 수정' : '목록 등록')
+                    ? (item.reason === 'non_list_input' ? '일괄 수정' : item.dimensionalMatchInfo === 'new_dim' ? '확인 후 등록' : '목록 등록')
                     : '등록 불가'}
                 </button>
                 {!item.canRegister && (

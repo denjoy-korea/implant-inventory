@@ -13,6 +13,7 @@ const DASHBOARD_TAB_TITLES: Record<DashboardTab, string> = {
   member_management: '구성원 관리',
   settings: '설정',
   audit_log: '감사 로그',
+  lectures: '동영상 강의',
 };
 
 export function getDashboardTabTitle(tab: DashboardTab): string {

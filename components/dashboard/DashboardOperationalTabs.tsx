@@ -26,6 +26,7 @@ const FailManager = lazyWithRetry(() => import('../FailManager'));
 const OrderManager = lazyWithRetry(() => import('../OrderManager'));
 const SettingsHub = lazyWithRetry(() => import('../SettingsHub'));
 const AuditLogViewer = lazyWithRetry(() => import('../AuditLogViewer'));
+const LecturesPage = lazyWithRetry(() => import('../LecturesPage'));
 
 interface DashboardOperationalTabsProps {
   dashboardTab: DashboardTab;
@@ -244,6 +245,9 @@ const DashboardOperationalTabs: React.FC<DashboardOperationalTabsProps> = ({
         <FeatureGate feature="audit_log" plan={effectivePlan} onOpenPaymentModal={onOpenPaymentModal} onOpenProfilePlan={onOpenProfilePlan}>
           <AuditLogViewer hospitalId={user.hospitalId} />
         </FeatureGate>
+      )}
+      {dashboardTab === 'lectures' && (
+        <LecturesPage />
       )}
     </>
   );

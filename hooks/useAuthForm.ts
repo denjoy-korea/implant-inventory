@@ -325,11 +325,6 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
         showToast('이용약관 및 개인정보 처리방침에 동의해주세요.', 'error');
         return;
       }
-      if (beta.isBetaInviteRequired && !beta.betaInviteVerified) {
-        beta.openBetaInviteModal();
-        return;
-      }
-
       pageViewService.trackEvent(
         'auth_start',
         { mode: 'signup', user_type: userType ?? null, has_trial_plan: Boolean(pendingTrialPlan) },

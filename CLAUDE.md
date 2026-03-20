@@ -51,6 +51,7 @@ npx supabase functions deploy dentweb-upload --no-verify-jwt
 npx supabase functions deploy toss-payment-confirm --no-verify-jwt
 npx supabase functions deploy toss-payment-refund --no-verify-jwt
 npx supabase functions deploy notify-hospital-slack --no-verify-jwt
+npx supabase functions deploy xlsx-generate --no-verify-jwt
 ```
 - 이유: `verify_jwt = false`가 config.toml에 있어도 클라우드 배포 시 CLI 플래그로 명시해야 반영됨
 - 플래그 누락 시 Supabase 게이트웨이가 모든 요청을 401 차단 (함수 코드가 실행되지 않음)

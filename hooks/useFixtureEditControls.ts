@@ -23,7 +23,7 @@ const buildFixtureRowKey = (row: ExcelRow): string => [
 ].join('\x00');
 
 const isSkippableManufacturer = (manufacturer: string): boolean =>
-  isExchangePrefix(manufacturer) || manufacturer === '보험청구';
+  isExchangePrefix(manufacturer) || manufacturer === '보험청구' || manufacturer === 'z수술후FAIL';
 
 export function useFixtureEditControls({
   fixtureData,
@@ -294,7 +294,21 @@ export function useFixtureEditControls({
         insuranceRows.push(insuranceRow);
       }
 
-      const newRows = [...activeSheet.rows, ...failRows, ...insuranceRows];
+      const sizeColumn = activeSheet.columns.find(column => /규격|사이즈|SIZE|size/i.test(column));
+      const activeMfrs = Array.from(new Set(
+        activeRows.map(row => String(row['제조사'] || '')).filter(m => m && !isSkippableManufacturer(m))
+      ));
+      const postFailRows: ExcelRow[] = activeMfrs.map(mfr => {
+        const row: ExcelRow = {};
+        activeSheet.columns.forEach(column => { row[column] = ''; });
+        row['제조사'] = 'z수술후FAIL';
+        row['브랜드'] = mfr;
+        if (sizeColumn) row[sizeColumn] = '_FAIL';
+        row['사용안함'] = false;
+        return row;
+      });
+
+      const newRows = [...activeSheet.rows, ...failRows, ...insuranceRows, ...postFailRows];
       const newSheets = { ...currentData.sheets, [currentData.activeSheetName]: { ...activeSheet, rows: newRows } };
       return { ...prev, fixtureData: { ...currentData, sheets: newSheets } };
     });

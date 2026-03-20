@@ -106,6 +106,7 @@ const FailMonthlyTrendChartCard: React.FC<FailMonthlyTrendChartCardProps> = ({
             >
               <svg
                 viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                height={svgHeight}
                 className="w-full"
                 style={{ minWidth: Math.max(320, svgWidth) }}
                 preserveAspectRatio="xMinYMid meet"

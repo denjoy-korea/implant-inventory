@@ -51,6 +51,7 @@ interface InventoryMasterBindings {
     targetBrand: string;
     targetSize: string;
     verifyOnly?: boolean;
+    forceApply?: boolean;
   }) => Promise<{
     checked: number;
     found: number;

@@ -334,11 +334,10 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4">
           <p className="text-xs font-bold text-indigo-500 uppercase tracking-wider">가입 정책</p>
           <p className="mt-2 text-sm font-black text-indigo-800">
-            {policy.requiresInviteCode ? '코드 필수 기간 진행 중' : '코드 제한 해제됨'}
+            코드 제한 해제됨
           </p>
           <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
-            베타 기간: ~ {policy.endDateText}<br />
-            자유 가입 시작: {policy.openDateText}
+            사전 가입기간 종료 · 자유 가입 운영 중
           </p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">

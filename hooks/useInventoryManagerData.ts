@@ -16,10 +16,13 @@ export function useInventoryManagerData({
   plan,
   unregisteredFromSurgery,
 }: UseInventoryManagerDataParams) {
-  /** 수술중교환_ / 보험청구 항목 제외한 실제 표시 대상 */
+  /** 수술중교환_ / 수술후FAIL / 보험청구 항목 제외한 실제 표시 대상 */
   const visibleInventory = useMemo(() => {
     return inventory.filter(item =>
-      !isExchangePrefix(item.manufacturer) && item.manufacturer !== '보험청구' && item.brand !== '보험임플란트'
+      !isExchangePrefix(item.manufacturer) &&
+      !item.manufacturer.startsWith('z수술후FAIL') &&
+      item.manufacturer !== '보험청구' &&
+      item.brand !== '보험임플란트'
     );
   }, [inventory]);
 
@@ -55,6 +58,7 @@ export function useInventoryManagerData({
         const brand = String(i.brand || '');
         const lowerManufacturer = manufacturer.toLowerCase();
         const isFailCategory = isExchangePrefix(manufacturer)
+          || manufacturer.startsWith('z수술후FAIL')
           || lowerManufacturer.includes('수술중fail')
           || lowerManufacturer.includes('fail_')
           || lowerManufacturer.includes('수술중 fail');

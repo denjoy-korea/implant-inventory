@@ -155,6 +155,11 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
     }).length;
   }, [baseStockInputs, visibleInventory]);
 
+  // 모바일 진행 상태: 필터된 항목 중 0이 아닌 값 입력된 수
+  const mobileProgress = useMemo(() => {
+    return filteredRows.filter(item => (baseStockInputs[item.id] ?? 0) > 0).length;
+  }, [filteredRows, baseStockInputs]);
+
   return (
     <ModalShell
       isOpen={true}
@@ -235,9 +240,51 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           )}
         </div>
 
-        {/* ── 필터 ── */}
-        <div className="px-4 sm:px-6 py-2.5 border-b border-slate-100 bg-white shrink-0 space-y-2">
-          {/* 제조사 필터 - 가로 스크롤 */}
+        {/* ── 필터 (모바일) ── */}
+        <div className="sm:hidden px-4 py-3 border-b border-slate-100 bg-white shrink-0 space-y-2.5">
+          {/* 제조사 탭 - flex-wrap, 숫자 없음 */}
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setManufacturerFilter(null)}
+              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
+                manufacturerFilter === null ? 'bg-slate-800 text-white' : 'text-slate-500 bg-slate-100'
+              }`}
+            >
+              전체
+            </button>
+            {manufacturerOptions.map(mfr => (
+              <button
+                key={mfr}
+                onClick={() => setManufacturerFilter(mfr)}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
+                  manufacturerFilter === mfr ? 'bg-slate-800 text-white' : 'text-slate-500 bg-slate-100'
+                }`}
+              >
+                {mfr}
+              </button>
+            ))}
+          </div>
+
+          {/* 진행 프로그레스바 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-400">입력 진행</span>
+              <span className="text-[10px] font-black text-slate-600 tabular-nums">
+                {mobileProgress} / {filteredRows.length}
+              </span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                style={{ width: `${filteredRows.length > 0 ? Math.round(mobileProgress / filteredRows.length * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── 필터 (데스크톱) ── */}
+        <div className="hidden sm:block px-6 py-2.5 border-b border-slate-100 bg-white shrink-0 space-y-2">
+          {/* 제조사 필터 */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
             <span className="text-[10px] font-bold text-slate-400 shrink-0 mr-0.5">제조사</span>
             <button
@@ -315,76 +362,58 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           ) : (
             <>
               {/* ── 모바일: 카드 목록 ── */}
-              <div className="sm:hidden divide-y divide-slate-100">
+              <div className="sm:hidden">
                 {filteredRows.map((item, idx) => {
                   const countedCurrentStock = Math.max(0, Math.round(baseStockInputs[item.id] ?? 0));
-                  const usage = Math.max(0, Math.round(item.usageCount ?? 0));
-                  const nextBaseStock = countedCurrentStock + usage;
                   return (
-                    <div key={item.id} className="px-4 py-3.5">
-                      {/* 품목 정보 */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-semibold text-slate-400 leading-none mb-0.5">
-                            {idx + 1}. {item.manufacturer}
-                          </p>
-                          <p className="text-sm font-black text-slate-800 leading-snug">
-                            {item.brand} <span className="font-semibold text-slate-600">{item.size}</span>
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0 ml-3">
-                          <p className="text-[10px] text-slate-400 font-medium">사용량</p>
-                          <p className="text-sm font-black text-rose-500 tabular-nums">{usage}</p>
-                        </div>
+                    <div key={item.id} className="px-4 py-4 border-b border-slate-100 last:border-0">
+                      {/* 품목 정보 - 크게 */}
+                      <div className="mb-4">
+                        <p className="text-[10px] font-bold text-slate-400 mb-0.5 tabular-nums">{idx + 1}</p>
+                        <p className="text-xs font-bold text-slate-400 mb-1">{item.manufacturer}</p>
+                        <p className="text-2xl font-black text-slate-900 leading-tight">{item.brand}</p>
+                        <p className="text-lg font-bold text-slate-500 mt-0.5">{item.size}</p>
                       </div>
 
                       {/* 스테퍼 입력 */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-0 bg-indigo-50 rounded-xl border border-indigo-200 overflow-hidden flex-1">
-                          {/* 감소 버튼 */}
-                          <button
-                            type="button"
-                            onPointerDown={(e) => { e.preventDefault(); handleStep(item.id, -1); }}
-                            className="w-12 h-12 flex items-center justify-center text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors font-black text-xl shrink-0"
-                            aria-label="1 감소"
-                          >
-                            −
-                          </button>
-                          {/* 숫자 입력 */}
-                          <input
-                            ref={(el) => { if (el) inputRefs.current.set(item.id, el); }}
-                            type="number"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            min={0}
-                            step={1}
-                            value={countedCurrentStock}
-                            onChange={(e) => {
-                              // 앞자리 0 즉시 제거: "08" → "8"
-                              if (/^0\d/.test(e.target.value)) {
-                                e.target.value = e.target.value.replace(/^0+(\d)/, '$1');
-                              }
-                              handleInputChange(item.id, e.target.value);
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            className="flex-1 h-12 text-center text-xl font-black text-indigo-700 bg-transparent outline-none tabular-nums min-w-0"
-                          />
-                          {/* 증가 버튼 */}
-                          <button
-                            type="button"
-                            onPointerDown={(e) => { e.preventDefault(); handleStep(item.id, 1); }}
-                            className="w-12 h-12 flex items-center justify-center text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors font-black text-xl shrink-0"
-                            aria-label="1 증가"
-                          >
-                            +
-                          </button>
-                        </div>
-
-                        {/* 기초재고 결과 */}
-                        <div className="text-right shrink-0 w-16">
-                          <p className="text-[10px] text-slate-400 font-medium">기초재고</p>
-                          <p className="text-base font-black text-emerald-600 tabular-nums">{nextBaseStock}</p>
-                        </div>
+                      <div className="flex items-center gap-0 bg-indigo-50 rounded-xl border border-indigo-200 overflow-hidden">
+                        {/* 감소 버튼 */}
+                        <button
+                          type="button"
+                          onPointerDown={(e) => { e.preventDefault(); handleStep(item.id, -1); }}
+                          className="w-12 h-12 flex items-center justify-center text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors font-black text-xl shrink-0"
+                          aria-label="1 감소"
+                        >
+                          −
+                        </button>
+                        {/* 숫자 입력 */}
+                        <input
+                          ref={(el) => { if (el) inputRefs.current.set(item.id, el); }}
+                          type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          min={0}
+                          step={1}
+                          value={countedCurrentStock}
+                          onChange={(e) => {
+                            // 앞자리 0 즉시 제거: "08" → "8"
+                            if (/^0\d/.test(e.target.value)) {
+                              e.target.value = e.target.value.replace(/^0+(\d)/, '$1');
+                            }
+                            handleInputChange(item.id, e.target.value);
+                          }}
+                          onFocus={(e) => e.target.select()}
+                          className="flex-1 h-12 text-center text-xl font-black text-indigo-700 bg-transparent outline-none tabular-nums min-w-0"
+                        />
+                        {/* 증가 버튼 */}
+                        <button
+                          type="button"
+                          onPointerDown={(e) => { e.preventDefault(); handleStep(item.id, 1); }}
+                          className="w-12 h-12 flex items-center justify-center text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors font-black text-xl shrink-0"
+                          aria-label="1 증가"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   );

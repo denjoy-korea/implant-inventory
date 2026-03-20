@@ -1,17 +1,12 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { parseExcelFile } from '../../services/excelService';
-import { buildBrandSizeFormatIndex, hasRegisteredBrandSize, isListBasedSurgeryInput, buildUnregisteredSample, appendUnregisteredSample } from '../../services/surgeryUnregisteredUtils';
-import { normalizeSurgery } from '../../services/normalizationService';
-import { getSizeMatchKey, isIbsImplantManufacturer } from '../../services/sizeNormalizer';
 import { isExchangePrefix } from '../../services/appUtils';
-import type { ExcelRow } from '../../types';
-import { InventoryItem, SurgeryUnregisteredItem } from '../../types';
 
 const PARSING_STEPS = [
   '파일을 읽는 중...',
   '수술기록 파싱 중...',
-  '재고 마스터와 비교 중...',
-  '미등록 규격 분석 중...',
+  '브랜드별 패턴 분석 중...',
+  '수기 입력 의심 항목 선별 중...',
 ];
 
 function ParsingScreen() {
@@ -43,13 +38,20 @@ function ParsingScreen() {
 
 type UploadState = 'idle' | 'parsing' | 'done' | 'error';
 
+interface PatternAnomaly {
+  manufacturer: string;
+  brand: string;
+  anomalousSizes: string[];
+  usageCount: number;
+  normalSamples: string[];
+}
+
 interface AnalysisResult {
   totalRecords: number;
-  unregistered: SurgeryUnregisteredItem[];
+  patternAnomalies: PatternAnomaly[];
 }
 
 interface Props {
-  inventory: InventoryItem[];
   onGoToSurgeryUpload: (file?: File) => Promise<boolean> | boolean;
   onUploaded: () => void;
 }
@@ -104,20 +106,69 @@ function parseFixtureFromRecord(surgeryRecord: string): { manufacturer: string; 
   return { manufacturer, brand, size };
 }
 
-function analyzeSurgeryRows(
-  rows: Record<string, unknown>[],
-  inventory: InventoryItem[]
-): AnalysisResult {
-  const formatIndex = buildBrandSizeFormatIndex(inventory);
-  // 픽스처 등록 전(inventory 비어 있음) → 미등록 분석 스킵, 레코드 수만 집계
-  const skipUnregistered = inventory.length === 0;
-  const missingMap = new Map<string, SurgeryUnregisteredItem>();
-  let totalRecords = 0;
+// ── 패턴 분석 (Step2FixtureUpload의 analyzeBrand와 동일 알고리즘) ──
 
-  // 포맷 감지: "구분" 컬럼 → DentWeb 원시 수출 포맷 / "수술기록" 컬럼 → 수술기록지 포맷
+const NUMERIC_CODE_RE = /^\d+[A-Za-z]*$/;
+
+function extractSizePattern(size: string): string {
+  const trimmed = size.trim();
+  const numericMatch = trimmed.match(/^(\d+)([A-Za-z]*)$/);
+  if (numericMatch) return numericMatch[1].replace(/\d/g, 'N');
+  return trimmed.replace(/\d+\.?\d*/g, 'N').replace(/\s+/g, ' ').trim();
+}
+
+function detectBrandAnomalies(sizes: string[]): {
+  anomalousSizes: Set<string>;
+  normalSamples: string[];
+} {
+  if (sizes.length < 4) {
+    return { anomalousSizes: new Set(), normalSamples: sizes.slice(0, 3) };
+  }
+
+  // 숫자코드 브랜드 감지 (90% 이상이 숫자+알파벳)
+  const numericCount = sizes.filter(s => NUMERIC_CODE_RE.test(s)).length;
+  if (numericCount >= sizes.length * 0.9) {
+    const anomalous = new Set<string>();
+    for (const size of sizes) if (!NUMERIC_CODE_RE.test(size)) anomalous.add(size);
+    const normalSamples = sizes.filter(s => NUMERIC_CODE_RE.test(s)).slice(0, 4);
+    return { anomalousSizes: anomalous, normalSamples };
+  }
+
+  // 일반 포맷: 지배 패턴 탐색
+  const patternCount = new Map<string, number>();
+  for (const size of sizes) {
+    const pat = extractSizePattern(size);
+    patternCount.set(pat, (patternCount.get(pat) || 0) + 1);
+  }
+  let dominantPattern = '';
+  let maxCount = 0;
+  for (const [pat, count] of patternCount) {
+    if (count > maxCount) { maxCount = count; dominantPattern = pat; }
+  }
+  // 지배 패턴이 60% 미만이면 혼재 상태 → 판단 보류
+  if (maxCount < sizes.length * 0.6) {
+    return { anomalousSizes: new Set(), normalSamples: sizes.slice(0, 3) };
+  }
+
+  const anomalous = new Set<string>();
+  for (const size of sizes) if (extractSizePattern(size) !== dominantPattern) anomalous.add(size);
+  const normalSamples = sizes.filter(s => extractSizePattern(s) === dominantPattern).slice(0, 4);
+  return { anomalousSizes: anomalous, normalSamples };
+}
+
+function analyzeSurgeryRows(rows: Record<string, unknown>[]): AnalysisResult {
   const firstRow = rows[0] ?? {};
   const isDenwebFormat = '구분' in firstRow;
   const isStatisticsFormat = !isDenwebFormat && '수술기록' in firstRow;
+
+  // Map: `${manufacturer}|${brand}` → { manufacturer, brand, sizes(with duplicates), sizeCountMap }
+  const brandMap = new Map<string, {
+    manufacturer: string;
+    brand: string;
+    sizes: string[];
+    sizeCountMap: Map<string, number>;
+  }>();
+  let totalRecords = 0;
 
   for (const row of rows) {
     let manufacturer: string;
@@ -126,7 +177,6 @@ function analyzeSurgeryRows(
     let qty = 1;
 
     if (isDenwebFormat) {
-      // ── DentWeb 원시 수술기록 포맷 ──
       const isTotalRow = Object.values(row).some(v => String(v).includes('합계'));
       if (isTotalRow) continue;
 
@@ -142,70 +192,71 @@ function analyzeSurgeryRows(
 
       if (!manufacturer && !brand && !size) continue;
       if (isExchangePrefix(manufacturer)) continue;
+      if (manufacturer === 'z수술후FAIL') continue;
       if (manufacturer === '보험청구' || brand === '보험임플란트') continue;
 
       const qtyRaw = row['갯수'] !== undefined ? Number(row['갯수']) : 1;
       qty = Number.isFinite(qtyRaw) ? qtyRaw : 1;
 
     } else if (isStatisticsFormat) {
-      // ── 수술기록지 시트 포맷 ──
       const surgeryRecord = String(row['수술기록'] || '').trim();
       const parsed = parseFixtureFromRecord(surgeryRecord);
       if (!parsed) continue;
+      if (parsed.manufacturer === 'z수술후FAIL') continue;
 
       manufacturer = parsed.manufacturer;
       brand = parsed.brand;
       size = parsed.size;
-      qty = 1; // 각 행 = 1건
+      qty = 1;
 
     } else {
       continue;
     }
 
     totalRecords += qty;
+    if (!size) continue;
 
-    if (skipUnregistered) continue;
-
-    // 등록된 사이즈 텍스트와 정확히 일치하는 경우만 등록된 것으로 인정.
-    // 형식이 다른 수술기록(e.g. "Φ5.0 ×10" vs "Φ5.0 × 10")도 미등록으로 잡기 위함.
-    const isListBased = isListBasedSurgeryInput(formatIndex, manufacturer, brand, size);
-    if (isListBased) continue;
-
-    // IBS: D:X L:Y Cuff:Z 포맷 ↔ canonical(C3 Φ... X ...) 포맷 간 불일치 허용
-    // 이전 DB에 canonical로 저장된 항목과 원래 포맷 수술기록 간 false positive 방지
-    const isIbs = isIbsImplantManufacturer(manufacturer) || isIbsImplantManufacturer(brand);
-    if (isIbs && hasRegisteredBrandSize(formatIndex, manufacturer, brand, size)) continue;
-
-    const normM = normalizeSurgery(manufacturer);
-    const normB = normalizeSurgery(brand);
-    const normS = getSizeMatchKey(size, manufacturer);
-    const itemKey = `${normM}|${normB}|${normS}`;
-
-    const sample = buildUnregisteredSample(row as ExcelRow);
-
-    const existing = missingMap.get(itemKey);
-    if (existing) {
-      existing.usageCount += qty;
-      appendUnregisteredSample(existing, sample);
+    const key = `${manufacturer}|${brand}`;
+    const entry = brandMap.get(key);
+    if (entry) {
+      for (let i = 0; i < qty; i++) entry.sizes.push(size);
+      entry.sizeCountMap.set(size, (entry.sizeCountMap.get(size) || 0) + qty);
     } else {
-      missingMap.set(itemKey, {
-        manufacturer: manufacturer || '-',
-        brand: brand || '-',
-        size: size || '-',
-        usageCount: qty,
-        reason: 'not_in_inventory',
-        samples: [sample],
+      const sizeCountMap = new Map([[size, qty]]);
+      brandMap.set(key, {
+        manufacturer,
+        brand,
+        sizes: Array.from({ length: qty }, () => size),
+        sizeCountMap,
       });
     }
   }
 
-  return {
-    totalRecords,
-    unregistered: Array.from(missingMap.values()).sort((a, b) => b.usageCount - a.usageCount),
-  };
+  const patternAnomalies: PatternAnomaly[] = [];
+  for (const entry of brandMap.values()) {
+    const { anomalousSizes, normalSamples } = detectBrandAnomalies(entry.sizes);
+    if (anomalousSizes.size === 0) continue;
+
+    let usageCount = 0;
+    for (const size of anomalousSizes) {
+      usageCount += entry.sizeCountMap.get(size) || 0;
+    }
+
+    patternAnomalies.push({
+      manufacturer: entry.manufacturer,
+      brand: entry.brand,
+      anomalousSizes: Array.from(anomalousSizes),
+      usageCount,
+      normalSamples,
+    });
+  }
+
+  patternAnomalies.sort((a, b) => b.usageCount - a.usageCount);
+
+  return { totalRecords, patternAnomalies };
 }
 
-export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUploaded }: Props) {
+export default function Step4UploadGuide({ onGoToSurgeryUpload, onUploaded }: Props) {
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState('');
@@ -242,14 +293,14 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
 
       if (rows.length === 0) throw new Error('수술기록 데이터를 찾을 수 없습니다. 파일 형식을 확인해주세요.');
 
-      const result = analyzeSurgeryRows(rows, inventory);
+      const result = analyzeSurgeryRows(rows);
       setAnalysis(result);
       setUploadState('done');
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : '파일을 읽을 수 없습니다.');
       setUploadState('error');
     }
-  }, [inventory]);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,7 +320,7 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
     <div className="px-6 py-6 flex flex-col h-full">
       <h2 className="text-xl font-black text-slate-900 mb-1">수술기록 업로드</h2>
       <p className="text-sm text-slate-500 mb-4">
-        파일을 업로드하면 재고 마스터에 없는 미등록 규격 수술 기록을 찾아드립니다.
+        파일을 업로드하면 브랜드별 규격 패턴을 분석해 수기 입력이 의심되는 항목을 찾아드립니다.
       </p>
 
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
@@ -330,21 +381,21 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
           </div>
 
           {/* Summary */}
-          {analysis.unregistered.length === 0 ? (
+          {analysis.patternAnomalies.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-5 text-center">
               <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center">
                 <svg className="w-5 h-5 text-emerald-600 animate-icon-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-sm font-bold text-emerald-700">
-                {inventory.length === 0 ? '수술기록 확인 완료' : '모두 등록된 품목'}
-              </p>
+              <p className="text-sm font-bold text-emerald-700">패턴 이상 없음</p>
               <p className="text-[11px] text-emerald-600">
-                {analysis.totalRecords}건 수술기록을 확인했습니다.<br />
-                {inventory.length === 0
-                  ? '픽스처 데이터 등록 후 미등록 품목을 확인할 수 있습니다.'
-                  : '미등록 규격이 없습니다.'}
+                {analysis.totalRecords}건 수술기록을 분석했습니다.<br />
+                규격 패턴이 일관되게 입력되어 있습니다.
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1 px-2 text-center leading-relaxed">
+                패턴이 일관되어도 수기 입력이 포함될 수 있습니다.<br />
+                수술기록과 품목 등록을 완료한 후 수술기록 DB에서 미등록 품목을 확인해주세요.
               </p>
             </div>
           ) : (
@@ -352,34 +403,42 @@ export default function Step4UploadGuide({ inventory, onGoToSurgeryUpload, onUpl
               {/* Header badge */}
               <div className="flex items-center gap-2 mb-2 shrink-0">
                 <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-[11px] font-black rounded-full">
-                  미등록 품목 {analysis.unregistered.length}종 · {analysis.unregistered.reduce((s, i) => s + i.usageCount, 0)}건
+                  수기 입력 의심 {analysis.patternAnomalies.length}개 브랜드 · {analysis.patternAnomalies.reduce((s, i) => s + i.usageCount, 0)}건
                 </span>
                 <span className="text-[11px] text-slate-400">총 {analysis.totalRecords}건 수술기록 중</span>
               </div>
 
               {/* List */}
               <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0 pr-0.5">
-                {analysis.unregistered.map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 bg-slate-50 rounded-xl px-3 py-2.5">
-                    <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-700 truncate">
+                {analysis.patternAnomalies.map((item, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <p className="text-xs font-bold text-slate-700 leading-tight">
                         {item.manufacturer} · {item.brand}
                       </p>
-                      <p className="text-[11px] text-slate-400">{item.size}</p>
+                      <span className="text-[11px] font-bold text-amber-600 shrink-0">{item.usageCount}건</span>
                     </div>
-                    <span className="text-[11px] font-bold text-amber-600 shrink-0">{item.usageCount}건</span>
+                    {/* Anomalous sizes */}
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {item.anomalousSizes.map((size, si) => (
+                        <span key={si} className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-black rounded-md">
+                          {size}
+                        </span>
+                      ))}
+                    </div>
+                    {/* Normal samples for context */}
+                    {item.normalSamples.length > 0 && (
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        일반 패턴: {item.normalSamples.slice(0, 2).join(' / ')}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
 
               {/* Tip */}
               <p className="text-[10px] text-slate-400 mt-2 shrink-0">
-                업로드 후 수술기록 DB 페이지에서 상세 확인 가능합니다.
+                업로드 후 수술기록 DB 페이지에서 상세 확인 및 수정이 가능합니다.
               </p>
             </div>
           )}

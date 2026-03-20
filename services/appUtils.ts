@@ -11,6 +11,14 @@ export function isExchangePrefix(manufacturer: string): boolean {
 }
 
 /**
+ * 재고 실사 대상에서 제외할 가상 제조사 판별
+ * 수술중교환_, 수술중FAIL_, z수술후FAIL, 보험청구 등은 실제 재고 품목이 아님
+ */
+export function isVirtualManufacturer(manufacturer: string): boolean {
+  return isExchangePrefix(manufacturer) || manufacturer === 'z수술후FAIL' || manufacturer === '보험청구';
+}
+
+/**
  * 교환 카테고리 prefix 제거 — '수술중교환_xxx' 또는 '수술중FAIL_xxx' → 'xxx'
  */
 export function stripExchangePrefix(manufacturer: string): string {

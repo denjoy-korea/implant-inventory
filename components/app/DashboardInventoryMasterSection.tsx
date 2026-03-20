@@ -26,6 +26,7 @@ interface ResolveManualSurgeryInputParams {
   targetBrand: string;
   targetSize: string;
   verifyOnly?: boolean;
+  forceApply?: boolean;
 }
 
 interface ResolveManualSurgeryInputResult {
@@ -242,6 +243,31 @@ const DashboardInventoryMasterSection: React.FC<DashboardInventoryMasterSectionP
       unregisteredFromSurgery={surgeryUnregisteredItems}
       onRefreshLatestSurgeryUsage={refreshLatestSurgeryUsage}
       onResolveManualInput={resolveManualSurgeryInput}
+      onAdjustBaseStock={async (inventoryId, delta) => {
+        const item = state.inventory.find(i => i.id === inventoryId);
+        if (!item) return;
+        const newInitialStock = item.initialStock + delta;
+        const prevInventory = state.inventory;
+        // 낙관적 업데이트 (useInventorySync가 수술기록 변경 후 currentStock을 재계산)
+        setState(prev => ({
+          ...prev,
+          inventory: prev.inventory.map(i =>
+            i.id === inventoryId ? { ...i, initialStock: newInitialStock } : i
+          ),
+        }));
+        try {
+          await inventoryService.updateItem(inventoryId, { initial_stock: newInitialStock });
+          operationLogService.logOperation(
+            'base_stock_edit',
+            `수술기록 수정 연동 기초재고 조정 (+${delta}) — ${item.brand} ${item.size}`,
+            { inventoryId, delta, brand: item.brand, size: item.size }
+          );
+        } catch (error) {
+          console.error('[App] 기초재고 연동 조정 실패, 롤백:', error);
+          setState(prev => ({ ...prev, inventory: prevInventory }));
+          showAlertToast('기초재고 연동 조정에 실패했습니다.', 'error');
+        }
+      }}
       initialShowBaseStockEdit={initialShowBaseStockEdit}
       onBaseStockEditApplied={onBaseStockEditApplied}
       onQuickOrder={async (item) => {

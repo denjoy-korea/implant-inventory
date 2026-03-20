@@ -1,5 +1,4 @@
 import { ExcelData, ExcelRow } from '../types';
-import { supabase } from './supabaseClient';
 
 function toCellScalar(cell: { t?: string; v?: unknown; w?: string } | undefined): string | number | boolean {
   if (!cell || cell.v === null || cell.v === undefined) return '';
@@ -78,51 +77,23 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
 
 export const downloadExcelFile = async (data: ExcelData, selectedIndices: Set<number>, fileName: string): Promise<void> => {
   const activeSheet = data.sheets[data.activeSheetName];
-  if (!activeSheet) {
-    return;
-  }
+  if (!activeSheet) return;
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('엑셀 생성 실패: Supabase 환경변수가 설정되지 않았습니다.');
-  }
+  const XLSX = await import('xlsx');
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token ?? supabaseAnonKey;
-  const endpoint = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/xlsx-generate`;
+  const processedRows = activeSheet.rows.filter((row, index) =>
+    selectedIndices.has(index) && row['사용안함'] !== true
+  );
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: supabaseAnonKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      activeSheet,
-      selectedIndices: Array.from(selectedIndices),
-      fileName,
-    }),
+  const worksheet = XLSX.utils.json_to_sheet(processedRows, {
+    header: activeSheet.columns,
   });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, activeSheet.name || 'Sheet1');
 
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`;
-    try {
-      const errBody = await response.json();
-      if (errBody && typeof errBody === 'object' && 'error' in errBody && typeof errBody.error === 'string') {
-        detail = errBody.error;
-      }
-    } catch {}
-    throw new Error(`엑셀 생성 실패: ${detail}`);
-  }
+  const buffer: Uint8Array = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
 
-  const binaryData = await response.arrayBuffer();
-  if (!(binaryData instanceof ArrayBuffer)) {
-    throw new Error('엑셀 생성 실패: 서버 응답 형식이 올바르지 않습니다.');
-  }
-
-  const blob = new Blob([binaryData], {
+  const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 

@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { betaInviteService, CodeType } from '../services/betaInviteService';
 import { getBetaSignupPolicy, normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
@@ -20,14 +20,6 @@ export function useBetaCodeVerification(deps: UseBetaCodeVerificationDeps) {
 
   const betaSignupPolicy = getBetaSignupPolicy();
   const isBetaInviteRequired = type === 'signup' && betaSignupPolicy.requiresInviteCode;
-
-  // Auto-open modal when required
-  useEffect(() => {
-    if (type !== 'signup') return;
-    if (!isBetaInviteRequired) return;
-    if (betaInviteVerified) return;
-    setBetaInviteModalOpen(true);
-  }, [type, isBetaInviteRequired, betaInviteVerified]);
 
   const openBetaInviteModal = () => {
     setBetaInviteError('');

@@ -128,7 +128,7 @@ const DashboardFixtureEditSection: React.FC<DashboardFixtureEditSectionProps> = 
     activeSheet.rows
       .filter(r => r['사용안함'] !== true)
       .map(r => String(r['제조사'] || ''))
-      .filter(m => m && !isExchangePrefix(m) && m !== '보험청구')
+      .filter(m => m && !isExchangePrefix(m) && m !== '보험청구' && m !== 'z수술후FAIL')
   )).sort();
 
   const selectedIndices = selectedFixtureIndices[fixtureData.activeSheetName] || new Set<number>();

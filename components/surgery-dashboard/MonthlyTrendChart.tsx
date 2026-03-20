@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MonthlyDatum, BAR_SERIES, CHART_FOCUS_CLASS } from './shared';
 
 interface Props {
@@ -10,12 +10,20 @@ interface Props {
 
 export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, selectedMonth }: Props) {
   const [hoveredBarGroup, setHoveredBarGroup] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const W = 700, H = 300;
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [monthlyData.length]);
+
+  const H = 300;
   const pad = { l: 48, r: 20, t: 25, b: 55 };
+  const groupCount = monthlyData.length;
+  const W = Math.max(700, groupCount * 65 + pad.l + pad.r);
   const plotW = W - pad.l - pad.r;
   const plotH = H - pad.t - pad.b;
-  const groupCount = monthlyData.length;
   const groupW = groupCount > 0 ? plotW / groupCount : 0;
   const barW = Math.min(22, groupW * 0.24);
   const barGap = 3;
@@ -56,9 +64,9 @@ export default function MonthlyTrendChart({ monthlyData, mounted, onMonthClick, 
           ))}
         </div>
       </div>
-      <div className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
-        <svg viewBox={`0 0 ${W} ${H}`} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
-          style={{ minWidth: Math.max(500, groupCount * 65) }}
+      <div ref={scrollRef} className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
+          style={{ minWidth: W }}
           role="img" aria-label="월별 식립, 청구, 수술중교환 건수 추이 바 차트"
           tabIndex={0} onKeyDown={handleKeyDown}
           onPointerLeave={() => setHoveredBarGroup(null)}

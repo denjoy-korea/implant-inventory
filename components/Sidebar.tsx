@@ -305,6 +305,26 @@ const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
+        {/* 그룹 N: 강의 */}
+        <div className="pt-6 border-t border-slate-800">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-3">교육</h3>
+          <nav className="space-y-1">
+            <button
+              onClick={() => handleTabClick('lectures')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                activeTab === 'lectures'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.845v6.31a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+              </svg>
+              동영상 강의
+            </button>
+          </nav>
+        </div>
+
         {/* Settings */}
         <div className="pt-6 border-t border-slate-800">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">설정</div>

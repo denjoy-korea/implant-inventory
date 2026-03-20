@@ -349,6 +349,8 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                 <p className="mt-1 text-slate-400">별도로 관리하신다면 확장하지 않아도 됩니다.</p>
                 <p className="font-bold text-amber-300 mt-2.5 mb-1">🏥 보험청구 항목 추가</p>
                 <p>보험청구 2단계 진행 시, 수술기록지에 픽스쳐 정보를 실수로 중복 입력하는 것을 방지합니다.</p>
+                <p className="font-bold text-orange-300 mt-2.5 mb-1">⚡ 수술후FAIL 항목 추가</p>
+                <p>수술 후 FAIL 발생 시 제조사별로 별도 추적합니다. 선택된 제조사마다 "z수술후FAIL / 제조사명 / _FAIL" 항목이 생성됩니다.</p>
                 <p className="mt-2 pt-2 border-t border-slate-600 text-amber-200">⚠️ 초기에 설정하지 않으면 추후 데이터 불일치 발생 시 조정에 추가 기간·비용이 발생할 수 있습니다.</p>
               </div>
             </div>
@@ -413,8 +415,17 @@ const ExcelTable: React.FC<ExcelTableProps> = ({
                     <p className="text-[11px] text-slate-400 mt-0.5">제조사/브랜드 "보험청구", 규격 "2단계 청구" <span className="font-bold text-slate-600">+1개</span></p>
                   </div>
                 </div>
+                <div className="border-t border-slate-200 pt-3 flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-black">Z</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">수술후FAIL 항목</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">제조사 "z수술후FAIL", 브랜드에 각 제조사명, 규격 "_FAIL" <span className="font-bold text-slate-600">+{activeManufacturers?.length ?? 0}개</span></p>
+                  </div>
+                </div>
                 <div className="border-t border-slate-200 pt-3">
-                  <p className="text-xs font-bold text-slate-500">총 예상 결과: <span className="text-indigo-600">{counts.active * 2 + 1}개</span> (기존 {counts.active} + 교환 {counts.active} + 보험청구 1)</p>
+                  <p className="text-xs font-bold text-slate-500">총 예상 결과: <span className="text-indigo-600">{counts.active * 2 + 1 + (activeManufacturers?.length ?? 0)}개</span> (기존 {counts.active} + 교환 {counts.active} + 보험청구 1 + 수술후FAIL {activeManufacturers?.length ?? 0})</p>
                 </div>
               </div>
             </div>

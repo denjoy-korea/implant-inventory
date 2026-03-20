@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import ModalShell from '../shared/ModalShell';
+import { InventoryItem } from '../../types';
+import { normalizeSurgery } from '../../services/normalizationService';
+import { getSizeMatchKey } from '../../services/sizeNormalizer';
+import { fixIbsImplant } from '../../services/mappers';
+import { isSameManufacturerAlias } from '../../services/unregisteredMatchingUtils';
 
 export interface ManualFixCheckResult {
   checked: number;
@@ -39,18 +44,22 @@ interface ManualFixTarget {
 
 interface ManualFixModalProps {
   target: ManualFixTarget;
+  mode?: 'manual_input' | 'brand_fix';
+  visibleInventory?: InventoryItem[];
   onResolveManualInput?: (params: {
     recordIds: string[];
     targetManufacturer: string;
     targetBrand: string;
     targetSize: string;
     verifyOnly?: boolean;
+    forceApply?: boolean;
   }) => Promise<ManualFixCheckResult>;
+  onAdjustBaseStock?: (inventoryId: string, delta: number) => Promise<void>;
   onClose: () => void;
   onResolved: (rowKey: string) => void;
 }
 
-const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManualInput, onClose, onResolved }) => {
+const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, mode = 'manual_input', visibleInventory, onResolveManualInput, onAdjustBaseStock, onClose, onResolved }) => {
   const [manualFixCheckResult, setManualFixCheckResult] = useState<ManualFixCheckResult | null>(null);
   const [manualFixError, setManualFixError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -66,6 +75,34 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
     String(draft.manufacturer || '').trim().length > 0 &&
     String(draft.brand || '').trim().length > 0 &&
     String(draft.size || '').trim().length > 0;
+
+  // 기존 재고 목록과 draft 값 일치 여부 (brand_fix 모드 전용)
+  const inventoryMatchResult = useMemo(() => {
+    if (mode !== 'brand_fix' || !visibleInventory || !isDraftValid) return null;
+    const draftMfr = String(draft.manufacturer || '').trim();
+    const draftBrand = String(draft.brand || '').trim();
+    const draftSize = String(draft.size || '').trim();
+    const draftBrandKey = normalizeSurgery(draftBrand);
+    const draftSizeKey = getSizeMatchKey(draftSize, draftMfr);
+
+    const exactMatch = visibleInventory.find(item => {
+      const fixed = fixIbsImplant(item.manufacturer, item.brand);
+      return (
+        normalizeSurgery(fixed.brand) === draftBrandKey &&
+        isSameManufacturerAlias(fixed.manufacturer, draftMfr) &&
+        getSizeMatchKey(item.size, fixed.manufacturer) === draftSizeKey
+      );
+    });
+    if (exactMatch) return { type: 'exact' as const, id: exactMatch.id, size: exactMatch.size };
+
+    const brandMatch = visibleInventory.find(item => {
+      const fixed = fixIbsImplant(item.manufacturer, item.brand);
+      return normalizeSurgery(fixed.brand) === draftBrandKey;
+    });
+    if (brandMatch) return { type: 'brand_only' as const };
+
+    return { type: 'no_match' as const };
+  }, [mode, visibleInventory, isDraftValid, draft.manufacturer, draft.brand, draft.size]);
 
   const getRecordIds = (): string[] => {
     const fromItem = (target.recordIds || []).filter(Boolean);
@@ -139,8 +176,23 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
         targetManufacturer: draftManufacturer,
         targetBrand: draftBrand,
         targetSize: draftSize,
+        ...(mode === 'brand_fix' ? { forceApply: true } : {}),
       });
       setManualFixCheckResult(result);
+      // brand_fix 모드: 재고 일치 항목이면 기초재고도 동일 건수만큼 증가 (사용량 증가분 상쇄)
+      if (
+        mode === 'brand_fix' &&
+        result.updated > 0 &&
+        inventoryMatchResult?.type === 'exact' &&
+        inventoryMatchResult.id &&
+        onAdjustBaseStock
+      ) {
+        try {
+          await onAdjustBaseStock(inventoryMatchResult.id, result.updated);
+        } catch (baseStockError) {
+          console.warn('[ManualFixModal] 기초재고 연동 조정 실패 (수술기록 수정은 완료됨):', baseStockError);
+        }
+      }
       if (result.failed === 0) {
         onResolved(target.rowKey);
       }
@@ -163,9 +215,13 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
     <ModalShell isOpen={true} onClose={handleClose} title="규격 오류 일괄 수정" titleId="manual-fix-modal-title" zIndex={230} maxWidth="max-w-3xl" className="rounded-2xl overflow-hidden max-h-[86vh] flex flex-col">
         <div className="px-6 py-4 bg-rose-600 text-white flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 id="manual-fix-modal-title" className="text-lg font-black">수기 입력 데이터 수정 적용</h3>
+            <h3 id="manual-fix-modal-title" className="text-lg font-black">
+              {mode === 'brand_fix' ? '수술기록 브랜드/규격 수정' : '수기 입력 데이터 수정 적용'}
+            </h3>
             <p className="text-rose-100 text-xs font-medium mt-1">
-              덴트웹 편집 완료 여부를 먼저 확인한 뒤, 필요 시 수술기록 DB에 표준 형식을 적용합니다.
+              {mode === 'brand_fix'
+                ? '제조사·브랜드·규격을 수정하면 수술기록 DB에 일괄 반영됩니다. 재고 등록은 별도로 진행하세요.'
+                : '덴트웹 편집 완료 여부를 먼저 확인한 뒤, 필요 시 수술기록 DB에 표준 형식을 적용합니다.'}
             </p>
           </div>
           <button
@@ -250,22 +306,56 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
             )}
           </div>
 
+          {inventoryMatchResult && (
+            <div className={`rounded-xl border px-3 py-2 flex items-center gap-2 ${
+              inventoryMatchResult.type === 'exact'
+                ? 'border-emerald-200 bg-emerald-50'
+                : inventoryMatchResult.type === 'brand_only'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-rose-200 bg-rose-50'
+            }`}>
+              <span className={`text-base leading-none ${
+                inventoryMatchResult.type === 'exact' ? 'text-emerald-600' :
+                inventoryMatchResult.type === 'brand_only' ? 'text-amber-600' : 'text-rose-600'
+              }`}>
+                {inventoryMatchResult.type === 'exact' ? '✓' : inventoryMatchResult.type === 'brand_only' ? '⚠' : '✗'}
+              </span>
+              <div>
+                <p className={`text-xs font-black ${
+                  inventoryMatchResult.type === 'exact' ? 'text-emerald-700' :
+                  inventoryMatchResult.type === 'brand_only' ? 'text-amber-700' : 'text-rose-700'
+                }`}>
+                  {inventoryMatchResult.type === 'exact'
+                    ? '재고 일치 — 수정 후 자동 해소'
+                    : inventoryMatchResult.type === 'brand_only'
+                    ? '브랜드 일치, 규격 불일치 — 수정 후 목록 등록 필요'
+                    : '재고에 없는 브랜드 — 수정 후 목록 등록 필요'}
+                </p>
+                {inventoryMatchResult.type === 'exact' && inventoryMatchResult.size && (
+                  <p className="text-[11px] font-semibold text-emerald-600 mt-0.5">재고 규격: {inventoryMatchResult.size}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-bold text-slate-500">
                 대상 레코드 {recordIds.length}건
               </p>
-              <button
-                onClick={handleVerify}
-                disabled={isVerifying || isApplying || !onResolveManualInput || !isDraftValid}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
-                  !isVerifying && !isApplying && onResolveManualInput && isDraftValid
-                    ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                }`}
-              >
-                {isVerifying ? '확인 중...' : '덴트웹 편집 후 확인'}
-              </button>
+              {mode === 'manual_input' && (
+                <button
+                  onClick={handleVerify}
+                  disabled={isVerifying || isApplying || !onResolveManualInput || !isDraftValid}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-colors ${
+                    !isVerifying && !isApplying && onResolveManualInput && isDraftValid
+                      ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isVerifying ? '확인 중...' : '덴트웹 편집 후 확인'}
+                </button>
+              )}
             </div>
             <div className="mt-2 space-y-1.5">
               {(target.samples || []).slice(0, 3).map((sample, idx) => (
@@ -329,7 +419,7 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
               !onResolveManualInput ||
               !isDraftValid ||
               recordIds.length === 0 ||
-              (manualFixCheckResult ? manualFixCheckResult.applicable === 0 : false)
+              (mode === 'manual_input' ? (manualFixCheckResult ? manualFixCheckResult.applicable === 0 : false) : false)
             }
             className={`px-4 py-2 rounded-xl text-sm font-black transition-colors ${
               !isApplying &&
@@ -337,12 +427,12 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, onResolveManual
               !!onResolveManualInput &&
               isDraftValid &&
               recordIds.length > 0 &&
-              !(manualFixCheckResult ? manualFixCheckResult.applicable === 0 : false)
+              !(mode === 'manual_input' ? (manualFixCheckResult ? manualFixCheckResult.applicable === 0 : false) : false)
                 ? 'bg-rose-600 text-white hover:bg-rose-700'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            {isApplying ? '적용 중...' : '확인 후 적용'}
+            {isApplying ? '적용 중...' : mode === 'brand_fix' ? '수술기록 수정 적용' : '확인 후 적용'}
           </button>
         </div>
   </ModalShell>

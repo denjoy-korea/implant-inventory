@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { Order, InventoryItem, ReturnRequest, ExcelRow } from '../types';
 import { getSizeMatchKey, isIbsImplantManufacturer } from '../services/sizeNormalizer';
 import { DONUT_COLORS } from '../components/surgery-dashboard/shared';
-import { isExchangePrefix } from '../services/appUtils';
+import { isExchangePrefix, isVirtualManufacturer } from '../services/appUtils';
 
 // ── Exported utilities (used in component JSX too) ──
 
@@ -55,7 +55,7 @@ export function useOrderManagerData({
 
   const lowStockItems = useMemo<LowStockEntry[]>(() => {
     return inventory
-      .filter(item => simpleNormalize(item.manufacturer) !== simpleNormalize('보험임플란트'))
+      .filter(item => !isVirtualManufacturer(item.manufacturer) && item.brand !== '보험임플란트')
       .map(item => {
         const rawDeficit = Math.max(0, item.recommendedStock - item.currentStock);
         if (rawDeficit <= 0) return null;

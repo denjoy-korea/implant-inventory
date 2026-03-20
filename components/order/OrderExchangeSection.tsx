@@ -29,7 +29,7 @@ export function OrderExchangeSection({
       <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4">
         <div className="flex items-center gap-2.5">
           <span className="flex h-2.5 w-2.5 rounded-full bg-violet-500 animate-pulse shrink-0" />
-          <h3 className="text-base font-black text-slate-800 tracking-tight">교환 권장 품목</h3>
+          <h3 className="text-base font-black text-slate-800 tracking-tight">반품 권장 품목</h3>
           <span className="text-xs font-black text-violet-500 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">{exchangeCandidates.totalActual}건 미처리</span>
         </div>
         <p className="hidden sm:block text-xs text-slate-400 mt-1.5 ml-5">수술 중 교환이 발생한 품목입니다. 제조사에 반품 처리를 진행하세요.</p>

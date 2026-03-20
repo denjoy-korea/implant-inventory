@@ -28,10 +28,8 @@ interface AuthSignupDentistScreenProps {
   passwordHints: React.ReactNode;
   signupSource: string;
   onSignupSourceChange: (value: string) => void;
-  isBetaInviteRequired: boolean;
   betaInviteVerified: boolean;
   betaInviteCode: string;
-  betaInviteEndDateText: string;
   onOpenBetaInviteModal: () => void;
   verifiedCodeType?: string | null;
   agreedToTerms: boolean;
@@ -71,10 +69,8 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
   passwordHints,
   signupSource,
   onSignupSourceChange,
-  isBetaInviteRequired,
   betaInviteVerified,
   betaInviteCode,
-  betaInviteEndDateText,
   onOpenBetaInviteModal,
   verifiedCodeType,
   agreedToTerms,
@@ -274,31 +270,11 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                 <option value="기타">기타</option>
               </select>
             </div>
-            {isBetaInviteRequired && (
-              <div className={`rounded-xl border px-3 py-2.5 ${betaInviteVerified ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <p className={`text-xs font-semibold leading-relaxed ${betaInviteVerified ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    사전 가입 기간으로 초대/제휴 코드 확인이 필요합니다.
-                    {!betaInviteVerified && ' 가입완료를 누르면 코드 확인 창이 열립니다.'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onOpenBetaInviteModal}
-                    className={`text-[11px] font-bold underline underline-offset-2 ${betaInviteVerified ? 'text-emerald-700 hover:text-emerald-800' : 'text-amber-700 hover:text-amber-800'}`}
-                  >
-                    {betaInviteVerified ? '코드 재확인' : '코드 입력'}
-                  </button>
-                </div>
-                <p className={`mt-1 text-[11px] ${betaInviteVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  {betaInviteVerified ? `확인 완료 코드: ${betaInviteCode}` : `코드 필수 기간: ${betaInviteEndDateText}까지`}
-                </p>
-              </div>
-            )}
-            {!isBetaInviteRequired && !betaInviteVerified && (
+            {!betaInviteVerified && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    제휴/프로모 코드가 있으신가요? <span className="text-slate-400">(선택)</span>
+                    제휴/프로모션 코드가 있으신가요? <span className="text-slate-400">(선택)</span>
                   </p>
                   <button
                     type="button"
@@ -319,7 +295,7 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                 <p className="mt-1 text-[11px] text-violet-600">가입 완료 시 제휴 쿠폰이 자동 발급되어 결제 시 할인이 적용됩니다.</p>
               </div>
             )}
-            {!isBetaInviteRequired && betaInviteVerified && verifiedCodeType !== 'partner' && (
+            {betaInviteVerified && verifiedCodeType !== 'partner' && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-emerald-700">코드 확인 완료: {betaInviteCode}</p>

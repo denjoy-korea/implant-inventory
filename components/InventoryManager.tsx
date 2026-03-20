@@ -39,6 +39,7 @@ interface InventoryManagerProps {
     targetBrand: string;
     targetSize: string;
     verifyOnly?: boolean;
+    forceApply?: boolean;
   }) => Promise<{
     checked: number;
     found: number;
@@ -51,6 +52,7 @@ interface InventoryManagerProps {
     appliedBrand: string;
     appliedSize: string;
   }>;
+  onAdjustBaseStock?: (inventoryId: string, delta: number) => Promise<void>;
   initialShowBaseStockEdit?: boolean;
   onBaseStockEditApplied?: () => void;
 }
@@ -74,6 +76,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   unregisteredFromSurgery = [],
   onRefreshLatestSurgeryUsage,
   onResolveManualInput,
+  onAdjustBaseStock,
   initialShowBaseStockEdit,
   onBaseStockEditApplied,
 }) => {
@@ -532,6 +535,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
           isReadOnly={isReadOnly}
           onAddInventoryItem={onAddInventoryItem}
           onResolveManualInput={onResolveManualInput}
+          onAdjustBaseStock={onAdjustBaseStock}
           onClose={() => setShowUnregisteredDetailModal(false)}
           initialViewMode={preferredUnregisteredViewMode}
         />

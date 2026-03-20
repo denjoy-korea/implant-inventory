@@ -14,6 +14,7 @@ export type AdminTab =
   | 'plan_change_requests'
   | 'traffic'
   | 'content'
+  | 'lectures'
   | 'consultations'
   | 'integrations'
   | 'billing';
@@ -34,6 +35,7 @@ const ADMIN_TAB_TITLES: Record<AdminTab, string> = {
   analysis_leads: '분석 리드 관리',
   traffic: '방문자 트래픽',
   content: '콘텐츠 관리',
+  lectures: '강의 관리',
   consultations: '상담 관리',
   integrations: '연동 설정',
   billing: '결제 내역',

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { MonthlyDatum, TrendlineData, smoothLine, smoothArea, CHART_FOCUS_CLASS } from './shared';
 
 type SeriesKey = '식립' | '청구' | '수술중교환';
@@ -21,14 +21,22 @@ interface Props {
 export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick, selectedMonth }: Props) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [activeKey, setActiveKey] = useState<SeriesKey>('식립');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [monthlyData.length]);
   const activeOption = SERIES_OPTIONS.find(s => s.key === activeKey)!;
   const color = activeOption.color;
 
-  const W = 700, H = 260;
+  const H = 260;
   const pad = { l: 48, r: 20, t: 25, b: 55 };
+  const count = monthlyData.length;
+  const W = Math.max(700, count * 55 + pad.l + pad.r);
   const plotW = W - pad.l - pad.r;
   const plotH = H - pad.t - pad.b;
-  const count = monthlyData.length;
   const maxVal = Math.max(1, ...monthlyData.map(d => d[activeKey]));
   const niceMax = Math.ceil(maxVal / 5) * 5;
 
@@ -94,9 +102,9 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
           ))}
         </div>
       </div>
-      <div className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
-        <svg viewBox={`0 0 ${W} ${H}`} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
-          style={{ minWidth: Math.max(400, count * 55) }}
+      <div ref={scrollRef} className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
+          style={{ minWidth: W }}
           role="img" aria-label={`월별 ${activeOption.label} 건수 추세 라인 차트`}
           tabIndex={0} onKeyDown={handleKeyDown}
           onPointerLeave={() => setHoveredIdx(null)}

@@ -52,9 +52,10 @@ const InventoryUsageChart: React.FC<InventoryUsageChartProps> = ({
           <div className="hidden lg:flex items-center gap-3 mb-2 pb-2 border-b border-slate-50">
             <span className="w-5 shrink-0" />
             <div className="w-[100px] shrink-0" />
-            <div className="flex-1 max-w-[160px] sm:max-w-[280px]" />
-            <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0">
+            <div className="flex-1 max-w-[100px] sm:max-w-[160px]" />
+            <div className="w-[200px] sm:w-[320px] shrink-0 grid grid-cols-5 gap-0">
               <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">월평균</p>
+              <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">일최대</p>
               <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-wide">지난달</p>
               <div className="text-center">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">현재재고</p>
@@ -91,16 +92,19 @@ const InventoryUsageChart: React.FC<InventoryUsageChartProps> = ({
                     <p className="text-[11px] font-black text-slate-700 truncate leading-snug">{item.size}</p>
                   </div>
                   {/* 바 */}
-                  <div className="flex-1 max-w-[160px] sm:max-w-[280px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
+                  <div className="flex-1 max-w-[100px] sm:max-w-[160px] h-1.5 bg-slate-50 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ease-out ${isTop ? 'bg-gradient-to-r from-indigo-500 to-violet-400' : 'bg-indigo-200 group-hover:bg-indigo-400'}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
                   {/* 수치 그리드 */}
-                  <div className="w-[160px] sm:w-[280px] shrink-0 grid grid-cols-4 gap-0 items-center">
+                  <div className="w-[200px] sm:w-[320px] shrink-0 grid grid-cols-5 gap-0 items-center">
                     <p className={`text-xs font-semibold tabular-nums text-center ${isTop ? 'text-indigo-500' : 'text-slate-500'}`}>
                       {avg.toFixed(1)}
+                    </p>
+                    <p className={`text-xs font-semibold tabular-nums text-center ${(item.dailyMaxUsage ?? 0) > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
+                      {(item.dailyMaxUsage ?? 0) > 0 ? item.dailyMaxUsage : '-'}
                     </p>
                     <div className="flex items-center justify-center gap-0.5">
                       <p className={`text-xs font-semibold tabular-nums ${last > 0 ? 'text-slate-700' : 'text-slate-300'}`}>

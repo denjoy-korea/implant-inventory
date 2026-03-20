@@ -17,6 +17,7 @@ import SystemAdminPlanChangeTab from './system-admin/tabs/SystemAdminPlanChangeT
 import SystemAdminAnalysisLeadsTab from './system-admin/tabs/SystemAdminAnalysisLeadsTab';
 import SystemAdminTrafficTab from './system-admin/tabs/SystemAdminTrafficTab';
 import SystemAdminContentTab from './system-admin/tabs/SystemAdminContentTab';
+import SystemAdminLecturesTab from './system-admin/tabs/SystemAdminLecturesTab';
 import SystemAdminConsultationTab from './system-admin/tabs/SystemAdminConsultationTab';
 import SystemAdminIntegrationsTab from './system-admin/tabs/SystemAdminIntegrationsTab';
 import SystemAdminBillingTab from './system-admin/tabs/SystemAdminBillingTab';
@@ -413,6 +414,9 @@ const SystemAdminDashboard: React.FC<SystemAdminDashboardProps> = ({ onLogout, o
 
                                 {activeTab === 'content' && (
                                     <SystemAdminContentTab />
+                                )}
+                                {activeTab === 'lectures' && (
+                                    <SystemAdminLecturesTab />
                                 )}
 
                                 {activeTab === 'consultations' && (
