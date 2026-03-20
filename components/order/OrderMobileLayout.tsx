@@ -610,6 +610,7 @@ export function OrderMobileLayout({
         })()}
 
         <FeatureGate feature="return_management" plan={plan ?? 'free'}>
+          <div className="hidden">
           <OrderReturnSection
             returnCandidates={returnCandidates}
             bulkReturnItems={bulkReturnItems}
@@ -619,6 +620,7 @@ export function OrderMobileLayout({
             setShowBulkReturnConfirm={setShowBulkReturnConfirm}
             setShowOptimizeModal={setShowOptimizeModal}
           />
+          </div>
         </FeatureGate>
 
         </>)}
