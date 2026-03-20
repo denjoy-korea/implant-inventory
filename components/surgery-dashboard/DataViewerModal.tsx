@@ -46,7 +46,8 @@ const DataViewerModal: React.FC<{
   unregisteredIds?: Set<string>;
   hospitalId?: string;
   onClose: () => void;
-}> = ({ rows, initialDayFilter, unregisteredIds, onClose }) => {
+  onRowsDeleted?: (deletedIds: string[]) => void;
+}> = ({ rows, initialDayFilter, unregisteredIds, onClose, onRowsDeleted }) => {
   const [search, setSearch] = useState('');
   const [filterCol, setFilterCol] = useState<string>('전체');
   const [filterCls, setFilterCls] = useState<string | null>(null);
@@ -73,6 +74,12 @@ const DataViewerModal: React.FC<{
   const [isSaving, setIsSaving] = useState(false);
   const [rowOverrides, setRowOverrides] = useState<Map<string, Partial<ExcelRow>>>(new Map());
   const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // 선택 삭제
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [localDeletedIds, setLocalDeletedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const saveColSettings = () => {
     localStorage.setItem(COL_SETTINGS_KEY, JSON.stringify({ visible: [...visibleCols], order: colOrder }));
@@ -111,7 +118,7 @@ const DataViewerModal: React.FC<{
   const displayCols = colOrder.filter(c => visibleCols.has(c));
 
   const filtered = useMemo(() => {
-    let result = rows;
+    let result = rows.filter(r => !localDeletedIds.has(String(r._id || '')));
     if (filterUnregistered && unregisteredIds && unregisteredIds.size > 0) {
       result = result.filter(row => unregisteredIds.has(String(row._id || '')));
     }
@@ -138,27 +145,77 @@ const DataViewerModal: React.FC<{
       });
     }
     return result;
-  }, [rows, search, filterCol, filterCls, dayFilter, sortCol, sortDir, filterUnregistered, unregisteredIds]);
+  }, [rows, search, filterCol, filterCls, dayFilter, sortCol, sortDir, filterUnregistered, unregisteredIds, localDeletedIds]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   useEffect(() => { setPage(0); }, [search, filterCol, filterCls, dayFilter, sortCol, sortDir, filterUnregistered]);
 
+  // 선택 관련 계산
+  const filteredSelectableIds = useMemo(
+    () => filtered.map(r => String(r._id || '')).filter(id => id),
+    [filtered]
+  );
+  const allFilteredSelected = filteredSelectableIds.length > 0 && filteredSelectableIds.every(id => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredSelectableIds));
+    }
+  };
+
+  const toggleSelectRow = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!id) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeleting(true);
+    const idsToDelete = [...selectedIds];
+    try {
+      const { error } = await supabase
+        .from('surgery_records')
+        .delete()
+        .in('id', idsToDelete);
+      if (error) throw error;
+      setLocalDeletedIds(prev => new Set([...prev, ...idsToDelete]));
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+      onRowsDeleted?.(idsToDelete);
+    } catch (e) {
+      console.error('[DataViewer] 삭제 실패:', e);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const summary = useMemo(() => {
     const noUsageTypes = new Set(['청구', '골이식만']);
     const counts = new Map<string, { rows: number; qty: number }>();
     rows.forEach(row => {
+      if (localDeletedIds.has(String(row._id || ''))) return;
       const cls = String(row['구분'] || '기타');
       const qty = noUsageTypes.has(cls) ? 0 : (Number(row['갯수']) || 0);
       const prev = counts.get(cls) || { rows: 0, qty: 0 };
       counts.set(cls, { rows: prev.rows + 1, qty: prev.qty + qty });
     });
     return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b, 'ko'));
-  }, [rows]);
+  }, [rows, localDeletedIds]);
 
   // 행 클릭 → 편집 패널 열기
   const handleRowClick = (row: ExcelRow) => {
+    if (someSelected) return; // 선택 모드 중에는 편집 패널 열지 않음
     const id = String(row._id || '');
     if (!id) return;
     if (!unregisteredIds?.has(id)) return; // 미등록 행만 편집 가능
@@ -226,9 +283,29 @@ const DataViewerModal: React.FC<{
                 </span>
               )}
             </div>
-            <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{filtered.length}건의 레코드 (총 {rows.length}건)</p>
+            <p id="surgery-data-viewer-desc" className="text-xs text-slate-400 mt-0.5">{filtered.length}건의 레코드 (총 {rows.length - localDeletedIds.size}건)</p>
           </div>
           <div className="flex items-center gap-2">
+            {someSelected && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black bg-rose-500 text-white shadow-md shadow-rose-200 hover:bg-rose-600 active:scale-95 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                선택 삭제
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-white/25">
+                  {selectedIds.size}건
+                </span>
+              </button>
+            )}
+            {someSelected && (
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="px-3 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
+              >
+                선택 해제
+              </button>
+            )}
             {unregisteredIds && unregisteredIds.size > 0 && (
               <button
                 onClick={() => setFilterUnregistered(p => !p)}
@@ -322,6 +399,16 @@ const DataViewerModal: React.FC<{
           <table className="w-full text-left border-collapse table-fixed">
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr>
+                {/* 체크박스 컬럼 */}
+                <th className="w-[3%] px-2 py-2.5 text-center border-b border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="전체 선택"
+                    className="w-3.5 h-3.5 rounded cursor-pointer accent-rose-500"
+                  />
+                </th>
                 <th className="w-[3%] px-2 py-2.5 text-[10px] font-bold text-slate-400 text-center border-b border-slate-200">#</th>
                 {displayCols.map(col => (
                   <th key={col} onClick={() => handleSort(col)} className={`${COL_WIDTH_CLASS[col] ?? ''} px-2 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-100 hover:text-slate-600 transition-colors select-none`}>
@@ -343,12 +430,25 @@ const DataViewerModal: React.FC<{
                 const isUnregistered = unregisteredIds?.has(rowId);
                 const isEdited = rowOverrides.has(rowId);
                 const isSelected = editingRowId === rowId;
+                const isChecked = selectedIds.has(rowId);
                 return (
                   <tr
                     key={i}
                     onClick={() => handleRowClick(rawRow)}
-                    className={`transition-colors ${isUnregistered ? 'cursor-pointer' : 'cursor-default'} ${isSelected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : isUnregistered ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-indigo-50/30'}`}
+                    className={`transition-colors ${isUnregistered && !someSelected ? 'cursor-pointer' : 'cursor-default'} ${isChecked ? 'bg-rose-50 ring-1 ring-inset ring-rose-200' : isSelected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : isUnregistered ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-indigo-50/30'}`}
                   >
+                    {/* 체크박스 셀 */}
+                    <td className="px-2 py-2 text-center" onClick={e => toggleSelectRow(rowId, e)}>
+                      {rowId && (
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          aria-label={`행 ${page * PAGE_SIZE + i + 1} 선택`}
+                          className="w-3.5 h-3.5 rounded cursor-pointer accent-rose-500"
+                        />
+                      )}
+                    </td>
                     <td className="px-2 py-2 text-[10px] text-slate-300 text-center tabular-nums">
                       {isEdited && <span className="text-indigo-400">✓</span>}
                       {!isEdited && page * PAGE_SIZE + i + 1}
@@ -460,6 +560,30 @@ const DataViewerModal: React.FC<{
               <div className="px-6 pb-6 flex gap-3">
                 <button onClick={() => setShowSaveConfirm(false)} className="flex-1 py-2.5 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">취소</button>
                 <button onClick={saveColSettings} className="flex-1 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl shadow-lg shadow-indigo-100 transition-all">저장</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirm Modal */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-[24px]" onClick={() => !isDeleting && setShowDeleteConfirm(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-desc">
+              <div className="p-6 flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </div>
+                <h4 id="delete-confirm-title" className="text-base font-black text-slate-900 mb-1">선택 레코드 삭제</h4>
+                <p id="delete-confirm-desc" className="text-sm text-slate-500">
+                  선택한 <span className="font-black text-rose-600">{selectedIds.size}건</span>의 수술기록을 삭제합니다.<br />
+                  <span className="text-xs text-slate-400">이 작업은 되돌릴 수 없습니다.</span>
+                </p>
+              </div>
+              <div className="px-6 pb-6 flex gap-3">
+                <button onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting} className="flex-1 py-2.5 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all disabled:opacity-50">취소</button>
+                <button onClick={handleDeleteSelected} disabled={isDeleting} className="flex-1 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 active:scale-95 rounded-xl shadow-lg shadow-rose-100 transition-all disabled:opacity-50">
+                  {isDeleting ? '삭제 중...' : '삭제'}
+                </button>
               </div>
             </div>
           </div>

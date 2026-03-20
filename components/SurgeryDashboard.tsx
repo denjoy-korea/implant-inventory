@@ -762,7 +762,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
       <FloatingTOC hasClinical={clinicalStats.hasClinicalData} />
 
       {/* Data Viewer Modal */}
-      {showDataViewer && <DataViewerModal rows={filteredRows} initialDayFilter={dataViewerDayFilter} unregisteredIds={unregisteredIdSet} onClose={() => { setShowDataViewer(false); setDataViewerDayFilter(null); }} />}
+      {showDataViewer && <DataViewerModal rows={filteredRows} initialDayFilter={dataViewerDayFilter} unregisteredIds={unregisteredIdSet} onClose={() => { setShowDataViewer(false); setDataViewerDayFilter(null); }} onRowsDeleted={() => onUpload()} />}
 
       {/* Monthly Report Modal */}
       {showMonthlyReport && <MonthlyReportModal rows={rows} onClose={() => setShowMonthlyReport(false)} hospitalId={hospitalId} />}
