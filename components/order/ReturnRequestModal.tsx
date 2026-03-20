@@ -98,7 +98,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
       title="반품 신청"
       titleId="return-request-modal-title"
       closeable={!isLoading}
-      backdropClassName="flex items-end sm:items-center sm:justify-center"
+      backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0"
       className="rounded-t-2xl sm:rounded-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col sm:max-w-lg sm:mx-auto sm:my-8"
       maxWidth="w-full"
     >
@@ -111,7 +111,7 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
           <h2 id="return-request-modal-title" className="text-base font-bold text-gray-900">반품 신청</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
+            className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -254,17 +254,18 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0"
+             style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
           >
             취소
           </button>
           <button
             onClick={handleSubmit}
             disabled={!isValid || isLoading}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? '처리 중...' : '반품 신청'}
           </button>

@@ -212,7 +212,11 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, mode = 'manual_
   const recordIds = getRecordIds();
 
   return (
-    <ModalShell isOpen={true} onClose={handleClose} title="규격 오류 일괄 수정" titleId="manual-fix-modal-title" zIndex={230} maxWidth="max-w-3xl" className="rounded-2xl overflow-hidden max-h-[86vh] flex flex-col">
+    <ModalShell isOpen={true} onClose={handleClose} title="규격 오류 일괄 수정" titleId="manual-fix-modal-title" zIndex={230} maxWidth="w-full max-w-3xl" backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0" className="rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[92dvh] sm:max-h-[86vh] flex flex-col">
+        {/* Drag indicator (mobile only) */}
+        <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 bg-rose-200 rounded-full" />
+        </div>
         <div className="px-6 py-4 bg-rose-600 text-white flex items-start justify-between gap-4 shrink-0">
           <div>
             <h3 id="manual-fix-modal-title" className="text-lg font-black">
@@ -228,7 +232,7 @@ const ManualFixModal: React.FC<ManualFixModalProps> = ({ target, mode = 'manual_
             onClick={handleClose}
             disabled={isApplying || isVerifying}
             aria-label="닫기"
-            className={`p-2 rounded-full transition-colors ${
+            className={`p-3 rounded-full transition-colors ${
               isApplying || isVerifying
                 ? 'opacity-50 cursor-not-allowed'
                 : 'hover:bg-white/15'

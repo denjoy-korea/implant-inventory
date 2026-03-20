@@ -57,6 +57,10 @@ export function ReturnCompleteModal({ group, isLoading, onConfirm, onClose }: Pr
     >
       {group && (
         <>
+          {/* Drag indicator (mobile only) */}
+          <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div className="w-10 h-1 bg-slate-200 rounded-full" />
+          </div>
           {/* 헤더 */}
           <div className="px-5 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
@@ -122,18 +126,19 @@ export function ReturnCompleteModal({ group, isLoading, onConfirm, onClose }: Pr
           </div>
 
           {/* 액션 버튼 */}
-          <div className="px-5 py-4 border-t border-slate-100 flex gap-2">
+          <div className="px-5 py-4 border-t border-slate-100 flex gap-2"
+               style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
             <button
               onClick={onClose}
               disabled={isLoading}
-              className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
             >
               취소
             </button>
             <button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="flex-[2] py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm flex items-center justify-center gap-2"
+              className="flex-[2] py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>

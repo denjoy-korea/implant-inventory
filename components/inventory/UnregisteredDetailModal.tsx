@@ -514,7 +514,11 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
 
   return (
     <>
-      <ModalShell isOpen={true} onClose={onClose} title="수술기록 미등록 품목 상세" titleId="unregistered-detail-title" zIndex={200} maxWidth="max-w-4xl" className="max-h-[82vh] flex flex-col">
+      <ModalShell isOpen={true} onClose={onClose} title="수술기록 미등록 품목 상세" titleId="unregistered-detail-title" zIndex={200} maxWidth="w-full max-w-4xl" backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0" className="rounded-t-2xl sm:rounded-2xl max-h-[92dvh] sm:max-h-[82vh] flex flex-col">
+          {/* Drag indicator (mobile only) */}
+          <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div className="w-10 h-1 bg-amber-200 rounded-full" />
+          </div>
           <div className="px-6 py-5 bg-amber-500 text-white flex items-start justify-between gap-4 shrink-0">
             <div>
               <h3 id="unregistered-detail-title" className="text-lg font-black flex items-center gap-2">
@@ -540,7 +544,7 @@ const UnregisteredDetailModal: React.FC<UnregisteredDetailModalProps> = ({
               onClick={handleClose}
               disabled={isBulkRegistering}
               aria-label="닫기"
-              className={`p-2 rounded-full transition-colors ${isBulkRegistering ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/15'}`}
+              className={`p-3 rounded-full transition-colors ${isBulkRegistering ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/15'}`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />

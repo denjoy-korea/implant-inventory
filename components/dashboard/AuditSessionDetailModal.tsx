@@ -85,7 +85,7 @@ const AuditSessionDetailModal: React.FC<AuditSessionDetailModalProps> = ({
             )}
           </div>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-400 transition-colors">
+        <button onClick={onClose} className="p-3 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-400 transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>

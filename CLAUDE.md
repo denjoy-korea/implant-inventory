@@ -57,6 +57,19 @@ npx supabase functions deploy xlsx-generate --no-verify-jwt
 - 플래그 누락 시 Supabase 게이트웨이가 모든 요청을 401 차단 (함수 코드가 실행되지 않음)
 - 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`, `holiday-proxy`, `dentweb-automation`, `dentweb-upload`, `toss-payment-confirm`, `toss-payment-refund`, `notify-hospital-slack`
 
+### 모달 헤더 컬러 코딩 규칙
+모달의 기능 유형에 따라 헤더 액센트 컬러를 일관되게 사용합니다:
+
+| 컬러 | Tailwind 클래스 | 적용 맥락 | 예시 |
+|------|----------------|----------|------|
+| Amber (경고/미등록) | `bg-amber-50`, `text-amber-700`, `border-amber-100` | 미등록 항목, 주의가 필요한 데이터 | UnregisteredDetailModal |
+| Rose (오류/수정) | `bg-rose-50`, `text-rose-700`, `border-rose-100` | 오류 수정, 수동 수정, 삭제/반품 | ManualFixModal, FailReturnModal |
+| Indigo (기본/실사) | `bg-indigo-50`, `text-indigo-700`, `border-indigo-100` | 기본 조회, 실사 관련 | AuditHistoryModal, BaseStockModal |
+| Teal (반품 후보) | `bg-teal-50`, `text-teal-700`, `border-teal-100` | 반품 후보 선택 | ReturnCandidateModal |
+| Slate (중립) | `bg-slate-50`, `text-slate-700`, `border-slate-200` | 중립적 정보 조회 | 기타 정보성 모달 |
+
+- 드래그 인디케이터(모바일 bottom-sheet) 색상도 헤더 컬러와 맞춤: `bg-amber-200`, `bg-rose-200`, `bg-slate-200` 등
+
 ## 도메인 맥락
 - 치과 임플란트 재고 관리 SaaS (DenJOY / DentWeb)
 - 병원(hospital) 단위로 데이터 격리

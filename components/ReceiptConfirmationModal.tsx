@@ -323,7 +323,7 @@ export function ReceiptConfirmationModal({
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                            className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
@@ -502,7 +502,8 @@ export function ReceiptConfirmationModal({
                     </div>
 
                     {/* Footer */}
-                    <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                    <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0"
+                         style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 0px))' }}>
                         <button
                             onClick={() => setPhase('orders')}
                             disabled={isLoading}
@@ -556,7 +557,7 @@ export function ReceiptConfirmationModal({
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                        className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
@@ -794,7 +795,8 @@ export function ReceiptConfirmationModal({
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0"
+                     style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
                     <button
                         onClick={onClose}
                         disabled={isLoading}

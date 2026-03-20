@@ -31,9 +31,14 @@ const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
       title="실사 이력 조회"
       titleId="audit-history-title"
       describedBy="audit-history-desc"
-      maxWidth="max-w-3xl"
-      className="max-h-[88vh] flex flex-col"
+      maxWidth="w-full max-w-3xl"
+      backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0"
+      className="rounded-t-2xl sm:rounded-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col"
     >
+      {/* Drag indicator (mobile only) */}
+      <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+        <div className="w-10 h-1 bg-slate-200 rounded-full" />
+      </div>
       {/* 헤더 */}
       <div className="px-5 sm:px-7 pt-6 pb-4 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
         <div>
@@ -43,7 +48,7 @@ const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
         <button
           onClick={onClose}
           aria-label="닫기"
-          className="p-2 border-2 border-slate-200 hover:border-slate-400 rounded-full transition-colors text-slate-400 hover:text-slate-700"
+          className="p-3 border-2 border-slate-200 hover:border-slate-400 rounded-full transition-colors text-slate-400 hover:text-slate-700"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
@@ -116,11 +121,11 @@ const AuditHistoryModal: React.FC<AuditHistoryModalProps> = ({
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-slate-200">
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">브랜드</th>
-                              <th className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">규격</th>
-                              <th className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center whitespace-nowrap">시스템</th>
-                              <th className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center whitespace-nowrap">실제</th>
-                              <th className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center whitespace-nowrap">오차</th>
+                              <th className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">브랜드</th>
+                              <th className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">규격</th>
+                              <th className="px-2 py-2 text-xs font-bold text-slate-400 text-center whitespace-nowrap">시스템</th>
+                              <th className="px-2 py-2 text-xs font-bold text-slate-400 text-center whitespace-nowrap">실제</th>
+                              <th className="px-2 py-2 text-xs font-bold text-slate-400 text-center whitespace-nowrap">오차</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">

@@ -102,6 +102,9 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
           ))}
         </div>
       </div>
+      <div className="relative">
+        {/* 모바일 우측 스크롤 힌트 fade */}
+        <div className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white to-transparent z-10 rounded-r-lg" />
       <div ref={scrollRef} className="chart-dot-grid rounded-lg overflow-x-auto overflow-y-visible">
         <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={`${CHART_FOCUS_CLASS} overflow-visible touch-manipulation`}
           style={{ minWidth: W }}
@@ -238,6 +241,7 @@ export default function PlacementTrendChart({ monthlyData, mounted, onMonthClick
             );
           })()}
         </svg>
+      </div>
       </div>
     </div>
   );

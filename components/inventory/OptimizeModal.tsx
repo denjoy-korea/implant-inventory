@@ -263,7 +263,7 @@ const OptimizeModal: React.FC<OptimizeModalProps> = ({ deadStockItems, onDeleteI
               <h3 id="optimize-modal-title" className="text-lg font-bold text-slate-900">품목 최적화</h3>
               <p className="text-xs text-slate-500 mt-0.5">장기 미사용 품목을 정리하여 재고 마스터를 슬림하게 유지하세요.</p>
             </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+            <button onClick={onClose} className="p-3 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>

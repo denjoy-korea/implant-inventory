@@ -167,7 +167,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
       title="기초재고 실사 입력"
       titleId="base-stock-modal-title"
       closeable={!isSaving}
-      backdropClassName="flex items-end sm:items-center justify-center sm:p-4"
+      backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0"
       className="rounded-t-3xl sm:rounded-2xl flex flex-col h-[100dvh] sm:h-[84vh]"
       maxWidth="w-full max-w-6xl"
       zIndex={220}
@@ -221,8 +221,8 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           {!isUnlimited && maxEdits > 0 && (
             <div className="mt-2">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-amber-600">사용 횟수</span>
-                <span className="text-[10px] font-bold text-amber-700">{editCount} / {maxEdits}회</span>
+                <span className="text-[11px] text-amber-600">사용 횟수</span>
+                <span className="text-[11px] font-bold text-amber-700">{editCount} / {maxEdits}회</span>
               </div>
               <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
                 <div
@@ -268,8 +268,8 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
           {/* 진행 프로그레스바 */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold text-slate-400">입력 진행</span>
-              <span className="text-[10px] font-black text-slate-600 tabular-nums">
+              <span className="text-[11px] font-bold text-slate-400">입력 진행</span>
+              <span className="text-[11px] font-black text-slate-600 tabular-nums">
                 {mobileProgress} / {filteredRows.length}
               </span>
             </div>
@@ -286,7 +286,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
         <div className="hidden sm:block px-6 py-2.5 border-b border-slate-100 bg-white shrink-0 space-y-2">
           {/* 제조사 필터 */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-            <span className="text-[10px] font-bold text-slate-400 shrink-0 mr-0.5">제조사</span>
+            <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-0.5">제조사</span>
             <button
               onClick={() => setManufacturerFilter(null)}
               className={`shrink-0 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
@@ -294,7 +294,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               }`}
             >
               전체
-              <span className={`ml-1 text-[10px] px-1 py-0.5 rounded-full ${manufacturerFilter === null ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+              <span className={`ml-1 text-[11px] px-1 py-0.5 rounded-full ${manufacturerFilter === null ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
                 {visibleInventory.length}
               </span>
             </button>
@@ -308,7 +308,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
                   className={`shrink-0 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${active ? 'bg-slate-800 text-white' : 'text-slate-500 bg-slate-100'}`}
                 >
                   {mfr}
-                  <span className={`ml-1 text-[10px] px-1 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+                  <span className={`ml-1 text-[11px] px-1 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
                     {count}
                   </span>
                 </button>
@@ -318,7 +318,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
 
           {/* 브랜드 필터 */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-            <span className="text-[10px] font-bold text-slate-400 shrink-0 mr-0.5">브랜드</span>
+            <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-0.5">브랜드</span>
             <button
               onClick={() => setBrandFilter(null)}
               className={`shrink-0 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
@@ -326,7 +326,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               }`}
             >
               전체
-              <span className={`ml-1 text-[10px] px-1 py-0.5 rounded-full ${brandFilter === null ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+              <span className={`ml-1 text-[11px] px-1 py-0.5 rounded-full ${brandFilter === null ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
                 {filteredRows.length}
               </span>
             </button>
@@ -343,13 +343,13 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
                   className={`shrink-0 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${active ? 'bg-indigo-600 text-white' : 'text-slate-500 bg-slate-100'}`}
                 >
                   {brand}
-                  <span className={`ml-1 text-[10px] px-1 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+                  <span className={`ml-1 text-[11px] px-1 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
                     {count}
                   </span>
                 </button>
               );
             })}
-            <span className="ml-auto shrink-0 text-[10px] text-slate-400 font-medium">{filteredRows.length}개</span>
+            <span className="ml-auto shrink-0 text-[11px] text-slate-400 font-medium">{filteredRows.length}개</span>
           </div>
         </div>
 
@@ -369,7 +369,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
                     <div key={item.id} className="px-4 py-4 border-b border-slate-100 last:border-0">
                       {/* 품목 정보 - 크게 */}
                       <div className="mb-4">
-                        <p className="text-[10px] font-bold text-slate-400 mb-0.5 tabular-nums">{idx + 1}</p>
+                        <p className="text-[11px] font-bold text-slate-400 mb-0.5 tabular-nums">{idx + 1}</p>
                         <p className="text-xs font-bold text-slate-400 mb-1">{item.manufacturer}</p>
                         <p className="text-2xl font-black text-slate-900 leading-tight">{item.brand}</p>
                         <p className="text-lg font-bold text-slate-500 mt-0.5">{item.size}</p>
@@ -424,13 +424,13 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
               <table className="hidden sm:table w-full text-left border-collapse">
                 <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[64px] text-center">No</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">제조사</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">브랜드</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">규격</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-rose-500 uppercase tracking-wider text-center">최신 사용량</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-indigo-500 uppercase tracking-wider text-center">현재재고(실사)</th>
-                    <th className="px-4 py-3 text-[10px] font-bold text-emerald-600 uppercase tracking-wider text-center">반영 기초재고</th>
+                    <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider w-[64px] text-center">No</th>
+                    <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">제조사</th>
+                    <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">브랜드</th>
+                    <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">규격</th>
+                    <th className="px-4 py-3 text-xs font-bold text-rose-500 uppercase tracking-wider text-center">최신 사용량</th>
+                    <th className="px-4 py-3 text-xs font-bold text-indigo-500 uppercase tracking-wider text-center">현재재고(실사)</th>
+                    <th className="px-4 py-3 text-xs font-bold text-emerald-600 uppercase tracking-wider text-center">반영 기초재고</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -471,7 +471,7 @@ const BaseStockModal: React.FC<BaseStockModalProps> = ({
         </div>
 
         {/* ── 푸터 ── */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 bg-slate-50 shrink-0">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 bg-slate-50 shrink-0" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>
           {/* 모바일: 세로 레이아웃 */}
           <div className="sm:hidden space-y-2">
             {changedCount > 0 && (

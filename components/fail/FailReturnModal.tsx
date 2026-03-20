@@ -53,7 +53,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
         <button
           onClick={onClose}
           aria-label="반품 처리 모달 닫기"
-          className="mt-1 h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+          className="mt-1 h-11 w-11 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -70,17 +70,17 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
           {/* 왼쪽: 수술중 교환 반품 */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
             <div className="mb-4">
-              <span className="inline-block text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 mb-2">수술중 교환</span>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">반품 가능 잔량</p>
+              <span className="inline-block text-[11px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 mb-2">수술중 교환</span>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">반품 가능 잔량</p>
               <p className="text-2xl font-black text-slate-800 tabular-nums leading-tight">
                 {currentRemainingFails}<span className="text-sm font-bold text-slate-400 ml-1">건</span>
               </p>
               {returnPendingCount > 0 && (
-                <p className="text-[9px] font-bold text-amber-500 mt-0.5">대기중 {returnPendingCount}건</p>
+                <p className="text-[11px] font-bold text-amber-500 mt-0.5">대기중 {returnPendingCount}건</p>
               )}
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">반품 처리 수량</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">반품 처리 수량</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -117,19 +117,19 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
                   </svg>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 font-bold text-right mt-1.5">최대 {currentRemainingFails}건</p>
+              <p className="text-[11px] text-slate-400 font-bold text-right mt-1.5">최대 {currentRemainingFails}건</p>
             </div>
           </div>
 
           {/* 오른쪽: 수술후 FAIL 반품 */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
             <div className="mb-4">
-              <span className="inline-block text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-100 rounded-full px-2 py-0.5 mb-2">수술후 FAIL</span>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">반품 유형</p>
+              <span className="inline-block text-[11px] font-black text-rose-600 bg-rose-50 border border-rose-100 rounded-full px-2 py-0.5 mb-2">수술후 FAIL</span>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">반품 유형</p>
               <p className="text-sm font-black text-slate-700 leading-tight mt-0.5">불량 반품</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">반품 처리 수량</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">반품 처리 수량</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -161,7 +161,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
                   </svg>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-300 font-bold text-right mt-1.5">제한 없음</p>
+              <p className="text-[11px] text-slate-300 font-bold text-right mt-1.5">제한 없음</p>
             </div>
           </div>
         </div>
@@ -169,7 +169,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
         {/* 날짜 + 담당자 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100">
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품신청일자</label>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품신청일자</label>
             <input
               type="text"
               value={new Date().toLocaleDateString('ko-KR')}
@@ -178,7 +178,7 @@ const FailReturnModal: React.FC<FailReturnModalProps> = ({
             />
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품 담당자</label>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">반품 담당자</label>
             <div className="w-full bg-slate-100 border border-slate-200 p-3 rounded-xl font-black text-slate-500 shadow-sm cursor-not-allowed">
               {currentUserName}
             </div>

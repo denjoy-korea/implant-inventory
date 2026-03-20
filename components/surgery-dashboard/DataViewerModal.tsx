@@ -318,7 +318,7 @@ const DataViewerModal: React.FC<{
                 </span>
               </button>
             )}
-            <button onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
+            <button onClick={onClose} aria-label="데이터 조회 모달 닫기" className="p-3 hover:bg-slate-200 rounded-xl transition-colors">
               <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>

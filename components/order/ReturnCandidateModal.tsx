@@ -254,8 +254,12 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
     }
 
     return (
-        <ModalShell isOpen={true} onClose={onClose} title="권장량 초과 품목" titleId="return-candidate-title" zIndex={110} backdropClassName="flex items-end sm:items-center justify-center sm:p-4" maxWidth="w-full sm:max-w-3xl" className="rounded-t-3xl sm:rounded-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+        <ModalShell isOpen={true} onClose={onClose} title="권장량 초과 품목" titleId="return-candidate-title" zIndex={110} backdropClassName="flex items-end sm:items-center justify-center sm:p-4 pb-[68px] sm:pb-0" maxWidth="w-full sm:max-w-3xl" className="rounded-t-3xl sm:rounded-2xl flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
 
+                {/* Drag indicator (mobile only) */}
+                <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+                  <div className="w-10 h-1 bg-slate-200 rounded-full" />
+                </div>
                 {/* Header */}
                 <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
                     <div className="flex items-start justify-between">
@@ -270,7 +274,7 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                                     {cardIndex + 1} <span className="text-slate-300 font-bold">/</span> {items.length}
                                 </span>
                             )}
-                            <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+                            <button onClick={onClose} className="p-3 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                         </div>
@@ -507,7 +511,8 @@ const ReturnCandidateModal: React.FC<ReturnCandidateModalProps> = ({
                 </div>
 
                 {/* 모바일 푸터 */}
-                <div className="sm:hidden px-4 py-3 border-t border-slate-100 flex items-center gap-2 shrink-0">
+                <div className="sm:hidden px-4 py-3 border-t border-slate-100 flex items-center gap-2 shrink-0"
+                     style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>
                     <button onClick={onClose}
                         className="flex-1 h-11 text-sm font-bold text-slate-600 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-colors whitespace-nowrap">
                         닫기

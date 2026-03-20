@@ -34,6 +34,10 @@ export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup
     >
       {g && (
         <>
+          {/* Drag indicator (mobile only) */}
+          <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div className="w-10 h-1 bg-slate-200 rounded-full" />
+          </div>
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -42,7 +46,7 @@ export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup
               </div>
               <p className="text-xs text-slate-400 mt-0.5">{g.date} · {reason ? RETURN_REASON_LABELS[reason] : ''}</p>
             </div>
-            <button onClick={() => setReturnDetailGroup(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
+            <button onClick={() => setReturnDetailGroup(null)} className="p-3 hover:bg-slate-100 rounded-full text-slate-400 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -82,7 +86,8 @@ export function OrderReturnDetailModal({ returnDetailGroup, setReturnDetailGroup
               </table>
             </div>
           </div>
-          <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between"
+               style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
             <span className="text-xs text-slate-500">총 <span className="font-black text-slate-700">{g.totalQty}개</span> · {brandTotals.length}종</span>
             <button onClick={() => setReturnDetailGroup(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-300 transition-colors">닫기</button>
           </div>

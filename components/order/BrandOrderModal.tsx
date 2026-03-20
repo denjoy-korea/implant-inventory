@@ -11,7 +11,7 @@ export interface BrandOrderEntry {
 interface BrandOrderModalProps {
   mfr: string;
   entries: BrandOrderEntry[];
-  onOrder: (item: InventoryItem, quantity: number) => void;
+  onAddToCart: (mfr: string, items: Array<{ item: InventoryItem; qty: number }>) => void;
   onClose: () => void;
   isReadOnly?: boolean;
   showAlertToast: (msg: string, type: 'success' | 'error' | 'info') => void;
@@ -20,7 +20,7 @@ interface BrandOrderModalProps {
 const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
   mfr,
   entries,
-  onOrder,
+  onAddToCart,
   onClose,
   isReadOnly,
   showAlertToast,
@@ -62,9 +62,9 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
     if (isReadOnly) return;
     const targets = entries.filter(e => selectedIds.has(e.item.id));
     if (targets.length === 0) return;
-    targets.forEach(e => onOrder(e.item, getQty(e.item.id, e.remainingDeficit)));
-    setSelectedIds(new Set());
-    showAlertToast(`${targets.length}품목 발주 목록에 추가되었습니다.`, 'success');
+    onAddToCart(mfr, targets.map(e => ({ item: e.item, qty: getQty(e.item.id, e.remainingDeficit) })));
+    showAlertToast(`${targets.length}품목이 장바구니에 담겼습니다.`, 'success');
+    onClose();
   };
 
   const selectedCount = selectedIds.size;
@@ -84,6 +84,10 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
       className="rounded-t-2xl sm:rounded-2xl flex flex-col h-[calc(100dvh-68px)] sm:h-auto sm:max-h-[85vh]"
       maxWidth="w-full sm:max-w-2xl"
     >
+        {/* Drag indicator (mobile only) */}
+        <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 bg-slate-200 rounded-full" />
+        </div>
         {/* Header */}
         <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100">
           <div className="flex items-start justify-between">
@@ -99,7 +103,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
             <button
               onClick={onClose}
               aria-label="닫기"
-              className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+              className="p-3 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -193,7 +197,7 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
                       <button
                         onClick={() => toggleId(item.id)}
                         disabled={isReadOnly}
-                        className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${isSelected ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                        className={`px-3 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${isSelected ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
                       >
                         확인
                       </button>
@@ -206,7 +210,8 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4">
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4"
+             style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
           <p className="text-xs text-slate-500">
             {selectedCount > 0 ? (
               <><span className="font-bold text-rose-600">{selectedCount}종</span> 선택됨</>
@@ -217,12 +222,12 @@ const BrandOrderModal: React.FC<BrandOrderModalProps> = ({
           <button
             onClick={handleBulkOrder}
             disabled={isReadOnly || selectedCount === 0}
-            className="h-10 px-5 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm shadow-rose-200 flex items-center gap-2"
+            className="h-11 px-5 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-sm shadow-rose-200 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            선택 발주
+            장바구니 담기
           </button>
         </div>
     </ModalShell>

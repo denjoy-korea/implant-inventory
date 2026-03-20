@@ -183,7 +183,7 @@ const FailBulkSetupModal: React.FC<FailBulkSetupModalProps> = ({
           </div>
           <button
             onClick={handleClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

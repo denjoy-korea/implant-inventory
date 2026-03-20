@@ -381,7 +381,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ inventory, onAdd, onClose }
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+            className="p-3 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
             aria-label="닫기"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
