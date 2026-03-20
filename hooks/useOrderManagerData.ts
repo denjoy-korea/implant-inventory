@@ -161,16 +161,24 @@ export function useOrderManagerData({
       byMfr[mfr] = (byMfr[mfr] || 0) + 1;
     });
     const pendingByMfr: Record<string, number> = {};
+    const completedByMfr: Record<string, number> = {};
     returnRequests
-      .filter(r => r.reason === 'exchange' && (r.status === 'requested' || r.status === 'picked_up'))
+      .filter(r => r.reason === 'exchange' && r.status !== 'rejected')
       .forEach(r => {
-        const qty = r.items.reduce((s: number, it) => s + it.quantity, 0);
-        pendingByMfr[r.manufacturer] = (pendingByMfr[r.manufacturer] || 0) + qty;
+        // z수술후FAIL 마커 아이템 제외 — FAIL 건수가 교환 actualCount 차감에 영향 주지 않도록
+        const qty = r.items.reduce((s: number, it) => it.brand === 'z수술후FAIL' ? s : s + it.quantity, 0);
+        if (r.status === 'requested' || r.status === 'picked_up') {
+          pendingByMfr[r.manufacturer] = (pendingByMfr[r.manufacturer] || 0) + qty;
+        } else if (r.status === 'completed') {
+          // 완료된 반품도 차감 유지 — 수술기록에서 처리된 건수로 영구 차감
+          completedByMfr[r.manufacturer] = (completedByMfr[r.manufacturer] || 0) + qty;
+        }
       });
     const list = Object.entries(byMfr)
       .map(([manufacturer, count]) => {
         const returnPending = pendingByMfr[manufacturer] || 0;
-        const actualCount = Math.max(0, count - returnPending);
+        const returnCompleted = completedByMfr[manufacturer] || 0;
+        const actualCount = Math.max(0, count - returnPending - returnCompleted);
         return { manufacturer, count, returnPending, actualCount };
       })
       .sort((a, b) => b.actualCount - a.actualCount);

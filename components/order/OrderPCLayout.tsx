@@ -195,7 +195,7 @@ export function OrderPCLayout({
           <BrandOrderModal
             mfr={brandOrderModalMfr}
             entries={brandEntries}
-            onOrder={onQuickOrder}
+            onAddToCart={async (_mfr, items) => { for (const { item, qty } of items) await onQuickOrder(item, qty); }}
             onClose={() => setBrandOrderModalMfr(null)}
             isReadOnly={isReadOnly}
             showAlertToast={showAlertToast}

@@ -96,15 +96,21 @@ export function useReturnHandlers({
     if (result.ok) {
       await loadReturnRequests();
       // 반품 신청 즉시 재고 차감 (보관소로 이동)
+      // defective(수술후FAIL)는 차감 구조 없음 — 신청/취소 모두 재고 영향 없음
+      if (params.reason === 'defective') return;
+      // exchange: 수술중교환_ 가상 버킷에서 차감 (실재고 무관)
+      const effectiveMfr = params.reason === 'exchange'
+        ? `수술중교환_${params.manufacturer}`
+        : params.manufacturer;
       for (const item of params.items) {
-        const sizeKey = getSizeMatchKey(item.size, params.manufacturer);
+        if (item.brand === 'z수술후FAIL') continue; // FAIL 마커 아이템 — 차감 없음
+        const sizeKey = getSizeMatchKey(item.size, effectiveMfr);
         const invItem = inventory.find(inv =>
-          inv.manufacturer === params.manufacturer &&
+          inv.manufacturer === effectiveMfr &&
           inv.brand === item.brand &&
           getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
         );
         if (invItem) {
-          // 정확한 품목 매칭 성공
           await inventoryService.adjustStock(invItem.id, -item.quantity);
           setState(prev => ({
             ...prev,
@@ -115,10 +121,9 @@ export function useReturnHandlers({
             ),
           }));
         } else {
-          // 폴백: 제조사 단위 자동 차감 (FAIL 트랙 등 brand/size 미지정 케이스)
-          // 해당 제조사의 재고를 수량 많은 품목부터 순차 차감
+          // 폴백: 수술중교환_ 버킷에서 총합계 차감
           const mfrItems = [...inventory]
-            .filter(inv => inv.manufacturer === params.manufacturer && inv.currentStock > 0)
+            .filter(inv => inv.manufacturer === effectiveMfr && inv.currentStock > 0)
             .sort((a, b) => b.currentStock - a.currentStock);
           let remaining = item.quantity;
           for (const mfrItem of mfrItems) {
@@ -136,7 +141,7 @@ export function useReturnHandlers({
             remaining -= deduct;
           }
           if (remaining > 0) {
-            console.warn(`[handleCreateReturn] 재고 부족: ${params.manufacturer} ${remaining}개 미처리`);
+            console.warn(`[handleCreateReturn] 재고 부족: ${effectiveMfr} ${remaining}개 미처리`);
           }
         }
       }
@@ -176,17 +181,23 @@ export function useReturnHandlers({
     }
 
     // 재고 조정: 반품 거절 시 복구, 거절 철회(rejected→requested) 시 재차감
+    // defective(수술후FAIL)는 차감 구조 없으므로 상태 변경에도 재고 영향 없음
     // ref로 최신 배열을 참조 (낙관적 업데이트 이후 stale closure 방지)
     const returnReq = returnRequestsRef.current.find(r => r.id === returnId);
-    if (returnReq) {
+    if (returnReq && returnReq.reason !== 'defective') {
       const needsRestore = status === 'rejected';
       const needsDeduct = status === 'requested' && currentStatus === 'rejected';
       if (needsRestore || needsDeduct) {
         const delta = needsRestore ? 1 : -1;
+        // exchange: 수술중교환_ 가상 버킷 조정 (실재고 무관)
+        const effectiveMfr = returnReq.reason === 'exchange'
+          ? `수술중교환_${returnReq.manufacturer}`
+          : returnReq.manufacturer;
         for (const item of returnReq.items) {
-          const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+          if (item.brand === 'z수술후FAIL') continue;
+          const sizeKey = getSizeMatchKey(item.size, effectiveMfr);
           const invItem = inventory.find(inv =>
-            inv.manufacturer === returnReq.manufacturer &&
+            inv.manufacturer === effectiveMfr &&
             inv.brand === item.brand &&
             getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
           );
@@ -232,14 +243,20 @@ export function useReturnHandlers({
     );
 
     // 재고 보정: 신청 수량 > 실수령 수량이면 차이분 복구
-    if (actualQties && returnReq) {
+    // defective(수술후FAIL)는 차감 구조 없으므로 보정도 없음
+    if (actualQties && returnReq && returnReq.reason !== 'defective') {
+      // exchange: 수술중교환_ 가상 버킷에 보정 (실재고 무관)
+      const effectiveMfr = returnReq.reason === 'exchange'
+        ? `수술중교환_${returnReq.manufacturer}`
+        : returnReq.manufacturer;
       for (const item of returnReq.items) {
+        if (item.brand === 'z수술후FAIL') continue;
         const actualQty = actualQties[item.id] ?? item.quantity;
         const diff = item.quantity - actualQty;
         if (diff > 0) {
-          const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+          const sizeKey = getSizeMatchKey(item.size, effectiveMfr);
           const invItem = inventory.find(inv =>
-            inv.manufacturer === returnReq.manufacturer &&
+            inv.manufacturer === effectiveMfr &&
             inv.brand === item.brand &&
             getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
           );
@@ -254,9 +271,9 @@ export function useReturnHandlers({
               ),
             }));
           } else {
-            // 폴백: 제조사 단위 복원 (FAIL 트랙 등 brand 미지정 케이스)
+            // 폴백: 제조사 단위 복원
             const mfrItem = [...inventory]
-              .filter(inv => inv.manufacturer === returnReq.manufacturer)
+              .filter(inv => inv.manufacturer === effectiveMfr)
               .sort((a, b) => b.currentStock - a.currentStock)[0];
             if (mfrItem) {
               await inventoryService.adjustStock(mfrItem.id, diff);
@@ -302,11 +319,17 @@ export function useReturnHandlers({
     }
 
     // 삭제 성공 시 재고 복구 — rejected/completed 는 이미 복구됐거나 실제 반출됐으므로 제외
-    if (returnReq && (returnReq.status === 'requested' || returnReq.status === 'picked_up')) {
+    // defective(수술후FAIL)는 신청 시 차감 구조 없으므로 복구도 없음
+    if (returnReq && returnReq.reason !== 'defective' && (returnReq.status === 'requested' || returnReq.status === 'picked_up')) {
+      // exchange: 수술중교환_ 가상 버킷에 반환 (실재고 무관)
+      const effectiveMfr = returnReq.reason === 'exchange'
+        ? `수술중교환_${returnReq.manufacturer}`
+        : returnReq.manufacturer;
       for (const item of returnReq.items) {
-        const sizeKey = getSizeMatchKey(item.size, returnReq.manufacturer);
+        if (item.brand === 'z수술후FAIL') continue; // FAIL 마커 아이템 — 복구 없음
+        const sizeKey = getSizeMatchKey(item.size, effectiveMfr);
         const invItem = inventory.find(inv =>
-          inv.manufacturer === returnReq.manufacturer &&
+          inv.manufacturer === effectiveMfr &&
           inv.brand === item.brand &&
           getSizeMatchKey(inv.size, inv.manufacturer) === sizeKey
         );
@@ -321,10 +344,9 @@ export function useReturnHandlers({
             ),
           }));
         } else {
-          // 폴백: 제조사 단위 복원 (FAIL 트랙 등 brand 미지정 케이스)
-          // 신청 시 수량 많은 순으로 차감했으므로, 복원도 수량 많은 품목에 추가
+          // 폴백: 제조사 단위 복원
           const mfrItems = [...inventory]
-            .filter(inv => inv.manufacturer === returnReq.manufacturer)
+            .filter(inv => inv.manufacturer === effectiveMfr)
             .sort((a, b) => b.currentStock - a.currentStock);
           let remaining = item.quantity;
           for (const mfrItem of mfrItems) {

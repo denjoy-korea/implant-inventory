@@ -40,7 +40,7 @@ interface UseFailManagerParams {
  * FAIL/교환 트랙: 제조사 재고에서 currentStock 많은 순으로 반품 품목 분배.
  * brand 필드에 제조사명 대신 실제 inventory 브랜드/사이즈를 사용해 DB 데이터 정합성 확보.
  */
-function buildReturnItems(
+export function buildReturnItems(
   inventory: InventoryItem[],
   manufacturer: string,
   totalQty: number
@@ -159,21 +159,7 @@ export function useFailManager({
     return Array.from(set).sort();
   }, [inventory]);
 
-  // 5. 미처리 교환을 제조사별 카운트로 변환
-  const pendingByManufacturer = useMemo(() => {
-    const counts: Record<string, number> = {};
-    pendingFailList.forEach(f => {
-      const m = normalizeMfrName(String(f['제조사'] || '기타'));
-      counts[m] = (counts[m] || 0) + 1;
-    });
-    return Object.entries(counts).map(([manufacturer, count]) => ({ manufacturer, count }));
-  }, [pendingFailList]);
-
-  const pendingByManufacturerMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    pendingByManufacturer.forEach(({ manufacturer, count }) => { map[manufacturer] = count; });
-    return map;
-  }, [pendingByManufacturer]);
+  // 5. 미처리 교환을 제조사별 카운트로 변환 (returnPendingByMfr/returnCompletedByMfr 선언 이후로 이동)
 
   const [activeM, setActiveM] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -225,7 +211,8 @@ export function useFailManager({
       .filter(r => r.reason === 'exchange' && (r.status === 'requested' || r.status === 'picked_up'))
       .forEach(r => {
         const m = normalizeMfrName(r.manufacturer);
-        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        // z수술후FAIL 마커 아이템 제외 — FAIL 건수가 교환 처리 집계에 영향 주지 않도록
+        const qty = r.items.reduce((s, i) => i.brand === 'z수술후FAIL' ? s : s + i.quantity, 0);
         counts[m] = (counts[m] || 0) + qty;
       });
     return counts;
@@ -238,11 +225,34 @@ export function useFailManager({
       .filter(r => r.reason === 'exchange' && r.status === 'completed')
       .forEach(r => {
         const m = normalizeMfrName(r.manufacturer);
-        const qty = r.items.reduce((s, i) => s + i.quantity, 0);
+        // z수술후FAIL 마커 아이템 제외 — FAIL 건수가 교환 처리 집계에 영향 주지 않도록
+        const qty = r.items.reduce((s, i) => i.brand === 'z수술후FAIL' ? s : s + i.quantity, 0);
         counts[m] = (counts[m] || 0) + qty;
       });
     return counts;
   }, [returnRequests]);
+
+  // 모달에 표시되는 "시스템 기록"은 완료/대기 반품을 차감한 실제 미처리 수
+  // (차감하지 않으면 사용자가 입력한 값과 최종 표시값이 불일치)
+  const pendingByManufacturer = useMemo(() => {
+    const counts: Record<string, number> = {};
+    pendingFailList.forEach(f => {
+      const m = normalizeMfrName(String(f['제조사'] || '기타'));
+      counts[m] = (counts[m] || 0) + 1;
+    });
+    return Object.entries(counts).map(([manufacturer, count]) => ({
+      manufacturer,
+      count: Math.max(0, count
+        - (returnPendingByMfr[manufacturer] || 0)
+        - (returnCompletedByMfr[manufacturer] || 0)),
+    }));
+  }, [pendingFailList, returnPendingByMfr, returnCompletedByMfr]);
+
+  const pendingByManufacturerMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    pendingByManufacturer.forEach(({ manufacturer, count }) => { map[manufacturer] = count; });
+    return map;
+  }, [pendingByManufacturer]);
 
   const totalReturnPending = Object.values(returnPendingByMfr).reduce((s, v) => s + v, 0);
   const totalReturnCompleted = Object.values(returnCompletedByMfr).reduce((s, v) => s + v, 0);
@@ -382,7 +392,14 @@ export function useFailManager({
 
   const handleBulkReconcile = async (reconciles: { manufacturer: string; targetCount: number }[], date: string) => {
     if (!hospitalId) return;
-    await surgeryService.bulkReconcileFails(reconciles, hospitalId, date);
+    // 모달의 targetCount는 "반품 차감 후 실미처리 수" 기준
+    // bulkReconcileFails는 수술기록 원본을 직접 조작하므로 반품 수량을 다시 더해 역산
+    const adjustedReconciles = reconciles.map(r => {
+      const m = normalizeMfrName(r.manufacturer);
+      const returnOffset = (returnCompletedByMfr[m] || 0) + (returnPendingByMfr[m] || 0);
+      return { manufacturer: r.manufacturer, targetCount: r.targetCount + returnOffset };
+    });
+    await surgeryService.bulkReconcileFails(adjustedReconciles, hospitalId, date);
     await onBulkSetupComplete?.();
   };
 

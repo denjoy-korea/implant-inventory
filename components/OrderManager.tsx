@@ -280,7 +280,6 @@ const OrderManager: React.FC<OrderManagerProps> = ({
       handleMobileBulkOrder={handleMobileBulkOrder}
       handleExchangeCandidateClick={handleExchangeCandidateClick}
       adjustExchangeQty={adjustExchangeQty}
-      handleExchangeReturnSubmit={handleExchangeReturnSubmit}
     />
   );
 };
