@@ -113,6 +113,10 @@ export function useFileUpload({
               if (sizeIndicatorMatch && sizeIndicatorMatch.index !== undefined) {
                 brand = brandSizeStr.substring(0, sizeIndicatorMatch.index).trim();
                 size = brandSizeStr.substring(sizeIndicatorMatch.index).trim();
+              } else if (brandSizeStr.endsWith(' _FAIL')) {
+                // "디오 _FAIL", "IBS _FAIL" 등 한글 포함 제조사명 처리
+                brand = brandSizeStr.slice(0, -' _FAIL'.length).trim();
+                size = '_FAIL';
               } else {
                 const fallbackMatch = brandSizeStr.match(/^([a-zA-Z\s\d-]+(?:\s[IVX]+)?)/);
                 brand = fallbackMatch ? fallbackMatch[1].trim() : brandSizeStr;
