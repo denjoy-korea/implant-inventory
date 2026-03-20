@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { ExcelRow, InventoryItem, SurgeryUnregisteredItem } from '../types';
+import { ExcelData, ExcelRow, InventoryItem, SurgeryUnregisteredItem } from '../types';
 import { normalizeSurgery } from '../services/normalizationService';
-import { getSizeMatchKey } from '../services/sizeNormalizer';
-import { isExchangePrefix } from '../services/appUtils';
+import { getSizeMatchKey, toCanonicalSize, isIbsImplantManufacturer } from '../services/sizeNormalizer';
+import { isExchangePrefix, buildInventoryDuplicateKey } from '../services/appUtils';
+import { fixIbsImplant } from '../services/mappers';
 import {
   appendUnregisteredSample,
   buildBrandSizeFormatIndex,
@@ -15,12 +16,40 @@ import {
 export function useSurgeryUnregistered(
   surgeryMaster: Record<string, ExcelRow[]>,
   inventory: InventoryItem[],
+  fixtureData?: ExcelData | null,
 ): SurgeryUnregisteredItem[] {
   return useMemo<SurgeryUnregisteredItem[]>(() => {
     const rows = surgeryMaster['수술기록지'] || [];
     if (rows.length === 0) return [];
 
-    const formatIndex = buildBrandSizeFormatIndex(inventory);
+    // fixture가 있으면 현재 활성(사용안함=false) 항목만 유효한 inventory로 간주
+    let effectiveInventory = inventory;
+    if (fixtureData) {
+      const activeSheet = fixtureData.sheets[fixtureData.activeSheetName];
+      if (activeSheet) {
+        const activeFixtureKeys = new Set(
+          activeSheet.rows
+            .filter(row =>
+              row['사용안함'] !== true &&
+              !isExchangePrefix(String(row['제조사'] || '')) &&
+              String(row['제조사'] || '') !== '보험청구' &&
+              String(row['제조사'] || '') !== 'z수술후FAIL'
+            )
+            .map(row => {
+              const fixed = fixIbsImplant(
+                String(row['제조사'] || ''),
+                String(row['브랜드'] || ''),
+              );
+              const rawSize = String(row['규격(SIZE)'] || row['규격'] || row['사이즈'] || row['Size'] || row['size'] || '');
+              const size = isIbsImplantManufacturer(fixed.manufacturer) ? rawSize : toCanonicalSize(rawSize, fixed.manufacturer);
+              return buildInventoryDuplicateKey({ manufacturer: fixed.manufacturer, brand: fixed.brand, size });
+            })
+        );
+        effectiveInventory = inventory.filter(item => activeFixtureKeys.has(buildInventoryDuplicateKey(item)));
+      }
+    }
+
+    const formatIndex = buildBrandSizeFormatIndex(effectiveInventory);
     const missingMap = new Map<string, SurgeryUnregisteredItem>();
 
     rows.forEach((row) => {
@@ -81,5 +110,5 @@ export function useSurgeryUnregistered(
     });
 
     return Array.from(missingMap.values()).sort((a, b) => b.usageCount - a.usageCount);
-  }, [surgeryMaster, inventory]);
+  }, [surgeryMaster, inventory, fixtureData]);
 }

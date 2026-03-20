@@ -386,7 +386,7 @@ export function useAppLogic({
     return { sheets: { '수술기록지': { name: '수술기록지', columns: sortedColumns, rows: masterRows } }, activeSheetName: '수술기록지' } as ExcelData;
   }, [state.surgeryMaster]);
 
-  const surgeryUnregisteredItems = useSurgeryUnregistered(state.surgeryMaster, state.inventory);
+  const surgeryUnregisteredItems = useSurgeryUnregistered(state.surgeryMaster, state.inventory, state.fixtureData);
 
   // ── Common sign-out helper ────────────────────────────────────
   const handleSignOut = useCallback(async () => {

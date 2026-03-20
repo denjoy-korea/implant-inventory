@@ -60,6 +60,7 @@ export function isFixtureRowUnused(
 ): boolean {
   if (!usageSet) return false;
   if (manufacturer === '보험청구' || brand === '보험임플란트') return false;
+  if (manufacturer === 'z수술후FAIL') return false;
   const baseMfr = isExchangePrefix(manufacturer) ? stripExchangePrefix(manufacturer) : manufacturer;
   return !isFixtureUsedInSurgery(usageSet, baseMfr, brand, size);
 }
