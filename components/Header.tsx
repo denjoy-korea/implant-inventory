@@ -34,21 +34,21 @@ const Header: React.FC<HeaderProps> = ({
   const isPublicView = publicViews.includes(currentView);
 
   return (
-    <header className={`bg-white border-b border-slate-200 py-3 md:sticky md:top-0 z-[100] shadow-sm ${showLogo ? 'px-6' : 'px-8'}`}>
+    <header className={`bg-white border-b border-slate-200 py-3 md:sticky md:top-0 z-[100] shadow-sm ${showLogo ? 'px-3 sm:px-6' : 'px-8'}`}>
       <div className={`mx-auto flex items-center justify-between ${showLogo ? 'max-w-7xl' : 'w-full'}`}>
-        <div className="flex items-center flex-shrink-0 w-[220px]">
+        <div className="flex items-center flex-shrink-0 min-w-0">
           {showLogo && (
             <button
               type="button"
               onClick={onHomeClick}
               className="flex items-center space-x-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg"
             >
-              <img src="/logo.png" alt="DentWeb Data Processor" className="h-10 w-auto object-contain" />
-              <div className="h-8 w-px bg-slate-200 mx-4"></div>
+              <img src="/logo.png" alt="DentWeb Data Processor" className="h-9 sm:h-10 w-auto object-contain" />
+              <div className="h-8 w-px bg-slate-200 mx-2 sm:mx-4"></div>
               <div className="flex flex-col items-start gap-0.5">
                 <span className="text-[10px] text-slate-400 font-medium leading-none">Powered by</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xl font-bold tracking-tight bg-[linear-gradient(135deg,#7c3aed_0%,#8b5cf6_50%,#6366f1_100%)] bg-clip-text text-transparent">DenJOY</span>
+                  <span className="text-lg sm:text-xl font-bold tracking-tight bg-[linear-gradient(135deg,#7c3aed_0%,#8b5cf6_50%,#6366f1_100%)] bg-clip-text text-transparent">DenJOY</span>
                 </div>
               </div>
             </button>
@@ -210,9 +210,9 @@ const Header: React.FC<HeaderProps> = ({
               </div>
             )
           ) : (
-            <div className="flex items-center gap-2">
-              <button onClick={onLoginClick} className="text-sm font-bold text-slate-600 px-3 py-1">로그인</button>
-              <button onClick={onSignupClick} className="text-sm font-bold bg-indigo-600 text-white px-4 py-2 rounded-lg">회원가입</button>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button onClick={onLoginClick} className="text-xs sm:text-sm font-bold text-slate-600 px-2 sm:px-3 py-1">로그인</button>
+              <button onClick={onSignupClick} className="text-xs sm:text-sm font-bold bg-indigo-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg whitespace-nowrap">회원가입</button>
             </div>
           )}
         </div>

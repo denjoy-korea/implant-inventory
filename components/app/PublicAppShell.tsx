@@ -404,7 +404,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         onNavigate={handleNavigate}
         onAnalyzeClick={handleAnalyzeEntry}
       />
-      <main className={`flex-1 overflow-x-hidden ${hasPublicMobileNav ? 'pb-24 xl:pb-0' : ''}`}>
+      <main className={`flex-1 overflow-x-hidden ${hasPublicMobileNav ? 'pb-36 xl:pb-0' : ''}`}>
         <ErrorBoundary>
           <Suspense fallback={suspenseFallback}>
             {currentView === 'landing' && (

@@ -45,7 +45,7 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
     return (
         <>
 
-            <nav className="fixed inset-x-0 bottom-0 z-[160] border-t border-slate-200 bg-white/96 backdrop-blur pb-[max(env(safe-area-inset-bottom),0px)] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.1)]">
+            <nav className="fixed inset-x-0 bottom-0 z-[160] border-t border-slate-200 bg-white/96 backdrop-blur pb-[max(env(safe-area-inset-bottom),_8px)] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.1)]">
                 <div className="grid grid-cols-3 gap-1.5 px-3 py-2.5 max-w-md mx-auto">
                     <button
                         type="button"
