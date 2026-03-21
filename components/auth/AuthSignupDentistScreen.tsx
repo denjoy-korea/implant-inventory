@@ -28,9 +28,9 @@ interface AuthSignupDentistScreenProps {
   passwordHints: React.ReactNode;
   signupSource: string;
   onSignupSourceChange: (value: string) => void;
-  betaInviteVerified: boolean;
-  betaInviteCode: string;
-  onOpenBetaInviteModal: () => void;
+  promoVerified: boolean;
+  promoCode: string;
+  onOpenPromoModal: () => void;
   verifiedCodeType?: string | null;
   agreedToTerms: boolean;
   onAgreedToTermsChange: (checked: boolean) => void;
@@ -69,9 +69,9 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
   passwordHints,
   signupSource,
   onSignupSourceChange,
-  betaInviteVerified,
-  betaInviteCode,
-  onOpenBetaInviteModal,
+  promoVerified,
+  promoCode,
+  onOpenPromoModal,
   verifiedCodeType,
   agreedToTerms,
   onAgreedToTermsChange,
@@ -271,7 +271,7 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                 <option value="기타">기타</option>
               </select>
             </div>
-            {!betaInviteVerified && (
+            {!promoVerified && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-xs text-slate-600 leading-relaxed">
@@ -279,7 +279,7 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                   </p>
                   <button
                     type="button"
-                    onClick={onOpenBetaInviteModal}
+                    onClick={onOpenPromoModal}
                     className="text-[11px] font-bold text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
                   >
                     코드 입력
@@ -287,7 +287,7 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                 </div>
               </div>
             )}
-            {betaInviteVerified && verifiedCodeType === 'partner' && (
+            {promoVerified && verifiedCodeType === 'partner' && (
               <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0" />
@@ -296,13 +296,13 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
                 <p className="mt-1 text-[11px] text-violet-600">가입 완료 시 제휴 쿠폰이 자동 발급되어 결제 시 할인이 적용됩니다.</p>
               </div>
             )}
-            {betaInviteVerified && verifiedCodeType !== 'partner' && (
+            {promoVerified && verifiedCodeType !== 'partner' && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-emerald-700">코드 확인 완료: {betaInviteCode}</p>
+                  <p className="text-xs font-semibold text-emerald-700">코드 확인 완료: {promoCode}</p>
                   <button
                     type="button"
-                    onClick={onOpenBetaInviteModal}
+                    onClick={onOpenPromoModal}
                     className="text-[11px] font-bold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
                   >
                     코드 재확인

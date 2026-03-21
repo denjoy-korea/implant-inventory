@@ -40,14 +40,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     rememberEmail, setRememberEmail,
     errorStatus, setErrorStatus,
     resetEmailSent, setResetEmailSent,
-    betaInviteCode, setBetaInviteCode,
-    betaInviteVerified,
+    promoCode, setPromoCode,
+    promoVerified,
     verifiedCodeType,
-    betaInviteModalOpen, setBetaInviteModalOpen,
-    betaInviteChecking,
-    betaInviteError,
-    betaSignupPolicy,
-    isBetaInviteRequired,
+    promoModalOpen, setPromoModalOpen,
+    promoChecking,
+    promoError,
     pendingTrialPlan, setPendingTrialPlan,
     trialConsented, setTrialConsented,
     planAvailability,
@@ -73,8 +71,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     handleWaitlistSubmit,
     handleInviteSubmit,
     handleRoleSelect,
-    openBetaInviteModal,
-    handleVerifyBetaInviteCode,
+    openPromoModal,
+    handleVerifyPromoCode,
     handleSubmit,
   } = useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initialPlan });
 
@@ -226,10 +224,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     );
   };
 
-  function renderBetaInviteModal() {
-    if (type !== 'signup' || !betaInviteModalOpen) return null;
+  function renderPromoModal() {
+    if (type !== 'signup' || !promoModalOpen) return null;
     return (
-      <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setBetaInviteModalOpen(false)}>
+      <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={() => setPromoModalOpen(false)}>
         <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
             <h3 className="text-base font-black text-slate-900">제휴/프로모션 코드 입력</h3>
@@ -237,32 +235,32 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
               제휴 채널이나 프로모션을 통해 받은 코드가 있으면 입력해주세요. 가입 시 할인 혜택이 자동 적용됩니다.
             </p>
           </div>
-          <form onSubmit={handleVerifyBetaInviteCode} className="px-5 py-4 space-y-3">
+          <form onSubmit={handleVerifyPromoCode} className="px-5 py-4 space-y-3">
             <label className="block text-xs font-bold text-slate-600">제휴/프로모션 코드</label>
             <input
-              value={betaInviteCode}
-              onChange={(event) => setBetaInviteCode(event.target.value.toUpperCase())}
+              value={promoCode}
+              onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
               placeholder="예: PARTNER-채널-코드"
               autoFocus
               className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold tracking-wide focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
-            {betaInviteError && (
-              <p className="text-xs text-rose-600 font-medium">{betaInviteError}</p>
+            {promoError && (
+              <p className="text-xs text-rose-600 font-medium">{promoError}</p>
             )}
             <div className="pt-1 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setBetaInviteModalOpen(false)}
+                onClick={() => setPromoModalOpen(false)}
                 className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
               >
                 닫기
               </button>
               <button
                 type="submit"
-                disabled={betaInviteChecking}
+                disabled={promoChecking}
                 className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
               >
-                {betaInviteChecking ? '확인 중...' : '코드 확인'}
+                {promoChecking ? '확인 중...' : '코드 확인'}
               </button>
             </div>
           </form>
@@ -393,9 +391,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           passwordHints={renderPwHints()}
           signupSource={signupSource}
           onSignupSourceChange={setSignupSource}
-          betaInviteVerified={betaInviteVerified}
-          betaInviteCode={betaInviteCode}
-          onOpenBetaInviteModal={openBetaInviteModal}
+          promoVerified={promoVerified}
+          promoCode={promoCode}
+          onOpenPromoModal={openPromoModal}
           verifiedCodeType={verifiedCodeType}
           agreedToTerms={agreedToTerms}
           onAgreedToTermsChange={setAgreedToTerms}
@@ -406,7 +404,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
           isSubmitting={isSubmitting}
         />
         <AuthFormToast toast={toast} />
-        {renderBetaInviteModal()}
+        {renderPromoModal()}
         {showLegalType && <LegalModal type={showLegalType} onClose={() => setShowLegalType(null)} />}
       </>
     );
@@ -443,9 +441,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         passwordHints={renderPwHints()}
         signupSource={signupSource}
         onSignupSourceChange={setSignupSource}
-        betaInviteVerified={betaInviteVerified}
-        betaInviteCode={betaInviteCode}
-        onOpenBetaInviteModal={openBetaInviteModal}
+        promoVerified={promoVerified}
+        promoCode={promoCode}
+        onOpenPromoModal={openPromoModal}
         verifiedCodeType={verifiedCodeType}
         agreedToTerms={agreedToTerms}
         onAgreedToTermsChange={setAgreedToTerms}
@@ -456,7 +454,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
         isSubmitting={isSubmitting}
       />
       <AuthFormToast toast={toast} />
-      {renderBetaInviteModal()}
+      {renderPromoModal()}
       {showLegalType && <LegalModal type={showLegalType} onClose={() => setShowLegalType(null)} />}
 
       {/* 대기 신청 모달 (P1-2) */}

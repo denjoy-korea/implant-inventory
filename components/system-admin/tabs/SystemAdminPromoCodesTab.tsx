@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { betaInviteService, BetaInviteCodeRow, CodeType } from '../../../services/betaInviteService';
+import { promoCodeService, PromoCodeRow, CodeType } from '../../../services/promoCodeService';
 import { couponService, CouponTemplate, UserCoupon, CouponStats, RedemptionStats, ChannelStat } from '../../../services/couponService';
 import { useToast } from '../../../hooks/useToast';
-import { getBetaSignupPolicy } from '../../../utils/betaSignupPolicy';
 import ConfirmModal from '../../ConfirmModal';
 import CouponTemplateSection from './code-management/CouponTemplateSection';
 import CouponLookupSection from './code-management/CouponLookupSection';
@@ -29,17 +28,16 @@ function formatDateTime(value: string | null): string {
   return parsed.toLocaleString('ko-KR', { hour12: false });
 }
 
-const SystemAdminBetaCodesTab: React.FC = () => {
-  const policy = useMemo(() => getBetaSignupPolicy(), []);
-  const [codes, setCodes] = useState<BetaInviteCodeRow[]>([]);
+const SystemAdminPromoCodesTab: React.FC = () => {
+  const [codes, setCodes] = useState<PromoCodeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteRow, setConfirmDeleteRow] = useState<BetaInviteCodeRow | null>(null);
-  const [codeType, setCodeType] = useState<CodeType>('beta');
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<PromoCodeRow | null>(null);
+  const [codeType, setCodeType] = useState<CodeType>('promo');
   const [channel, setChannel] = useState('');
   const [filterType, setFilterType] = useState<CodeType | ''>('');
   const [distributedTo, setDistributedTo] = useState('');
@@ -71,7 +69,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   const loadCodes = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await betaInviteService.listCodes(filterType || undefined);
+      const rows = await promoCodeService.listCodes(filterType || undefined);
       setCodes(rows);
     } catch (error) {
       showToast(error instanceof Error ? error.message : '코드 목록을 불러오지 못했습니다.', 'error');
@@ -193,7 +191,6 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   );
 
   const handleCopyCode = async (code: string) => {
-    // 1차: Clipboard API
     if (navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(code);
@@ -203,7 +200,6 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         // 포커스 없음 등으로 실패 시 execCommand 폴백
       }
     }
-    // 2차: execCommand 폴백 (구형 브라우저 / 포커스 없는 경우)
     try {
       const el = document.createElement('textarea');
       el.value = code;
@@ -231,7 +227,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     }
     setCreating(true);
     try {
-      const created = await betaInviteService.createCode({
+      const created = await promoCodeService.createCode({
         codeType,
         channel: channel.trim() || undefined,
         distributedTo,
@@ -253,10 +249,10 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     }
   };
 
-  const handleToggleActive = async (row: BetaInviteCodeRow) => {
+  const handleToggleActive = async (row: PromoCodeRow) => {
     setTogglingId(row.id);
     try {
-      await betaInviteService.setCodeActive(row.id, !row.is_active);
+      await promoCodeService.setCodeActive(row.id, !row.is_active);
       setCodes((prev) => prev.map((item) => (
         item.id === row.id
           ? { ...item, is_active: !row.is_active, updated_at: new Date().toISOString() }
@@ -270,7 +266,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     }
   };
 
-  const handleStartEdit = (row: BetaInviteCodeRow) => {
+  const handleStartEdit = (row: PromoCodeRow) => {
     setEditingId(row.id);
     setEditDistributedTo(row.distributed_to || '');
     setEditDistributedContact(row.distributed_contact || '');
@@ -289,7 +285,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   const handleSaveEdit = async (rowId: string) => {
     setSavingEditId(rowId);
     try {
-      const updated = await betaInviteService.updateCodeMeta(rowId, {
+      const updated = await promoCodeService.updateCodeMeta(rowId, {
         distributedTo: editDistributedTo,
         distributedContact: editDistributedContact,
         note: editNote,
@@ -305,7 +301,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     }
   };
 
-  const handleDeleteCode = async (row: BetaInviteCodeRow) => {
+  const handleDeleteCode = async (row: PromoCodeRow) => {
     setConfirmDeleteRow(row);
   };
 
@@ -315,7 +311,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
     setConfirmDeleteRow(null);
     setDeletingId(row.id);
     try {
-      await betaInviteService.deleteCode(row.id);
+      await promoCodeService.deleteCode(row.id);
       setCodes((prev) => prev.filter((item) => item.id !== row.id));
       if (editingId === row.id) {
         handleCancelEdit();
@@ -330,26 +326,17 @@ const SystemAdminBetaCodesTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4">
-          <p className="text-xs font-bold text-indigo-500 uppercase tracking-wider">가입 정책</p>
-          <p className="mt-2 text-sm font-black text-indigo-800">
-            코드 제한 해제됨
-          </p>
-          <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
-            사전 가입기간 종료 · 자유 가입 운영 중
-          </p>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
           <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider">활성 코드</p>
           <p className="mt-2 text-2xl font-black text-emerald-700">{activeCount}</p>
-          <p className="mt-1 text-xs text-emerald-700">현재 회원가입 통과에 사용 가능한 코드 수</p>
+          <p className="mt-1 text-xs text-emerald-700">현재 사용 가능한 코드 수</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">총 코드</p>
           <p className="mt-2 text-2xl font-black text-slate-800">{codes.length}</p>
           <p className="mt-1 text-xs text-slate-500">
-            베타 {codes.filter(c => c.code_type === 'beta').length} / 제휴 {codes.filter(c => c.code_type === 'partner').length} / 프로모 {codes.filter(c => c.code_type === 'promo').length}
+            제휴 {codes.filter(c => c.code_type === 'partner').length} / 프로모 {codes.filter(c => c.code_type === 'promo').length} / 초대 {codes.filter(c => c.code_type === 'referral').length}
           </p>
         </div>
       </div>
@@ -371,7 +358,7 @@ const SystemAdminBetaCodesTab: React.FC = () => {
         </div>
 
         <div className="flex gap-2">
-          {(['beta', 'partner', 'promo'] as CodeType[]).map((t) => (
+          {(['partner', 'promo'] as CodeType[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -435,9 +422,9 @@ const SystemAdminBetaCodesTab: React.FC = () => {
               className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 focus:outline-none focus:border-indigo-400"
             >
               <option value="">전체 타입</option>
-              <option value="beta">베타코드</option>
               <option value="partner">제휴코드</option>
               <option value="promo">프로모코드</option>
+              <option value="referral">초대코드</option>
             </select>
           </div>
           <button
@@ -474,8 +461,8 @@ const SystemAdminBetaCodesTab: React.FC = () => {
                   return (
                     <tr key={row.id} className="text-slate-700">
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${CODE_TYPE_COLORS[row.code_type || 'beta']}`}>
-                          {CODE_TYPE_LABELS[row.code_type || 'beta']}
+                        <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold border ${CODE_TYPE_COLORS[row.code_type || 'promo']}`}>
+                          {CODE_TYPE_LABELS[row.code_type || 'promo']}
                         </span>
                         {row.channel && (
                           <p className="mt-1 text-[10px] text-violet-600 font-semibold">{row.channel}</p>
@@ -655,4 +642,4 @@ const SystemAdminBetaCodesTab: React.FC = () => {
   );
 };
 
-export default SystemAdminBetaCodesTab;
+export default SystemAdminPromoCodesTab;

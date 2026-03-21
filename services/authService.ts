@@ -3,8 +3,11 @@ import { Session } from '@supabase/supabase-js';
 import { DbProfile, TrustedDevice, UserRole, PlanType } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, hashPatientInfo } from './cryptoUtils';
 import { decryptProfile } from './mappers';
-import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
-import { betaInviteService } from './betaInviteService';
+import { promoCodeService } from './promoCodeService';
+
+function normalizeCode(raw: string): string {
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+}
 
 /** 평문 여부 확인 (ENCv2/ENC v1 접두사 없으면 평문) */
 const isPlain = (v: string | null | undefined): boolean =>
@@ -131,7 +134,7 @@ interface SignupParams {
   bizFile?: File;
   signupSource?: string;
   trialPlan?: PlanType;
-  betaInviteCode?: string;
+  promoCode?: string;
 }
 
 interface AuthResult {
@@ -144,7 +147,7 @@ interface AuthResult {
 export const authService = {
   /** 이메일/비밀번호 회원가입 */
   async signUp(params: SignupParams): Promise<AuthResult> {
-    const { email, password, name, role, hospitalName, phone, bizFile, signupSource, trialPlan, betaInviteCode } = params;
+    const { email, password, name, role, hospitalName, phone, bizFile, signupSource, trialPlan, promoCode } = params;
     if (role === 'admin') {
       return { success: false, error: '운영자 계정은 직접 가입할 수 없습니다.' };
     }
@@ -162,21 +165,9 @@ export const authService = {
       role: signupRole,
       phone: phone || '',
     };
-    const normalizedBetaInviteCode = normalizeBetaInviteCode(betaInviteCode || '');
-    if (normalizedBetaInviteCode) {
-      userMetadata.beta_invite_code = normalizedBetaInviteCode;
-    } else if (import.meta.env.DEV) {
-      const devFallbackInviteCode = normalizeBetaInviteCode((import.meta.env.VITE_DEV_BETA_INVITE_CODE as string | undefined) || '');
-      if (devFallbackInviteCode) {
-        userMetadata.beta_invite_code = devFallbackInviteCode;
-      }
-    }
-
-    if (import.meta.env.DEV) {
-      const devBypassToken = String((import.meta.env.VITE_DEV_SIGNUP_BYPASS_TOKEN as string | undefined) || '').trim();
-      if (devBypassToken) {
-        userMetadata.beta_dev_bypass_token = devBypassToken;
-      }
+    const normalizedPromoCode = normalizeCode(promoCode || '');
+    if (normalizedPromoCode) {
+      userMetadata.promo_code = normalizedPromoCode;
     }
 
     // 1. Supabase Auth 회원가입
@@ -219,8 +210,8 @@ export const authService = {
       if (trialPlan && trialPlan !== 'free') {
         pendingSetup.trialPlan = trialPlan;
       }
-      if (normalizedBetaInviteCode) {
-        pendingSetup.betaInviteCode = normalizedBetaInviteCode;
+      if (normalizedPromoCode) {
+        pendingSetup.promoCode = normalizedPromoCode;
       }
       localStorage.setItem('_pending_hospital_setup', JSON.stringify(pendingSetup));
 
@@ -318,8 +309,8 @@ export const authService = {
       }
 
       // 3-2. Referral 코드로 가입한 경우 referred_hospital_id 연결
-      if (normalizedBetaInviteCode) {
-        betaInviteService.linkReferralHospital(normalizedBetaInviteCode, hospital.id).catch(() => {});
+      if (normalizedPromoCode) {
+        promoCodeService.linkReferralHospital(normalizedPromoCode, hospital.id).catch(() => {});
       }
 
       // 4. 사업자등록증 업로드 (선택)
@@ -384,8 +375,8 @@ export const authService = {
       }
 
       // Referral 코드로 가입한 경우 referred_hospital_id 연결
-      if (normalizedBetaInviteCode) {
-        betaInviteService.linkReferralHospital(normalizedBetaInviteCode, workspace.id).catch(() => {});
+      if (normalizedPromoCode) {
+        promoCodeService.linkReferralHospital(normalizedPromoCode, workspace.id).catch(() => {});
       }
     }
 
@@ -762,7 +753,7 @@ export const authService = {
     localStorage.removeItem('_pending_hospital_setup');
     localStorage.removeItem('_pending_trial_plan'); // 이중 트라이얼 방지
 
-    const { role, hospitalName, name, email: cfmEmail, phone, trialPlan, betaInviteCode: cfmBetaCode } = pendingSetup;
+    const { role, hospitalName, name, email: cfmEmail, phone, trialPlan, promoCode: cfmPromoCode } = pendingSetup;
 
     // 전화번호 암호화 + 핑거프린트 해시 계산
     const profileUpdates: Record<string, string | null> = {};
@@ -814,8 +805,8 @@ export const authService = {
             nameHash: cfmNameHash,
           });
         }
-        if (cfmBetaCode) {
-          betaInviteService.linkReferralHospital(cfmBetaCode, hospital.id).catch(() => {});
+        if (cfmPromoCode) {
+          promoCodeService.linkReferralHospital(cfmPromoCode, hospital.id).catch(() => {});
         }
         return hospital.id;
       }
@@ -841,8 +832,8 @@ export const authService = {
             nameHash: cfmNameHash,
           });
         }
-        if (cfmBetaCode) {
-          betaInviteService.linkReferralHospital(cfmBetaCode, workspace.id).catch(() => {});
+        if (cfmPromoCode) {
+          promoCodeService.linkReferralHospital(cfmPromoCode, workspace.id).catch(() => {});
         }
         return workspace.id;
       }

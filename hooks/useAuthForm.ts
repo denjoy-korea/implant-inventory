@@ -11,7 +11,7 @@ import { pageViewService } from '../services/pageViewService';
 import { SIGNUP_PLANS } from '../components/auth/authSignupConfig';
 import { TRIAL_OFFER_LABEL } from '../utils/trialPolicy';
 import { useWaitlistForm } from './useWaitlistForm';
-import { useBetaCodeVerification } from './useBetaCodeVerification';
+import { usePromoCodeVerification } from './usePromoCodeVerification';
 
 export interface InviteInfo {
   token: string;
@@ -46,12 +46,6 @@ const AUTH_ERROR_KO: Record<string, string> = {
   'for security purposes, you can only request this once every 60 seconds': '보안을 위해 60초 후 다시 시도해주세요.',
   'too many requests': '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
   'database error saving new user': '회원가입 처리 중 저장 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-  'beta_invite_code_required': '베타테스터 초대 코드를 입력해주세요.',
-  'beta_invite_code_invalid': '유효하지 않은 베타테스터 초대 코드입니다.',
-  'beta_invite_code_inactive': '비활성화된 코드입니다. 운영팀에 문의해주세요.',
-  'beta_invite_code_expired': '만료된 코드입니다. 운영팀에 문의해주세요.',
-  'beta_invite_code_already_used': '이미 사용된 코드입니다. 다른 코드를 입력해주세요.',
-  'beta_invite_codes_table_missing': '베타 코드 시스템 설정이 누락되었습니다. 운영팀에 문의해주세요.',
 };
 
 export function toAuthErrorStatus(message: string): AuthErrorStatus {
@@ -134,7 +128,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
   const { toast, showToast } = useToast();
 
   // Compose sub-hooks
-  const beta = useBetaCodeVerification({ type, showToast });
+  const promo = usePromoCodeVerification({ showToast });
   const waitlist = useWaitlistForm({ showToast, showLegalType });
 
   useEffect(() => {
@@ -181,7 +175,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     setPhone('');
     setBizFile(null);
     setPasswordConfirm('');
-    beta.resetBetaState();
+    promo.resetPromoState();
   }, [type]);
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
@@ -343,7 +337,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
         bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
         signupSource: signupSource || undefined,
         trialPlan: (pendingTrialPlan && pendingTrialPlan !== 'free') ? pendingTrialPlan : undefined,
-        betaInviteCode: beta.betaInviteVerified ? beta.betaInviteCode : undefined,
+        promoCode: promo.promoVerified ? promo.promoCode : undefined,
       });
       setIsSubmitting(false);
 
@@ -444,14 +438,12 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     rememberEmail, setRememberEmail,
     errorStatus, setErrorStatus,
     resetEmailSent, setResetEmailSent,
-    betaInviteCode: beta.betaInviteCode, setBetaInviteCode: beta.setBetaInviteCode,
-    betaInviteVerified: beta.betaInviteVerified,
-    verifiedCodeType: beta.verifiedCodeType,
-    betaInviteModalOpen: beta.betaInviteModalOpen, setBetaInviteModalOpen: beta.setBetaInviteModalOpen,
-    betaInviteChecking: beta.betaInviteChecking,
-    betaInviteError: beta.betaInviteError,
-    betaSignupPolicy: beta.betaSignupPolicy,
-    isBetaInviteRequired: beta.isBetaInviteRequired,
+    promoCode: promo.promoCode, setPromoCode: promo.setPromoCode,
+    promoVerified: promo.promoVerified,
+    verifiedCodeType: promo.verifiedCodeType,
+    promoModalOpen: promo.promoModalOpen, setPromoModalOpen: promo.setPromoModalOpen,
+    promoChecking: promo.promoChecking,
+    promoError: promo.promoError,
     pendingTrialPlan, setPendingTrialPlan,
     trialConsented, setTrialConsented,
     planAvailability,
@@ -478,8 +470,8 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
     handleWaitlistSubmit: waitlist.handleWaitlistSubmit,
     handleInviteSubmit,
     handleRoleSelect,
-    openBetaInviteModal: beta.openBetaInviteModal,
-    handleVerifyBetaInviteCode: beta.handleVerifyBetaInviteCode,
+    openPromoModal: promo.openPromoModal,
+    handleVerifyPromoCode: promo.handleVerifyPromoCode,
     handleSubmit,
   };
 }

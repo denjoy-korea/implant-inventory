@@ -1,9 +1,8 @@
 import { supabase } from './supabaseClient';
-import { normalizeBetaInviteCode } from '../utils/betaSignupPolicy';
 
 export type CodeType = 'beta' | 'partner' | 'promo' | 'referral';
 
-export interface BetaInviteCodeRow {
+export interface PromoCodeRow {
   id: string;
   code: string;
   distributed_to: string | null;
@@ -24,13 +23,13 @@ export interface BetaInviteCodeRow {
   coupon_template_id: string | null;
 }
 
-export interface BetaCodeVerifyResult {
+export interface PromoCodeVerifyResult {
   ok: boolean;
   message: string;
   codeType?: CodeType;
 }
 
-interface CreateBetaCodeParams {
+interface CreatePromoCodeParams {
   distributedTo?: string;
   distributedContact?: string;
   note?: string;
@@ -41,43 +40,11 @@ interface CreateBetaCodeParams {
   couponTemplateId?: string;
 }
 
-interface UpdateBetaCodeMetaParams {
+interface UpdatePromoCodeMetaParams {
   distributedTo?: string;
   distributedContact?: string;
   note?: string;
   usageMode?: 'single' | 'unlimited';
-}
-
-function buildRandomSegment(length: number): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const randomValues = new Uint32Array(length);
-  crypto.getRandomValues(randomValues);
-  let out = '';
-  for (let i = 0; i < length; i += 1) {
-    out += chars[randomValues[i] % chars.length];
-  }
-  return out;
-}
-
-export function generateBetaInviteCode(): string {
-  return `BETA-${buildRandomSegment(4)}-${buildRandomSegment(4)}`;
-}
-
-export function generateCode(codeType: CodeType, channel?: string): string {
-  const seg = () => buildRandomSegment(4);
-  switch (codeType) {
-    case 'partner': {
-      const ch = (channel || 'PRTN').substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
-      return `PARTNER-${ch || 'PRTN'}-${seg()}`;
-    }
-    case 'promo':
-      return `PROMO-${seg()}-${seg()}`;
-    case 'referral':
-      return `INVITE-${seg()}-${seg()}`;
-    case 'beta':
-    default:
-      return generateBetaInviteCode();
-  }
 }
 
 export interface ReferralInfo {
@@ -95,11 +62,43 @@ export interface ReferralInfo {
   }[];
 }
 
-export const betaInviteService = {
-  async verifyCode(rawCode: string): Promise<BetaCodeVerifyResult> {
-    const code = normalizeBetaInviteCode(rawCode);
+function normalizeCode(raw: string): string {
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function buildRandomSegment(length: number): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const randomValues = new Uint32Array(length);
+  crypto.getRandomValues(randomValues);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += chars[randomValues[i] % chars.length];
+  }
+  return out;
+}
+
+export function generateCode(codeType: CodeType, channel?: string): string {
+  const seg = () => buildRandomSegment(4);
+  switch (codeType) {
+    case 'partner': {
+      const ch = (channel || 'PRTN').substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      return `PARTNER-${ch || 'PRTN'}-${seg()}`;
+    }
+    case 'promo':
+      return `PROMO-${seg()}-${seg()}`;
+    case 'referral':
+      return `INVITE-${seg()}-${seg()}`;
+    case 'beta':
+    default:
+      return `BETA-${seg()}-${seg()}`;
+  }
+}
+
+export const promoCodeService = {
+  async verifyCode(rawCode: string): Promise<PromoCodeVerifyResult> {
+    const code = normalizeCode(rawCode);
     if (!code) {
-      return { ok: false, message: '초대 코드를 입력해주세요.' };
+      return { ok: false, message: '코드를 입력해주세요.' };
     }
 
     const { data, error } = await supabase.rpc('verify_beta_invite_code', {
@@ -114,14 +113,14 @@ export const betaInviteService = {
     if (row && typeof row === 'object') {
       const ok = Boolean((row as { ok?: boolean }).ok);
       const message = String((row as { message?: string }).message || (ok ? '확인되었습니다.' : '유효하지 않은 코드입니다.'));
-      const codeType = ((row as { code_type?: string }).code_type || 'beta') as CodeType;
+      const codeType = ((row as { code_type?: string }).code_type || 'promo') as CodeType;
       return { ok, message, codeType };
     }
 
     return { ok: false, message: '코드 검증 응답이 올바르지 않습니다.' };
   },
 
-  async listCodes(codeType?: CodeType): Promise<BetaInviteCodeRow[]> {
+  async listCodes(codeType?: CodeType): Promise<PromoCodeRow[]> {
     let query = supabase
       .from('beta_invite_codes')
       .select('*')
@@ -137,11 +136,11 @@ export const betaInviteService = {
     if (error) {
       throw new Error('코드 목록을 불러오지 못했습니다.');
     }
-    return (data || []) as BetaInviteCodeRow[];
+    return (data || []) as PromoCodeRow[];
   },
 
-  async createCode(params: CreateBetaCodeParams): Promise<BetaInviteCodeRow> {
-    const codeType: CodeType = params.codeType || 'beta';
+  async createCode(params: CreatePromoCodeParams): Promise<PromoCodeRow> {
+    const codeType: CodeType = params.codeType || 'promo';
     const distributedTo = String(params.distributedTo || '').trim();
     const distributedContact = String(params.distributedContact || '').trim();
     const note = String(params.note || '').trim();
@@ -172,7 +171,7 @@ export const betaInviteService = {
         .single();
 
       if (!error && data) {
-        return data as BetaInviteCodeRow;
+        return data as PromoCodeRow;
       }
 
       const pgCode = (error as { code?: string } | null)?.code;
@@ -185,7 +184,7 @@ export const betaInviteService = {
     throw new Error('코드 생성에 실패했습니다. 다시 시도해주세요.');
   },
 
-  async updateCodeMeta(id: string, params: UpdateBetaCodeMetaParams): Promise<BetaInviteCodeRow> {
+  async updateCodeMeta(id: string, params: UpdatePromoCodeMetaParams): Promise<PromoCodeRow> {
     const distributedTo = String(params.distributedTo || '').trim();
     const distributedContact = String(params.distributedContact || '').trim();
     const note = String(params.note || '').trim();
@@ -211,7 +210,7 @@ export const betaInviteService = {
       throw new Error('배포 정보 저장에 실패했습니다.');
     }
 
-    return data as BetaInviteCodeRow;
+    return data as PromoCodeRow;
   },
 
   async setCodeActive(id: string, isActive: boolean): Promise<void> {

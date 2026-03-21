@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { betaInviteService, ReferralInfo } from '../../services/betaInviteService';
+import { promoCodeService, ReferralInfo } from '../../services/promoCodeService';
 
 interface ReferralSectionProps {
   hospitalId: string;
@@ -16,7 +16,7 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ plan }) => {
   const loadInfo = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await betaInviteService.getMyReferralInfo();
+      const data = await promoCodeService.getMyReferralInfo();
       setInfo(data);
     } catch {
       // 조회 실패 시 빈 상태
@@ -33,7 +33,7 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ plan }) => {
     setCreating(true);
     setError(null);
     try {
-      await betaInviteService.createMyReferralCode();
+      await promoCodeService.createMyReferralCode();
       await loadInfo();
     } catch (err) {
       setError(err instanceof Error ? err.message : '코드 생성에 실패했습니다.');
