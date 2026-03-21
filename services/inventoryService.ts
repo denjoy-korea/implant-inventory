@@ -119,21 +119,8 @@ export const inventoryService = {
       p_adjustment: delta,
     });
     if (error) {
-      console.warn('[inventoryService] adjustStock RPC failed, using fallback:', error.message);
-      const { data: current } = await supabase
-        .from('inventory')
-        .select('stock_adjustment')
-        .eq('id', id)
-        .single();
-      const currentAdj = (current as { stock_adjustment?: number } | null)?.stock_adjustment ?? 0;
-      const { error: fallbackError } = await supabase
-        .from('inventory')
-        .update({ stock_adjustment: currentAdj + delta })
-        .eq('id', id);
-      if (fallbackError) {
-        console.error('[inventoryService] adjustStock fallback failed:', fallbackError);
-        return false;
-      }
+      console.error('[inventoryService] adjustStock RPC failed:', error.message);
+      return false;
     }
     return true;
   },

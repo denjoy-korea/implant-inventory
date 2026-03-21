@@ -9,6 +9,14 @@ const ROLE_LABELS: Record<string, string> = {
   staff: "👤 개인 회원",
 };
 
+/** Slack mrkdwn 인젝션 방지 — 특수 문자 이스케이프 */
+function escapeMrkdwn(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     const corsHeaders = getCorsHeaders(req);
@@ -43,16 +51,16 @@ Deno.serve(async (req: Request) => {
     });
 
     const fields: { type: string; text: string }[] = [
-      { type: "mrkdwn", text: `*이름*\n${name || "—"}` },
-      { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
-      { type: "mrkdwn", text: `*역할*\n${ROLE_LABELS[role] || role}` },
+      { type: "mrkdwn", text: `*이름*\n${escapeMrkdwn(name || "—")}` },
+      { type: "mrkdwn", text: `*이메일*\n${escapeMrkdwn(email || "—")}` },
+      { type: "mrkdwn", text: `*역할*\n${ROLE_LABELS[role] || escapeMrkdwn(String(role || "—"))}` },
     ];
 
     if (hospitalName) {
-      fields.push({ type: "mrkdwn", text: `*병원명*\n${hospitalName}` });
+      fields.push({ type: "mrkdwn", text: `*병원명*\n${escapeMrkdwn(hospitalName)}` });
     }
     if (signupSource) {
-      fields.push({ type: "mrkdwn", text: `*가입경로*\n${signupSource}` });
+      fields.push({ type: "mrkdwn", text: `*가입경로*\n${escapeMrkdwn(signupSource)}` });
     }
 
     const slackBody = {

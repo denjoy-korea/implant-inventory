@@ -138,8 +138,9 @@ export function useAppState(onNotify?: NotifyFn) {
       // - planState 조회 전이므로 일단 planService.checkPlanExpiry를 통해 플랜 확인
       //   → 실용적 방법: 플랜을 먼저 확인한 후 fromDate 결정
       const planStateForDate = await planService.checkPlanExpiry(user.hospitalId);
-      const retentionMonths = PLAN_LIMITS[planStateForDate.plan]?.retentionMonths ?? 24;
-      // 보관 기간이 24개월을 넘어도 DB에는 최대 24개월치만 존재하므로 max 24
+      const retentionMonths = PLAN_LIMITS[planStateForDate.plan]?.viewMonths ?? 24;
+      // 조회 허용 기간(viewMonths): Free=3, Basic=12, Plus/Business=24
+      // DB 보관(retentionMonths)은 모두 24개월이지만 조회는 플랜별로 제한
       const effectiveMonths = Math.min(retentionMonths, 24);
       const fromDateObj = new Date();
       fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);

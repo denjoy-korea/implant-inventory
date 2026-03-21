@@ -74,37 +74,14 @@ export const resetService = {
 
   /** 즉시 초기화 승인 (admin) */
   async approveImmediate(requestId: string, hospitalId: string): Promise<boolean> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    // 1. 데이터 삭제 RPC
-    const { error: rpcError } = await supabase.rpc('admin_reset_hospital_data', {
-      p_hospital_id: hospitalId,
+    const { error } = await supabase.functions.invoke('reset-hospital-data', {
+      body: { hospitalId, requestId, mode: 'immediate' },
     });
 
-    if (rpcError) {
-      console.error('[resetService] RPC failed:', rpcError);
+    if (error) {
+      console.error('[resetService] approveImmediate failed:', error);
       return false;
     }
-
-    // 2. 요청 상태 업데이트
-    const { error } = await supabase
-      .from('data_reset_requests')
-      .update({
-        status: 'completed',
-        approved_by: user.id,
-        approved_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', requestId);
-
-    if (error) {
-      console.error('[resetService] approveImmediate status update failed:', error);
-    }
-
-    // 3. 신청자 프로필 상태를 일시정지로 변경
-    await this.pauseRequester(requestId);
-
     return true;
   },
 
@@ -176,26 +153,15 @@ export const resetService = {
     const scheduledTime = new Date(req.scheduled_at).getTime();
     if (Date.now() < scheduledTime) return false;
 
-    // 기한 도래 → 실행
-    const { error: rpcError } = await supabase.rpc('admin_reset_hospital_data', {
-      p_hospital_id: hospitalId,
+    // 기한 도래 → Edge Function으로 실행 (service_role RPC 호출)
+    const { error } = await supabase.functions.invoke('reset-hospital-data', {
+      body: { hospitalId, requestId: req.id, mode: 'scheduled' },
     });
 
-    if (rpcError) {
-      console.error('[resetService] scheduled reset RPC failed:', rpcError);
+    if (error) {
+      console.error('[resetService] scheduled reset failed:', error);
       return false;
     }
-
-    await supabase
-      .from('data_reset_requests')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', req.id);
-
-    // 신청자 프로필 상태를 일시정지로 변경
-    await this.pauseRequester(req.id);
 
     return true;
   },

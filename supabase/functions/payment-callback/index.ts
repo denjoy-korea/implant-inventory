@@ -148,13 +148,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const callbackSecret = (Deno.env.get("PAYMENT_CALLBACK_SECRET") || "").trim();
-  if (callbackSecret) {
-    const queryToken = req.url ? new URL(req.url).searchParams.get("token") || "" : "";
-    const headerToken = (req.headers.get("x-callback-token") || "").trim();
-    const requestToken = queryToken || headerToken;
-    if (!requestToken || !timingSafeEquals(requestToken, callbackSecret)) {
-      return jsonResponse({ error: "Invalid callback token" }, 401);
-    }
+  if (!callbackSecret) {
+    return jsonResponse({ error: "Payment callback is not configured" }, 500);
+  }
+  const queryToken = req.url ? new URL(req.url).searchParams.get("token") || "" : "";
+  const headerToken = (req.headers.get("x-callback-token") || "").trim();
+  const requestToken = queryToken || headerToken;
+  if (!requestToken || !timingSafeEquals(requestToken, callbackSecret)) {
+    return jsonResponse({ error: "Invalid callback token" }, 401);
   }
 
   const body = await parseBody(req);
