@@ -89,7 +89,7 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
                     >
                         <div className="absolute inset-0 bg-gradient-to-tr from-emerald-100/50 to-emerald-50/10 opacity-0 group-active:opacity-100 transition-opacity"></div>
                         <div className="flex items-center gap-1 z-10">
-                            <span className="text-[12px] font-bold">분석 문의</span>
+                            <span className="text-[12px] font-bold">무료분석</span>
                         </div>
                     </button>
                 </div>

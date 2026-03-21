@@ -230,26 +230,10 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     : undefined;
 
   const handleNavigate = (targetView: View) => {
-    if (targetView === 'analyze') {
-      const isMobileSize = window.matchMedia('(max-width: 1023px)').matches;
-      const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-
-      if (isMobileSize || isTouchDevice) {
-        showAlertToast('무료분석은 PC에서 이용 가능합니다. PC로 접속해 주세요.', 'info');
-        return;
-      }
-    }
     onNavigate(targetView);
   };
 
   const handleAnalyzeEntry = () => {
-    const isMobileSize = window.matchMedia('(max-width: 1023px)').matches;
-    const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-    if (isMobileSize || isTouchDevice) {
-      showAlertToast('무료분석은 PC에서 이용 가능합니다. 문의 페이지로 안내합니다.', 'info');
-      onNavigate('contact');
-      return;
-    }
     onNavigate('analyze');
   };
 
