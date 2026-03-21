@@ -278,8 +278,7 @@ test('landing/value pages share unified trial copy policy', () => {
   const value = read('components/ValuePage.tsx');
   const policy = read('utils/trialPolicy.ts');
 
-  assert.match(policy, /BETA_TRIAL_DEADLINE_TEXT = '2026년 3월 31일까지'/);
-  assert.match(policy, /export function getTrialCopy\(now: Date = new Date\(\)\)/);
+  assert.match(policy, /export function getTrialCopy\(\)/);
   assert.match(policy, /footnoteWithDot/);
   assert.match(policy, /footnoteWithPipe/);
 

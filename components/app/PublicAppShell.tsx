@@ -272,7 +272,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     },
     signup: {
       title: '회원가입 | DenJOY',
-      description: '1분이면 끝나는 간단한 가입. 지금 무료로 시작하세요.',
+      description: '간편한 가입 후 무료로 시작하세요. 카드 정보 불필요.',
     },
   };
 

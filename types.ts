@@ -119,6 +119,8 @@ export interface Hospital {
   onboardingFlags: number;
   /** 워크스페이스에서 사용하는 청구프로그램 */
   billingProgram: BillingProgram | null;
+  /** 사업자등록증 파일 참조 (null이면 미등록) */
+  bizFileUrl: string | null;
 }
 
 export interface ParsedSize {
@@ -158,6 +160,8 @@ export interface AppState {
   hospitalWorkDays: number[];
   /** 병원별 청구프로그램 (선택 전이면 null) */
   hospitalBillingProgram: BillingProgram | null;
+  /** 병원 사업자등록증 파일 참조 (null이면 미등록) */
+  hospitalBizFileUrl: string | null;
   /** MFA OTP 검증 대기 중인 이메일 */
   mfaPendingEmail?: string;
   /** PricingPage에서 플랜 선택 후 회원가입으로 넘어온 경우 */

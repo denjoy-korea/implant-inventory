@@ -1,7 +1,8 @@
-import React, { Suspense, useMemo } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import { AppState, BillingCycle, ExcelData, InventoryItem, Order, OrderStatus, PlanType, PLAN_LIMITS, ReturnReason, ReturnRequest, ReturnStatus, ReturnMutationResult, SurgeryUnregisteredItem, User } from '../../types';
 import { StockCalcSettings } from '../../services/hospitalSettingsService';
 import MigrationBanner from '../MigrationBanner';
+import { checkProfileGaps, hasProfileGaps } from '../../utils/profileCompleteness';
 import UpgradeNudge, { NudgeType } from '../UpgradeNudge';
 import PlanLimitToast, { LimitType } from '../PlanLimitToast';
 import ReadOnlyBanner from '../ReadOnlyBanner';
@@ -166,9 +167,19 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
   onStockCalcSettingsChange,
   onOpenPaymentModal,
 }) => {
+  const [profileBannerDismissed, setProfileBannerDismissed] = useState(false);
+
   const surgeryUsageSet = useMemo(
     () => buildSurgeryUsageSet(state.surgeryMaster),
     [state.surgeryMaster],
+  );
+
+  const profileGaps = useMemo(
+    () => isHospitalMaster ? checkProfileGaps({
+      phone: state.user?.phone,
+      bizFileUrl: state.hospitalBizFileUrl,
+    }) : null,
+    [isHospitalMaster, state.user?.phone, state.hospitalBizFileUrl],
   );
 
   const buildQuickOrder = (item: InventoryItem, quantity?: number): Order => ({
@@ -236,6 +247,41 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
           maxItems={PLAN_LIMITS.free.maxItems}
           onUpgrade={onOpenProfilePlan ?? onGoToPricing}
         />
+      )}
+
+      {profileGaps && hasProfileGaps(profileGaps) && !profileBannerDismissed && (
+        <div className="bg-sky-50 border border-sky-200 rounded-xl px-5 py-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <svg className="w-4 h-4 text-sky-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-sm font-semibold text-sky-800">프로필 정보를 완성하세요</p>
+                <p className="text-xs text-sky-600 mt-0.5">
+                  미등록: {[profileGaps.missingPhone && '연락처', profileGaps.missingBizFile && '사업자등록증'].filter(Boolean).join(', ')}
+                  <button
+                    type="button"
+                    onClick={() => setState(prev => ({ ...prev, dashboardTab: 'settings' }))}
+                    className="ml-2 font-bold underline underline-offset-2 hover:text-sky-700"
+                  >
+                    설정에서 등록 →
+                  </button>
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProfileBannerDismissed(true)}
+              aria-label="닫기"
+              className="text-sky-400 hover:text-sky-600 flex-shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
 
       {state.dashboardTab === 'overview' && (

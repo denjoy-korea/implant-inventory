@@ -66,12 +66,13 @@ export const hospitalService = {
       workDays: DEFAULT_WORK_DAYS,
       onboardingFlags: 0,
       billingProgram: null,
+      bizFileUrl: null,
     }));
   },
 
   /** 병원 ID로 단건 조회 */
   async getHospitalById(hospitalId: string): Promise<Hospital | null> {
-    const baseSelect = 'id, name, master_admin_id, created_at, work_days, onboarding_flags';
+    const baseSelect = 'id, name, master_admin_id, created_at, work_days, onboarding_flags, biz_file_url';
     const selectWithProgram = `${baseSelect}, billing_program`;
 
     let { data, error } = await supabase

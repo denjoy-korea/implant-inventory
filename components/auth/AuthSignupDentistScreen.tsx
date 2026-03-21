@@ -157,17 +157,18 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  연락처 <span className="text-rose-400">*</span>
+                  연락처 <span className="text-slate-400 font-normal">(선택)</span>
                 </label>
-                <input type="tel" name="phone" autoComplete="tel" value={phone} onChange={(event) => onPhoneChange(event.target.value)} className={inputClass} placeholder="010-0000-0000" required />
+                <input type="tel" name="phone" autoComplete="tel" value={phone} onChange={(event) => onPhoneChange(event.target.value)} className={inputClass} placeholder="010-0000-0000" />
               </div>
             </div>
 
             {/* Row 2: 사업자등록증 */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                사업자등록증 <span className="text-rose-400">*</span>
+                사업자등록증 <span className="text-slate-400 font-normal">(선택)</span>
               </label>
+              <p className="text-xs text-slate-400 mb-2">결제 시 세금계산서 발행에 필요합니다. 나중에 설정에서 등록 가능합니다.</p>
               <div className={`relative w-full border-2 border-dashed rounded-xl p-4 text-center transition-all ${bizFile ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200 hover:border-indigo-300'}`}>
                 {bizFile ? (
                   <div className="flex items-center justify-center gap-3">
@@ -257,7 +258,7 @@ const AuthSignupDentistScreen: React.FC<AuthSignupDentistScreenProps> = ({
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                가입경로 <span className="text-rose-400">*</span>
+                가입경로 <span className="text-slate-400 font-normal">(선택)</span>
               </label>
               <select value={signupSource} onChange={(event) => onSignupSourceChange(event.target.value)} className={inputClass}>
                 <option value="">선택 안 함</option>

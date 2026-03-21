@@ -32,32 +32,20 @@ test('trial policy copy is centralized and reused by landing/pricing/signup/lega
   assert.match(legal, /TRIAL_DATA_DELETION_POLICY_TEXT/);
 });
 
-test('trial duration policy is aligned to default 14 days with beta-started 28-day exception', () => {
+test('trial duration policy is fixed at 14 days', () => {
   const policy = read('utils/trialPolicy.ts');
   const types = read('types.ts');
   // TRIAL_DAYS may be in types/plan.ts and re-exported from types.ts after refactoring
   const planTypes = read('types/plan.ts');
   const planService = read('services/planService.ts');
   const systemAdminDomain = read('components/system-admin/systemAdminDomain.ts');
-  const sql = read('supabase/048_trial_policy_14_28_alignment.sql');
 
   assert.match(types + planTypes, /export const TRIAL_DAYS = 14;/);
   assert.match(policy, /export const DEFAULT_TRIAL_DAYS = 14;/);
-  assert.match(policy, /export const BETA_TRIAL_DAYS = 28;/);
-  assert.match(policy, /BETA_TRIAL_CUTOFF_KST_ISO = '2026-04-01T00:00:00\+09:00'/);
-  assert.match(
-    policy,
-    /return isBetaTrialEligibleByStart\(trialStartedAt\) \? BETA_TRIAL_DAYS : DEFAULT_TRIAL_DAYS;/,
-  );
 
   // Runtime consumers should reuse shared policy helper instead of hard-coding day counts.
   assert.match(planService, /import \{ getTrialDurationDays \} from '\.\.\/utils\/trialPolicy';/);
   assert.match(systemAdminDomain, /import \{ getTrialDurationDays \} from '\.\.\/\.\.\/utils\/trialPolicy';/);
-
-  // SQL expiry policy must mirror the same 14/28 rule by trial start timestamp.
-  assert.match(sql, /CREATE OR REPLACE FUNCTION _trial_duration_days/);
-  assert.match(sql, /THEN 28/);
-  assert.match(sql, /ELSE 14/);
 });
 
 test('public pages consistently expose legal links via shared footer', () => {
@@ -155,16 +143,19 @@ test('waitlist/trial/legal modals keep keyboard and aria primitives', () => {
 
 test('mobile analyze entry uses fallback journey instead of desktop-only action', () => {
   const landing = read('components/LandingPage.tsx');
-  const appShell = read('components/app/PublicAppShell.tsx');
+  const analyzePage = read('components/AnalyzePage.tsx');
+  const mobileGate = read('components/analyze/MobileAnalyzeGate.tsx');
   const contact = read('components/ContactPage.tsx');
   const mobileNav = read('components/PublicMobileNav.tsx');
 
   assert.match(landing, /isMobileViewport \? '도입 문의하기' : '무료 분석하기'/);
   assert.match(landing, /무료분석은 PC 전용입니다 · 모바일에서는 문의로 안내해 드립니다/);
-  assert.match(appShell, /무료분석은 PC에서 이용 가능합니다\. 문의 페이지로 안내합니다\./);
-  assert.match(appShell, /onNavigate\('contact'\)/);
+  // MobileAnalyzeGate is rendered by AnalyzePage for mobile users (replaces old PublicAppShell redirect)
+  assert.match(analyzePage, /MobileAnalyzeGate/);
+  assert.match(analyzePage, /isMobile/);
+  assert.match(mobileGate, /onContact/);
   assert.match(contact, /onAnalyze && isMobileViewport/);
-  assert.match(mobileNav, /분석 문의/);
+  assert.match(mobileNav, /무료분석/);
 });
 
 test('payment failure path offers alternative actions (consultation and free-plan fallback)', () => {

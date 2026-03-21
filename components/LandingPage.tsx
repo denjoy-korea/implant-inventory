@@ -161,7 +161,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </svg>
               </button>
             </div>
-            <span className="text-xs sm:text-sm text-slate-400 font-medium bg-slate-100/50 px-3 py-1.5 rounded-full border border-slate-200/50">카드 정보 불필요 &middot; 1분 가입</span>
+            <span className="text-xs sm:text-sm text-slate-400 font-medium bg-slate-100/50 px-3 py-1.5 rounded-full border border-slate-200/50">카드 정보 불필요 &middot; 간편 가입</span>
           </div>
 
           {/* 피드포워드: 가입 후 얻을 결과 미리보기 */}
@@ -591,8 +591,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
               {
                 step: '01',
                 title: '회원가입',
-                desc: '병원명과 기본 정보만 입력하면 즉시 대시보드가 열립니다.',
-                result: '→ 1분 안에 완료',
+                desc: '병원 정보를 등록하면 바로 대시보드가 열립니다.',
+                result: '→ 간단한 가입 절차',
               },
               {
                 step: '02',

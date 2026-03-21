@@ -318,9 +318,6 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
       }
 
       if (userType === 'dentist' && !hospitalName) { showToast('병원명을 입력해주세요.', 'error'); return; }
-      if (userType === 'dentist' && !phone) { showToast('연락처를 입력해주세요.', 'error'); return; }
-      if (userType === 'dentist' && !bizFile) { showToast('사업자등록증을 첨부해주세요.', 'error'); return; }
-      if (!signupSource) { showToast('가입경로를 선택해주세요.', 'error'); return; }
       if (!agreedToTerms || !agreedToPrivacy) {
         showToast('이용약관 및 개인정보 처리방침에 동의해주세요.', 'error');
         return;

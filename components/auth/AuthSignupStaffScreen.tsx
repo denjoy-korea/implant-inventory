@@ -150,9 +150,9 @@ const AuthSignupStaffScreen: React.FC<AuthSignupStaffScreenProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  연락처 <span className="text-rose-400">*</span>
+                  연락처 <span className="text-slate-400 font-normal">(선택)</span>
                 </label>
-                <input type="tel" name="phone" autoComplete="tel" value={phone} onChange={(event) => onPhoneChange(event.target.value)} className={inputClass} placeholder="010-0000-0000" required />
+                <input type="tel" name="phone" autoComplete="tel" value={phone} onChange={(event) => onPhoneChange(event.target.value)} className={inputClass} placeholder="010-0000-0000" />
               </div>
             </div>
             <div>
@@ -207,7 +207,7 @@ const AuthSignupStaffScreen: React.FC<AuthSignupStaffScreenProps> = ({
             {passwordHints}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                가입경로 <span className="text-rose-400">*</span>
+                가입경로 <span className="text-slate-400 font-normal">(선택)</span>
               </label>
               <select value={signupSource} onChange={(event) => onSignupSourceChange(event.target.value)} className={inputClass}>
                 <option value="">선택 안 함</option>

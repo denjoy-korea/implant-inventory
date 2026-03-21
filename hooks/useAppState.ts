@@ -51,6 +51,7 @@ const INITIAL_STATE: AppState = {
   hospitalMasterAdminId: '',
   hospitalWorkDays: DEFAULT_WORK_DAYS,
   hospitalBillingProgram: null,
+  hospitalBizFileUrl: null,
 };
 
 type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
@@ -105,6 +106,7 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalMasterAdminId: '',
         hospitalWorkDays: DEFAULT_WORK_DAYS,
         hospitalBillingProgram: null,
+        hospitalBizFileUrl: null,
         isLoading: false,
       }));
       // 백그라운드 프로필 복호화
@@ -123,6 +125,7 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalMasterAdminId: '',
         hospitalWorkDays: DEFAULT_WORK_DAYS,
         hospitalBillingProgram: null,
+        hospitalBizFileUrl: null,
         isLoading: false,
       }));
       // 백그라운드 프로필 복호화
@@ -196,6 +199,7 @@ export function useAppState(onNotify?: NotifyFn) {
         hospitalMasterAdminId: hospitalData?.masterAdminId || '',
         hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
         hospitalBillingProgram: hospitalData?.billingProgram ?? null,
+        hospitalBizFileUrl: hospitalData?.bizFileUrl ?? null,
         isLoading: false,
       }));
 

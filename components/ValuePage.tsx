@@ -290,7 +290,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               {
                 step: '01',
                 title: '회원가입 & 병원 등록',
-                desc: '1분이면 끝나는 간단한 가입. 병원명과 기본 정보만 입력하면 즉시 대시보드가 열립니다.',
+                desc: '병원 정보를 등록하면 바로 대시보드가 열립니다. 첫 세팅 후 자동화가 시작됩니다.',
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
