@@ -33,3 +33,4 @@
 | pricing-overhaul | 97.8% | 2026-03-08 | [pricing-overhaul/](./pricing-overhaul/) |
 | security-hardening | 100% | 2026-03-12 | [security-hardening/](./security-hardening/) |
 | order-return-remodel | 94.1% | 2026-03-12 | [order-return-remodel/](./order-return-remodel/) |
+| reviews-fallback | 100% | 2026-03-21 | [reviews-fallback/](./reviews-fallback/) |
