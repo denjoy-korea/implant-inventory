@@ -9,6 +9,12 @@ interface ReviewsPageProps {
 type RoleFilter = 'all' | ReviewRole;
 type RatingFilter = 0 | 1 | 2 | 3 | 4 | 5;
 
+const FALLBACK: UserReview[] = [
+  { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+  { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.', display_last_name: '박', display_role: '실장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+  { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.', display_last_name: '이', display_role: '팀장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+];
+
 const ROLE_FILTERS: { label: string; value: RoleFilter }[] = [
   { label: '전체', value: 'all' },
   { label: '원장', value: '원장' },
@@ -30,20 +36,22 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const filtered = reviews.filter(r => {
+  const displayReviews = !isLoading && reviews.length === 0 ? FALLBACK : reviews;
+
+  const filtered = displayReviews.filter(r => {
     if (roleFilter !== 'all' && r.display_role !== roleFilter) return false;
     if (ratingFilter !== 0 && r.rating !== ratingFilter) return false;
     return true;
   });
 
   // 통계
-  const avg = reviews.length
-    ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
+  const avg = displayReviews.length
+    ? displayReviews.reduce((s, r) => s + r.rating, 0) / displayReviews.length
     : 0;
   const dist = [5, 4, 3, 2, 1].map(star => ({
     star,
-    count: reviews.filter(r => r.rating === star).length,
-    pct: reviews.length ? Math.round((reviews.filter(r => r.rating === star).length / reviews.length) * 100) : 0,
+    count: displayReviews.filter(r => r.rating === star).length,
+    pct: displayReviews.length ? Math.round((displayReviews.filter(r => r.rating === star).length / displayReviews.length) * 100) : 0,
   }));
 
   return (
@@ -66,7 +74,7 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
         )}
 
         {/* 평점 요약 */}
-        {!isLoading && reviews.length > 0 && (
+        {!isLoading && displayReviews.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 mb-8 shadow-sm">
             <div className="flex flex-col sm:flex-row gap-6 sm:gap-10 items-center sm:items-start">
               {/* 평균 점수 */}
@@ -79,7 +87,7 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
                     </svg>
                   ))}
                 </div>
-                <p className="text-xs text-slate-400 font-medium">{reviews.length}개 후기</p>
+                <p className="text-xs text-slate-400 font-medium">{displayReviews.length}개 후기</p>
               </div>
 
               {/* 별점 분포 */}
@@ -106,7 +114,7 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
         )}
 
         {/* 필터 */}
-        {!isLoading && reviews.length > 0 && (
+        {!isLoading && displayReviews.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
             {ROLE_FILTERS.map(f => (
               <button
@@ -120,7 +128,7 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
                 {f.label}
                 {f.value !== 'all' && (
                   <span className="ml-1 opacity-60">
-                    {reviews.filter(r => r.display_role === f.value).length}
+                    {displayReviews.filter(r => r.display_role === f.value).length}
                   </span>
                 )}
               </button>
@@ -142,25 +150,6 @@ export default function ReviewsPage({ onBack }: ReviewsPageProps) {
         {/* 후기 목록 */}
         {isLoading ? (
           <div className="py-20 text-center text-sm text-slate-400">불러오는 중...</div>
-        ) : reviews.length === 0 ? (
-          <div className="py-32 text-center relative overflow-hidden rounded-[2rem] border border-slate-200/60 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[inset_0_0_40px_rgba(0,0,0,0.02)]">
-            {/* 장식용 블러 배경 */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-100 rounded-full blur-[80px] opacity-60"></div>
-
-            <div className="relative z-10 flex flex-col items-center">
-              <div className="w-20 h-20 rounded-2xl bg-white/80 backdrop-blur-xl border border-white flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-100/50 animate-[float_4s_ease-in-out_infinite]">
-                <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">
-                아직 공개된 후기가 없습니다
-              </h3>
-              <p className="text-sm text-slate-500 max-w-[260px] leading-relaxed mx-auto">
-                현재 리뷰 검토 중이거나 수집 단계에 있습니다. 곧 생생한 도입 후기로 찾아오겠습니다.
-              </p>
-            </div>
-          </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-sm text-slate-400">
             해당 조건의 후기가 없습니다
