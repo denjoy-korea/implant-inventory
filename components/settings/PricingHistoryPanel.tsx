@@ -4,7 +4,6 @@ import type { ItemPricingHistory } from '../../types/pricing';
 interface PricingHistoryPanelProps {
   manufacturer: string;
   brand: string;
-  size: string;
   history: ItemPricingHistory[];
   isLoading: boolean;
   onClose: () => void;
@@ -33,7 +32,7 @@ function formatDate(iso: string): string {
 }
 
 const PricingHistoryPanel: React.FC<PricingHistoryPanelProps> = ({
-  manufacturer, brand, size, history, isLoading, onClose,
+  manufacturer, brand, history, isLoading, onClose,
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
@@ -42,7 +41,7 @@ const PricingHistoryPanel: React.FC<PricingHistoryPanelProps> = ({
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-slate-800">변경 이력</h3>
-            <p className="text-xs text-slate-500 mt-0.5 truncate">{manufacturer} · {brand} · {size}</p>
+            <p className="text-xs text-slate-500 mt-0.5 truncate">{manufacturer} · {brand}</p>
           </div>
           <button
             onClick={onClose}

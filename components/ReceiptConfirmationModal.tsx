@@ -309,25 +309,25 @@ export function ReceiptConfirmationModal({
 
     // ── 단가 관리 (Business+ 플랜) ────────────────────────────────────────────
     const [pricingMap, setPricingMap] = useState<Map<string, ItemPricing>>(new Map());
-    // key: "manufacturer|brand|size" → 편집 중인 매입단가 문자열
+    // key: "manufacturer|brand" → 편집 중인 매입단가 문자열
     const [editingPrices, setEditingPrices] = useState<Record<string, string>>({});
     const hasPricingAccess = !!hospitalId && (plan === 'business' || plan === 'ultimate');
 
     useEffect(() => {
         if (!hasPricingAccess) return;
         const allItems = groupedOrder.orders.flatMap(o =>
-            o.items.map(item => ({ manufacturer: o.manufacturer, brand: item.brand, size: item.size }))
+            o.items.map(item => ({ manufacturer: o.manufacturer, brand: item.brand }))
         );
         pricingService.getPricingBatch(hospitalId!, allItems).then(map => setPricingMap(map));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasPricingAccess, hospitalId]);
 
-    const getPricingKey = (manufacturer: string, brand: string, size: string) =>
-        `${manufacturer}|${brand}|${size}`;
+    const getPricingKey = (manufacturer: string, brand: string) =>
+        `${manufacturer}|${brand}`;
 
-    const savePriceIfChanged = async (manufacturer: string, brand: string, size: string) => {
+    const savePriceIfChanged = async (manufacturer: string, brand: string) => {
         if (!hasPricingAccess) return;
-        const key = getPricingKey(manufacturer, brand, size);
+        const key = getPricingKey(manufacturer, brand);
         const editVal = editingPrices[key];
         if (editVal === undefined) return;
         const newPrice = parseInt(editVal, 10);
@@ -337,7 +337,6 @@ export function ReceiptConfirmationModal({
         const result = await pricingService.upsertPricing(hospitalId!, {
             manufacturer,
             brand,
-            size,
             purchasePrice: newPrice,
             treatmentFee: existing?.treatmentFee ?? 0,
         }, 'receipt_confirmation');
@@ -717,7 +716,7 @@ export function ReceiptConfirmationModal({
                                                             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{item.size}</span>
                                                         </div>
                                                         {hasPricingAccess && (() => {
-                                                            const pKey = getPricingKey(currentOrder.manufacturer, item.brand, item.size);
+                                                            const pKey = getPricingKey(currentOrder.manufacturer, item.brand);
                                                             const priceEntry = pricingMap.get(pKey);
                                                             const editVal = editingPrices[pKey];
                                                             const displayVal = editVal !== undefined ? editVal : (priceEntry?.purchasePrice ?? '');
@@ -728,7 +727,7 @@ export function ReceiptConfirmationModal({
                                                                         type="number" min="0"
                                                                         value={displayVal}
                                                                         onChange={e => setEditingPrices(prev => ({ ...prev, [pKey]: e.target.value }))}
-                                                                        onBlur={() => savePriceIfChanged(currentOrder.manufacturer, item.brand, item.size)}
+                                                                        onBlur={() => savePriceIfChanged(currentOrder.manufacturer, item.brand)}
                                                                         placeholder="미등록"
                                                                         className="w-24 px-2 py-0.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white text-right"
                                                                     />
