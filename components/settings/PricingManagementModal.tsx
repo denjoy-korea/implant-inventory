@@ -360,7 +360,7 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
                           {hasData && (
                             <button
                               onClick={() => openHistory(row.manufacturer, row.brand)}
-                              className="p-1 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                               title="이력"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
