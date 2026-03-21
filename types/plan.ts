@@ -36,7 +36,8 @@ export type PlanFeature =
   | 'surgery_chart_advanced' // 수술기록 고급 차트 전체 — Plus+
   | 'exchange_analysis'      // 교환관리 하단 4섹션 분석 — Plus+
   | 'order_optimization'     // 발주 최적화 추천 + OptimizeModal — Plus+
-  | 'simple_order';          // 간편발주 (카톡 복사) — Plus+
+  | 'simple_order'           // 간편발주 (카톡 복사) — Plus+
+  | 'pricing_management';    // 품목별 매입단가·진료수가 관리 — Business+
 
 // ── 인테그레이션 타입 ─────────────────────────────────────────────
 export type IntegrationProvider = 'notion' | 'slack' | 'solapi';
@@ -160,6 +161,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       'simple_order', 'one_click_order', 'monthly_report', 'yearly_report',
       'supplier_management', 'ai_forecast', 'role_management',
       'audit_log', 'email_support', 'priority_support', 'integrations',
+      'pricing_management',
     ],
   },
   ultimate: {
@@ -178,6 +180,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       'simple_order', 'one_click_order', 'monthly_report', 'yearly_report',
       'supplier_management', 'ai_forecast', 'role_management',
       'audit_log', 'email_support', 'priority_support', 'integrations',
+      'pricing_management',
     ],
   },
 };

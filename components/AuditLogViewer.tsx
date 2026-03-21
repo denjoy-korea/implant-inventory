@@ -24,6 +24,7 @@ const ACTION_LABELS: Record<OperationAction, { label: string; color: string; bg:
   account_self_deleted: { label: '자발적 탈퇴', color: 'text-rose-700', bg: 'bg-rose-100' },
   account_force_deleted: { label: '강제 삭제', color: 'text-red-700', bg: 'bg-red-100' },
   account_deactivated: { label: '계정 비활성화', color: 'text-gray-700', bg: 'bg-gray-100' },
+  pricing_update: { label: '단가 수정', color: 'text-indigo-700', bg: 'bg-indigo-100' },
 };
 
 const PAGE_SIZE = 50;

@@ -26,6 +26,7 @@ export interface MemberPermissions {
   canManageOptimizer: boolean; // 권장재고산출설정
   canViewAuditLog: boolean;    // 감사 로그
   canManageDentweb: boolean;   // 덴트웹 자동화
+  canManagePricing: boolean;   // 단가 관리
 }
 
 /** 권한 레벨 프리셋 */
@@ -44,6 +45,7 @@ export const DEFAULT_STAFF_PERMISSIONS: MemberPermissions = {
   canManageOptimizer: true,
   canViewAuditLog: true,
   canManageDentweb: true,
+  canManagePricing: true,
 };
 
 export const READONLY_PERMISSIONS: MemberPermissions = {
@@ -59,6 +61,7 @@ export const READONLY_PERMISSIONS: MemberPermissions = {
   canManageOptimizer: false,
   canViewAuditLog: false,
   canManageDentweb: false,
+  canManagePricing: false,
 };
 
 export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
@@ -74,6 +77,7 @@ export const PERMISSION_LABELS: Record<keyof MemberPermissions, string> = {
   canManageOptimizer: '권장재고산출설정',
   canViewAuditLog: '감사 로그',
   canManageDentweb: '덴트웹 자동화',
+  canManagePricing: '단가 관리',
 };
 
 export interface User {

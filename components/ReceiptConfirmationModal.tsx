@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { GroupedOrder } from './OrderManager';
-import { InventoryItem, OrderItem, type OrderStatus } from '../types';
+import { InventoryItem, OrderItem, type OrderStatus, type PlanType } from '../types';
 import { parseSize } from '../services/sizeNormalizer';
 import ModalShell from './shared/ModalShell';
+import { pricingService } from '../services/pricingService';
+import type { ItemPricing } from '../types/pricing';
 
 export interface ReceiptUpdate {
     orderId: string;
@@ -27,6 +29,10 @@ interface ReceiptConfirmationModalProps {
     onUpdateOrderStatus?: (id: string, status: OrderStatus) => void;
     onDeleteOrder?: (id: string) => void;
     isLoading?: boolean;
+    /** 단가 관리 기능 접근 여부 판단용 */
+    plan?: PlanType;
+    /** 병원 ID (단가 upsert 시 필요) */
+    hospitalId?: string;
 }
 
 // ── Helper: inventory에서 manufacturer+brand 조합의 dimension 목록 추출 ──
@@ -102,7 +108,9 @@ export function ReceiptConfirmationModal({
     onConfirmStep,
     onUpdateOrderStatus,
     onDeleteOrder,
-    isLoading
+    isLoading,
+    plan,
+    hospitalId,
 }: ReceiptConfirmationModalProps) {
     const [quantities, setQuantities] = useState<Record<string, number>>(() => {
         const init: Record<string, number> = {};
@@ -298,6 +306,49 @@ export function ReceiptConfirmationModal({
 
     const [visible, setVisible] = useState(false);
     useEffect(() => { const t = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(t); }, []);
+
+    // ── 단가 관리 (Business+ 플랜) ────────────────────────────────────────────
+    const [pricingMap, setPricingMap] = useState<Map<string, ItemPricing>>(new Map());
+    // key: "manufacturer|brand|size" → 편집 중인 매입단가 문자열
+    const [editingPrices, setEditingPrices] = useState<Record<string, string>>({});
+    const hasPricingAccess = !!hospitalId && (plan === 'business' || plan === 'ultimate');
+
+    useEffect(() => {
+        if (!hasPricingAccess) return;
+        const allItems = groupedOrder.orders.flatMap(o =>
+            o.items.map(item => ({ manufacturer: o.manufacturer, brand: item.brand, size: item.size }))
+        );
+        pricingService.getPricingBatch(hospitalId!, allItems).then(map => setPricingMap(map));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasPricingAccess, hospitalId]);
+
+    const getPricingKey = (manufacturer: string, brand: string, size: string) =>
+        `${manufacturer}|${brand}|${size}`;
+
+    const savePriceIfChanged = async (manufacturer: string, brand: string, size: string) => {
+        if (!hasPricingAccess) return;
+        const key = getPricingKey(manufacturer, brand, size);
+        const editVal = editingPrices[key];
+        if (editVal === undefined) return;
+        const newPrice = parseInt(editVal, 10);
+        if (isNaN(newPrice) || newPrice < 0) return;
+        const existing = pricingMap.get(key);
+        if (existing && existing.purchasePrice === newPrice) return;
+        const result = await pricingService.upsertPricing(hospitalId!, {
+            manufacturer,
+            brand,
+            size,
+            purchasePrice: newPrice,
+            treatmentFee: existing?.treatmentFee ?? 0,
+        }, 'receipt_confirmation');
+        if (result) {
+            setPricingMap(prev => {
+                const next = new Map(prev);
+                next.set(key, result);
+                return next;
+            });
+        }
+    };
 
     // ─── 규격 오배송 처리 세션 UI ─────────────────────────────────────────────
     if (phase === 'wrongDelivery') {
@@ -661,10 +712,30 @@ export function ReceiptConfirmationModal({
                                             <div key={idx} className={`p-4 transition-colors ${isOver ? 'bg-amber-50/30' : isUnder ? 'bg-rose-50/30' : 'bg-white'}`}>
                                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                                     <div className="flex-1">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="text-sm font-black text-slate-800">{item.brand}</span>
                                                             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{item.size}</span>
                                                         </div>
+                                                        {hasPricingAccess && (() => {
+                                                            const pKey = getPricingKey(currentOrder.manufacturer, item.brand, item.size);
+                                                            const priceEntry = pricingMap.get(pKey);
+                                                            const editVal = editingPrices[pKey];
+                                                            const displayVal = editVal !== undefined ? editVal : (priceEntry?.purchasePrice ?? '');
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 mt-1.5">
+                                                                    <span className="text-[10px] font-bold text-slate-400">매입단가</span>
+                                                                    <input
+                                                                        type="number" min="0"
+                                                                        value={displayVal}
+                                                                        onChange={e => setEditingPrices(prev => ({ ...prev, [pKey]: e.target.value }))}
+                                                                        onBlur={() => savePriceIfChanged(currentOrder.manufacturer, item.brand, item.size)}
+                                                                        placeholder="미등록"
+                                                                        className="w-24 px-2 py-0.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white text-right"
+                                                                    />
+                                                                    <span className="text-[10px] text-slate-400">원</span>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
 
                                                     <div className="flex items-center gap-4 sm:gap-6">

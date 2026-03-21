@@ -40,7 +40,8 @@ export type OperationAction =
   | 'surgery_upload'
   | 'account_self_deleted'
   | 'account_force_deleted'
-  | 'account_deactivated';
+  | 'account_deactivated'
+  | 'pricing_update';
 
 export interface OperationLog {
   id: string;

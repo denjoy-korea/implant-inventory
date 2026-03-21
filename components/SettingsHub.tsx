@@ -11,6 +11,7 @@ import { WorkDaySelector } from './WorkDaySelector';
 import { useToast } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 import VendorManagementModal from './settings/VendorManagementModal';
+import PricingManagementModal from './settings/PricingManagementModal';
 import DataResetRequestModal from './settings/DataResetRequestModal';
 import DentwebAutomationModal from './settings/DentwebAutomationModal';
 import WorkDaysSettingsSection from './settings/WorkDaysSettingsSection';
@@ -92,6 +93,9 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
 
+  // 단가 관리 상태
+  const [showPricingModal, setShowPricingModal] = useState(false);
+
   // 거래처 관리 상태
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [vendorManufacturers, setVendorManufacturers] = useState<string[]>([]);
@@ -116,6 +120,8 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
   // 거래처 데이터 로딩 (master 또는 canManageVendors 권한 보유 staff, Business 플랜 이상)
   const canVendorPlan = planService.canAccess(plan, 'supplier_management');
   const canAccessVendors = canVendorPlan && ((isMaster && !isStaff) || (!isMaster && !!permissions?.canManageVendors));
+  const canPricingPlan = planService.canAccess(plan, 'pricing_management');
+  const canAccessPricing = canPricingPlan && ((isMaster && !isStaff) || (!isMaster && !!permissions?.canManagePricing));
   const canAccessWorkDays = isMaster || !!permissions?.canManageWorkDays;
   const canAccessIntegrations = isMaster && !isStaff && planService.canAccess(plan, 'integrations');
   const canAccessOptimizer = (isMaster && !isStaff) || (!isMaster && !!permissions?.canManageOptimizer);
@@ -506,6 +512,53 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
           );
         })()}
 
+        {/* 단가 관리 카드 */}
+        {((isMaster && !isStaff) || (!isMaster && !!permissions?.canManagePricing)) && hospitalId && (() => {
+          const isPricingLocked = !canPricingPlan;
+          return (
+            <button
+              onClick={() => !isPricingLocked && setShowPricingModal(true)}
+              disabled={isPricingLocked}
+              className={`group relative text-left p-6 rounded-2xl border transition-all duration-200 ${
+                isPricingLocked
+                  ? 'bg-slate-50/80 border-slate-200 cursor-not-allowed'
+                  : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-100/50 hover:-translate-y-0.5 active:scale-[0.99]'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                  isPricingLocked ? 'bg-slate-100 text-slate-300' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100'
+                }`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-base font-bold ${isPricingLocked ? 'text-slate-400' : 'text-slate-800'}`}>단가 관리</h3>
+                    {isPricingLocked && (
+                      <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    )}
+                  </div>
+                  <p className={`text-xs mt-1 leading-relaxed ${isPricingLocked ? 'text-slate-400' : 'text-slate-500'}`}>
+                    품목별 매입단가·진료수가를 등록하고 원가율을 분석합니다.
+                  </p>
+                  {isPricingLocked && (
+                    <p className="mt-2 text-[11px] font-bold text-amber-600 flex items-center gap-1">
+                      <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-black">Business</span> 이상 플랜에서 이용 가능
+                    </p>
+                  )}
+                </div>
+                <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 transition-transform ${isPricingLocked ? 'text-slate-200' : 'text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </button>
+          );
+        })()}
+
         {/* 외부 연동 카드 */}
         {isMaster && !isStaff && hospitalId && (
           <button
@@ -671,6 +724,14 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ onNavigate, isMaster, isStaff
         onSave={handleSaveVendor}
         onDelete={handleDeleteVendor}
         onClose={() => setShowVendorModal(false)}
+      />
+    )}
+
+    {/* 단가 관리 모달 */}
+    {showPricingModal && hospitalId && (
+      <PricingManagementModal
+        hospitalId={hospitalId}
+        onClose={() => setShowPricingModal(false)}
       />
     )}
 

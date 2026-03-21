@@ -18,6 +18,7 @@ interface OrderPCLayoutProps {
   inventory: InventoryItem[];
   returnRequests: ReturnRequest[];
   plan?: PlanType;
+  hospitalId?: string;
   isReadOnly?: boolean;
   // Stats & KPI
   reportStats: {
@@ -73,6 +74,7 @@ export function OrderPCLayout({
   inventory,
   returnRequests,
   plan,
+  hospitalId,
   isReadOnly,
   reportStats,
   kpiData,
@@ -184,6 +186,8 @@ export function OrderPCLayout({
             onUpdateOrderStatus={onUpdateOrderStatus}
             onDeleteOrder={onDeleteOrder}
             isLoading={isReceiptConfirming}
+            plan={plan}
+            hospitalId={hospitalId}
           />
         );
       })()}

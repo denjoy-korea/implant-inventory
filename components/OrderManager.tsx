@@ -145,6 +145,7 @@ const OrderManager: React.FC<OrderManagerProps> = ({
         inventory={inventory}
         returnRequests={returnRequests}
         plan={plan}
+        hospitalId={hospitalId}
         isReadOnly={isReadOnly}
         reportStats={reportStats}
         kpiData={kpiData}

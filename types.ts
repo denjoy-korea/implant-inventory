@@ -6,6 +6,7 @@ export * from './types/fail';
 export * from './types/app';
 export * from './types/user';
 export * from './types/notice';
+export * from './types/pricing';
 
 // ── 도메인 타입 import (이 파일 내 타입 정의에서 사용) ────────────
 import type { PlanType, BillingCycle, HospitalPlanState } from './types/plan';
