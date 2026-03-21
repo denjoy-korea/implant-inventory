@@ -184,6 +184,13 @@ Deno.serve(async (req: Request) => {
       p_refund_amount: 0,
       p_refund_reason: calc.reason,
     });
+    await adminClient.from("audit_logs").insert({
+      action: "refund",
+      actor_id: user.id,
+      target_id: billing.id,
+      hospital_id: billing.hospital_id,
+      meta: { refund_amount: 0, refund_type: "none", reason: calc.reason },
+    });
     return json({ ok: ok === true, refundAmount: 0, refundType: calc.reason, reason: calc.reason });
   }
 
@@ -235,8 +242,34 @@ Deno.serve(async (req: Request) => {
     // TossPayments 취소는 이미 성공 — 경고 로그만 남기고 성공 응답 반환
     // (운영팀이 DB 수동 정리 필요)
     console.warn("[toss-payment-refund] CRITICAL: TossPayments refund succeeded but DB update failed. Manual fix required for billing:", billing.id);
+    await adminClient.from("audit_logs").insert({
+      action: "refund",
+      actor_id: user.id,
+      target_id: billing.id,
+      hospital_id: billing.hospital_id,
+      meta: {
+        refund_amount: calc.refundAmount,
+        refund_type: calc.refundType,
+        reason: calc.reason,
+        warning: "toss_ok_db_failed",
+      },
+    });
     return json({ ok: true, warning: "refund_processed_db_error", refundAmount: calc.refundAmount, refundType: calc.refundType, reason: calc.reason });
   }
+
+  // 정상 환불 완료 감사 로그
+  await adminClient.from("audit_logs").insert({
+    action: "refund",
+    actor_id: user.id,
+    target_id: billing.id,
+    hospital_id: billing.hospital_id,
+    meta: {
+      refund_amount: calc.refundAmount,
+      refund_type: calc.refundType,
+      reason: calc.reason,
+      used_days: calc.usedDays,
+    },
+  });
 
   return json({
     ok: ok === true,

@@ -67,6 +67,15 @@ Deno.serve(async (req: Request) => {
       return jsonError("계정 삭제에 실패했습니다.", 500, corsHeaders);
     }
 
+    // 감사 로그: 누가 언제 누구를 방출했는지 기록
+    await supabase.from("audit_logs").insert({
+      action: "kick_member",
+      actor_id: caller.id,
+      target_id: targetUserId,
+      hospital_id: callerProfile.hospital_id,
+      meta: { target_role: targetProfile.role },
+    });
+
     return jsonOk({ success: true }, corsHeaders);
   } catch (err) {
     console.error("kick-member error:", err);
