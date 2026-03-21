@@ -10,9 +10,9 @@ type RoleFilter = 'all' | ReviewRole;
 type RatingFilter = 0 | 1 | 2 | 3 | 4 | 5;
 
 const FALLBACK: UserReview[] = [
-  { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
-  { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.', display_last_name: '박', display_role: '실장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
-  { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.', display_last_name: '이', display_role: '팀장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+  { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '2026-01-15', updated_at: '2026-01-15' },
+  { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.', display_last_name: '박', display_role: '실장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '2026-01-22', updated_at: '2026-01-22' },
+  { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.', display_last_name: '이', display_role: '팀장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '2026-02-03', updated_at: '2026-02-03' },
 ];
 
 const ROLE_FILTERS: { label: string; value: RoleFilter }[] = [
