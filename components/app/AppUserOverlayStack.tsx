@@ -87,7 +87,7 @@ const AppUserOverlayStack: React.FC<AppUserOverlayStackProps> = ({
         const initLastName = user.name ? user.name.charAt(0) : '';
         const initRole = user.clinicRole
           ? CLINIC_ROLE_LABELS[user.clinicRole]
-          : user.role === 'master' ? '담당자' : undefined;
+          : undefined;
         const initHospital = hospitalName ?? '';
 
         return (
