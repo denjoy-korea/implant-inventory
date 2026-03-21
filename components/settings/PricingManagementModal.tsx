@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ModalShell from '../shared/ModalShell';
-import PricingHistoryPanel from './PricingHistoryPanel';
 import { pricingService } from '../../services/pricingService';
 import { inventoryService } from '../../services/inventoryService';
 import { isVirtualManufacturer } from '../../services/appUtils';
@@ -300,8 +299,12 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
                     ? pp !== row.pricing!.purchasePrice || tf !== row.pricing!.treatmentFee
                     : (pp > 0 || tf > 0);
 
+                  const rowKey = `${row.manufacturer}|${row.brand}`;
+                  const isHistoryOpen = historyTarget?.manufacturer === row.manufacturer && historyTarget?.brand === row.brand;
+
                   return (
-                    <tr key={`${row.manufacturer}|${row.brand}`} className="group hover:bg-slate-50/80 transition-colors">
+                    <React.Fragment key={rowKey}>
+                    <tr className="group hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-2.5 text-slate-600 font-medium truncate max-w-[7rem]">{row.manufacturer}</td>
                       <td className="px-2 py-2.5">
                         <div className="flex items-center gap-1.5">
@@ -371,6 +374,66 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
                         </div>
                       </td>
                     </tr>
+                    {/* 인라인 이력 행 */}
+                    {isHistoryOpen && (
+                      <tr>
+                        <td colSpan={7} className="px-4 pb-3 pt-0 bg-slate-50/80">
+                          <div className="border border-slate-100 rounded-xl overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border-b border-indigo-100">
+                              <span className="text-[11px] font-bold text-indigo-700">
+                                {row.manufacturer} · {row.brand} 변경 이력
+                              </span>
+                              <button
+                                onClick={() => { setHistoryTarget(null); setHistory([]); }}
+                                className="text-indigo-400 hover:text-indigo-600 transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                            {historyLoading ? (
+                              <div className="px-3 py-4 text-center text-[11px] text-slate-400">불러오는 중...</div>
+                            ) : history.length === 0 ? (
+                              <div className="px-3 py-4 text-center text-[11px] text-slate-400">변경 이력이 없습니다.</div>
+                            ) : (
+                              <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
+                                {history.map(h => {
+                                  const fieldLabel: Record<string, string> = {
+                                    purchase_price: '매입단가', treatment_fee: '진료수가', both: '매입+수가', initial: '최초등록',
+                                  };
+                                  const sourceLabel: Record<string, string> = { settings: '설정', receipt_confirmation: '도착확인' };
+                                  const fmt = (v: number | null) => v == null ? '—' : v.toLocaleString('ko-KR') + '원';
+                                  const dt = new Date(h.changedAt);
+                                  const dateStr = `${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,'0')}.${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+                                  return (
+                                    <div key={h.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                                      <span className={`shrink-0 px-1.5 py-0.5 rounded-full font-black text-[10px] ${h.fieldChanged === 'initial' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {fieldLabel[h.fieldChanged] ?? h.fieldChanged}
+                                      </span>
+                                      <span className="shrink-0 text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {sourceLabel[h.changeSource] ?? h.changeSource}
+                                      </span>
+                                      {h.fieldChanged !== 'initial' && h.oldPurchasePrice !== h.newPurchasePrice && (
+                                        <span className="text-slate-500">매입 <span className="line-through">{fmt(h.oldPurchasePrice)}</span> → <span className="font-bold text-indigo-700">{fmt(h.newPurchasePrice)}</span></span>
+                                      )}
+                                      {h.fieldChanged !== 'initial' && h.oldTreatmentFee !== h.newTreatmentFee && (
+                                        <span className="text-slate-500">수가 <span className="line-through">{fmt(h.oldTreatmentFee)}</span> → <span className="font-bold text-indigo-700">{fmt(h.newTreatmentFee)}</span></span>
+                                      )}
+                                      {h.fieldChanged === 'initial' && (
+                                        <span className="text-slate-500">매입 <span className="font-bold text-indigo-700">{fmt(h.newPurchasePrice)}</span> · 수가 <span className="font-bold text-indigo-700">{fmt(h.newTreatmentFee)}</span></span>
+                                      )}
+                                      <span className="ml-auto shrink-0 text-[10px] text-slate-400 tabular-nums">{dateStr}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -387,17 +450,6 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
           <span className="ml-auto text-[10px] text-slate-400">입력 후 저장 버튼을 눌러주세요</span>
         </div>
       </ModalShell>
-
-      {/* 이력 패널 */}
-      {historyTarget && (
-        <PricingHistoryPanel
-          manufacturer={historyTarget.manufacturer}
-          brand={historyTarget.brand}
-          history={history}
-          isLoading={historyLoading}
-          onClose={() => { setHistoryTarget(null); setHistory([]); }}
-        />
-      )}
     </>
   );
 };
