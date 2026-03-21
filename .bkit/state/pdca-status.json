@@ -1,8 +1,7 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-21T03:21:25.901Z",
+  "lastUpdated": "2026-03-21T00:00:00+09:00",
   "activeFeatures": [
-    "implant-inventory",
     "surgery-dashboard",
     "sizeNormalizer.ts",
     "cryptoUtils.ts",
@@ -118,19 +117,12 @@
   "primaryFeature": "implant-inventory",
   "features": {
     "implant-inventory": {
-      "phase": "do",
-      "phaseNumber": 3,
+      "phase": "archived",
       "matchRate": 100,
       "iterationCount": 0,
-      "requirements": [],
-      "documents": {
-        "analysis": "docs/03-analysis/implant-inventory.analysis.md"
-      },
-      "timestamps": {
-        "started": "2026-02-16T07:42:26.745Z",
-        "lastUpdated": "2026-03-21T03:21:25.901Z"
-      },
-      "lastFile": "/Users/mac/Downloads/Projects/implant-inventory/components/ReviewsPage.tsx"
+      "startedAt": "2026-01-01T00:00:00Z",
+      "archivedAt": "2026-03-21T00:00:00+09:00",
+      "archivedTo": "docs/archive/2026-03/implant-inventory/"
     },
     "surgery-dashboard": {
       "phase": "do",
