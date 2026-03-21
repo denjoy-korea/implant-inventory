@@ -2,8 +2,8 @@ import { supabase } from './supabaseClient';
 import { operationLogService } from './operationLogService';
 import type { ItemPricing, ItemPricingHistory, PricingUpsertInput } from '../types/pricing';
 
-function toPricingKey(manufacturer: string, brand: string, size: string): string {
-  return `${manufacturer}|${brand}|${size}`;
+function toPricingKey(manufacturer: string, brand: string): string {
+  return `${manufacturer}|${brand}`;
 }
 
 function mapRow(row: Record<string, unknown>): ItemPricing {
@@ -12,7 +12,6 @@ function mapRow(row: Record<string, unknown>): ItemPricing {
     hospitalId: row.hospital_id as string,
     manufacturer: row.manufacturer as string,
     brand: row.brand as string,
-    size: row.size as string,
     purchasePrice: (row.purchase_price as number) ?? 0,
     treatmentFee: (row.treatment_fee as number) ?? 0,
     updatedBy: (row.updated_by as string) ?? null,
@@ -28,7 +27,6 @@ function mapHistoryRow(row: Record<string, unknown>): ItemPricingHistory {
     hospitalId: row.hospital_id as string,
     manufacturer: row.manufacturer as string,
     brand: row.brand as string,
-    size: row.size as string,
     fieldChanged: row.field_changed as ItemPricingHistory['fieldChanged'],
     oldPurchasePrice: (row.old_purchase_price as number) ?? null,
     newPurchasePrice: (row.new_purchase_price as number) ?? null,
@@ -48,8 +46,7 @@ export const pricingService = {
       .select('*')
       .eq('hospital_id', hospitalId)
       .order('manufacturer', { ascending: true })
-      .order('brand', { ascending: true })
-      .order('size', { ascending: true });
+      .order('brand', { ascending: true });
 
     if (error) {
       console.error('[pricingService] getPricingList failed:', error);
@@ -58,12 +55,11 @@ export const pricingService = {
     return (data || []).map(r => mapRow(r as Record<string, unknown>));
   },
 
-  /** 특정 품목 단가 조회 */
+  /** 특정 브랜드 단가 조회 */
   async getPricing(
     hospitalId: string,
     manufacturer: string,
     brand: string,
-    size: string,
   ): Promise<ItemPricing | null> {
     const { data, error } = await supabase
       .from('item_pricing')
@@ -71,7 +67,6 @@ export const pricingService = {
       .eq('hospital_id', hospitalId)
       .eq('manufacturer', manufacturer)
       .eq('brand', brand)
-      .eq('size', size)
       .maybeSingle();
 
     if (error) {
@@ -82,12 +77,12 @@ export const pricingService = {
   },
 
   /**
-   * 여러 품목 단가 일괄 조회 (N+1 방지)
-   * 반환: Map<"manufacturer|brand|size", ItemPricing>
+   * 여러 브랜드 단가 일괄 조회 (N+1 방지)
+   * 반환: Map<"manufacturer|brand", ItemPricing>
    */
   async getPricingBatch(
     hospitalId: string,
-    items: Array<{ manufacturer: string; brand: string; size: string }>,
+    items: Array<{ manufacturer: string; brand: string }>,
   ): Promise<Map<string, ItemPricing>> {
     if (items.length === 0) return new Map();
 
@@ -104,14 +99,13 @@ export const pricingService = {
     const map = new Map<string, ItemPricing>();
     for (const row of data || []) {
       const p = mapRow(row as Record<string, unknown>);
-      map.set(toPricingKey(p.manufacturer, p.brand, p.size), p);
+      map.set(toPricingKey(p.manufacturer, p.brand), p);
     }
     return map;
   },
 
   /**
    * 단가 upsert — 변경 이력 자동 기록
-   * changeSource: 'settings' | 'receipt_confirmation'
    */
   async upsertPricing(
     hospitalId: string,
@@ -121,13 +115,11 @@ export const pricingService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { manufacturer, brand, size, purchasePrice, treatmentFee } = input;
+    const { manufacturer, brand, purchasePrice, treatmentFee } = input;
 
-    // 기존 레코드 확인
-    const existing = await this.getPricing(hospitalId, manufacturer, brand, size);
+    const existing = await this.getPricing(hospitalId, manufacturer, brand);
 
     if (existing) {
-      // UPDATE
       const { data, error } = await supabase
         .from('item_pricing')
         .update({
@@ -144,21 +136,18 @@ export const pricingService = {
         return null;
       }
 
-      // 변경된 필드 판별
       const ppChanged = purchasePrice !== existing.purchasePrice;
       const tfChanged = treatmentFee !== existing.treatmentFee;
       let fieldChanged: ItemPricingHistory['fieldChanged'] = 'both';
       if (ppChanged && !tfChanged) fieldChanged = 'purchase_price';
       else if (!ppChanged && tfChanged) fieldChanged = 'treatment_fee';
 
-      // 히스토리 기록 (변경이 있을 때만)
       if (ppChanged || tfChanged) {
         await supabase.from('item_pricing_history').insert({
           item_pricing_id: existing.id,
           hospital_id: hospitalId,
           manufacturer,
           brand,
-          size,
           field_changed: fieldChanged,
           old_purchase_price: existing.purchasePrice,
           new_purchase_price: purchasePrice,
@@ -170,21 +159,19 @@ export const pricingService = {
 
         operationLogService.logOperation(
           'pricing_update',
-          `단가 수정: ${manufacturer} ${brand} ${size}`,
-          { manufacturer, brand, size, changeSource, fieldChanged },
+          `단가 수정: ${manufacturer} ${brand}`,
+          { manufacturer, brand, changeSource, fieldChanged },
         );
       }
 
       return mapRow(data as Record<string, unknown>);
     } else {
-      // INSERT
       const { data, error } = await supabase
         .from('item_pricing')
         .insert({
           hospital_id: hospitalId,
           manufacturer,
           brand,
-          size,
           purchase_price: purchasePrice,
           treatment_fee: treatmentFee,
           updated_by: user.id,
@@ -199,13 +186,11 @@ export const pricingService = {
 
       const inserted = mapRow(data as Record<string, unknown>);
 
-      // 초기 등록 히스토리
       await supabase.from('item_pricing_history').insert({
         item_pricing_id: inserted.id,
         hospital_id: hospitalId,
         manufacturer,
         brand,
-        size,
         field_changed: 'initial',
         old_purchase_price: null,
         new_purchase_price: purchasePrice,
@@ -217,20 +202,19 @@ export const pricingService = {
 
       operationLogService.logOperation(
         'pricing_update',
-        `단가 등록: ${manufacturer} ${brand} ${size}`,
-        { manufacturer, brand, size, changeSource },
+        `단가 등록: ${manufacturer} ${brand}`,
+        { manufacturer, brand, changeSource },
       );
 
       return inserted;
     }
   },
 
-  /** 특정 품목의 변경 이력 조회 */
+  /** 특정 브랜드의 변경 이력 조회 */
   async getPricingHistory(
     hospitalId: string,
     manufacturer: string,
     brand: string,
-    size: string,
   ): Promise<ItemPricingHistory[]> {
     const { data, error } = await supabase
       .from('item_pricing_history')
@@ -238,7 +222,6 @@ export const pricingService = {
       .eq('hospital_id', hospitalId)
       .eq('manufacturer', manufacturer)
       .eq('brand', brand)
-      .eq('size', size)
       .order('changed_at', { ascending: false })
       .limit(50);
 
@@ -247,6 +230,20 @@ export const pricingService = {
       return [];
     }
     return (data || []).map(r => mapHistoryRow(r as Record<string, unknown>));
+  },
+
+  /** 단가 이력 삭제 */
+  async deletePricingHistory(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('item_pricing_history')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[pricingService] deletePricingHistory failed:', error);
+      return false;
+    }
+    return true;
   },
 
   /** 단가 삭제 */
@@ -263,3 +260,5 @@ export const pricingService = {
     return true;
   },
 };
+
+export { toPricingKey };

@@ -407,7 +407,7 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
                                   const dt = new Date(h.changedAt);
                                   const dateStr = `${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,'0')}.${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
                                   return (
-                                    <div key={h.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                                    <div key={h.id} className="group/hist flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-rose-50/50 transition-colors">
                                       <span className={`shrink-0 px-1.5 py-0.5 rounded-full font-black text-[10px] ${h.fieldChanged === 'initial' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
                                         {fieldLabel[h.fieldChanged] ?? h.fieldChanged}
                                       </span>
@@ -424,6 +424,18 @@ const PricingManagementModal: React.FC<PricingManagementModalProps> = ({ hospita
                                         <span className="text-slate-500">매입 <span className="font-bold text-indigo-700">{fmt(h.newPurchasePrice)}</span> · 수가 <span className="font-bold text-indigo-700">{fmt(h.newTreatmentFee)}</span></span>
                                       )}
                                       <span className="ml-auto shrink-0 text-[10px] text-slate-400 tabular-nums">{dateStr}</span>
+                                      <button
+                                        onClick={async () => {
+                                          const ok = await pricingService.deletePricingHistory(h.id);
+                                          if (ok) setHistory(prev => prev.filter(x => x.id !== h.id));
+                                        }}
+                                        className="shrink-0 opacity-0 group-hover/hist:opacity-100 p-0.5 text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-all"
+                                        title="이력 삭제"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
                                     </div>
                                   );
                                 })}
