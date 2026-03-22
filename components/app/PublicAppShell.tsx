@@ -383,6 +383,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         currentView={currentView}
         showLogo={true}
       />
+      {/* fixed 헤더 높이만큼 spacer (py-3 + h-9 ≈ 60px / sm: h-10 ≈ 64px) */}
+      <div className="h-[60px] sm:h-[64px] flex-shrink-0" />
       <PublicMobileNav
         currentView={currentView}
         onNavigate={handleNavigate}

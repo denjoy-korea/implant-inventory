@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { User, View, DashboardTab } from '../types';
-import { scrollToElementWithRetry } from '../utils/scroll';
 
 interface HeaderProps {
   onHomeClick: () => void;
@@ -34,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({
   const isPublicView = publicViews.includes(currentView);
 
   return (
-    <header className={`bg-white border-b border-slate-200 py-3 md:sticky md:top-0 z-[100] shadow-sm ${showLogo ? 'px-3 sm:px-6' : 'px-8'}`}>
+    <header className={`bg-white border-b border-slate-200 py-3 fixed top-0 left-0 right-0 z-[100] shadow-sm ${showLogo ? 'px-3 sm:px-6' : 'px-8'}`}>
       <div className={`mx-auto flex items-center justify-between ${showLogo ? 'max-w-7xl' : 'w-full'}`}>
         <div className="flex items-center flex-shrink-0 min-w-0">
           {showLogo && (
@@ -63,11 +62,8 @@ const Header: React.FC<HeaderProps> = ({
               도입 효과
             </button>
             <button
-              onClick={() => {
-                if (currentView !== 'landing') onNavigate('landing' as View);
-                scrollToElementWithRetry('features');
-              }}
-              className="text-sm font-bold text-slate-500 hover:text-slate-800"
+              onClick={() => onNavigate('landing' as View)}
+              className={`text-sm font-bold ${currentView === 'landing' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
             >
               기능소개
             </button>

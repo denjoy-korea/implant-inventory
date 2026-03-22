@@ -30,8 +30,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const stat1 = useCountUp(104, 800);
   const stat2 = useCountUp(14, 600);
-  const stat3 = useCountUp(5, 600);
-  const stat4 = useCountUp(0, 400);
+  const stat3 = useCountUp(21, 600);
+  const stat4 = useCountUp(8, 400);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [featuredReviews, setFeaturedReviews] = useState<UserReview[]>([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -131,19 +131,19 @@ const LandingPage: React.FC<LandingPageProps> = ({
             <span className="text-[11px] sm:text-sm font-bold text-slate-800 tracking-tight leading-relaxed text-balance">{heroTrialText}</span>
           </div>
 
-          {/* 프레이밍: 구체적 수치로 가치 제시 */}
+          {/* 프레이밍: 플랫폼 가치 전달 */}
           <h1 className="text-[2rem] sm:text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-4 sm:mb-6 leading-[1.14] sm:leading-tight text-balance animate-fade-in-up animation-delay-200">
-            임플란트 재고관리,<br className="sm:hidden" /><br className="hidden md:block" />
+            수술 기록 하나로,<br className="sm:hidden" /><br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500">
-              연 104시간을 돌려드립니다
+              재고부터 임상분석까지 자동으로
             </span>
           </h1>
 
-          {/* 손실 회피: 현재 낭비를 암시 */}
+          {/* 플랫폼 가치 제시 */}
           <p className="mt-3 sm:mt-4 text-[15px] sm:text-lg md:text-2xl leading-relaxed text-slate-600 font-medium max-w-3xl mx-auto text-balance animate-fade-in-up animation-delay-400">
-            매주 <strong className="text-rose-500">2시간</strong>씩 엑셀 정리에 쓰는 시간,{' '}
-            <strong className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500 font-black">5분</strong>으로 바꾸세요.<br className="hidden md:block" />
-            덴트웹 데이터를 업로드하면 나머지는 <strong className="text-emerald-500 font-black">자동</strong>입니다.
+            수술 기록을 업로드하면 재고 차감, 발주 추천, 교환 추적, 임상 분석이{' '}
+            <strong className="text-emerald-500 font-black">자동</strong>으로 시작됩니다.<br className="hidden md:block" />
+            <strong className="text-indigo-600 font-black">14개 브랜드</strong>, <strong className="text-indigo-600 font-black">8가지 규격</strong>을 자동 인식합니다.
           </p>
 
           {/* 힉스의 법칙: 선택지를 줄여 명확한 행동 유도 */}
@@ -172,11 +172,15 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </span>
             <span className="flex items-center gap-1.5">
               <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              자동 재고 차감
+              교환 자동 감지
             </span>
             <span className="flex items-center gap-1.5">
               <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               스마트 발주
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              임상 분석 대시보드
             </span>
           </div>
         </div>
@@ -239,21 +243,21 @@ const LandingPage: React.FC<LandingPageProps> = ({
             {[
               {
                 emoji: '1',
-                title: '"이 사이즈 재고 있어?"',
-                desc: '수술 직전, 필요한 사이즈가 있는지 확인하려고 창고를 뒤지거나 엑셀을 열어야 했던 적',
-                tag: '재고 파악 지연',
+                title: '"이 임플란트, 또 교환이요?"',
+                desc: '교환이 반복되는데 제조사별, 규격별로 패턴을 파악할 방법이 없는 적. 어떤 브랜드에서 문제가 생기는지 알 수가 없는 적',
+                tag: '임상 품질 사각지대',
               },
               {
                 emoji: '2',
-                title: '"또 발주를 빠뜨렸네"',
-                desc: '재고가 바닥났는데 아무도 몰랐거나, 이미 넉넉한 사이즈를 또 주문해버린 적',
-                tag: '발주 실수 반복',
+                title: '"재고가 또 안 맞네"',
+                desc: '수동 관리로 오차가 누적되고, 필요한 건 없고 남는 건 쌓이는 악순환. 실물이랑 시스템이 다른 게 당연해진 적',
+                tag: '재고 관리 악순환',
               },
               {
                 emoji: '3',
-                title: '"이 엑셀 또 정리해야 해?"',
-                desc: '매주 반복되는 수동 재고 정리. 직원들은 지치고, 정작 환자 케어에 쓸 시간은 줄어드는 악순환',
-                tag: '비생산적 반복 업무',
+                title: '"우리 병원 데이터가 어디 있지?"',
+                desc: '월별 수술 건수, 브랜드별 사용량, 연도별 추세... 경영 판단 근거가 없어서 직관에만 의존해야 했던 적',
+                tag: '경영 데이터 부재',
               },
             ].map((item, i) => (
               <div key={i} className={`bg-white rounded-2xl p-5 sm:p-8 border border-slate-200 hover:border-rose-200 hover:shadow-xl hover:shadow-rose-100/50 hover:-translate-y-2 transition-all duration-300 animate-fade-in-up ${i === 0 ? 'animation-delay-200' : i === 1 ? 'animation-delay-400' : 'animation-delay-[600ms]'}`}>
@@ -284,34 +288,34 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
             {[
               {
-                before: '재고 파악 30분~1시간',
-                after: '클릭 한 번, 5분',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                ),
-                label: '재고 확인',
-              },
-              {
-                before: '감으로 발주, 잦은 실수',
-                after: '데이터 기반 자동 추천',
+                before: '수동 확인, 감으로 발주',
+                after: '실시간 현황 + 데이터 기반 추천 발주',
                 icon: (
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
                   </svg>
                 ),
-                label: '발주 관리',
+                label: '재고+발주',
               },
               {
-                before: '수동 엑셀 정리 매주 반복',
-                after: '수술 기록 자동 연동',
+                before: '교환 건은 수기 메모나 기억에 의존',
+                after: 'FAIL 자동 감지 + 제조사별 교환율 분석',
                 icon: (
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
                 ),
-                label: '데이터 관리',
+                label: '교환 관리',
+              },
+              {
+                before: '감으로 운영, 근거 없는 의사결정',
+                after: '수술 트렌드, 브랜드 점유율, 임상 히트맵',
+                icon: (
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                ),
+                label: '경영 분석',
               },
             ].map((item, i) => (
               <div key={i} className="text-center group">
@@ -352,27 +356,27 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
 
-            {/* Card 1 — 실시간 재고 & 자동 차감 (Hero, row-span-2) */}
+            {/* Card 1 — 임상 인텔리전스 대시보드 (Hero, row-span-2) */}
             <div className="group relative p-5 sm:p-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[2rem] shadow-xl shadow-indigo-200 text-white overflow-hidden md:row-span-2 flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-[2rem] -mr-8 -mt-8"></div>
               <div className="absolute inset-0 noise-bg opacity-10"></div>
               <div className="relative z-10 flex flex-col flex-1">
                 <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm mb-4 sm:mb-6">
                   <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 text-xs font-bold mb-4 w-fit">
                   <span className="w-1.5 h-1.5 bg-amber-300 rounded-full"></span>
-                  가장 인기 있는 기능
+                  DenJOY만의 기능
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold mb-3 text-balance">실시간 재고 & 자동 차감</h3>
+                <h3 className="text-lg sm:text-xl font-bold mb-3 text-balance">임상 인텔리전스 대시보드</h3>
                 <p className="text-indigo-100 leading-relaxed text-balance flex-1">
-                  수술 기록을 업로드하면 재고가 자동으로 차감됩니다. 브랜드/사이즈별 현재고를 한눈에 파악하고,
-                  부족 시 즉시 알림을 받으세요.
+                  FAIL 자동 감지, 제조사별 교환율, 수술 트렌드, 치아별 히트맵까지. 수술 기록이 쌓일수록
+                  병원 운영 인텔리전스가 깊어집니다.
                 </p>
                 <div className="flex flex-wrap gap-2 mt-6 pt-5 border-t border-white/20">
-                  {['업로드 후 30초', '14개 브랜드', '실시간 알림'].map(stat => (
+                  {['FAIL 자동 감지', '21개 분석 차트', '치아별 히트맵'].map(stat => (
                     <span key={stat} className="px-2.5 py-1 rounded-full bg-white/15 text-xs font-semibold text-white/90 backdrop-blur-sm">
                       {stat}
                     </span>
@@ -381,13 +385,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Card 2 — 수술 통계 & 임상 분석 (NEW) */}
+            {/* Card 2 — 수술 통계 & 임상 분석 */}
             <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-emerald-100/50 transition-all duration-500 border border-slate-200 hover:border-emerald-200 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[2rem] -mr-8 -mt-8 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-emerald-100/50 z-0"></div>
               <div className="relative z-10">
                 <div className="h-12 w-12 sm:h-14 sm:w-14 flex items-center justify-center rounded-2xl bg-white shadow-inner border border-emerald-100 mb-4 sm:mb-6 text-emerald-600 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
                 <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold mb-3">
@@ -409,9 +413,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">교환 완전 추적</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 text-balance">실시간 재고 & 자동 차감</h3>
                 <p className="text-slate-500 leading-relaxed text-balance">
-                  수술 중 교환 → 교환 접수 → 입고 확인까지 단계별 추적. 브랜드별 교환율을 자동으로 계산합니다.
+                  수술 기록을 업로드하면 재고가 자동으로 차감됩니다. 브랜드/사이즈별 현재고를 한눈에 파악하고, 부족 시 즉시 알림을 받으세요.
                 </p>
               </div>
             </div>
@@ -448,7 +452,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Card 6 — 스마트 데이터 정규화 (Wide, col-span-3) */}
+            {/* Card 6 — 14개 브랜드, 8가지 규격 자동 통합 (Wide, col-span-3) */}
             <div className="group relative p-5 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] hover:shadow-2xl hover:shadow-purple-100/50 transition-all duration-500 border border-slate-200 hover:border-purple-200 overflow-hidden md:col-span-3">
               <div className="absolute top-0 right-0 w-40 h-40 bg-purple-50 rounded-bl-[3rem] -mr-10 -mt-10 transition-all duration-500 group-hover:scale-[1.5] group-hover:bg-purple-100/50 z-0"></div>
               <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-10">
@@ -460,9 +464,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 text-balance">스마트 데이터 정규화</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 text-balance">14개 브랜드, 8가지 규격 자동 통합</h3>
                     <p className="text-slate-500 leading-relaxed text-balance">
-                      다양한 제조사와 브랜드의 파편화된 이름을 표준 규격으로 자동 변환합니다. 오타 자동 수정으로 데이터 정확도 99.9%.
+                      OSSTEM, Dentium, Megagen 등 14개 브랜드의 제각각인 이름 표기를 자동으로 통합합니다. 직경·길이·연결 방식 8가지 규격 패턴을 인식해 어떤 파일도 정확하게 처리합니다.
                     </p>
                   </div>
                 </div>
@@ -470,8 +474,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="flex sm:flex-col gap-4 sm:gap-4 sm:border-l sm:border-slate-100 sm:pl-10 flex-shrink-0">
                   {[
                     { value: '14개', label: '지원 브랜드' },
+                    { value: '8가지', label: '규격 패턴' },
                     { value: '99.9%', label: '데이터 정확도' },
-                    { value: '자동', label: '오타 수정' },
                   ].map(({ value, label }) => (
                     <div key={label} className="flex sm:flex-row items-center gap-2">
                       <span className="text-xl sm:text-2xl font-extrabold text-purple-600 leading-none">{value}</span>
@@ -552,17 +556,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
             <div ref={stat3.ref} className="p-4 sm:p-6">
               <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
-                {stat3.count}<span className="text-xl sm:text-2xl lg:text-3xl">분</span>
+                {stat3.count}<span className="text-xl sm:text-2xl lg:text-3xl">개</span>
               </div>
-              <div className="text-white font-bold text-xs sm:text-sm mb-1">재고 확인 시간</div>
-              <div className="text-slate-500 text-xs">클릭 한 번이면 끝</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">임상 분석 차트</div>
+              <div className="text-slate-500 text-xs">교환·트렌드·히트맵 통합</div>
             </div>
             <div ref={stat4.ref} className="p-4 sm:p-6">
               <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-1.5 sm:mb-2">
-                {stat4.count}<span className="text-xl sm:text-2xl lg:text-3xl">원</span>
+                {stat4.count}<span className="text-xl sm:text-2xl lg:text-3xl">가지</span>
               </div>
-              <div className="text-white font-bold text-xs sm:text-sm mb-1">도입 비용</div>
-              <div className="text-slate-500 text-xs">무료 플랜으로 바로 시작</div>
+              <div className="text-white font-bold text-xs sm:text-sm mb-1">규격 자동 인식</div>
+              <div className="text-slate-500 text-xs">직경·길이·연결 방식 패턴</div>
             </div>
           </div>
           <p className="mt-8 text-center text-[11px] text-slate-400">
@@ -597,7 +601,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               {
                 step: '02',
                 title: '데이터 업로드',
-                desc: '사용 중인 덴트웹 엑셀을 그대로 업로드. 자동으로 제조사/브랜드/사이즈를 분류합니다.',
+                desc: '덴트웹 수술기록지를 그대로 업로드. 자동으로 제조사/브랜드/규격을 분류합니다.',
                 result: '→ 자동 정규화 완료',
               },
               {
@@ -653,9 +657,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
           {(() => {
             const FALLBACK: UserReview[] = [
-              { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '덴트웹 데이터 정리에 매주 2시간씩 쓰던 시간이 사라졌습니다. 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
-              { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록과 재고가 자동으로 연동되니까, 어떤 사이즈가 부족한지 미리 알 수 있어서 발주 실수가 확 줄었어요.', display_last_name: '박', display_role: '실장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
-              { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '엑셀로 하루 종일 걸리던 월말 재고 정리가 5분이면 끝납니다. 직원들이 가장 좋아하는 변화예요.', display_last_name: '이', display_role: '팀장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+              { id: '_1', user_id: '', review_type: 'initial', rating: 5, content: '수술 기록 업로드 한 번이면 브랜드별 재고가 한눈에 들어와요. 덴트웹 데이터 정리에 매주 2시간씩 쓰던 게 없어졌습니다.', display_last_name: '김', display_role: '원장' as ReviewRole, display_hospital: '서울 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+              { id: '_2', user_id: '', review_type: 'initial', rating: 5, content: '교환 데이터를 제조사별로 분석할 수 있게 되니까 문제 있는 규격이 한눈에 보여요. 발주 결정할 때 확실히 근거가 생겼습니다.', display_last_name: '박', display_role: '원장' as ReviewRole, display_hospital: '경기 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
+              { id: '_3', user_id: '', review_type: 'initial', rating: 5, content: '월별 수술 추세와 브랜드별 사용량을 대시보드에서 바로 확인하니 발주 계획을 데이터로 세울 수 있게 됐어요.', display_last_name: '이', display_role: '실장' as ReviewRole, display_hospital: '부산 치과의원', is_public: true, is_featured: true, created_at: '', updated_at: '' },
             ];
             const displayList = featuredReviews.length > 0 ? featuredReviews : FALLBACK;
             const isCarousel = displayList.length > 3;
@@ -756,7 +760,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
           </h2>
           <p className="text-slate-300 text-[15px] sm:text-lg mb-3 sm:mb-4 text-balance font-medium">
-            엑셀에 쓰는 시간을 환자에게 쓰세요.
+            수술 기록이 쌓일수록, 병원 운영이 똑똑해집니다.
           </p>
           <p className="text-sm text-slate-500 mb-7 sm:mb-10 text-balance">
             {ctaTrialFootnoteText}

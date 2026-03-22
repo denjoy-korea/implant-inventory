@@ -18,8 +18,8 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
 
   const stat1 = useCountUp(104, 800);
   const stat2 = useCountUp(14, 600);
-  const stat3 = useCountUp(5, 600);
-  const stat4 = useCountUp(0, 400);
+  const stat3 = useCountUp(21, 600);
+  const stat4 = useCountUp(8, 400);
   const trialCopy = getTrialCopy();
   const ctaTrialBadgeText = trialCopy.badgeText;
   const ctaTrialFootnoteText = trialCopy.footnoteWithPipe;
@@ -41,22 +41,19 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900"></div>
         <div className="absolute inset-0 noise-bg opacity-20"></div>
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 mb-8">
-            <span className="w-2 h-2 bg-rose-400 rounded-full animate-pulse"></span>
-            <span className="text-sm font-bold text-rose-300">지금 이 순간에도 시간이 낭비되고 있습니다</span>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-8">
+            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></span>
+            <span className="text-sm font-bold text-indigo-300">병원 데이터가 일하게 하세요</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-tight mb-6 text-slate-100 animate-fade-in-up animation-delay-200">
-            아직도 엑셀로<br />
+            수술 기록이 쌓일수록,<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">
-              임플란트 재고를 관리하시나요?
+              병원 운영이 똑똑해집니다
             </span>
           </h1>
-          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-4 animate-fade-in-up animation-delay-400">
-            매주 <span className="text-rose-400 font-black">2시간</span>, 연간{' '}
-            <span className="text-rose-400 font-black">104시간</span>을
-          </p>
-          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-12 animate-fade-in-up animation-delay-600">
-            재고 확인과 발주에 쓰고 있다면, <span className="text-white font-bold">이미 늦었습니다.</span>
+          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-12 animate-fade-in-up animation-delay-400">
+            재고 차감, 발주 추천, 교환 추적, 임상 분석까지 —<br className="hidden md:block" />
+            수술 기록 하나가 모든 것을 움직입니다.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-[800ms]">
             <div className="relative group inline-block">
@@ -85,7 +82,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-rose-500 uppercase tracking-widest mb-3">Problem</p>
             <h2 className="text-3xl md:text-4xl font-black text-slate-900">
-              엑셀 재고관리가 만드는 <span className="text-rose-500">숨은 손실</span>
+              지금 이 순간, 병원에서 일어나고 있는 일
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -93,32 +90,32 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               {
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016zM12 9v2m0 4h.01" />
                   </svg>
                 ),
-                title: '주 2시간 낭비',
-                desc: '재고 수량 세기, 엑셀 정리, 부족분 계산에 매주 반복되는 비생산적 시간',
-                metric: '연 104시간',
+                title: '"이 브랜드, 왜 계속 교환이 나올까?"',
+                desc: '교환이 반복되는데 어떤 제조사, 어떤 규격에서 문제가 나는지 데이터가 없어 패턴을 파악할 수 없는 상황',
+                metric: '임상 의사결정 근거 부재',
               },
               {
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                   </svg>
                 ),
-                title: '발주 실수',
-                desc: '수동 재고 파악의 부정확성으로 인한 과잉 발주 또는 재고 부족 반복',
-                metric: '월 평균 3~5건',
+                title: '"실물이랑 시스템이 또 다르네"',
+                desc: '수동 관리로 오차가 누적되고, 필요한 건 없고 남는 건 쌓이는 악순환. 실사할 때마다 불일치가 당연해진 상황',
+                metric: '재고 정확도 저하',
               },
               {
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                 ),
-                title: '비용 누수',
-                desc: '유통기한 만료, 불필요한 사이즈 과잉 보유로 묶이는 재고 비용',
-                metric: '연 수백만원',
+                title: '"우리 병원 월 수술 건수가 몇 건이지?"',
+                desc: '월별 수술 건수, 브랜드별 점유율, 연도별 추세 — 경영 판단에 필요한 기초 데이터조차 정리되지 않은 상황',
+                metric: '데이터 기반 경영 불가',
               },
               {
                 icon: (
@@ -126,9 +123,9 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 16.318A4.486 4.486 0 0012.016 15a4.486 4.486 0 00-3.198 1.318M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
                   </svg>
                 ),
-                title: '직원 스트레스',
-                desc: '수술 직전 재고 부족 발견, 긴급 발주 반복으로 인한 업무 피로 누적',
-                metric: '이직 원인 1위',
+                title: '"이 발주, 내가 또 확인해야 해?"',
+                desc: '수술 직전 재고 부족 발견, 긴급 발주 반복으로 인한 업무 피로. 시스템 부재로 모든 책임이 사람에게 쏠리는 구조',
+                metric: '업무 부담 집중',
               },
             ].map((item, i) => (
               <div key={i} className={`bg-white rounded-[2rem] p-7 sm:p-8 border border-slate-200 hover:border-rose-200 hover:shadow-xl hover:shadow-rose-100/50 hover:-translate-y-2 transition-all duration-500 animate-fade-in-up group`} style={{ animationDelay: `${(i % 4 + 1) * 200}ms` }}>
@@ -165,14 +162,14 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                 </svg>
                 BEFORE
               </div>
-              <h3 className="text-xl font-bold text-slate-700 mb-6">엑셀 수동 관리</h3>
+              <h3 className="text-xl font-bold text-slate-700 mb-6">데이터 없는 운영</h3>
               <ul className="space-y-4">
                 {[
+                  '교환 패턴을 제조사별로 파악할 수 없음',
+                  '월별 수술 건수와 브랜드 점유율 데이터 없음',
                   '재고 파악에 30분~1시간 소요',
                   '수술 기록과 재고가 따로 관리',
                   '발주 시점을 감으로 판단',
-                  '사이즈별 소모량 분석 불가',
-                  '직원마다 다른 엑셀 양식',
                   '교환 이력 추적 어려움',
                 ].map((text, i) => (
                   <li key={i} className="flex items-start gap-3">
@@ -193,14 +190,14 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                 </svg>
                 AFTER
               </div>
-              <h3 className="text-xl font-bold text-indigo-900 mb-6">DenJOY 자동 관리</h3>
+              <h3 className="text-xl font-bold text-indigo-900 mb-6">데이터가 일하는 운영</h3>
               <ul className="space-y-4">
                 {[
+                  'FAIL 자동 감지 + 제조사별 교환율 실시간 분석',
+                  '수술 트렌드, 브랜드 점유율, 임상 히트맵 대시보드',
                   '클릭 한 번으로 전체 재고 현황 확인',
                   '수술 기록 업로드 시 재고 자동 차감',
                   '데이터 기반 적정 재고량 자동 계산',
-                  '브랜드/사이즈별 소모 트렌드 분석',
-                  '통합 대시보드로 일관된 관리',
                   '교환 접수부터 입고까지 자동 추적',
                 ].map((text, i) => (
                   <li key={i} className="flex items-start gap-3">
@@ -214,26 +211,30 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
             </div>
           </div>
 
-          {/* Aha! Moment - Key Transformation */}
-          <div className="mt-12 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 md:p-12 text-center text-white relative overflow-hidden">
+          {/* Aha! Moment - Intelligence Platform */}
+          <div className="mt-12 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 md:p-12 text-white relative overflow-hidden">
             <div className="absolute inset-0 noise-bg opacity-10"></div>
             <div className="relative z-10">
-              <p className="text-indigo-200 font-bold text-sm mb-4">핵심 변화</p>
-              <div className="flex items-center justify-center gap-4 md:gap-8 mb-4">
-                <div>
-                  <p className="text-4xl md:text-6xl font-black">2시간</p>
-                  <p className="text-indigo-200 text-sm mt-1">엑셀 재고 정리</p>
+              <p className="text-indigo-200 font-bold text-sm mb-8 text-center">DenJOY 임상 인텔리전스</p>
+              <div className="grid grid-cols-3 gap-4 md:gap-8 mb-6">
+                <div className="text-center">
+                  <p className="text-3xl md:text-5xl font-black">FAIL</p>
+                  <p className="text-indigo-200 text-sm mt-2">자동 감지</p>
+                  <p className="text-indigo-300 text-xs mt-1">교환 발생 시 즉시 등록</p>
                 </div>
-                <svg className="w-8 h-8 md:w-12 md:h-12 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-                <div>
-                  <p className="text-4xl md:text-6xl font-black">5<span className="text-3xl md:text-5xl">분</span></p>
-                  <p className="text-indigo-200 text-sm mt-1">DenJOY 대시보드</p>
+                <div className="text-center border-x border-white/20">
+                  <p className="text-3xl md:text-5xl font-black">21<span className="text-2xl md:text-3xl">개</span></p>
+                  <p className="text-indigo-200 text-sm mt-2">임상 분석 차트</p>
+                  <p className="text-indigo-300 text-xs mt-1">교환·트렌드·히트맵</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-3xl md:text-5xl font-black">8<span className="text-2xl md:text-3xl">가지</span></p>
+                  <p className="text-indigo-200 text-sm mt-2">규격 자동 인식</p>
+                  <p className="text-indigo-300 text-xs mt-1">직경·길이·연결 방식</p>
                 </div>
               </div>
-              <p className="text-indigo-100 text-lg font-medium">
-                도입 첫날부터 체감하는 변화
+              <p className="text-indigo-100 text-base md:text-lg font-medium text-center">
+                수술 기록이 쌓일수록, 인텔리전스가 깊어집니다
               </p>
             </div>
           </div>
@@ -253,9 +254,9 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { ref: stat1.ref, count: stat1.count, suffix: '시간', label: '연간 절약 시간', sub: '주 2시간 x 52주' },
-              { ref: stat2.ref, count: stat2.count, suffix: '개', label: '적용 브랜드', sub: '덴트웹 기본셋팅 전 제조사' },
-              { ref: stat3.ref, count: stat3.count, suffix: '분', label: '재고 확인 시간', sub: '클릭 한 번이면 끝' },
-              { ref: stat4.ref, count: stat4.count, suffix: '원', label: '도입 비용', sub: '무료 플랜으로 바로 시작' },
+              { ref: stat2.ref, count: stat2.count, suffix: '개', label: '지원 브랜드', sub: '덴트웹 기본셋팅 전 제조사' },
+              { ref: stat3.ref, count: stat3.count, suffix: '개', label: '임상 분석 차트', sub: '교환·트렌드·히트맵 통합' },
+              { ref: stat4.ref, count: stat4.count, suffix: '가지', label: '규격 자동 인식', sub: '직경·길이·연결 방식 패턴' },
             ].map((item, i) => (
               <div key={i} ref={item.ref} className="text-center p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
                 <p className="text-4xl md:text-5xl font-black text-white mb-1">
@@ -300,7 +301,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
               {
                 step: '02',
                 title: '덴트웹 데이터 업로드',
-                desc: '사용 중인 덴트웹 엑셀을 그대로 업로드. 자동으로 제조사, 브랜드, 사이즈를 분류합니다.',
+                desc: '덴트웹 수술기록지를 그대로 업로드. 자동으로 제조사, 브랜드, 규격을 분류합니다.',
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -349,16 +350,16 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                 metric: '주 2시간 절약',
               },
               {
-                quote: '발주 실수가 확 줄었어요. 예전엔 넉넉히 시켰다가 남거나, 부족해서 급발주하는 일이 잦았는데 이제는 시스템이 적정량을 알려주니까 편합니다.',
-                name: '박OO 실장',
+                quote: '교환 데이터를 제조사별로 분석할 수 있게 되니까 문제 있는 규격이 한눈에 보여요. 임플란트 선택에 데이터 근거가 생겼습니다.',
+                name: '박OO 원장',
                 clinic: '경기 · 치과의원',
-                metric: '발주 실수 감소',
+                metric: '임상 의사결정 개선',
               },
               {
-                quote: '엑셀로 하루 종일 걸리던 월말 재고 정리가 3초면 끝납니다. 직원들이 가장 좋아하는 변화예요.',
+                quote: '월별 수술 추세와 브랜드 점유율을 대시보드에서 바로 보니 경영 회의 자료를 따로 만들 필요가 없어졌어요.',
                 name: '최OO 원장',
                 clinic: '부산 · 치과의원',
-                metric: '업무 시간 대폭 단축',
+                metric: '경영 가시성 확보',
               },
             ].map((t, i) => (
               <div key={i} className="bg-white rounded-2xl p-8 border border-slate-200 hover:shadow-lg transition-shadow flex flex-col">
@@ -399,16 +400,16 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
           <div className="text-center mb-14">
             <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-3">Features</p>
             <h2 className="text-3xl md:text-4xl font-black text-slate-900">
-              이 모든 기능이 하나의 도구에
+              치과 운영 인텔리전스의 모든 것
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
+              { title: 'FAIL 자동 감지 & 교환율 분석', desc: '교환 발생 시 자동 FAIL 등록, 제조사·규격별 교환율을 실시간으로 집계. 문제 패턴을 데이터로 파악', tag: '임상' },
+              { title: '수술 트렌드 & 임상 히트맵', desc: '월별 수술 건수, 브랜드별 점유율, 치아별 식립 히트맵까지 21개 차트로 임상 패턴을 시각화', tag: '분석' },
               { title: '실시간 재고 현황', desc: '제조사/브랜드/사이즈별 현재고, 사용량, 적정 재고량을 한눈에 파악', tag: '재고' },
-              { title: '수술 기록 자동 연동', desc: '덴트웹 수술기록 업로드 시 자동으로 재고 차감 및 소모 이력 기록', tag: '자동화' },
-              { title: '브랜드별 소모 분석', desc: '어떤 브랜드의 어떤 사이즈가 많이 쓰이는지 데이터 기반 분석', tag: '분석' },
+              { title: '수술 기록 자동 연동', desc: '덴트웹 수술기록지를 업로드하면 재고 차감 및 소모 이력이 자동 기록됩니다', tag: '자동화' },
               { title: '스마트 발주 추천', desc: '소모 패턴 기반 적정 재고 자동 계산, 부족 시 즉시 발주 가능', tag: '발주' },
-              { title: '교환 관리', desc: '수술 중 교환 발생부터 교환 접수, 입고 확인까지 전 과정 추적', tag: '교환' },
               { title: '역할별 권한 관리', desc: '원장/매니저/스탭 역할에 따라 접근 가능한 메뉴와 기능을 구분', tag: '보안' },
             ].map((item, i) => (
               <div key={i} className="group p-7 sm:p-8 bg-white/80 backdrop-blur-md rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-2xl hover:shadow-indigo-100/50 hover:-translate-y-2 transition-all duration-500 relative overflow-hidden">
@@ -440,8 +441,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400">{DEFAULT_TRIAL_HIGHLIGHT_TEXT}</span>
           </h2>
           <p className="text-indigo-200 text-lg mb-4 leading-relaxed font-medium">
-            엑셀에 쓰는 시간을 환자에게 쓰세요.<br />
-            더 이상 재고 걱정에 시간을 낭비하지 마세요.
+            데이터가 일하게 하세요. 원장님은 진료에 집중하세요.
           </p>
           <p className="text-sm text-indigo-300 mb-10 text-balance">
             {ctaTrialFootnoteText}
