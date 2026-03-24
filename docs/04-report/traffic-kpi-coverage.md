@@ -1,8 +1,8 @@
 # Traffic Snapshot Coverage
 
-- 생성시각(KST): 2026-03-24T01:07:11.521+09:00
+- 생성시각(KST): 2026-03-25T01:15:21.896+09:00
 - 대상 디렉터리: `/home/runner/work/implant-inventory/implant-inventory/docs/04-report/traffic-kpi-daily`
-- 기준일(KST): 2026-03-24
+- 기준일(KST): 2026-03-25
 - 검사 구간: 최근 28일
 - 요구 생성일 수: 27일
 - 실제 생성일 수: 28일
@@ -14,7 +14,6 @@
 
 ## Expected Dates
 
-- 2026-02-25 (ok)
 - 2026-02-26 (ok)
 - 2026-02-27 (ok)
 - 2026-02-28 (ok)
@@ -42,3 +41,4 @@
 - 2026-03-22 (ok)
 - 2026-03-23 (ok)
 - 2026-03-24 (ok)
+- 2026-03-25 (ok)
