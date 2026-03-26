@@ -7,14 +7,14 @@ html {
   -webkit-tap-highlight-color: transparent;
   /* 스크롤바 표시/숨김으로 인한 레이아웃 시프트 방지 (데스크톱만) */
   scrollbar-gutter: stable;
-  /* 모바일 좌우 스크롤 방지 */
-  overflow-x: hidden;
+  /* 모바일 좌우 스크롤 방지 — clip은 hidden과 달리 BFC를 생성하지 않아 position:sticky 유지 */
+  overflow-x: clip;
 }
 
 body {
   font-family: 'Inter', 'Noto Sans KR', sans-serif;
-  /* 모바일 좌우 스크롤 방지 */
-  overflow-x: hidden;
+  /* 모바일 좌우 스크롤 방지 — clip은 hidden과 달리 BFC를 생성하지 않아 position:sticky 유지 */
+  overflow-x: clip;
 }
 
 @utility text-balance {
