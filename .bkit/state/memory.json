@@ -1,13 +1,13 @@
 {
-  "sessionCount": 455,
+  "sessionCount": 469,
   "lastSession": {
-    "startedAt": "2026-03-21T03:24:40.008Z",
+    "startedAt": "2026-03-25T23:57:47.927Z",
     "platform": "claude",
     "level": "Dynamic"
   },
-  "currentFeature": "admin-billing-labels",
+  "currentFeature": "signup-onboarding-friction",
   "currentPhase": "completed",
-  "matchRate": null,
+  "matchRate": 100,
   "lastArchived": {
     "feature": "valuation-narrowing",
     "phase": "archived",
