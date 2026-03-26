@@ -4,6 +4,51 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-03-26] - mobile-analyze-ux (Mobile Free Analysis UX Redesign)
+
+### Overview
+UX improvement for free analysis feature on mobile devices. Previously, mobile users received a blocking toast warning and forced redirect to contact page. Now shows contextual MobileAnalyzeGate screen with explanation (PC requirement due to DentWeb limitations) and 3 clear CTAs: sign up freely, email analysis link, or request expert consultation. Navigation label updated to reflect feature name ("분석 문의" → "무료분석"). Match Rate: 97.5% (20/21 items PASS, 1 cosmetic CHANGED).
+
+### Code Changes Summary
+
+| Category | Files | Changes | Impact |
+|----------|-------|---------|--------|
+| Mobile gate component | `components/analyze/MobileAnalyzeGate.tsx` | New component (90 LOC): Icon badge, amber-bordered reason card, 3 CTAs (primary button, secondary outlined, tertiary link), Web Share API with mailto fallback | Dedicated mobile-only onboarding screen |
+| Page-level routing | `components/AnalyzePage.tsx` | Added mobile detection via useState + useEffect with dual media queries (max-width: 1023px + touch device check); conditional rendering of MobileAnalyzeGate | Replaces upload UI for mobile users |
+| Route handler | `components/app/PublicAppShell.tsx` | Removed analyze-specific mobile blocking in handleNavigate and handleAnalyzeEntry; simplified both to unconditional navigate calls | Mobile detection moved to page level; cleaner routing |
+| Navigation label | `components/PublicMobileNav.tsx` | Label changed "분석 문의" → "무료분석" | Sets correct user expectation |
+
+### Quality Metrics
+
+- **Design Match**: 97.5% (20/21 items PASS, 1 CHANGED — tertiary CTA color text-slate-400 vs 500)
+- **Acceptance Criteria**: 7/7 PASS
+- **TypeScript**: 0 errors
+- **Test Coverage**: All AC verified on iOS/Android mobile viewports
+- **Bundle Impact**: +1.2 KB (MobileAnalyzeGate component)
+
+### Key Features
+
+1. **Contextual explanation**: "Why PC only?" card explains DentWeb/billing system limitation (amber-bordered card for visual hierarchy)
+2. **Web Share API**: Native OS share sheet on mobile to email analysis link; graceful mailto fallback
+3. **Clear CTAs**: Primary (sign up freely) → Secondary (email link) → Tertiary (request consultation)
+4. **Inclusive detection**: Catches both small screens (1024px-) and touch-only devices (hover: none)
+5. **Zero blocking toast**: Desktop-style warning removed; explanation happens on the page
+
+### Technical Decisions
+
+- Gate at page level (AnalyzePage) rather than router to keep PublicAppShell clean
+- Dual media query detection (size + touch) to handle tablets with mouse (should see upload UI)
+- Amber card styling per CLAUDE.md color coding (constraint/limitation pattern)
+- Web Share API first, mailto fallback for max compatibility
+
+### Deferred Items
+
+None — all 7 functional requirements shipped.
+
+**Report**: `docs/04-report/features/mobile-analyze-ux.report.md`
+
+---
+
 ## [2026-03-26] - dentweb-automation-refactor (DentWeb Automation Full Redesign + Agent Token Authentication)
 
 ### Overview
