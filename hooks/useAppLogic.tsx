@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   AppState, BillingCycle, BillingProgram, DashboardTab,
-  ExcelData, FailCandidate, PLAN_LIMITS, PLAN_NAMES, PLAN_ORDER, PlanType, User,
+  ExcelData, PLAN_LIMITS, PLAN_NAMES, PLAN_ORDER, PlanType, User,
 } from '../types';
 import { authService } from '../services/authService';
 import { hospitalService } from '../services/hospitalService';
@@ -9,7 +9,7 @@ import { StockCalcSettings, DEFAULT_STOCK_CALC_SETTINGS } from '../services/hosp
 import { planService } from '../services/planService';
 import { onboardingService } from '../services/onboardingService';
 import { isExchangePrefix } from '../services/appUtils';
-import { reviewService, ReviewType } from '../services/reviewService';
+import { reviewService } from '../services/reviewService';
 import { pageViewService } from '../services/pageViewService';
 import { supabase } from '../services/supabaseClient';
 import { useInventoryCompare } from './useInventoryCompare';
@@ -27,7 +27,9 @@ import { useBaseStockBatch } from './useBaseStockBatch';
 import { useInviteFlow } from './useInviteFlow';
 import { useRefreshSurgeryUsage } from './useRefreshSurgeryUsage';
 import type { NudgeType } from '../components/UpgradeNudge';
-import type { LimitType } from '../components/PlanLimitToast';
+import { useUIStore } from '../stores/uiStore';
+import { usePaymentStore } from '../stores/paymentStore';
+import { useFailStore } from '../stores/failStore';
 
 interface UseAppLogicParams {
   state: AppState;
@@ -52,22 +54,22 @@ export function useAppLogic({
   surgeryFileRef,
   dashboardHeaderRef,
 }: UseAppLogicParams) {
-  // ── UI overlay state ──────────────────────────────────────────
-  const [reviewPopupType, setReviewPopupType] = useState<ReviewType | null>(null);
-  const [profileInitialTab, setProfileInitialTab] = useState<'info' | 'plan' | 'security' | 'reviews' | undefined>(undefined);
-  const [planLimitToast, setPlanLimitToast] = useState<LimitType | null>(null);
-  const [directPayment, setDirectPayment] = useState<{ plan: PlanType; billing: BillingCycle; isRenewal?: boolean } | null>(null);
-  const [billingProgramSaving, setBillingProgramSaving] = useState(false);
-  const [billingProgramError, setBillingProgramError] = useState('');
-  const [pendingFailCandidates, setPendingFailCandidates] = useState<FailCandidate[]>([]);
-  const [showAuditHistory, setShowAuditHistory] = useState(false);
-  const [autoOpenBaseStockEdit, setAutoOpenBaseStockEdit] = useState(false);
-  const [autoOpenFailBulkModal, setAutoOpenFailBulkModal] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{
-    title: string; message: string; tip?: string;
-    confirmLabel?: string; confirmColor?: 'indigo' | 'rose' | 'amber' | 'emerald';
-    icon?: React.ReactNode; onConfirm: () => void;
-  } | null>(null);
+  // ── UI overlay state (Zustand stores) ────────────────────────
+  const {
+    reviewPopupType, setReviewPopupType,
+    profileInitialTab, setProfileInitialTab,
+    planLimitToast, setPlanLimitToast,
+    showAuditHistory, setShowAuditHistory,
+    autoOpenBaseStockEdit, setAutoOpenBaseStockEdit,
+    autoOpenFailBulkModal, setAutoOpenFailBulkModal,
+    confirmModal, setConfirmModal,
+  } = useUIStore();
+  const {
+    directPayment, setDirectPayment,
+    billingProgramSaving, setBillingProgramSaving,
+    billingProgramError, setBillingProgramError,
+  } = usePaymentStore();
+  const { pendingFailCandidates, setPendingFailCandidates } = useFailStore();
 
   // ── Review popup ──────────────────────────────────────────────
   useEffect(() => {

@@ -122,8 +122,8 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
     setShowDataViewer(true);
   }, []);
 
-  const confirmedReimplantCount = useMemo(() => detectedFails.filter(f => f.status === 'confirmed').length, [detectedFails]);
-  const pendingReimplantCount = useMemo(() => detectedFails.filter(f => f.status === 'pending').length, [detectedFails]);
+  const confirmedReimplantCount = detectedFails.filter(f => f.status === 'confirmed').length;
+  const pendingReimplantCount = detectedFails.filter(f => f.status === 'pending').length;
 
   const handleScanAll = useCallback(async () => {
     if (!hospitalId) return;
@@ -346,10 +346,7 @@ const SurgeryDashboard: React.FC<SurgeryDashboardProps> = ({
   // =====================================================
   // HOOKS — must be before any early return
   // =====================================================
-  const unregisteredUsageTotal = useMemo(
-    () => unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0),
-    [unregisteredFromSurgery]
-  );
+  const unregisteredUsageTotal = unregisteredFromSurgery.reduce((sum, item) => sum + item.usageCount, 0);
 
   const unregisteredIdSet = useMemo(
     () => new Set(unregisteredFromSurgery.flatMap(item => item.recordIds ?? [])),
