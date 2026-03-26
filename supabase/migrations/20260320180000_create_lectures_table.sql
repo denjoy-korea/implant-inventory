@@ -12,15 +12,19 @@ create table if not exists lectures (
 -- 시스템 어드민만 write, 인증된 회원 전체 read
 alter table lectures enable row level security;
 
+drop policy if exists "lectures_select" on lectures;
 create policy "lectures_select" on lectures
   for select to authenticated using (true);
 
+drop policy if exists "lectures_insert" on lectures;
 create policy "lectures_insert" on lectures
   for insert to service_role with check (true);
 
+drop policy if exists "lectures_update" on lectures;
 create policy "lectures_update" on lectures
   for update to service_role using (true);
 
+drop policy if exists "lectures_delete" on lectures;
 create policy "lectures_delete" on lectures
   for delete to service_role using (true);
 

@@ -2,13 +2,12 @@
 // Pricing Types
 // ============================================
 
-/** 품목별 단가 (item_pricing 테이블 매핑) */
+/** 품목별 단가 (item_pricing 테이블 매핑) — 브랜드 단위 */
 export interface ItemPricing {
   id: string;
   hospitalId: string;
   manufacturer: string;
   brand: string;
-  size: string;
   purchasePrice: number;
   treatmentFee: number;
   updatedBy: string | null;
@@ -23,7 +22,6 @@ export interface ItemPricingHistory {
   hospitalId: string;
   manufacturer: string;
   brand: string;
-  size: string;
   fieldChanged: 'purchase_price' | 'treatment_fee' | 'both' | 'initial';
   oldPurchasePrice: number | null;
   newPurchasePrice: number | null;
@@ -38,7 +36,6 @@ export interface ItemPricingHistory {
 export interface PricingUpsertInput {
   manufacturer: string;
   brand: string;
-  size: string;
   purchasePrice: number;
   treatmentFee: number;
 }
