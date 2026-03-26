@@ -11,6 +11,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, createAdminClient } from "../_shared/authUtils.ts";
 
 // ── AES-GCM 복호화 ──────────────────────────────────────────────
 const PBKDF2_SALT = new TextEncoder().encode("implant-inventory-pbkdf2-salt-v1");
@@ -177,6 +178,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // 인증: JWT 필수 (verify_jwt = true로 게이트웨이에서 검증됨)
+    const auth = await requireAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
+
     const patientDataKey = Deno.env.get("PATIENT_DATA_KEY");
     if (!patientDataKey) {
       return new Response(JSON.stringify({ ok: false }), {
@@ -194,6 +199,22 @@ Deno.serve(async (req: Request) => {
     if (!hospital_id || !event) {
       return new Response(JSON.stringify({ ok: false }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 소유권 검증: 요청한 사용자가 해당 병원 소속인지 확인
+    const adminClient = createAdminClient();
+    const { data: membership } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("id", auth.user.id)
+      .eq("hospital_id", hospital_id)
+      .maybeSingle();
+
+    if (!membership) {
+      return new Response(JSON.stringify({ ok: false }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

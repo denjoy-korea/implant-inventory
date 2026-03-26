@@ -50,12 +50,12 @@ npx supabase functions deploy dentweb-automation --no-verify-jwt
 npx supabase functions deploy dentweb-upload --no-verify-jwt
 npx supabase functions deploy toss-payment-confirm --no-verify-jwt
 npx supabase functions deploy toss-payment-refund --no-verify-jwt
-npx supabase functions deploy notify-hospital-slack --no-verify-jwt
 npx supabase functions deploy xlsx-generate --no-verify-jwt
 ```
 - 이유: `verify_jwt = false`가 config.toml에 있어도 클라우드 배포 시 CLI 플래그로 명시해야 반영됨
 - 플래그 누락 시 Supabase 게이트웨이가 모든 요청을 401 차단 (함수 코드가 실행되지 않음)
-- 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`, `holiday-proxy`, `dentweb-automation`, `dentweb-upload`, `toss-payment-confirm`, `toss-payment-refund`, `notify-hospital-slack`
+- 해당 함수: `crypto-service`, `notify-signup`, `notify-withdrawal`, `holiday-proxy`, `dentweb-automation`, `dentweb-upload`, `toss-payment-confirm`, `toss-payment-refund`
+- `notify-hospital-slack`: 보안 패치(2026-03-26)로 `verify_jwt = true`로 변경됨 — `--no-verify-jwt` 불필요
 
 ### 모달 헤더 컬러 코딩 규칙
 모달의 기능 유형에 따라 헤더 액센트 컬러를 일관되게 사용합니다:

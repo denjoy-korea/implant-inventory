@@ -26,6 +26,12 @@ Deno.serve(async (req: Request) => {
 
     const { email, reasons, reasonDetail } = await req.json();
 
+    // mrkdwn injection 방지: Slack mrkdwn 특수문자 이스케이프
+    const escapeMrkdwn = (s: unknown): string => {
+      if (typeof s !== "string") return "—";
+      return s.replace(/[&<>*_~`]/g, (c) => `\\${c}`);
+    };
+
     const now = new Date().toLocaleString("ko-KR", {
       timeZone: "Asia/Seoul",
       year: "numeric",
@@ -36,12 +42,12 @@ Deno.serve(async (req: Request) => {
     });
 
     const fields: { type: string; text: string }[] = [
-      { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
-      { type: "mrkdwn", text: `*탈퇴 사유*\n${reasons || "—"}` },
+      { type: "mrkdwn", text: `*이메일*\n${escapeMrkdwn(email)}` },
+      { type: "mrkdwn", text: `*탈퇴 사유*\n${escapeMrkdwn(reasons)}` },
     ];
 
     if (reasonDetail) {
-      fields.push({ type: "mrkdwn", text: `*기타 사유*\n${reasonDetail}` });
+      fields.push({ type: "mrkdwn", text: `*기타 사유*\n${escapeMrkdwn(reasonDetail)}` });
     }
 
     const slackBody = {

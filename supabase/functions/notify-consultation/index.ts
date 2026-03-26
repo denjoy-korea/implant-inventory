@@ -102,6 +102,12 @@ Deno.serve(async (req: Request) => {
     const { name, email, hospital_name, region, contact, preferred_date, preferred_time_slot, notes } =
       await req.json();
 
+    // mrkdwn injection 방지: Slack mrkdwn 특수문자 이스케이프
+    const escapeMrkdwn = (s: unknown): string => {
+      if (typeof s !== "string") return "—";
+      return s.replace(/[&<>*_~`]/g, (c) => `\\${c}`);
+    };
+
     // ── 2. system_integrations에서 Notion 설정 로드 ──
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -135,20 +141,20 @@ Deno.serve(async (req: Request) => {
     getSlackWebhookUrl("문의알림").then(slackUrl => {
       if (!slackUrl) return;
       const fields: { type: string; text: string }[] = [
-        { type: "mrkdwn", text: `*병원명*\n${hospital_name || "—"}` },
-        { type: "mrkdwn", text: `*이름*\n${name || "—"}` },
-        { type: "mrkdwn", text: `*연락처*\n${contact || "—"}` },
-        { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
+        { type: "mrkdwn", text: `*병원명*\n${escapeMrkdwn(hospital_name)}` },
+        { type: "mrkdwn", text: `*이름*\n${escapeMrkdwn(name)}` },
+        { type: "mrkdwn", text: `*연락처*\n${escapeMrkdwn(contact)}` },
+        { type: "mrkdwn", text: `*이메일*\n${escapeMrkdwn(email)}` },
       ];
-      if (preferred_date)      fields.push({ type: "mrkdwn", text: `*선호 날짜*\n${preferred_date}` });
-      if (preferred_time_slot) fields.push({ type: "mrkdwn", text: `*선호 시간대*\n${TIME_SLOT_KO[preferred_time_slot] ?? preferred_time_slot}` });
-      if (region)              fields.push({ type: "mrkdwn", text: `*지역*\n${region}` });
+      if (preferred_date)      fields.push({ type: "mrkdwn", text: `*선호 날짜*\n${escapeMrkdwn(preferred_date)}` });
+      if (preferred_time_slot) fields.push({ type: "mrkdwn", text: `*선호 시간대*\n${TIME_SLOT_KO[preferred_time_slot] ?? escapeMrkdwn(preferred_time_slot)}` });
+      if (region)              fields.push({ type: "mrkdwn", text: `*지역*\n${escapeMrkdwn(region)}` });
 
       const slackBody: Record<string, unknown> = {
         blocks: [
           { type: "header", text: { type: "plain_text", text: "📋 새 상담 신청이 접수되었습니다!" } },
           { type: "section", fields },
-          ...(notes ? [{ type: "section", text: { type: "mrkdwn", text: `*추가 요청*\n${notes.slice(0, 300)}` } }] : []),
+          ...(notes ? [{ type: "section", text: { type: "mrkdwn", text: `*추가 요청*\n${escapeMrkdwn(notes).slice(0, 300)}` } }] : []),
           { type: "context", elements: [{ type: "mrkdwn", text: `⏰ ${now} (KST)` }] },
         ],
       };
