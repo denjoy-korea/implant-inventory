@@ -131,11 +131,34 @@ Used for `/pdca report {feature}` after Check phase (Match Rate ≥90%).
 - Counterintuitive at first but correct semantics: "how much surplus did we recover?"
 - Implementation uses positive number = surplus restored (matches use case)
 
+## signup-onboarding-friction Report Pattern (2026-03-21)
+
+**Scope**: 2 Phases (Phase 1 copy honesty + Phase 2 progressive profiling) with 20 requirements
+- Match Rate: 100% (20/20: all PASS)
+- Phase 1: 5/5 (landing copy, value page, SEO meta)
+- Phase 2: 15/15 (form validation relief, UI labels, data layer, dashboard banner)
+- Phase 3: Deferred to 2026-04-01 (beta cleanup separate PDCA)
+- Code growth: +55 LOC net (13 files modified, 1 new utility)
+
+**Key insights**:
+- Analysis-driven implementation: No Plan/Design docs written; implementation followed Analysis directly (efficient when Match Rate analysis ≥90%)
+- Progressive profiling pattern validated: Deferred collection via post-signup banner → higher data completeness at intent moment (first payment)
+- Type-first approach worked: bizFileUrl added to Hospital + AppState before UI changes prevented runtime errors
+- Copy-paste problem solved: Honest "간편 가입" reduces false expectations, supports higher conversion by managing promise-delivery gap
+
+**Report location**: `docs/04-report/features/signup-onboarding-friction.report.md` (12 sections, 13 appendices)
+
+**Lessons for future reports**:
+- When Analysis Match Rate is 100%, still create lightweight Plan/Design retroactively for compliance trail (5-min docs)
+- Define deferred phases formally before implementation (Phase 3 "beta cleanup" should have explicit acceptance criteria)
+- For analysis-driven implementations, note in report why Plan/Design were skipped and what could have gone wrong without them
+
 **Files to Reference**
 - Report template: `/Users/mac/.claude/plugins/cache/bkit-marketplace/bkit/1.5.8/templates/report.template.md`
 - Plan: `docs/01-plan/features/{feature}.plan.md`
 - Analysis: `docs/03-analysis/features/{feature}.analysis.md`
 - Output: `docs/04-report/features/{feature}.report.md`
+- signup-onboarding-friction Report: `docs/04-report/features/signup-onboarding-friction.report.md`
 - pricing-overhaul Report: `docs/04-report/features/pricing-overhaul.report.md`
 - security-hardening Report: `docs/04-report/features/security-hardening.report.md`
 - order-return-remodel Report: `docs/04-report/features/order-return-remodel.report.md`
