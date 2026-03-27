@@ -77,6 +77,18 @@ function buildEmailHtml(title: string, body: string, ctaUrl: string, ctaLabel: s
 
 Deno.serve(async (req: Request) => {
   try {
+    // Supabase Auth Hook 서명 검증 (SEND_EMAIL_HOOK_SECRET 설정 시 활성화)
+    const hookSecret = Deno.env.get("SEND_EMAIL_HOOK_SECRET");
+    if (hookSecret) {
+      const authHeader = req.headers.get("Authorization") ?? "";
+      if (authHeader !== `Bearer ${hookSecret}`) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const payload: EmailHookPayload = await req.json();
     const { user, email_data } = payload;
     const { email_action_type, token_hash, redirect_to } = email_data;
