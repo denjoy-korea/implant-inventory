@@ -556,6 +556,11 @@ export function useAppState(onNotify?: NotifyFn) {
       if (event === 'SIGNED_IN') {
         // initSession이 이미 세션 복원 + loadHospitalData를 완료한 경우 중복 실행 방지
         if (initSessionHandledRef.current) return;
+        // 로그인 타임아웃 후 원래 요청이 늦게 완료된 경우 — 세션을 즉시 폐기
+        if (authService.consumeLoginTimedOut()) {
+          void supabase.auth.signOut();
+          return;
+        }
         const now = Date.now();
         // 초기 세션 복원/토큰 갱신 과정에서 중복 SIGNED_IN 이벤트가 짧게 연속 발행할 수 있음
         if (now - lastSignedInAtRef.current < 800) return;

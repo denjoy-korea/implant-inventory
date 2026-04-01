@@ -12,7 +12,7 @@ import process from 'node:process';
 
 const checks = [
   {
-    name: 'Edge Functions 배포 상태 (xlsx-parse, xlsx-generate)',
+    name: 'Edge Functions 배포 상태 (xlsx-parse, xlsx-generate, toss-payment-confirm, crypto-service, notify-signup, auth-send-email)',
     cmd: 'node',
     args: ['scripts/check-edge-functions.mjs'],
   },

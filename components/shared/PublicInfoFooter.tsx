@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import LegalModal from './LegalModal';
+import React from 'react';
 import { BUSINESS_INFO } from '../../utils/businessInfo';
 
 interface PublicInfoFooterProps {
@@ -7,9 +6,6 @@ interface PublicInfoFooterProps {
 }
 
 const PublicInfoFooter: React.FC<PublicInfoFooterProps> = ({ showLegalLinks = true }) => {
-  const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
-
   return (
     <>
       <footer className="border-t border-slate-800 bg-slate-950 text-slate-400 py-16 px-6">
@@ -65,20 +61,18 @@ const PublicInfoFooter: React.FC<PublicInfoFooterProps> = ({ showLegalLinks = tr
 
             {showLegalLinks && (
               <div className="flex gap-6">
-                <button onClick={() => setShowTerms(true)} className="hover:text-slate-300 transition-colors">
+                <a href="#/terms" className="hover:text-slate-300 transition-colors">
                   이용약관
-                </button>
-                <button onClick={() => setShowPrivacy(true)} className="hover:text-slate-300 transition-colors">
+                </a>
+                <a href="#/privacy" className="hover:text-slate-300 transition-colors">
                   개인정보처리방침
-                </button>
+                </a>
               </div>
             )}
           </div>
         </div>
       </footer>
 
-      {showTerms && <LegalModal type="terms" onClose={() => setShowTerms(false)} />}
-      {showPrivacy && <LegalModal type="privacy" onClose={() => setShowPrivacy(false)} />}
     </>
   );
 };

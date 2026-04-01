@@ -13,11 +13,11 @@ interface LegalModalProps {
 }
 
 // 강조 단락: 사용자가 반드시 인지해야 할 의무·권리 항목에만 사용
-type ParagraphEntry = string | { text: string; highlight: true } | { type: 'table'; headers: string[]; rows: string[][] };
+export type ParagraphEntry = string | { text: string; highlight: true } | { type: 'table'; headers: string[]; rows: string[][] };
 
-const EFFECTIVE_DATE = '2026년 2월 25일';
+export const EFFECTIVE_DATE = '2026년 2월 25일';
 
-const TERMS_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
+export const TERMS_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
   {
     title: '제1조 (목적)',
     paragraphs: [
@@ -142,7 +142,7 @@ const TERMS_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
   },
 ];
 
-const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
+export const PRIVACY_SECTIONS: Array<{ title: string; paragraphs: ParagraphEntry[] }> = [
   {
     title: '개요',
     paragraphs: [

@@ -144,6 +144,9 @@ interface AuthResult {
   emailConfirmationRequired?: boolean;
 }
 
+// 로그인 타임아웃 후 늦게 도달하는 SIGNED_IN 이벤트를 무시하기 위한 플래그
+let _loginTimedOut = false;
+
 export const authService = {
   /** 이메일/비밀번호 회원가입 */
   async signUp(params: SignupParams): Promise<AuthResult> {
@@ -483,12 +486,16 @@ export const authService = {
   /** 로그인 */
   async signIn(email: string, password: string): Promise<AuthResult> {
     clearProfileLookupCache();
+    _loginTimedOut = false; // 재시도 시 이전 타임아웃 플래그 초기화
     let authError: Error | null = null;
     try {
       const { error } = await Promise.race([
         supabase.auth.signInWithPassword({ email, password }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('네트워크 응답이 없습니다. 잠시 후 다시 시도해주세요.')), 10_000)
+          setTimeout(() => {
+            _loginTimedOut = true;
+            reject(new Error('네트워크 응답이 없습니다. 잠시 후 다시 시도해주세요.'));
+          }, 10_000)
         ),
       ]);
       authError = error;
@@ -1028,5 +1035,12 @@ export const authService = {
     return data.identities
       .filter(i => i.provider !== 'email')
       .map(i => ({ id: i.id, provider: i.provider }));
+  },
+
+  /** 로그인 타임아웃 플래그를 소비(consume)하고 반환 — SIGNED_IN 핸들러에서 호출 */
+  consumeLoginTimedOut(): boolean {
+    const v = _loginTimedOut;
+    _loginTimedOut = false;
+    return v;
   },
 };

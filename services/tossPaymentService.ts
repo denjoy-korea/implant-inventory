@@ -275,6 +275,12 @@ export const tossPaymentService = {
     }
 
     if (!window.TossPayments) {
+      // SDK 로드는 성공했지만 window.TossPayments가 비어 있는 경우 billing record 취소 처리
+      await supabase
+        .from('billing_history')
+        .update({ payment_status: 'cancelled' })
+        .eq('id', billingId)
+        .eq('payment_status', 'pending');
       return { error: 'TossPayments SDK를 사용할 수 없습니다.' };
     }
 

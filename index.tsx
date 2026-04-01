@@ -5,7 +5,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import App from './App';
 import PaymentRedirectPage from './components/payment/PaymentRedirectPage';
 
-// 배포 후 청크 파일 변경으로 발생하는 ChunkLoadError 처리 — 자동 새로고침
+// 배포 후 청크 파일 변경으로 발생하는 ChunkLoadError 처리 — 자동 새로고침 (최대 3회)
 window.addEventListener('error', (event) => {
   const msg = event.message || '';
   if (
@@ -14,6 +14,18 @@ window.addEventListener('error', (event) => {
     msg.includes('Loading chunk') ||
     msg.includes('ChunkLoadError')
   ) {
+    try {
+      const key = '_chunkReloadCount';
+      const count = Number(sessionStorage.getItem(key) || '0');
+      if (count >= 3) {
+        // 3회 초과: 루프 중단 — 배포 상태 이상 또는 CDN 캐시 문제일 수 있음
+        console.error('[ChunkLoad] 반복 실패 — 자동 새로고침 중단. 브라우저 캐시를 지우고 다시 시도해주세요.');
+        return;
+      }
+      sessionStorage.setItem(key, String(count + 1));
+    } catch {
+      // sessionStorage 사용 불가 환경: 기존 동작 유지
+    }
     window.location.reload();
   }
 });

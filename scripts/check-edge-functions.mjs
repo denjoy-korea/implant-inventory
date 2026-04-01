@@ -50,6 +50,12 @@ const baseUrl = supabaseUrl.replace(/\/$/, '');
 const probes = [
   { name: 'xlsx-parse', body: { fileBase64: 'aGVsbG8=', filename: 'probe.xlsx' } },
   { name: 'xlsx-generate', body: { activeSheet: { name: 'Sheet1', columns: [], rows: [] }, selectedIndices: [] } },
+  // 핵심 운영 함수 배포 확인 — 404 = 미배포(FAIL), 그 외 응답 = 배포됨(OK)
+  // onlyCheck404: 함수 자체 인증(401) 또는 잘못된 프로브 body로 인한 에러(5xx)를 배포 실패로 오판하지 않음
+  { name: 'toss-payment-confirm', body: {}, opts: { onlyCheck404: true } },  // 함수 레벨 JWT 검증 → 401 정상
+  { name: 'crypto-service', body: { action: 'ping' }, opts: { onlyCheck404: true } },  // 함수 레벨 JWT 검증 → 401 정상
+  { name: 'notify-signup', body: { _probe: true } },  // verify_jwt=false, 유효하지 않은 body → 200 정상
+  { name: 'auth-send-email', body: {}, opts: { onlyCheck404: true } },  // Auth Hook 전용 payload 없으면 500
 ];
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -71,7 +77,7 @@ function classifyUnreachableDetail(detail) {
   return 'network';
 }
 
-async function probeFunctionOnce(name, body) {
+async function probeFunctionOnce(name, body, opts = {}) {
   const endpoint = `${baseUrl}/functions/v1/${name}`;
   try {
     const response = await fetch(endpoint, {
@@ -87,6 +93,10 @@ async function probeFunctionOnce(name, body) {
     const status = response.status;
     if (status === 404) {
       return { ok: false, name, reason: 'not_found', status };
+    }
+    // onlyCheck404: 404만 배포 실패로 판정 (함수 자체 인증/에러를 정상으로 허용)
+    if (opts.onlyCheck404) {
+      return { ok: true, name, status };
     }
     if (status === 401 || status === 403) {
       return { ok: false, name, reason: 'auth', status };
@@ -111,20 +121,20 @@ async function probeFunctionOnce(name, body) {
   }
 }
 
-async function probeFunction(name, body) {
-  const result = await probeFunctionOnce(name, body);
+async function probeFunction(name, body, opts = {}) {
+  const result = await probeFunctionOnce(name, body, opts);
   // 504 cold-start: 5초 대기 후 1회 재시도
   if (result.reason === 'cold_start') {
     console.warn(`[edge-check] WARN: ${name} cold-start timeout (504), retrying in 5s...`);
     await wait(5000);
-    return probeFunctionOnce(name, body);
+    return probeFunctionOnce(name, body, opts);
   }
 
   // 네트워크 단절/일시 장애: 2초 대기 후 1회 재시도
   if (result.reason === 'unreachable') {
     console.warn(`[edge-check] WARN: ${name} unreachable[${result.unreachableType}] on first attempt, retrying in 2s...`);
     await wait(2000);
-    const retryResult = await probeFunctionOnce(name, body);
+    const retryResult = await probeFunctionOnce(name, body, opts);
     if (retryResult.ok) {
       return { ...retryResult, recoveredFrom: 'unreachable' };
     }
@@ -139,7 +149,7 @@ async function probeFunction(name, body) {
 
 const results = [];
 for (const probe of probes) {
-  results.push(await probeFunction(probe.name, probe.body));
+  results.push(await probeFunction(probe.name, probe.body, probe.opts));
 }
 
 let failed = false;

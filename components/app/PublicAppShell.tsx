@@ -82,6 +82,7 @@ const AdminPanel = lazyWithRetry(() => import('../AdminPanel'));
 const MfaOtpScreen = lazyWithRetry(() => import('../MfaOtpScreen'));
 const ReviewsPage = lazyWithRetry(() => import('../ReviewsPage'));
 const ConsultationPage = lazyWithRetry(() => import('../ConsultationPage'));
+const LegalPage = lazyWithRetry(() => import('../shared/LegalPage'));
 
 interface InviteInfo {
   token: string;
@@ -265,6 +266,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     analyze: {
       title: '무료 분석 | DenJOY',
       description: '덴트웹 수술기록을 업로드하면 재고 건강도를 무료로 분석해 드립니다.',
+    },
+    terms: {
+      title: '이용약관 | DenJOY',
+      description: 'DenJOY 서비스 이용약관을 확인하세요.',
+    },
+    privacy: {
+      title: '개인정보처리방침 | DenJOY',
+      description: 'DenJOY 개인정보처리방침을 확인하세요.',
     },
     login: {
       title: '로그인 | DenJOY',
@@ -497,6 +506,12 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 initialRegion={consultationPrefill.region}
                 initialContact={consultationPrefill.contact}
               />
+            )}
+            {currentView === 'terms' && (
+              <LegalPage type="terms" onBack={() => handleNavigate('landing')} />
+            )}
+            {currentView === 'privacy' && (
+              <LegalPage type="privacy" onBack={() => handleNavigate('landing')} />
             )}
           </Suspense>
         </ErrorBoundary>
