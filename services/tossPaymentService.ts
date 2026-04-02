@@ -285,6 +285,8 @@ export const tossPaymentService = {
     }
 
     // 4. 결제 요청 (성공 시 페이지 redirect → 이 함수는 반환되지 않음)
+    // [SEC] CSRF 방지: redirect 전 billingId를 sessionStorage에 기록, /payment/fail 에서 소유권 검증
+    try { sessionStorage.setItem('_pendingOrderId', billingId); } catch { /* private mode */ }
     const toss = window.TossPayments(clientKey);
     const origin = window.location.origin;
     const orderName = `${PLAN_NAMES[plan]} 플랜 ${billingCycle === 'yearly' ? '연간' : '월간'} 결제`;

@@ -28,10 +28,15 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       }
       setPageState('fail');
 
-      // [C-8] pending billing_history 정리: fail 경로에서는 취소 처리가 없으므로
-      // 세션이 유효한 경우 orphaned pending 레코드를 cancelled로 업데이트
+      // [SEC] CSRF 방지: sessionStorage의 _pendingOrderId가 URL의 orderId와 일치하는 경우에만
+      // billing_history를 cancelled로 업데이트 (타인이 조작한 orderId 파라미터 차단)
       const orderId = params.get('orderId');
-      if (orderId) {
+      let isOwnPayment = false;
+      try {
+        isOwnPayment = sessionStorage.getItem('_pendingOrderId') === orderId;
+        if (isOwnPayment) sessionStorage.removeItem('_pendingOrderId');
+      } catch { /* private mode */ }
+      if (orderId && isOwnPayment) {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
             supabase
@@ -58,6 +63,9 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       setPageState('fail');
       return;
     }
+
+    // [SEC] CSRF: success 경로에서도 sessionStorage 정리
+    try { sessionStorage.removeItem('_pendingOrderId'); } catch { /* private mode */ }
 
     // Supabase JS v2는 fresh page load 시 세션 복원이 비동기.
     // getSession()은 로컬스토리지에서 읽기만 해서 만료된 토큰도 반환할 수 있음.

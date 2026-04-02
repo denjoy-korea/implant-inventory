@@ -194,11 +194,15 @@ Deno.serve(async (req: Request) => {
   // 발신자 소유권 검증: 요청자가 이 billing record를 소유한 병원의 구성원인지 확인
   const { data: profile } = await adminClient
     .from("profiles")
-    .select("hospital_id")
+    .select("hospital_id, role")
     .eq("id", user.id)
     .single();
   if (!profile || profile.hospital_id !== billing.hospital_id) {
     return jsonResponse({ error: "Access denied" }, 403);
+  }
+  // [SEC] 결제 권한: master 또는 admin 역할만 허용
+  if (profile.role !== "master" && profile.role !== "admin") {
+    return jsonResponse({ error: "Billing requires master or admin role" }, 403);
   }
 
   if (billing.payment_status !== "pending") {
@@ -213,6 +217,18 @@ Deno.serve(async (req: Request) => {
       });
     }
     return jsonResponse({ error: "Billing is not pending", status }, 409);
+  }
+
+  // [SEC] 동시 중복 요청 방지: pending → confirming 원자적 전환 (CAS)
+  const { data: claimed } = await adminClient
+    .from("billing_history")
+    .update({ payment_status: "confirming" })
+    .eq("id", orderId.trim())
+    .eq("payment_status", "pending")
+    .select("id")
+    .single();
+  if (!claimed) {
+    return jsonResponse({ error: "Payment is being processed concurrently", status: "confirming" }, 409);
   }
 
   // 금액 검증: plan + billing_cycle로 서버에서 기본가를 독립 계산
@@ -530,9 +546,20 @@ Deno.serve(async (req: Request) => {
   const { data: rpcData, error: rpcError } = await adminClient.rpc("process_payment_callback", rpcParams);
 
   if (rpcError) {
-    console.error("[toss-payment-confirm] process_payment_callback RPC failed:", rpcError.message);
+    // [SEC] CRITICAL: Toss가 이미 승인했으나 내부 RPC 실패 — 결제 불일치 발생
+    // billing을 'failed'로 마킹하여 조정(reconciliation) 대상임을 표시
+    console.error("[toss-payment-confirm] CRITICAL: Toss payment captured but RPC failed. Manual reconciliation required.", {
+      orderId: orderId.trim(),
+      paymentKey: paymentKey.trim(),
+      rpcError: rpcError.message,
+    });
+    await adminClient
+      .from("billing_history")
+      .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+      .eq("id", orderId.trim())
+      .eq("payment_status", "confirming");
     return jsonResponse(
-      { error: "Failed to process payment callback", detail: rpcError.message },
+      { error: "Payment captured but activation failed. Please contact support.", detail: rpcError.message },
       500,
     );
   }
