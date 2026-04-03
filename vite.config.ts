@@ -12,9 +12,17 @@ export default defineConfig(() => {
   ).trim();
 
   return {
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     server: {
       port: 3000,
       host: '0.0.0.0',
+      // SPA fallback for brand/solution pathname routes (/about, /inventory/**, etc.)
+      // is handled by Vite's built-in historyApiFallback in dev and
+      // by vercel.json "/(.*) → /index.html" rewrite in production.
+      watch: {
+        // Exclude agent worktrees and bkit internal directories from file watching
+        ignored: ['**/.claude/worktrees/**', '**/.bkit/snapshots/**'],
+      },
     },
     plugins: [tailwindcss(), react()],
     define: {
