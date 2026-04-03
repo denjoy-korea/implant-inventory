@@ -90,7 +90,7 @@ interface UseAuthFormParams {
 }
 
 export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initialPlan }: UseAuthFormParams) {
-  const [step, setStep] = useState<SignupStep>('plan_select');
+  const [step, setStep] = useState<SignupStep>('role_selection');
   const [userType, setUserType] = useState<UserType | null>(null);
 
   const savedEmail = type === 'login' ? (localStorage.getItem('dentweb_remember_email') ?? '') : '';
@@ -292,6 +292,7 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorStatus(null);
 
     if (type === 'signup') {
@@ -327,24 +328,35 @@ export function useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initia
       }
 
       setIsSubmitting(true);
-      const result = await authService.signUp({
-        email,
-        password,
-        name,
-        role: userType === 'dentist' ? 'master' : 'staff',
-        hospitalName: userType === 'dentist' ? hospitalName : undefined,
-        phone: phone || undefined,
-        bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
-        signupSource: signupSource || undefined,
-        trialPlan: (pendingTrialPlan && pendingTrialPlan !== 'free') ? pendingTrialPlan : undefined,
-        promoCode: promo.promoVerified ? promo.promoCode : undefined,
-      });
-      setIsSubmitting(false);
-
-      if (!result.success) {
+      let result: Awaited<ReturnType<typeof authService.signUp>> | null = null;
+      try {
+        result = await authService.signUp({
+          email,
+          password,
+          name,
+          role: userType === 'dentist' ? 'master' : 'staff',
+          hospitalName: userType === 'dentist' ? hospitalName : undefined,
+          phone: phone || undefined,
+          bizFile: userType === 'dentist' ? bizFile || undefined : undefined,
+          signupSource: signupSource || undefined,
+          trialPlan: (pendingTrialPlan && pendingTrialPlan !== 'free') ? pendingTrialPlan : undefined,
+          promoCode: promo.promoVerified ? promo.promoCode : undefined,
+        });
+      } catch (err) {
         localStorage.removeItem('_pending_trial_plan');
-        setErrorStatus(toAuthErrorStatus(result.error || '회원가입에 실패했습니다.'));
-        pageViewService.trackEvent('auth_error', { mode: 'signup', reason: result.error || 'signup_failed' }, 'signup');
+        const message = getErrorMessage(err) || '회원가입 요청 중 오류가 발생했습니다.';
+        setErrorStatus(toAuthErrorStatus(message));
+        pageViewService.trackEvent('auth_error', { mode: 'signup', reason: message }, 'signup');
+        return;
+      } finally {
+        setIsSubmitting(false);
+      }
+
+      if (!result || !result.success) {
+        localStorage.removeItem('_pending_trial_plan');
+        const reason = result?.error || '회원가입에 실패했습니다.';
+        setErrorStatus(toAuthErrorStatus(reason));
+        pageViewService.trackEvent('auth_error', { mode: 'signup', reason }, 'signup');
         return;
       }
 

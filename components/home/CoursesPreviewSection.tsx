@@ -2,6 +2,7 @@ import React from 'react';
 
 interface CoursesPreviewSectionProps {
   onGoToContact: () => void;
+  onGoToFeaturedCourse: () => void;
 }
 
 const COURSES = [
@@ -9,20 +10,29 @@ const COURSES = [
     title: '덴트웹 데이터로 보는 임플란트 재고관리',
     type: '실무 강의',
     description: '엑셀 정리 시간을 줄이고 수술기록을 운영 데이터로 바꾸는 방법을 다룹니다.',
+    actionLabel: '상세 보기',
+    isDetailEnabled: true,
   },
   {
     title: '병원 운영자를 위한 KPI 읽기',
     type: '경영 강의',
     description: '매출, 재고, 보험, 인력 데이터를 함께 보는 기준을 정리합니다.',
+    actionLabel: '알림 신청',
+    isDetailEnabled: false,
   },
   {
     title: '신입 스탭 온보딩 표준화',
     type: '교육 강의',
     description: '반복 설명을 줄이는 교육 설계와 현장 적용 템플릿을 다룹니다.',
+    actionLabel: '알림 신청',
+    isDetailEnabled: false,
   },
 ];
 
-const CoursesPreviewSection: React.FC<CoursesPreviewSectionProps> = ({ onGoToContact }) => {
+const CoursesPreviewSection: React.FC<CoursesPreviewSectionProps> = ({
+  onGoToContact,
+  onGoToFeaturedCourse,
+}) => {
   return (
     <section id="home-courses" className="py-24 relative">
       <div className="section-divider mb-24" />
@@ -60,9 +70,14 @@ const CoursesPreviewSection: React.FC<CoursesPreviewSectionProps> = ({ onGoToCon
                 <p className="text-sm leading-relaxed text-gray-500 mb-6">{course.description}</p>
               </div>
               <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-xs font-semibold text-indigo-500">강의 상세페이지로 확장 예정</span>
-                <button onClick={onGoToContact} className="text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors">
-                  알림 신청 &rarr;
+                <span className="text-xs font-semibold text-indigo-500">
+                  {course.isDetailEnabled ? '강의 상세페이지 연결됨' : '강의 상세페이지로 확장 예정'}
+                </span>
+                <button
+                  onClick={course.isDetailEnabled ? onGoToFeaturedCourse : onGoToContact}
+                  className="text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
+                >
+                  {course.actionLabel} &rarr;
                 </button>
               </div>
             </div>

@@ -149,7 +149,7 @@ export interface SubmitInquiryParams {
   email: string;
   role?: string;
   phone: string;
-  weekly_surgeries: string;
+  weekly_surgeries?: string;
   inquiry_type: string;
   content: string;
 }
@@ -165,7 +165,7 @@ function toSubmitPayload(params: SubmitInquiryParams) {
     email: params.email.trim(),
     role: params.role?.trim() || null,
     phone: params.phone.trim(),
-    weekly_surgeries: params.weekly_surgeries,
+    weekly_surgeries: params.weekly_surgeries?.trim() || '-',
     inquiry_type: params.inquiry_type,
     content: params.content.trim(),
   };

@@ -73,6 +73,26 @@ import { planService } from '../../services/planService';
 import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import { VIEW_PATH } from '../../appRouting';
 import { getViewLayer } from '../../types/app';
+import { getCourseDetailContent } from '../../data/courseCatalogContent';
+
+function getCourseMetaFromPath() {
+  if (typeof window === 'undefined') return null;
+  const match = window.location.pathname.match(/^\/courses\/([^/]+)\/?$/);
+  if (!match) return null;
+
+  const content = getCourseDetailContent(match[1]);
+  if (!content) {
+    return {
+      title: '강의 상세 | DenJOY',
+      description: 'DenJOY 강의 상세 페이지입니다.',
+    };
+  }
+
+  return {
+    title: `${content.title} | DenJOY 강의`,
+    description: content.shortDescription,
+  };
+}
 
 const FEATURE_LABELS: Partial<Record<PlanFeature, string>> = {
   dashboard_advanced: '고급 대시보드',
@@ -203,7 +223,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   const publicViews: View[] = ['homepage', 'landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews', 'about', 'consulting', 'solutions', 'courses', 'blog', 'community'];
   const isBrandPage = layer === 'brand';
   const isServiceHubView = layer === 'service-hub';
-  const usesHomepageHeaderShell = layer === 'brand' || layer === 'service-hub';
+  const usesHomepageHeaderShell = currentView === 'login' || currentView === 'signup' || layer === 'service-hub';
   const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
   const [downgradePending, setDowngradePending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [downgradeCreditPreview, setDowngradeCreditPreview] = useState<number>(0);
@@ -323,6 +343,11 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     onNavigate('analyze');
   };
 
+  const handleNavigateToCourse = (slug: string) => {
+    window.history.pushState(null, '', `/courses/${slug}`);
+    onNavigate('courses');
+  };
+
   const PAGE_META: Record<string, { title: string; description: string }> = {
     landing: {
       title: '임플란트 재고관리 | DenJOY',
@@ -331,6 +356,30 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     homepage: {
       title: 'DenJOY | 치과 교육 · 컨설팅 · 솔루션',
       description: 'DenJOY 메인 홈페이지에서 교육, 컨설팅, 솔루션 구조를 한 번에 보고 각 솔루션 랜딩으로 이동하세요.',
+    },
+    about: {
+      title: '회사소개 | DenJOY',
+      description: 'DenJOY 팀이 어떤 방식으로 치과의 교육, 운영, 솔루션 문제를 다루는지 소개합니다.',
+    },
+    consulting: {
+      title: '병원컨설팅 | DenJOY',
+      description: '치과 운영 구조와 데이터 흐름을 함께 정리하는 DenJOY 병원컨설팅을 소개합니다.',
+    },
+    solutions: {
+      title: '솔루션 | DenJOY',
+      description: 'DenJOY가 제공하는 병원 운영 솔루션과 도입 방향을 확인하세요.',
+    },
+    courses: {
+      title: '강의 | DenJOY',
+      description: 'DenJOY 강의 주제와 시즌 운영 구조를 확인하고 상세페이지로 이동하세요.',
+    },
+    blog: {
+      title: '블로그 | DenJOY',
+      description: '치과 운영과 데이터 실무에 관한 DenJOY 인사이트를 읽어보세요.',
+    },
+    community: {
+      title: '커뮤니티 | DenJOY',
+      description: 'DenJOY 커뮤니티 소식과 참여 정보를 확인하세요.',
     },
     value: {
       title: '도입효과 | DenJOY',
@@ -382,7 +431,9 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     },
   };
 
-  const meta = PAGE_META[currentView] || PAGE_META.landing;
+  const meta = currentView === 'courses'
+    ? (getCourseMetaFromPath() || PAGE_META.courses || PAGE_META.landing)
+    : (PAGE_META[currentView] || PAGE_META.landing);
 
   const downgradeDiff = downgradePending
     ? getDowngradeLines(planState?.plan ?? 'free', downgradePending.plan)
@@ -481,13 +532,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         <Suspense fallback={null}>
           <HomepageHeader
             currentView={currentView}
-            user={isServiceHubView ? user : null}
+            user={user}
             onGoToLogin={() => handleNavigate('login')}
             onGoToSignup={() => handleNavigate('signup')}
             onGoToContact={() => handleNavigate('contact')}
             onNavigate={(v) => handleNavigate(v as View)}
             onGoToMyPage={user ? () => handleNavigate('mypage') : undefined}
             onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+            onLogout={user ? onLogout : undefined}
           />
           <div className="h-[57px] sm:h-[60px] flex-shrink-0" />
         </Suspense>
@@ -523,12 +575,11 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                   user={user}
                   hospitalName={hospitalName}
                   planState={planState}
-                  isSystemAdmin={isSystemAdmin}
                   onGoToDashboard={() => handleNavigate('dashboard')}
-                  onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
                   onGoToPricing={() => handleNavigate('pricing')}
                   onGoToContact={() => handleNavigate('contact')}
                   onProfileClick={onProfileClick}
+                  onLogout={onLogout}
                 />
                 <HomepageFooter
                   onGoToContact={() => handleNavigate('contact')}
@@ -543,11 +594,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToLogin={goToDenjoyLogin}
                 onGoToSignup={() => goToDenjoySignup()}
                 onGoToContact={() => handleNavigate('contact')}
+                onGoToFeaturedCourse={() => handleNavigateToCourse('implant-inventory')}
                 onOpenInventorySolution={() => handleNavigate('landing')}
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onNavigate={(v) => handleNavigate(v as View)}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'landing' && (
@@ -628,6 +682,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onNavigate={(v) => handleNavigate(v as View)}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'value' && (
@@ -680,6 +736,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'consulting' && (
@@ -692,6 +750,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'solutions' && (
@@ -704,6 +764,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'courses' && (
@@ -716,6 +778,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'blog' && (
@@ -728,6 +792,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
             {currentView === 'community' && (
@@ -740,6 +806,8 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToTerms={() => handleNavigate('terms')}
                 onGoToPrivacy={() => handleNavigate('privacy')}
                 onGoToMyPage={() => onNavigate('mypage')}
+                onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                onLogout={user ? onLogout : undefined}
               />
             )}
           </Suspense>

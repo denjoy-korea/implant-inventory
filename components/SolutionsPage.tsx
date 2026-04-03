@@ -17,7 +17,7 @@ const solutions: Solution[] = [
   {
       id: "implant-inventory",
       title: "임플란트 재고관리",
-      subtitle: "Implant Inventory Pro",
+      subtitle: "Implant Inventory Manager",
       description: "엑셀 업로드 한 번으로 재고 현황 파악. 수술 기록 연동, 자동 사용량 분석, 발주 관리까지.",
       icon: (
           <svg aria-hidden="true" className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,7 +81,7 @@ const liveSolution = solutions.find((solution) => solution.status === "live");
 const comingSolutions = solutions.filter((solution) => solution.status === "coming");
 
 const SolutionsPage: React.FC<BrandPageProps> = ({
-  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage
+  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage, onGoToAdminPanel, onLogout
 }) => {
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -100,6 +100,8 @@ const SolutionsPage: React.FC<BrandPageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 relative z-10 pt-20">

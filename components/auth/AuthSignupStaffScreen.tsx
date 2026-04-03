@@ -72,7 +72,7 @@ const AuthSignupStaffScreen: React.FC<AuthSignupStaffScreenProps> = ({
   isSubmitting,
 }) => {
   return (
-    <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/80 backdrop-blur-sm relative">
+    <div className="flex-1 flex items-center justify-center px-6 py-8 bg-slate-50/80 backdrop-blur-sm relative" style={{ minHeight: 'calc(100vh - 57px)' }}>
       <div className="absolute top-20 right-10 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-20 left-10 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
 

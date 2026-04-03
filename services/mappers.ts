@@ -17,6 +17,7 @@ import {
   DbReturnRequestItem,
   ReturnRequest,
   ReturnRequestItem,
+  normalizeUserRole,
 } from '../types';
 import { encryptPatientInfo, decryptPatientInfo, decryptPatientInfoBatch, hashPatientInfo } from './cryptoUtils';
 
@@ -313,13 +314,16 @@ export function dbToHospital(db: DbHospital): Hospital {
 }
 
 /** DbProfile → User */
-export function dbToUser(db: DbProfile): User {
+export function dbToUser(db: DbProfile, authEmail?: string | null): User {
+  const fallbackEmail = typeof authEmail === 'string' ? authEmail.trim().toLowerCase() : '';
+  const email = (sanitizeEncryptedProfileField('email', db.email) ?? fallbackEmail) || fallbackEmail;
+
   return {
     id: db.id,
-    email: sanitizeEncryptedProfileField('email', db.email) ?? '',
+    email,
     name: sanitizeEncryptedProfileField('name', db.name) ?? '사용자',
     phone: sanitizeEncryptedProfileField('phone', db.phone),
-    role: db.role,
+    role: normalizeUserRole(db.role, email || authEmail || db.email),
     clinicRole: db.clinic_role ?? null,
     hospitalId: db.hospital_id || '',
     status: db.status,

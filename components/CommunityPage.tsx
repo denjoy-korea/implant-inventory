@@ -4,7 +4,7 @@ import HomepageFooter from './home/HomepageFooter';
 import { BrandPageProps } from './ConsultingPage';
 
 const CommunityPage: React.FC<BrandPageProps> = ({
-  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage
+  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage, onGoToAdminPanel, onLogout
 }) => {
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -23,6 +23,8 @@ const CommunityPage: React.FC<BrandPageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 relative z-10 pt-32 pb-20">

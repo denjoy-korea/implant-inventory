@@ -290,8 +290,8 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
             {[
               {
                 step: '01',
-                title: '회원가입 & 병원 등록',
-                desc: '병원 정보를 등록하면 바로 대시보드가 열립니다. 첫 세팅 후 자동화가 시작됩니다.',
+                title: '메인홈 가입 및 서비스 연결',
+                desc: 'DenJOY 메인 홈에서 서비스 이용을 시작하면 바로 대시보드가 열리고 첫 세팅이 이어집니다.',
                 icon: (
                   <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -457,7 +457,7 @@ const ValuePage: React.FC<ValuePageProps> = ({ onGetStarted, onContact }) => {
                 className="relative w-full sm:w-auto px-10 py-4 bg-white text-indigo-800 font-black text-lg rounded-2xl shadow-2xl hover:shadow-white/40 active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
               >
                 <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-                <span className="relative z-10">무료로 시작하기</span>
+                <span className="relative z-10">메인홈에서 회원가입</span>
               </button>
             </div>
             <button

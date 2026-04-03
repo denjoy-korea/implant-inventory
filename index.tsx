@@ -46,8 +46,16 @@ root.render(
     {isPaymentRedirect ? (
       <PaymentRedirectPage
         onComplete={() => {
-          // 결제 완료 후 대시보드로 이동 — planState가 새로 로드되어 플랜 즉시 반영
-          window.location.href = `${window.location.origin}/#/dashboard`;
+          // 서비스 구매 → 마이페이지(구매내역), 플랜 결제 → 대시보드
+          let target = '/#/dashboard';
+          try {
+            if (sessionStorage.getItem('_pendingPaymentType') === 'service') {
+              target = '/#/mypage';
+              sessionStorage.setItem('_myPageTab', 'purchases');
+              sessionStorage.removeItem('_pendingPaymentType');
+            }
+          } catch { /* private mode */ }
+          window.location.href = `${window.location.origin}${target}`;
         }}
       />
     ) : (

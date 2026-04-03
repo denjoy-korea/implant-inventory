@@ -60,6 +60,7 @@ type BillingRow = {
   payment_status: string;
   plan: string;
   billing_cycle: string;
+  amount: number;
   is_test_payment: boolean;
   coupon_id: string | null;
   original_amount: number | null;
@@ -67,7 +68,84 @@ type BillingRow = {
   upgrade_credit_amount: number;
   upgrade_source_billing_id: string | null;
   credit_used_amount: number;
+  description?: string | null;
 };
+
+type ServicePurchaseItem = {
+  id: string;
+  name?: string;
+  price?: number;
+};
+
+function parseServicePurchaseItems(description: string | null | undefined): ServicePurchaseItem[] {
+  if (!description) return [];
+
+  try {
+    const parsed = JSON.parse(description);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((item) => {
+      if (
+        typeof item !== "object" ||
+        item === null ||
+        typeof (item as { id?: unknown }).id !== "string"
+      ) {
+        return [];
+      }
+
+      return [{
+        id: (item as { id: string }).id,
+        name: typeof (item as { name?: unknown }).name === "string"
+          ? (item as { name: string }).name
+          : undefined,
+        price: typeof (item as { price?: unknown }).price === "number"
+          ? (item as { price: number }).price
+          : undefined,
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function grantPurchasedSeasonAccess(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+  grantedBy: string,
+  billingDescription: string | null | undefined,
+): Promise<number> {
+  const seasonIds = [...new Set(parseServicePurchaseItems(billingDescription).map((item) => item.id))];
+  if (seasonIds.length === 0) return 0;
+
+  const { data: seasons, error: seasonError } = await adminClient
+    .from("course_seasons")
+    .select("id")
+    .in("id", seasonIds);
+
+  if (seasonError || !seasons?.length) {
+    console.error("[toss-payment-confirm] could not resolve purchased seasons:", seasonError?.message);
+    return 0;
+  }
+
+  const grantedAt = new Date().toISOString();
+  const rows = seasons.map((season) => ({
+    user_id: userId,
+    season_id: season.id as string,
+    completed_at: grantedAt,
+    granted_by: grantedBy,
+  }));
+
+  const { error: enrollmentError } = await adminClient
+    .from("course_enrollments")
+    .upsert(rows, { onConflict: "user_id,season_id" });
+
+  if (enrollmentError) {
+    console.error("[toss-payment-confirm] enrollment upsert failed:", enrollmentError.message);
+    return 0;
+  }
+
+  return rows.length;
+}
 
 async function fetchBillingRowWithCompatibility(
   adminClient: ReturnType<typeof createClient>,
@@ -75,7 +153,7 @@ async function fetchBillingRowWithCompatibility(
 ): Promise<{ billing: BillingRow | null; billingError: { message: string } | null }> {
   const primary = await adminClient
     .from("billing_history")
-    .select("hospital_id, payment_status, plan, billing_cycle, is_test_payment, coupon_id, original_amount, discount_amount, upgrade_credit_amount, upgrade_source_billing_id, credit_used_amount")
+    .select("hospital_id, payment_status, plan, billing_cycle, amount, is_test_payment, coupon_id, original_amount, discount_amount, upgrade_credit_amount, upgrade_source_billing_id, credit_used_amount, description")
     .eq("id", billingId)
     .single();
 
@@ -109,6 +187,7 @@ async function fetchBillingRowWithCompatibility(
       upgrade_credit_amount: 0,
       upgrade_source_billing_id: null,
       credit_used_amount: 0,
+      description: null,
     },
     billingError: null,
   };
@@ -176,8 +255,8 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "orderId is required" }, 400);
   }
   const amountNum = typeof amount === "number" ? amount : Number(amount);
-  if (!Number.isFinite(amountNum) || amountNum <= 0) {
-    return jsonResponse({ error: "amount must be a positive number" }, 400);
+  if (!Number.isFinite(amountNum) || amountNum < 0) {
+    return jsonResponse({ error: "amount must be a non-negative number" }, 400);
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -229,6 +308,82 @@ Deno.serve(async (req: Request) => {
     .single();
   if (!claimed) {
     return jsonResponse({ error: "Payment is being processed concurrently", status: "confirming" }, 409);
+  }
+
+  // ── 서비스 구매 분기 (plan='service_purchase') ────────────────────────────
+  // 플랜 승격 없이 결제만 확인하고 completed로 마킹
+  if (billing.plan === "service_purchase") {
+    const billingAmount = Number(billing.amount);
+    if (billingAmount !== amountNum) {
+      console.error("[toss-payment-confirm] service_purchase amount mismatch:", { billingAmount, amountNum });
+      await adminClient
+        .from("billing_history")
+        .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+        .eq("id", orderId.trim());
+      return jsonResponse({ error: "Amount mismatch", expected: billingAmount, received: amountNum }, 400);
+    }
+
+    let servicePayRef = paymentKey.trim();
+
+    if (billingAmount > 0) {
+      const encodedKeyService = btoa(`${tossSecretKey}:`);
+      let serviceTossResponse: Response;
+      try {
+        serviceTossResponse = await fetch(TOSS_CONFIRM_URL, {
+          method: "POST",
+          headers: {
+            "Authorization": `Basic ${encodedKeyService}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ paymentKey: paymentKey.trim(), orderId: orderId.trim(), amount: amountNum }),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await adminClient
+          .from("billing_history")
+          .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", orderId.trim());
+        return jsonResponse({ error: "TossPayments API call failed", detail: msg }, 502);
+      }
+
+      const serviceTossData = await serviceTossResponse.json().catch(() => ({})) as Record<string, unknown>;
+      if (!serviceTossResponse.ok) {
+        await adminClient
+          .from("billing_history")
+          .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", orderId.trim());
+        const code = typeof serviceTossData.code === "string" ? serviceTossData.code : "UNKNOWN";
+        const message = typeof serviceTossData.message === "string" ? serviceTossData.message : "결제 승인 실패";
+        console.error("[toss-payment-confirm] service_purchase TossPayments failed:", code, message);
+        return jsonResponse({ error: message, code }, 400);
+      }
+
+      servicePayRef = typeof serviceTossData.paymentKey === "string"
+        ? serviceTossData.paymentKey
+        : paymentKey.trim();
+    } else {
+      servicePayRef = "FREE_SERVICE_PURCHASE";
+    }
+
+    const grantedCount = await grantPurchasedSeasonAccess(
+      adminClient,
+      user.id,
+      user.id,
+      billing.description,
+    );
+
+    await adminClient
+      .from("billing_history")
+      .update({ payment_status: "completed", payment_ref: servicePayRef, updated_at: new Date().toISOString() })
+      .eq("id", orderId.trim());
+
+    return jsonResponse({
+      ok: true,
+      billing_id: orderId.trim(),
+      payment_ref: servicePayRef,
+      granted_season_count: grantedCount,
+      is_test_payment: billing.is_test_payment ?? true,
+    });
   }
 
   // 금액 검증: plan + billing_cycle로 서버에서 기본가를 독립 계산

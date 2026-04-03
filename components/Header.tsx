@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { User, View, DashboardTab } from '../types';
+import { User, View, DashboardTab, isSystemAdminIdentity } from '../types';
 
 interface HeaderProps {
   onHomeClick: () => void;
@@ -27,10 +27,11 @@ const Header: React.FC<HeaderProps> = ({
   currentView,
   showLogo = true
 }) => {
-  const isSystemAdmin = user?.role === 'admin';
+  const isSystemAdmin = isSystemAdminIdentity(user);
   const isHospitalAdmin = user?.role === 'master' || isSystemAdmin;
-  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews', 'consultation'];
+  const publicViews: View[] = ['homepage', 'landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews', 'consultation'];
   const isPublicView = publicViews.includes(currentView);
+  const showGuestAuthActions = false; // 로그인/회원가입은 메인홈에만 표시
 
   return (
     <header className={`bg-white border-b border-slate-200 py-3 fixed top-0 left-0 right-0 z-[100] shadow-sm ${showLogo ? 'px-3 sm:px-6' : 'px-8'}`}>
@@ -56,6 +57,12 @@ const Header: React.FC<HeaderProps> = ({
         {(!user || isPublicView) && (
           <nav className="hidden xl:flex items-center justify-center gap-10 flex-1">
             <button
+              onClick={() => onNavigate('homepage')}
+              className={`text-sm font-bold ${currentView === 'homepage' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              메인홈
+            </button>
+            <button
               onClick={() => onNavigate('value')}
               className={`text-sm font-bold ${currentView === 'value' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
             >
@@ -65,7 +72,7 @@ const Header: React.FC<HeaderProps> = ({
               onClick={() => onNavigate('landing' as View)}
               className={`text-sm font-bold ${currentView === 'landing' ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              기능소개
+              재고관리
             </button>
             <button
               onClick={() => onNavigate('pricing')}
@@ -205,12 +212,13 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
             )
-          ) : (
+          ) : showGuestAuthActions ? (
             <div className="flex items-center gap-1.5 sm:gap-2">
               <button onClick={onLoginClick} className="text-xs sm:text-sm font-bold text-slate-600 px-2 sm:px-3 py-1">로그인</button>
               <button onClick={onSignupClick} className="text-xs sm:text-sm font-bold bg-indigo-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg whitespace-nowrap">회원가입</button>
             </div>
-          )}
+          ) : null
+          }
         </div>
       </div>
     </header>

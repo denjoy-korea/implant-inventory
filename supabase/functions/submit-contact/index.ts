@@ -49,7 +49,6 @@ async function sendInquiryEmail(params: {
   email: string;
   role: string | null;
   phone: string;
-  weeklySurgeries: string;
   inquiryType: string;
   content: string;
   now: string;
@@ -81,7 +80,6 @@ async function sendInquiryEmail(params: {
             ["이메일", params.email],
             ["직위", params.role || "—"],
             ["연락처", params.phone],
-            ["주간 수술 건수", params.weeklySurgeries],
             ["문의 유형", params.inquiryType],
             ["접수 시각", `${params.now} (KST)`],
           ].map(([label, value]) => `
@@ -166,14 +164,14 @@ Deno.serve(async (req: Request) => {
     const email = asTrimmedString(payload.email);
     const role = asTrimmedString(payload.role) || null;
     const phone = asTrimmedString(payload.phone);
-    const weeklySurgeries = asTrimmedString(payload.weekly_surgeries);
+    const weeklySurgeries = asTrimmedString(payload.weekly_surgeries) || "-";
     const inquiryType = asTrimmedString(payload.inquiry_type);
     const content = asTrimmedString(payload.content);
 
     const waitlist = isWaitlistInquiry(inquiryType);
     const hospitalName = hospitalNameRaw || (waitlist ? "-" : "");
 
-    if (!contactName || !email || !phone || !weeklySurgeries || !inquiryType || !content || !hospitalName) {
+    if (!contactName || !email || !phone || !inquiryType || !content || !hospitalName) {
       return jsonResponse(422, {
         success: false,
         error_code: "invalid_input",
@@ -317,7 +315,6 @@ Deno.serve(async (req: Request) => {
         email,
         role,
         phone,
-        weeklySurgeries,
         inquiryType,
         content,
         now,
@@ -341,7 +338,6 @@ Deno.serve(async (req: Request) => {
                 { type: "mrkdwn", text: `*연락처*\n${phone || "—"}` },
                 { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
                 { type: "mrkdwn", text: `*문의 유형*\n${inquiryType || "—"}` },
-                { type: "mrkdwn", text: `*수술 건수*\n${weeklySurgeries || "—"}` },
               ],
             },
             {

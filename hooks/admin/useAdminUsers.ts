@@ -29,12 +29,71 @@ type ProfileLastAccessRow = {
     last_access_at: string | null;
 };
 
+type AdminContractKey =
+    | 'profilesWithLastLogin'
+    | 'profilesLastAccessMap'
+    | 'planUsageCounts'
+    | 'planCapacities';
+
+type AdminContractStatus = 'unknown' | 'supported' | 'unsupported';
+
+const adminContractSupport: Record<AdminContractKey, AdminContractStatus> = {
+    profilesWithLastLogin: 'unknown',
+    profilesLastAccessMap: 'unknown',
+    planUsageCounts: 'unknown',
+    planCapacities: 'unknown',
+};
+
+function getErrorText(error: { message?: string; details?: string; hint?: string } | null | undefined) {
+    return [error?.message, error?.details, error?.hint].filter(Boolean).join(' ').toLowerCase();
+}
+
+function isSchemaContractError(error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined) {
+    if (!error) return false;
+    const code = error.code ?? '';
+    const text = getErrorText(error);
+    return (
+        code === 'PGRST202'
+        || code === 'PGRST205'
+        || code === '42883'
+        || code === '42P01'
+        || text.includes('schema cache')
+        || text.includes('could not find the function')
+        || text.includes('does not exist')
+        || text.includes('structure of query does not match function result type')
+    );
+}
+
+function markContractSupport(key: AdminContractKey, status: AdminContractStatus) {
+    adminContractSupport[key] = status;
+}
+
+function warnContractFallback(
+    key: AdminContractKey,
+    label: string,
+    error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined,
+) {
+    if (adminContractSupport[key] === 'unsupported') return;
+    console.warn(`[useAdminUsers] ${label} unavailable, using fallback path.`, error);
+    markContractSupport(key, 'unsupported');
+}
+
+function computePlanUsages(rows: DbHospitalRow[]): PlanUsage[] {
+    const usageByPlan = new Map<string, number>();
+    for (const row of rows) {
+        const plan = row.plan || 'free';
+        usageByPlan.set(plan, (usageByPlan.get(plan) ?? 0) + 1);
+    }
+    return Array.from(usageByPlan.entries()).map(([plan, usage_count]) => ({ plan, usage_count }));
+}
+
 export function useAdminUsers(
     showToast: ShowToast,
     setConfirmModal: SetConfirmModal,
     setManualEntries: (fn: (prev: ManualEntry[]) => ManualEntry[]) => void,
 ) {
     const loadDataInFlightRef = useRef<Promise<void> | null>(null);
+    const loadErrorToastShownRef = useRef(false);
 
     // Core data
     const [hospitals, setHospitals] = useState<DbHospitalRow[]>([]);
@@ -82,19 +141,27 @@ export function useAdminUsers(
         const task = (async () => {
             setIsLoading(true);
             try {
-                const [profileRes, lastAccessRes, hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
-                    supabase.rpc('get_all_profiles_with_last_login'),
-                    supabase.rpc('get_profiles_last_access_map'),
+                const [hospitalRes, resetData, manualRes, sessionRes] = await Promise.all([
                     supabase.from('hospitals').select('*'),
                     resetService.getAllRequests(),
                     supabase.from('admin_manuals').select('*').order('created_at', { ascending: false }),
                     supabase.auth.getUser(),
                 ]);
 
+                const hospitalRows = (hospitalRes.data as DbHospitalRow[] | null) ?? [];
+
                 const lastAccessMap = new Map<string, string>();
-                if (lastAccessRes.data) {
-                    for (const row of (lastAccessRes.data as ProfileLastAccessRow[])) {
-                        if (row.last_access_at) lastAccessMap.set(row.id, row.last_access_at);
+                if (adminContractSupport.profilesLastAccessMap !== 'unsupported') {
+                    const { data, error } = await supabase.rpc('get_profiles_last_access_map');
+                    if (!error && data) {
+                        markContractSupport('profilesLastAccessMap', 'supported');
+                        for (const row of (data as ProfileLastAccessRow[])) {
+                            if (row.last_access_at) lastAccessMap.set(row.id, row.last_access_at);
+                        }
+                    } else if (isSchemaContractError(error)) {
+                        warnContractFallback('profilesLastAccessMap', 'get_profiles_last_access_map()', error);
+                    } else if (error) {
+                        console.error('[useAdminUsers] get_profiles_last_access_map failed:', error);
                     }
                 }
 
@@ -108,13 +175,25 @@ export function useAdminUsers(
                     };
                 });
 
-                const sourceProfiles = (
-                    profileRes.error
-                    || !profileRes.data
-                    || (profileRes.data as DbProfile[]).length === 0
-                )
-                    ? (await supabase.rpc('get_all_profiles')).data as DbProfile[] | null
-                    : profileRes.data as DbProfile[];
+                let sourceProfiles: DbProfile[] | null = null;
+
+                if (adminContractSupport.profilesWithLastLogin !== 'unsupported') {
+                    const { data, error } = await supabase.rpc('get_all_profiles_with_last_login');
+                    if (!error && data) {
+                        markContractSupport('profilesWithLastLogin', 'supported');
+                        sourceProfiles = data as DbProfile[];
+                    } else if (isSchemaContractError(error)) {
+                        warnContractFallback('profilesWithLastLogin', 'get_all_profiles_with_last_login()', error);
+                    } else if (error) {
+                        console.error('[useAdminUsers] get_all_profiles_with_last_login failed:', error);
+                    }
+                }
+
+                if (!sourceProfiles) {
+                    const { data, error } = await supabase.rpc('get_all_profiles');
+                    if (error) throw error;
+                    sourceProfiles = data as DbProfile[] | null;
+                }
 
                 if (sourceProfiles) {
                     const decrypted = await decryptProfilesBatch(sourceProfiles);
@@ -122,7 +201,7 @@ export function useAdminUsers(
                 }
 
                 if (sessionRes.data?.user) setCurrentUserId(sessionRes.data.user.id);
-                if (hospitalRes.data) setHospitals(hospitalRes.data as DbHospitalRow[]);
+                setHospitals(hospitalRows);
                 setResetRequests(resetData);
 
                 if (manualRes.data) {
@@ -133,12 +212,43 @@ export function useAdminUsers(
                     setManualEntries(() => sanitized);
                 }
 
-                const [capRes, usageRes] = await Promise.all([
-                    supabase.from('plan_capacities').select('*').order('capacity', { ascending: false }),
-                    supabase.rpc('get_plan_usage_counts'),
-                ]);
-                if (capRes.data) setPlanCapacities(capRes.data as PlanCapacity[]);
-                if (usageRes.data) setPlanUsages(usageRes.data as PlanUsage[]);
+                let nextPlanCapacities: PlanCapacity[] = [];
+                if (adminContractSupport.planCapacities !== 'unsupported') {
+                    const { data, error } = await supabase
+                        .from('plan_capacities')
+                        .select('*')
+                        .order('capacity', { ascending: false });
+                    if (!error && data) {
+                        markContractSupport('planCapacities', 'supported');
+                        nextPlanCapacities = data as PlanCapacity[];
+                    } else if (isSchemaContractError(error)) {
+                        warnContractFallback('planCapacities', 'plan_capacities table', error);
+                    } else if (error) {
+                        console.error('[useAdminUsers] plan_capacities load failed:', error);
+                    }
+                }
+                setPlanCapacities(nextPlanCapacities);
+
+                let nextPlanUsages = computePlanUsages(hospitalRows);
+                if (adminContractSupport.planUsageCounts !== 'unsupported') {
+                    const { data, error } = await supabase.rpc('get_plan_usage_counts');
+                    if (!error && data) {
+                        markContractSupport('planUsageCounts', 'supported');
+                        nextPlanUsages = data as PlanUsage[];
+                    } else if (isSchemaContractError(error)) {
+                        warnContractFallback('planUsageCounts', 'get_plan_usage_counts()', error);
+                    } else if (error) {
+                        console.error('[useAdminUsers] get_plan_usage_counts failed:', error);
+                    }
+                }
+                setPlanUsages(nextPlanUsages);
+                loadErrorToastShownRef.current = false;
+            } catch (error) {
+                console.error('[useAdminUsers] loadData failed:', error);
+                if (!loadErrorToastShownRef.current) {
+                    showToast('운영자 데이터를 일부 불러오지 못했습니다. 마이그레이션 적용 상태를 확인해 주세요.', 'error');
+                    loadErrorToastShownRef.current = true;
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -182,13 +292,13 @@ export function useAdminUsers(
     const handleAssignPlan = async () => {
         if (!planModal) return;
         setPlanSaving(true);
-        const { error } = await supabase.rpc('admin_assign_plan', {
+        const { data, error } = await supabase.rpc('change_hospital_plan', {
             p_hospital_id: planModal.hospitalId,
             p_plan: planForm.plan,
             p_billing_cycle: planForm.plan === 'free' || planForm.plan === 'ultimate' ? null : planForm.cycle,
         });
-        if (error) {
-            showToast('플랜 배정 실패: ' + error.message, 'error');
+        if (error || !data) {
+            showToast('플랜 배정 실패: ' + (error?.message || 'DB 응답을 확인해 주세요.'), 'error');
         } else {
             setPlanModal(null);
             await loadData();

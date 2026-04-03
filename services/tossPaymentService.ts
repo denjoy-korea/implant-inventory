@@ -36,6 +36,23 @@ const TOSS_SDK_URL = 'https://js.tosspayments.com/v1/payment';
 
 let sdkLoadPromise: Promise<void> | null = null;
 
+function resolveTossClientKey(): string | undefined {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const raw = env.VITE_TOSS_CLIENT_KEY || env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+  const value = raw?.trim();
+  return value ? value : undefined;
+}
+
+function clearPendingServicePurchase() {
+  try {
+    sessionStorage.removeItem('_pendingOrderId');
+    sessionStorage.removeItem('_pendingPaymentType');
+    sessionStorage.removeItem('_pendingServiceCartKey');
+  } catch {
+    // sessionStorage unavailable
+  }
+}
+
 
 async function createBillingRecordWithCoupon(params: {
   hospitalId: string;
@@ -164,6 +181,7 @@ export interface TossPaymentRequest {
 
 export interface TossPaymentResult {
   error?: string;
+  completed?: boolean;
 }
 
 export interface TossConfirmResult {
@@ -204,10 +222,10 @@ export const tossPaymentService = {
       upgradeCreditAmount, upgradeSourceBillingId,
       creditUsedAmount,
     } = request;
-    const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY as string | undefined;
+    const clientKey = resolveTossClientKey();
 
     if (!clientKey) {
-      return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의하세요.' };
+      return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. VITE_TOSS_CLIENT_KEY 설정을 확인해 주세요.' };
     }
 
     // 1. 금액 계산: 기본가 → 쿠폰 할인 → VAT → 업그레이드 크레딧 → 잔액 크레딧 차감
@@ -317,6 +335,131 @@ export const tossPaymentService = {
       if (isCancel) {
         return { error: 'user_cancel' };
       }
+      return { error: tossErr.message || '결제 중 오류가 발생했습니다.' };
+    }
+  },
+
+  /**
+   * 장바구니 결제 시작 (서비스 구매용):
+   * billing_history 생성(plan='service_purchase') → TossPayments SDK 호출 → 페이지 redirect
+   */
+  async requestCartPayment(params: {
+    hospitalId: string;
+    customerName: string;
+    cartStorageKey: string;
+    items: Array<{ id: string; name: string; price: number }>;
+  }): Promise<TossPaymentResult> {
+    const clientKey = resolveTossClientKey();
+    if (!clientKey) {
+      return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의해주세요.' };
+    }
+
+    const subtotal = params.items.reduce((s, i) => s + i.price, 0);
+    const totalAmount = Math.round(subtotal * 1.1); // VAT 10%
+    const isTestPayment = resolveIsTestPayment();
+
+    const { data, error: dbError } = await supabase
+      .from('billing_history')
+      .insert({
+        hospital_id: params.hospitalId,
+        plan: 'service_purchase',
+        billing_cycle: null,
+        amount: totalAmount,
+        is_test_payment: isTestPayment,
+        payment_status: 'pending',
+        payment_method: totalAmount === 0 ? 'free' : 'card',
+        description: JSON.stringify(params.items.map(i => ({ id: i.id, name: i.name, price: i.price }))),
+      })
+      .select('id')
+      .single();
+
+    if (dbError || !data?.id) {
+      console.error('[tossPaymentService] cart billing insert failed:', dbError);
+      return { error: '주문 생성에 실패했습니다. 다시 시도해주세요.' };
+    }
+
+    const billingId = data.id as string;
+
+    if (totalAmount === 0) {
+      const { data: confirmData, error: confirmError } = await supabase.functions.invoke('toss-payment-confirm', {
+        body: { paymentKey: 'FREE_SERVICE_PURCHASE', orderId: billingId, amount: 0 },
+      });
+
+      if (confirmError || !(confirmData as { ok?: boolean } | null)?.ok) {
+        console.error('[tossPaymentService] zero-cost cart confirm failed:', confirmError, confirmData);
+        await supabase
+          .from('billing_history')
+          .update({ payment_status: 'failed' })
+          .eq('id', billingId)
+          .eq('payment_status', 'pending');
+        return { error: '무료 주문 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' };
+      }
+
+      clearPendingServicePurchase();
+      try {
+        localStorage.removeItem(params.cartStorageKey);
+      } catch {
+        // localStorage unavailable
+      }
+      return { completed: true };
+    }
+
+    try {
+      await loadTossSdk();
+    } catch {
+      await supabase
+        .from('billing_history')
+        .update({ payment_status: 'cancelled' })
+        .eq('id', billingId)
+        .eq('payment_status', 'pending');
+      clearPendingServicePurchase();
+      return { error: 'TossPayments SDK 로드에 실패했습니다. 잠시 후 다시 시도해주세요.' };
+    }
+
+    if (!window.TossPayments) {
+      await supabase
+        .from('billing_history')
+        .update({ payment_status: 'cancelled' })
+        .eq('id', billingId)
+        .eq('payment_status', 'pending');
+      clearPendingServicePurchase();
+      return { error: 'TossPayments SDK를 사용할 수 없습니다.' };
+    }
+
+    try {
+      sessionStorage.setItem('_pendingOrderId', billingId);
+      sessionStorage.setItem('_pendingPaymentType', 'service');
+      sessionStorage.setItem('_pendingServiceCartKey', params.cartStorageKey);
+    } catch { /* private mode */ }
+
+    const toss = window.TossPayments(clientKey);
+    const origin = window.location.origin;
+    const orderName = params.items.length === 1
+      ? params.items[0].name
+      : `${params.items[0].name} 외 ${params.items.length - 1}건`;
+
+    try {
+      await toss.requestPayment('카드', {
+        amount: totalAmount,
+        orderId: billingId,
+        orderName,
+        customerName: params.customerName || undefined,
+        successUrl: `${origin}/payment/success`,
+        failUrl: `${origin}/payment/fail`,
+      });
+      return {};
+    } catch (err: unknown) {
+      const tossErr = err as { code?: string; message?: string };
+      const isCancel = tossErr.code === 'USER_CANCEL' || tossErr.message?.includes('cancel');
+
+      await supabase
+        .from('billing_history')
+        .update({ payment_status: 'cancelled' })
+        .eq('id', billingId)
+        .eq('payment_status', 'pending');
+      clearPendingServicePurchase();
+
+      if (isCancel) return { error: 'user_cancel' };
       return { error: tossErr.message || '결제 중 오류가 발생했습니다.' };
     }
   },

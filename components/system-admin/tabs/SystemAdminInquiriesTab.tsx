@@ -25,6 +25,16 @@ const SystemAdminInquiriesTab: React.FC<SystemAdminInquiriesTabProps> = ({
   const pending = inquiries.filter((item) => item.status === 'pending').length;
   const inProgress = inquiries.filter((item) => item.status === 'in_progress').length;
   const resolved = inquiries.filter((item) => item.status === 'resolved').length;
+  const detailFields = selectedInquiry ? [
+    { label: '담당자', value: selectedInquiry.contact_name },
+    { label: '직위', value: selectedInquiry.role || '-' },
+    { label: '이메일', value: selectedInquiry.email },
+    { label: '연락처', value: selectedInquiry.phone },
+    { label: '문의 유형', value: selectedInquiry.inquiry_type },
+    ...(selectedInquiry.weekly_surgeries && selectedInquiry.weekly_surgeries !== '-'
+      ? [{ label: '수술 건수', value: selectedInquiry.weekly_surgeries }]
+      : []),
+  ] : [];
 
   return (
     <div>
@@ -89,14 +99,7 @@ const SystemAdminInquiriesTab: React.FC<SystemAdminInquiriesTabProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-5">
-                {[
-                  { label: '담당자', value: selectedInquiry.contact_name },
-                  { label: '직위', value: selectedInquiry.role || '-' },
-                  { label: '이메일', value: selectedInquiry.email },
-                  { label: '연락처', value: selectedInquiry.phone },
-                  { label: '문의 유형', value: selectedInquiry.inquiry_type },
-                  { label: '수술 건수', value: selectedInquiry.weekly_surgeries },
-                ].map(({ label, value }) => (
+                {detailFields.map(({ label, value }) => (
                   <div key={label} className="bg-slate-50 rounded-xl p-3">
                     <p className="text-[10px] font-bold text-slate-400 mb-0.5">{label}</p>
                     <p className="text-sm font-semibold text-slate-800">{value}</p>

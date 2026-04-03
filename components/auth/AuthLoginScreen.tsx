@@ -51,7 +51,7 @@ const AuthLoginScreen: React.FC<AuthLoginScreenProps> = ({
 }) => {
   return (
     <>
-      <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/80 backdrop-blur-sm relative">
+      <div className="flex-1 flex items-center justify-center px-6 py-8 bg-slate-50/80 backdrop-blur-sm relative" style={{ minHeight: 'calc(100vh - 57px)' }}>
         <div className="absolute top-20 left-10 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -72,23 +72,23 @@ const AuthLoginScreen: React.FC<AuthLoginScreenProps> = ({
               </div>
               <h2 className="text-[28px] font-black leading-snug mb-4 tracking-tight">
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-indigo-200">
-                  임플란트 재고관리,
+                  치과 운영의
                   <br />
-                  이제 스마트하게.
+                  새로운 기준.
                 </span>
               </h2>
               <p className="text-indigo-200 text-sm leading-relaxed font-medium">
-                덴트웹 연동 기반의
+                교육 · 컨설팅 · 솔루션이 하나로
                 <br />
-                자동화된 재고관리 시스템
+                DenJOY OS에서 시작하세요.
               </p>
             </div>
 
             <div className="relative z-10 space-y-3 mt-8">
               {[
-                { icon: '📊', text: '실시간 재고 현황' },
-                { icon: '🔗', text: '덴트웹 자동 연동' },
-                { icon: '📦', text: '원클릭 발주 시스템' },
+                { icon: '📦', text: '임플란트 재고관리' },
+                { icon: '🏥', text: '병원 경영 컨설팅' },
+                { icon: '🎓', text: '임상 교육 플랫폼' },
               ].map((item, index) => (
                 <div key={index} className="flex items-center gap-3.5 bg-white/5 backdrop-blur-sm border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all rounded-xl px-4 py-3 group">
                   <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
@@ -100,7 +100,7 @@ const AuthLoginScreen: React.FC<AuthLoginScreenProps> = ({
             </div>
 
             <div className="relative z-10 mt-10 pt-6 border-t border-white/10">
-              <p className="text-xs text-indigo-300/60 font-medium tracking-wide">14개 제조사 데이터 기본 적용</p>
+              <p className="text-xs text-indigo-300/60 font-medium tracking-wide">치과 전문가를 위한 통합 운영 플랫폼</p>
             </div>
           </div>
 

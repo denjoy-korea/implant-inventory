@@ -2,6 +2,31 @@ import type { DashboardTab } from './app';
 
 export type UserRole = 'master' | 'dental_staff' | 'staff' | 'admin';
 
+export const SERVICE_ADMIN_EMAILS = ['admin@denjoy.info'] as const;
+const SERVICE_ADMIN_EMAIL_SET = new Set<string>(SERVICE_ADMIN_EMAILS);
+
+type AdminIdentity = {
+  role?: UserRole | null;
+  email?: string | null;
+};
+
+export function isServiceAdminEmail(email?: string | null): boolean {
+  if (typeof email !== 'string') return false;
+  return SERVICE_ADMIN_EMAIL_SET.has(email.trim().toLowerCase());
+}
+
+export function isSystemAdminRole(role?: UserRole | null, email?: string | null): boolean {
+  return role === 'admin' || isServiceAdminEmail(email);
+}
+
+export function normalizeUserRole(role: UserRole, email?: string | null): UserRole {
+  return isSystemAdminRole(role, email) ? 'admin' : role;
+}
+
+export function isSystemAdminIdentity(identity?: AdminIdentity | null): boolean {
+  return !!identity && isSystemAdminRole(identity.role, identity.email);
+}
+
 /** 치과 내 직책 (초대 시 지정, 권한과 무관) */
 export type ClinicRole = 'director' | 'manager' | 'team_lead' | 'staff';
 

@@ -5,6 +5,7 @@ import { DbBillingHistory, DbProfile, UserRole } from '../types';
 import { decryptProfile } from '../services/mappers';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from '../hooks/useToast';
+import SystemAdminLecturesTab from './system-admin/tabs/SystemAdminLecturesTab';
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   admin: { label: '운영자', color: 'bg-rose-50 text-rose-600' },
@@ -51,25 +52,6 @@ interface PendingRoleChange {
 
 type AdminTab = 'users' | 'payments' | 'lectures';
 
-interface LectureRow {
-  id: string;
-  title: string;
-  description: string | null;
-  youtube_url: string;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-interface LectureForm {
-  title: string;
-  description: string;
-  youtube_url: string;
-  sort_order: string;
-}
-
-const EMPTY_FORM: LectureForm = { title: '', description: '', youtube_url: '', sort_order: '0' };
-
 const AdminPanel: React.FC = () => {
   const [tab, setTab] = useState<AdminTab>('users');
 
@@ -86,14 +68,6 @@ const AdminPanel: React.FC = () => {
   const [billingRows, setBillingRows] = useState<DbBillingHistory[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingFilter, setBillingFilter] = useState<string>('all');
-
-  // --- 강의 탭 ---
-  const [lectureRows, setLectureRows] = useState<LectureRow[]>([]);
-  const [lectureLoading, setLectureLoading] = useState(false);
-  const [lectureForm, setLectureForm] = useState<LectureForm>(EMPTY_FORM);
-  const [lectureFormSaving, setLectureFormSaving] = useState(false);
-  const [editingLecture, setEditingLecture] = useState<LectureRow | null>(null);
-  const [pendingDeleteLecture, setPendingDeleteLecture] = useState<LectureRow | null>(null);
 
   useEffect(() => {
     loadData();
@@ -133,66 +107,7 @@ const AdminPanel: React.FC = () => {
 
   useEffect(() => {
     if (tab === 'payments') loadBilling();
-    if (tab === 'lectures') void loadLectures();
   }, [tab, loadBilling]);
-
-  const loadLectures = async () => {
-    setLectureLoading(true);
-    const { data } = await supabase
-      .from('lectures')
-      .select('*')
-      .order('sort_order', { ascending: true });
-    setLectureRows((data ?? []) as LectureRow[]);
-    setLectureLoading(false);
-  };
-
-  const saveLecture = async () => {
-    if (!lectureForm.title.trim() || !lectureForm.youtube_url.trim()) return;
-    setLectureFormSaving(true);
-    const payload = {
-      title: lectureForm.title.trim(),
-      description: lectureForm.description.trim() || null,
-      youtube_url: lectureForm.youtube_url.trim(),
-      sort_order: parseInt(lectureForm.sort_order, 10) || 0,
-    };
-    if (editingLecture) {
-      await supabase.from('lectures').update(payload).eq('id', editingLecture.id);
-      setEditingLecture(null);
-    } else {
-      await supabase.from('lectures').insert({ ...payload, is_active: true });
-    }
-    setLectureForm(EMPTY_FORM);
-    setLectureFormSaving(false);
-    void loadLectures();
-  };
-
-  const toggleLectureActive = async (row: LectureRow) => {
-    await supabase.from('lectures').update({ is_active: !row.is_active }).eq('id', row.id);
-    void loadLectures();
-  };
-
-  const confirmDeleteLecture = async () => {
-    if (!pendingDeleteLecture) return;
-    await supabase.from('lectures').delete().eq('id', pendingDeleteLecture.id);
-    setPendingDeleteLecture(null);
-    void loadLectures();
-  };
-
-  const startEditLecture = (row: LectureRow) => {
-    setEditingLecture(row);
-    setLectureForm({
-      title: row.title,
-      description: row.description ?? '',
-      youtube_url: row.youtube_url,
-      sort_order: String(row.sort_order),
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const cancelEditLecture = () => {
-    setEditingLecture(null);
-    setLectureForm(EMPTY_FORM);
-  };
 
   const updateRole = async (profileId: string, newRole: UserRole) => {
     try {
@@ -371,144 +286,7 @@ const AdminPanel: React.FC = () => {
 
       {/* 강의 관리 탭 */}
       {tab === 'lectures' && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.845v6.31a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">강의 관리</h2>
-              <p className="text-slate-500 text-sm mt-0.5">회원에게 노출되는 동영상 강의를 추가·수정·삭제합니다.</p>
-            </div>
-          </div>
-
-          {/* 추가/수정 폼 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-700">{editingLecture ? '강의 수정' : '새 강의 추가'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">제목 *</label>
-                <input
-                  type="text"
-                  placeholder="예: DenJOY 시작하기"
-                  value={lectureForm.title}
-                  onChange={e => setLectureForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">유튜브 URL *</label>
-                <input
-                  type="text"
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  value={lectureForm.youtube_url}
-                  onChange={e => setLectureForm(f => ({ ...f, youtube_url: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">설명 (선택)</label>
-                <input
-                  type="text"
-                  placeholder="간략한 강의 소개"
-                  value={lectureForm.description}
-                  onChange={e => setLectureForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">정렬 순서</label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={lectureForm.sort_order}
-                  onChange={e => setLectureForm(f => ({ ...f, sort_order: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => void saveLecture()}
-                disabled={lectureFormSaving || !lectureForm.title.trim() || !lectureForm.youtube_url.trim()}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {lectureFormSaving ? '저장 중...' : (editingLecture ? '수정 저장' : '강의 추가')}
-              </button>
-              {editingLecture && (
-                <button
-                  onClick={cancelEditLecture}
-                  className="px-5 py-2 bg-slate-100 text-slate-600 text-sm font-bold rounded-xl hover:bg-slate-200 transition-all"
-                >
-                  취소
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 강의 목록 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">강의 목록 ({lectureRows.length})</span>
-              <button onClick={() => void loadLectures()} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" title="새로고침">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-            {lectureLoading ? (
-              <div className="py-16 text-center text-slate-400 text-sm">불러오는 중...</div>
-            ) : lectureRows.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 text-sm">등록된 강의가 없습니다.</div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {lectureRows.map((row, idx) => (
-                  <div key={row.id} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50/50 transition-colors group">
-                    <span className="text-xs font-black text-slate-300 w-5 text-center shrink-0">{idx + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold ${row.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{row.title}</span>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${row.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                          {row.is_active ? '공개' : '비공개'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">{row.youtube_url}</p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button
-                        onClick={() => void toggleLectureActive(row)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-xs font-bold"
-                        title={row.is_active ? '비공개로 전환' : '공개로 전환'}
-                      >
-                        {row.is_active ? '숨김' : '공개'}
-                      </button>
-                      <button
-                        onClick={() => startEditLecture(row)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        title="수정"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setPendingDeleteLecture(row)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                        title="삭제"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <SystemAdminLecturesTab />
       )}
 
       {/* 회원 탭 */}
@@ -699,17 +477,6 @@ const AdminPanel: React.FC = () => {
           confirmColor="rose"
           onConfirm={confirmDeleteUser}
           onCancel={() => setPendingDeleteUser(null)}
-        />
-      )}
-      {pendingDeleteLecture && (
-        <ConfirmModal
-          title="강의 삭제 확인"
-          message={`"${pendingDeleteLecture.title}" 강의를 삭제하시겠습니까?`}
-          tip="삭제 후 복구할 수 없습니다."
-          confirmLabel="삭제"
-          confirmColor="rose"
-          onConfirm={() => void confirmDeleteLecture()}
-          onCancel={() => setPendingDeleteLecture(null)}
         />
       )}
     </div>

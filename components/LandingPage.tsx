@@ -155,7 +155,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 className="relative px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-900 text-white text-base sm:text-lg font-bold rounded-2xl shadow-2xl hover:bg-slate-800 active:scale-95 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3 border border-slate-700/50 min-w-[200px]"
               >
                 <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-                <span className="relative z-10">무료로 시작하기</span>
+                <span className="relative z-10">메인홈에서 회원가입</span>
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
@@ -594,9 +594,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
             {[
               {
                 step: '01',
-                title: '회원가입',
-                desc: '병원 정보를 등록하면 바로 대시보드가 열립니다.',
-                result: '→ 간단한 가입 절차',
+                title: '메인홈 가입 및 구독',
+                desc: 'DenJOY 메인 홈에서 서비스 이용을 시작하면 바로 임플란트 재고관리로 연결됩니다.',
+                result: '→ 서비스 연결 완료',
               },
               {
                 step: '02',
@@ -775,7 +775,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               className="relative px-7 sm:px-10 py-3 sm:py-4 bg-white text-slate-900 text-base sm:text-lg font-black rounded-2xl shadow-2xl hover:shadow-white/20 active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden"
             >
               <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-slate-900/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-              <span className="relative z-10">무료로 시작하기</span>
+              <span className="relative z-10">메인홈에서 회원가입</span>
             </button>
           </div>
         </div>

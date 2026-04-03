@@ -18,11 +18,14 @@ interface HomepagePageProps {
   onGoToLogin: () => void;
   onGoToSignup: () => void;
   onGoToContact: () => void;
+  onGoToFeaturedCourse: () => void;
   onOpenInventorySolution: () => void;
   onGoToTerms: () => void;
   onGoToPrivacy: () => void;
   onNavigate: (view: string) => void;
   onGoToMyPage?: () => void;
+  onGoToAdminPanel?: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 const HomepagePage: React.FC<HomepagePageProps> = ({
@@ -30,11 +33,14 @@ const HomepagePage: React.FC<HomepagePageProps> = ({
   onGoToLogin,
   onGoToSignup,
   onGoToContact,
+  onGoToFeaturedCourse,
   onOpenInventorySolution,
   onGoToTerms,
   onGoToPrivacy,
   onNavigate,
   onGoToMyPage,
+  onGoToAdminPanel,
+  onLogout,
 }) => {
   return (
     <div className="min-h-screen bg-mesh text-slate-900 overflow-x-hidden">
@@ -49,6 +55,8 @@ const HomepagePage: React.FC<HomepagePageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="relative z-10 overflow-x-hidden pt-20">
@@ -68,7 +76,10 @@ const HomepagePage: React.FC<HomepagePageProps> = ({
           onGoToContact={onGoToContact}
           onNavigate={onNavigate}
         />
-        <CoursesPreviewSection onGoToContact={onGoToContact} />
+        <CoursesPreviewSection
+          onGoToContact={onGoToContact}
+          onGoToFeaturedCourse={onGoToFeaturedCourse}
+        />
         <SocialProofSection />
         <FounderSection onGoToContact={onGoToContact} />
         <MicroCommitmentSection

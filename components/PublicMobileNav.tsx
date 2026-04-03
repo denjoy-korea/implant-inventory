@@ -49,17 +49,17 @@ export const PublicMobileNav: React.FC<PublicMobileNavProps> = ({ currentView, o
                 <div className="grid grid-cols-3 gap-1.5 px-3 py-2.5 max-w-md mx-auto">
                     <button
                         type="button"
-                        onClick={() => handleNavClick('value')}
-                        className={`min-h-[3rem] rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98] ${currentView === 'value' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white text-slate-600 shadow-sm'}`}
+                        onClick={() => handleNavClick('homepage')}
+                        className={`min-h-[3rem] rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98] ${currentView === 'homepage' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white text-slate-600 shadow-sm'}`}
                     >
-                        <span className="text-[12px] font-bold">도입효과</span>
+                        <span className="text-[12px] font-bold">메인홈</span>
                     </button>
                     <button
                         type="button"
                         onClick={() => handleNavClick('landing', 'features')}
-                        className={`min-h-[3rem] rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98] border-slate-100 bg-white text-slate-600 shadow-sm`}
+                        className={`min-h-[3rem] rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-[0.98] ${currentView === 'landing' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white text-slate-600 shadow-sm'}`}
                     >
-                        <span className="text-[12px] font-bold">기능소개</span>
+                        <span className="text-[12px] font-bold">재고관리</span>
                     </button>
                     <button
                         type="button"

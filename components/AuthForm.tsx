@@ -76,30 +76,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     handleSubmit,
   } = useAuthForm({ type, onSuccess, inviteInfo, onMfaRequired, initialPlan });
 
-  // ── Plan Selection Screen ──
+  // ── Plan Selection Screen ── (플랜 선택은 가입 후 별도 진행 — 즉시 role_selection으로 스킵)
   if (type === 'signup' && step === 'plan_select') {
-    return (
-      <AuthSignupPlanSelect
-        planAvailability={planAvailability}
-        pendingTrialPlan={pendingTrialPlan}
-        trialConsented={trialConsented}
-        onSelectPlanWithoutTrial={() => setStep('role_selection')}
-        onSelectTrialPlan={(plan) => {
-          setPendingTrialPlan(plan);
-          setTrialConsented(false);
-        }}
-        onChangeTrialConsented={setTrialConsented}
-        onContinueAfterTrialConsent={() => {
-          if (!trialConsented || !pendingTrialPlan) return;
-          setStep('role_selection');
-        }}
-        onSwitchToLogin={onSwitch}
-        onRequestWaitlist={(plan) => {
-          setWaitlistPlan(plan);
-          setWaitlistAgreed(false);
-        }}
-      />
-    );
+    setStep('role_selection');
+    return null;
   }
 
   // Render Role Selection Screen
@@ -107,7 +87,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess, onSwitch, onContac
     return (
       <AuthSignupRoleSelect
         onSelectRole={handleRoleSelect}
-        onBack={() => setStep('plan_select')}
+        onBack={onSwitch}
         onSwitchToLogin={onSwitch}
       />
     );

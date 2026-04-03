@@ -51,6 +51,9 @@ export function useOnboarding({
   // ⚠️ IIFE 유지 필수: onboardingService.mark*() 는 localStorage 기록이라 React deps에 포함 불가.
   //    useMemo로 바꾸면 mark* 호출 직후 재렌더 시 캐시된 이전 값을 반환해 wizard가 재등장함.
   const firstIncompleteStep = (() => {
+    // Hospital-scoped onboarding only applies to users attached to a workspace.
+    // System admins or transient users without hospitalId should never see it.
+    if (!hospitalId) return null;
     if (requiresBillingProgramSetup) return null;
     if (user?.status !== 'active') return null;
     const hid = hospitalId;

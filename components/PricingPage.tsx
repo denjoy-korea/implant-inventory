@@ -812,13 +812,13 @@ const PricingPage: React.FC<PricingPageProps> = ({ onGetStarted, currentPlan, is
         <div className="absolute inset-0 noise-bg opacity-20"></div>
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
         <div className="max-w-3xl mx-auto px-6 relative z-10">
-          <h2 className="text-3xl md:text-4xl font-black mb-4">임플란트 재고 관리,<br />지금 바로 시작하세요</h2>
-          <p className="text-slate-400 text-lg mb-8">덴트웹 엑셀만 업로드하면 끝. 무료 플랜으로 부담 없이 체험해 보세요.</p>
+          <h2 className="text-3xl md:text-4xl font-black mb-4">임플란트 재고 관리,<br />메인홈에서 시작하세요</h2>
+          <p className="text-slate-400 text-lg mb-8">서비스 가입과 구독은 DenJOY 메인 홈에서 진행하고, 연결 후 바로 이용할 수 있습니다.</p>
           <button
             onClick={() => onGetStarted('free')}
             className="px-8 py-4 bg-white text-slate-900 text-lg font-bold rounded-2xl shadow-2xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
           >
-            무료로 시작하기
+            메인홈에서 회원가입
           </button>
         </div>
       </section>

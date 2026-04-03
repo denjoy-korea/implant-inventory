@@ -19,7 +19,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { hospitalName, contactName, role, phone, email, weeklySurgeries, inquiryType, content } = await req.json();
+    const { hospitalName, contactName, role, phone, email, inquiryType, content } = await req.json();
 
     const now = new Date().toLocaleString("ko-KR", {
       timeZone: "Asia/Seoul",
@@ -44,7 +44,6 @@ Deno.serve(async (req: Request) => {
             { type: "mrkdwn", text: `*연락처*\n${phone || "—"}` },
             { type: "mrkdwn", text: `*이메일*\n${email || "—"}` },
             { type: "mrkdwn", text: `*문의 유형*\n${inquiryType || "—"}` },
-            { type: "mrkdwn", text: `*수술 건수*\n${weeklySurgeries || "—"}` },
           ],
         },
         {

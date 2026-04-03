@@ -296,6 +296,7 @@ const DashboardWorkspaceSection: React.FC<DashboardWorkspaceSectionProps> = ({
             hospitalWorkDays={state.hospitalWorkDays}
             onNavigate={(tab) => setState(prev => ({ ...prev, dashboardTab: tab }))}
             planState={state.planState}
+            effectivePlan={effectivePlan}
             onboardingStep={onboardingStep}
             onResumeOnboarding={onResumeOnboarding}
             onSurgeryUploadClick={onSurgeryUploadClick}

@@ -12,6 +12,8 @@ export interface BrandPageProps {
   onGoToTerms: () => void;
   onGoToPrivacy: () => void;
   onGoToMyPage?: () => void;
+  onGoToAdminPanel?: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 /** Constants ported from denjoy-homepage/src/lib/course-constants.ts */
@@ -26,6 +28,8 @@ const ConsultingPage: React.FC<BrandPageProps> = ({
   onGoToTerms,
   onGoToPrivacy,
   onGoToMyPage,
+  onGoToAdminPanel,
+  onLogout,
 }) => {
   const careerYears = new Date().getFullYear() - FOUNDED_YEAR;
 
@@ -47,6 +51,8 @@ const ConsultingPage: React.FC<BrandPageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 relative z-10 pt-20">

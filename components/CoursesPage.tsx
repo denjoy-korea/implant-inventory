@@ -1,7 +1,11 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import HomepageHeader from './home/HomepageHeader';
 import HomepageFooter from './home/HomepageFooter';
 import { View } from '../types';
+import { courseCatalogService } from '../services/courseCatalogService';
+import { DEFAULT_TOPIC_BY_SLUG } from '../data/courseCatalogContent';
+import type { CourseTopicRow } from '../types/courseCatalog';
+import CourseDetailExperience from './courses/CourseDetailExperience';
 
 export interface BrandPageProps {
   user?: import('../types').User | null;
@@ -12,6 +16,13 @@ export interface BrandPageProps {
   onGoToTerms: () => void;
   onGoToPrivacy: () => void;
   onGoToMyPage?: () => void;
+  onGoToAdminPanel?: () => void;
+  onLogout?: () => void | Promise<void>;
+}
+
+function getCourseSlugFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/courses\/([^/]+)\/?$/);
+  return match?.[1] ?? null;
 }
 
 /**
@@ -19,10 +30,34 @@ export interface BrandPageProps {
  * Redesigned to match the high-end aesthetic of https://www.denjoy.info/courses
  */
 const CoursesPage: React.FC<BrandPageProps> = ({
-  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage
+  user, onGoToLogin, onGoToSignup, onGoToContact, onNavigate, onGoToTerms, onGoToPrivacy, onGoToMyPage, onGoToAdminPanel, onLogout
 }) => {
+  const [topics, setTopics] = useState<CourseTopicRow[]>([]);
+  const [activeCourseSlug, setActiveCourseSlug] = useState<string | null>(() => (
+    typeof window !== 'undefined' ? getCourseSlugFromPath(window.location.pathname) : null
+  ));
+
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const rows = await courseCatalogService.listPublicTopics();
+        if (!cancelled && rows.length > 0) {
+          setTopics(rows);
+        }
+      } catch (error) {
+        console.warn('[CoursesPage] course topic fallback:', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const scrollToFeaturedCourse = useCallback(() => {
@@ -31,6 +66,40 @@ const CoursesPage: React.FC<BrandPageProps> = ({
       block: 'start',
     });
   }, []);
+
+  const navigateToCourse = useCallback((slug: string) => {
+    setActiveCourseSlug(slug);
+    window.history.pushState(null, '', `/courses/${slug}`);
+    onNavigate('courses');
+  }, [onNavigate]);
+
+  const goToCourseList = useCallback(() => {
+    setActiveCourseSlug(null);
+    window.history.pushState(null, '', '/courses');
+    onNavigate('courses');
+  }, [onNavigate]);
+
+  useEffect(() => {
+    const syncSlugFromPath = () => {
+      setActiveCourseSlug(getCourseSlugFromPath(window.location.pathname));
+    };
+
+    syncSlugFromPath();
+    window.addEventListener('popstate', syncSlugFromPath);
+    return () => window.removeEventListener('popstate', syncSlugFromPath);
+  }, []);
+
+  const courseSlug = activeCourseSlug;
+  const featuredTopic = topics[0] ?? DEFAULT_TOPIC_BY_SLUG['implant-inventory'];
+  const additionalTopics = topics.slice(1);
+  const featuredCategory = featuredTopic?.category || '데이터 엔지니어링';
+  const featuredHeadline = featuredTopic?.hero_headline || '덴트웹 임플란트 재고관리:\n입력 구조부터 바꾸는 실전 강의';
+  const featuredSummary = featuredTopic?.hero_summary || '데이터 정합성을 해치는 근본적인 원인을 파악하고, 엑셀 없이도 물 흐르듯 관리되는 자동화 프로세스를 구축합니다.';
+  const featuredSlug = featuredTopic?.slug || 'implant-inventory';
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [courseSlug]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden flex flex-col font-sans">
@@ -48,9 +117,19 @@ const CoursesPage: React.FC<BrandPageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 relative z-10">
+        {courseSlug ? (
+          <CourseDetailExperience
+            slug={courseSlug}
+            onGoToCourseList={goToCourseList}
+            onGoToContact={onGoToContact}
+          />
+        ) : (
+          <>
         {/* Hero Section */}
         <section className="pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -149,18 +228,16 @@ const CoursesPage: React.FC<BrandPageProps> = ({
                 <div className="flex-[1.2] p-8 md:p-12 lg:p-16 space-y-8">
                   <div className="flex flex-wrap gap-2">
                     <span className="px-3 py-1 rounded-full bg-red-500 text-white text-[11px] font-black tracking-tighter uppercase animate-pulse">슈퍼얼리버드 마감 임박</span>
-                    <span className="px-3 py-1 rounded-full bg-white/10 text-white text-[11px] font-bold tracking-tight uppercase backdrop-blur-sm">데이터 엔지니어링</span>
+                    <span className="px-3 py-1 rounded-full bg-white/10 text-white text-[11px] font-bold tracking-tight uppercase backdrop-blur-sm">{featuredCategory}</span>
                   </div>
 
                   <div className="space-y-4">
                     <p className="text-slate-400 text-sm font-bold tracking-widest uppercase">PREMIUM CLASS · 4 HOURS</p>
-                    <h3 className="text-2xl md:text-3xl lg:text-4xl font-black text-white leading-tight">
-                      덴트웹 임플란트 재고관리: <br className="hidden md:block" />
-                      입력 구조부터 바꾸는 실전 강의
+                    <h3 className="text-2xl md:text-3xl lg:text-4xl font-black text-white leading-tight whitespace-pre-line">
+                      {featuredHeadline}
                     </h3>
                     <p className="text-slate-400 text-lg leading-relaxed max-w-xl">
-                      데이터 정합성을 해치는 근본적인 원인을 파악하고, <br className="hidden md:block" />
-                      엑셀 없이도 물 흐르듯 관리되는 <span className="text-indigo-400 font-bold">자동화 프로세스</span>를 구축합니다.
+                      {featuredSummary}
                     </p>
                   </div>
 
@@ -179,7 +256,11 @@ const CoursesPage: React.FC<BrandPageProps> = ({
                   </div>
 
                   <div className="pt-6">
-                    <button className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-lg transition-all transform hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/40">
+                    <button
+                      type="button"
+                      onClick={() => navigateToCourse(featuredSlug)}
+                      className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-lg transition-all transform hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/40"
+                    >
                       강의 상세 보기
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
@@ -236,6 +317,47 @@ const CoursesPage: React.FC<BrandPageProps> = ({
             </div>
           </div>
         </section>
+
+        {additionalTopics.length > 0 && (
+          <section className="pb-12 bg-white">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-end justify-between gap-4 mb-8">
+                <div>
+                  <p className="text-xs font-black tracking-[0.3em] text-slate-400 mb-2">TOPIC LIST</p>
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-900">운영 중인 강의 주제</h2>
+                </div>
+                <p className="text-sm font-medium text-slate-500">주제는 유지하고 시즌만 교체하는 구조입니다.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {additionalTopics.map((topic) => (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    onClick={() => navigateToCourse(topic.slug)}
+                    className="text-left rounded-[28px] border border-slate-200 bg-slate-50 p-6 transition-all hover:-translate-y-1 hover:border-indigo-200 hover:bg-white hover:shadow-lg"
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-black tracking-tight text-indigo-700">
+                        {topic.category || '강의 주제'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-400">/{topic.slug}</span>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 mb-3">{topic.title}</h3>
+                    <p className="text-sm leading-relaxed text-slate-600 mb-5">
+                      {topic.short_description || topic.hero_summary || '회차별 일정과 금액만 교체해서 시즌 운영에 맞게 확장할 수 있습니다.'}
+                    </p>
+                    <span className="inline-flex items-center gap-2 text-sm font-black text-indigo-600">
+                      상세 보기
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Instructor Section */}
         <section className="py-24 bg-slate-50 relative overflow-hidden">
@@ -355,14 +477,20 @@ const CoursesPage: React.FC<BrandPageProps> = ({
                 <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">수강 후 바로 시작하는 <br className="hidden md:block" />데이터 혁신</h2>
                 <p className="text-indigo-100 text-lg md:text-xl font-medium max-w-2xl mx-auto">지금 신청하시면 70,000원 상당의 데이터 분석 리포트를 무료로 제공해 드립니다.</p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                  <button onClick={onGoToContact} className="w-full sm:w-auto px-10 py-5 rounded-2xl bg-white text-indigo-600 font-black text-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105 active:scale-95">
-                    지금 수강 신청하기
+                  <button
+                    type="button"
+                    onClick={() => navigateToCourse(featuredSlug)}
+                    className="w-full sm:w-auto px-10 py-5 rounded-2xl bg-white text-indigo-600 font-black text-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105 active:scale-95"
+                  >
+                    지금 강의 보러가기
                   </button>
                 </div>
               </div>
             </div>
           </div>
         </section>
+          </>
+        )}
       </main>
 
       <HomepageFooter onGoToContact={onGoToContact} onGoToTerms={onGoToTerms} onGoToPrivacy={onGoToPrivacy} />

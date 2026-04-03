@@ -13,6 +13,11 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
   const isSuccessPath = window.location.pathname === '/payment/success';
   const [pageState, setPageState] = useState<PageState>('loading');
   const [message, setMessage] = useState('');
+
+  // Detect service purchase (set before redirect by requestCartPayment)
+  const isServicePayment = (() => {
+    try { return sessionStorage.getItem('_pendingPaymentType') === 'service'; } catch { return false; }
+  })();
   const processedRef = useRef(false);
 
   useEffect(() => {
@@ -83,6 +88,17 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       if (!result) return; // 세션 없음 처리됨
       const { ok, error } = result;
       if (ok) {
+        if (isServicePayment) {
+          try {
+            const cartStorageKey = sessionStorage.getItem('_pendingServiceCartKey');
+            if (cartStorageKey) {
+              localStorage.removeItem(cartStorageKey);
+              sessionStorage.removeItem('_pendingServiceCartKey');
+            }
+          } catch {
+            // storage unavailable
+          }
+        }
         setPageState('success');
         // [LOW] clearTimeout으로 컴포넌트 언마운트 시 navigate 누수 방지
         const timer = setTimeout(onComplete, 2500);
@@ -124,8 +140,10 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
             </div>
             <h2 className="text-xl font-bold text-slate-800 mb-2">결제 완료!</h2>
             <p className="text-slate-500 text-sm leading-relaxed">
-              플랜이 성공적으로 활성화되었습니다.
-              <br />잠시 후 서비스로 이동합니다...
+              {isServicePayment
+                ? <>구매가 완료되었습니다.<br />강의 탭과 구매내역에 바로 반영됩니다.</>
+                : <>플랜이 성공적으로 활성화되었습니다.<br />잠시 후 서비스로 이동합니다...</>
+              }
             </p>
           </>
         )}

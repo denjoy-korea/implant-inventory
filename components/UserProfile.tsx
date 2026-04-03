@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, BillingCycle, TrustedDevice } from '../types';
+import { User, HospitalPlanState, PLAN_NAMES, PLAN_PRICING, PlanType, BillingCycle, TrustedDevice, isSystemAdminRole } from '../types';
 import type { DbBillingHistory } from '../types';
 import { authService } from '../services/authService';
 import { planService } from '../services/planService';
@@ -29,7 +29,7 @@ interface UserProfileProps {
 
 const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName, onClose, onDeleteAccount, onChangePlan, initialTab }) => {
     const isStaff = user.role === 'staff';
-    const isSystemAdmin = user.role === 'admin';
+    const isSystemAdmin = isSystemAdminRole(user.role, user.email);
     const isUltimatePlan = isSystemAdmin || planState?.plan === 'ultimate';
     const canShowReferral = !isStaff && !isSystemAdmin;
     const linkSuccessProvider = localStorage.getItem('_link_success_provider');
@@ -58,6 +58,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const [wouldStayForFeature, setWouldStayForFeature] = useState<boolean | null>(null);
     const [isPausing, setIsPausing] = useState(false);
     const [pauseSuccess, setPauseSuccess] = useState(false);
+    // 비밀번호 변경
+    const [showPasswordForm, setShowPasswordForm] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
     // 이직 데이터 초기화
     const [resetReason, setResetReason] = useState('');
     const [isRequestingReset, setIsRequestingReset] = useState(false);
@@ -774,23 +779,57 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                             </div>
                                             <div>
                                                 <p className="text-xs font-semibold text-slate-700">비밀번호 변경</p>
-                                                <p className="text-[10px] text-slate-400">재설정 이메일로 변경할 수 있습니다</p>
+                                                <p className="text-[10px] text-slate-400">새 비밀번호를 직접 설정합니다</p>
                                             </div>
                                         </div>
                                         <button
-                                            onClick={async () => {
-                                                const result = await authService.resetPassword(user.email);
-                                                if (result.success) {
-                                                    showToast('비밀번호 재설정 이메일이 전송되었습니다.', 'success');
-                                                } else {
-                                                    showToast('이메일 전송에 실패했습니다.', 'error');
-                                                }
-                                            }}
+                                            onClick={() => { setShowPasswordForm(v => !v); setNewPassword(''); setConfirmPassword(''); }}
                                             className="text-xs font-bold px-3 py-1.5 rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0"
                                         >
-                                            변경
+                                            {showPasswordForm ? '취소' : '변경'}
                                         </button>
                                     </div>
+                                    {showPasswordForm && (
+                                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                                            <input
+                                                type="password"
+                                                placeholder="새 비밀번호 (8자 이상, 대·소문자·숫자·특수문자 포함)"
+                                                value={newPassword}
+                                                onChange={e => setNewPassword(e.target.value)}
+                                                className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                            />
+                                            <input
+                                                type="password"
+                                                placeholder="새 비밀번호 확인"
+                                                value={confirmPassword}
+                                                onChange={e => setConfirmPassword(e.target.value)}
+                                                className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                            />
+                                            <button
+                                                disabled={isChangingPassword || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/.test(newPassword) || newPassword !== confirmPassword}
+                                                onClick={async () => {
+                                                    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/.test(newPassword)) { showToast('비밀번호는 8자 이상, 대·소문자·숫자·특수문자를 각 1개 이상 포함해야 합니다.', 'error'); return; }
+                                                    if (newPassword !== confirmPassword) { showToast('비밀번호가 일치하지 않습니다.', 'error'); return; }
+                                                    setIsChangingPassword(true);
+                                                    const result = await authService.changePassword(newPassword);
+                                                    setIsChangingPassword(false);
+                                                    if (result.success) {
+                                                        showToast('비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.', 'success');
+                                                        setShowPasswordForm(false);
+                                                        setNewPassword('');
+                                                        setConfirmPassword('');
+                                                        // 비밀번호 변경 시 기존 세션 무효화 → 명시적 로그아웃
+                                                        setTimeout(() => { void authService.signOut(); }, 1500);
+                                                    } else {
+                                                        showToast(result.error ?? '비밀번호 변경에 실패했습니다.', 'error');
+                                                    }
+                                                }}
+                                                className="w-full text-xs font-bold py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                {isChangingPassword ? '변경 중...' : '비밀번호 저장'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

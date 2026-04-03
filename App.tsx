@@ -83,7 +83,7 @@ const App: React.FC = () => {
     </div>
   );
 
-  const signOut = async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'landing' })); };
+  const signOut = async () => { await authService.signOut(); setState(prev => ({ ...prev, user: null, currentView: 'homepage' })); };
 
   return (
     <div
@@ -171,7 +171,7 @@ const App: React.FC = () => {
                 <SystemAdminDashboard
                   onLogout={signOut}
                   onToggleView={() => setState(prev => ({ ...prev, adminViewMode: 'user' }))}
-                  onGoHome={() => setState(prev => ({ ...prev, currentView: 'landing' }))}
+                  onGoHome={() => setState(prev => ({ ...prev, currentView: 'homepage' }))}
                 />
               </Suspense>
             </ErrorBoundary>
@@ -199,7 +199,7 @@ const App: React.FC = () => {
                   selectedFixtureIndices: {}, dashboardTab: 'fixture_upload',
                 }))}
                 onOpenProfile={() => setState(prev => ({ ...prev, showProfile: true }))}
-                onGoHome={() => setState(prev => ({ ...prev, currentView: 'landing' }))}
+                onGoHome={() => setState(prev => ({ ...prev, currentView: 'homepage' }))}
                 onLogout={signOut}
                 onOpenContactForm={() => setState(prev => ({ ...prev, currentView: 'contact' }))}
                 onOpenSupportChat={() => setSupportChatOpenRequest((prev) => prev + 1)}

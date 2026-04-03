@@ -6,6 +6,7 @@ import {
   HospitalPlanState,
   InventoryItem,
   Order,
+  PlanType,
   SurgeryUnregisteredItem,
 } from '../types';
 import type { ReturnRequest } from '../types/return';
@@ -26,6 +27,7 @@ interface DashboardOverviewProps {
   hospitalWorkDays?: number[];
   onNavigate: (tab: DashboardTab) => void;
   planState: HospitalPlanState | null;
+  effectivePlan: PlanType;
   onboardingStep?: number | null;
   onResumeOnboarding?: () => void;
   onSurgeryUploadClick?: () => void;
@@ -69,6 +71,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   hospitalWorkDays = DEFAULT_WORK_DAYS,
   onNavigate,
   planState,
+  effectivePlan,
   onboardingStep,
   onResumeOnboarding,
   onSurgeryUploadClick,
@@ -129,7 +132,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     onSurgeryUploadClick,
   });
 
-  const isPlus = PLUS_PLANS.includes((planState?.plan ?? 'free') as typeof PLUS_PLANS[number]);
+  const isPlus = PLUS_PLANS.includes(effectivePlan as typeof PLUS_PLANS[number]);
 
   return (
     <>

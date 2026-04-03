@@ -15,7 +15,7 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
 }) => {
   return (
     <>
-      <div className="flex-1 flex items-center justify-center px-6 py-36 bg-slate-50/80 backdrop-blur-sm relative">
+      <div className="flex-1 flex items-center justify-center px-6 py-8 bg-slate-50/80 backdrop-blur-sm relative" style={{ minHeight: 'calc(100vh - 57px)' }}>
         <div className="absolute top-20 right-10 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-20 left-10 w-96 h-96 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -37,19 +37,19 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
               </div>
               <h2 className="text-[28px] font-black leading-snug mb-4 tracking-tight">
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-indigo-200">
-                  임플란트 재고관리,<br />이제 스마트하게.
+                  치과 운영의<br />새로운 기준.
                 </span>
               </h2>
               <p className="text-indigo-200 text-sm leading-relaxed font-medium">
-                역할에 맞는 회원 유형을<br />선택하고 시작하세요.
+                교육 · 컨설팅 · 솔루션이 하나로<br />DenJOY OS에서 시작하세요.
               </p>
             </div>
 
             <div className="relative z-10 space-y-3 mt-8">
               {[
-                { icon: '📊', text: '실시간 재고 현황' },
-                { icon: '🔗', text: '덴트웹 자동 연동' },
-                { icon: '📦', text: '원클릭 발주 시스템' },
+                { icon: '📦', text: '임플란트 재고관리' },
+                { icon: '🏥', text: '병원 경영 컨설팅' },
+                { icon: '🎓', text: '임상 교육 플랫폼' },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-3.5 bg-white/5 backdrop-blur-sm border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all rounded-xl px-4 py-3 group">
                   <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
@@ -61,15 +61,15 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
             </div>
 
             <div className="relative z-10 mt-10 pt-6 border-t border-white/10">
-              <p className="text-xs text-indigo-300/60 font-medium tracking-wide">14개 제조사 데이터 기본 적용</p>
+              <p className="text-xs text-indigo-300/60 font-medium tracking-wide">치과 전문가를 위한 통합 운영 플랫폼</p>
             </div>
           </div>
 
           {/* Right Panel - Selection */}
           <div className="md:col-span-3 p-10 lg:p-14 flex flex-col justify-center bg-white">
             <div className="mb-10">
-              <h2 className="text-[28px] font-extrabold text-slate-900 tracking-tight">회원 유형 선택</h2>
-              <p className="text-sm text-slate-500 mt-2 font-medium">가입하실 유형을 선택해주세요.</p>
+              <h2 className="text-[28px] font-extrabold text-slate-900 tracking-tight">계정 유형 선택</h2>
+              <p className="text-sm text-slate-500 mt-2 font-medium">어떤 유형으로 DenJOY OS를 사용하실 건가요?</p>
             </div>
 
             <div className="space-y-4">
@@ -86,10 +86,13 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
                 </div>
                 <div className="relative z-10 flex-1 min-w-0 pt-0.5">
                   <div className="flex items-center justify-between mb-1.5">
-                    <h3 className="text-[17px] font-bold text-slate-900">치과 회원 (관리자)</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[17px] font-bold text-slate-900">병원 계정</h3>
+                      <span className="text-[11px] font-semibold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">관리자</span>
+                    </div>
                     <svg className="w-5 h-5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                   </div>
-                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원 데이터를 생성·관리합니다. 스태프 초대 및 권한 부여는 Plus 이상에서 가능합니다.</p>
+                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원 단위로 솔루션을 구독하고 팀원을 초대합니다. 원장·실장 등 병원 운영 주체에 적합합니다.</p>
                 </div>
               </button>
 
@@ -104,10 +107,13 @@ const AuthSignupRoleSelect: React.FC<AuthSignupRoleSelectProps> = ({
                 </div>
                 <div className="relative z-10 flex-1 min-w-0 pt-0.5">
                   <div className="flex items-center justify-between mb-1.5">
-                    <h3 className="text-[17px] font-bold text-slate-900">개인 회원 (담당자)</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[17px] font-bold text-slate-900">개인 계정</h3>
+                      <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">담당자</span>
+                    </div>
                     <svg className="w-5 h-5 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                   </div>
-                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원 소속 없이 독립적으로 재고를 관리합니다. <span className="text-slate-400">개인 전용 공간 배정.</span></p>
+                  <p className="text-[14px] text-slate-500 leading-relaxed font-medium">병원에 소속되어 솔루션을 사용합니다. 관리자의 초대를 받거나 개인 계정으로 시작할 수 있습니다.</p>
                 </div>
               </button>
             </div>

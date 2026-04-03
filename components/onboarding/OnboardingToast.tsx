@@ -18,7 +18,7 @@ export default function OnboardingToast({ progress, onClick, completedLabel }: P
 
   return (
     <div
-      className="fixed bottom-20 right-3 md:bottom-8 md:right-6 z-[200] cursor-pointer group"
+      className="fixed bottom-20 right-3 md:bottom-8 md:right-28 z-[200] cursor-pointer group"
       onClick={onClick}
     >
       <div className={`rounded-full shadow-md border pl-2.5 pr-3 py-1.5 flex items-center gap-2 transition-all duration-300

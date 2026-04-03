@@ -144,6 +144,15 @@ interface AuthResult {
   emailConfirmationRequired?: boolean;
 }
 
+function isSignupRateLimited(error: { message?: string; status?: number | string } | null | undefined): boolean {
+  if (!error) return false;
+  const normalized = String(error.message || '').toLowerCase();
+  return String(error.status || '') === '429'
+    || normalized.includes('too many requests')
+    || normalized.includes('rate limit')
+    || normalized.includes('email rate limit exceeded');
+}
+
 // 로그인 타임아웃 후 늦게 도달하는 SIGNED_IN 이벤트를 무시하기 위한 플래그
 let _loginTimedOut = false;
 
@@ -186,9 +195,11 @@ export const authService = {
     if (authError) {
       return {
         success: false,
-        error: authError.message === 'User already registered'
-          ? '이미 등록된 이메일입니다.'
-          : authError.message,
+        error: isSignupRateLimited(authError)
+          ? '같은 네트워크에서 짧은 시간 안에 너무 많은 시도가 이루어졌습니다. 잠시 후 다시 시도해주세요.'
+          : authError.message === 'User already registered'
+            ? '이미 등록된 이메일입니다.'
+            : authError.message,
       };
     }
 
@@ -612,6 +623,13 @@ export const authService = {
   /** 비밀번호 재설정 이메일 발송 */
   async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /** 현재 세션에서 직접 비밀번호 변경 (이메일 불필요) */
+  async changePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) return { success: false, error: error.message };
     return { success: true };
   },

@@ -19,6 +19,8 @@ const AboutPage: React.FC<BrandPageProps> = ({
   onGoToTerms,
   onGoToPrivacy,
   onGoToMyPage,
+  onGoToAdminPanel,
+  onLogout,
 }) => {
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -38,6 +40,8 @@ const AboutPage: React.FC<BrandPageProps> = ({
         onGoToContact={onGoToContact}
         onNavigate={onNavigate}
         onGoToMyPage={onGoToMyPage}
+        onGoToAdminPanel={onGoToAdminPanel}
+        onLogout={onLogout}
       />
 
       <main className="flex-1 relative z-10 pt-20">
