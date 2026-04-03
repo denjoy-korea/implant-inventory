@@ -3,6 +3,7 @@ import { useToast } from '../hooks/useToast';
 import { contactService } from '../services/contactService';
 import { pageViewService } from '../services/pageViewService';
 import LegalModal from './shared/LegalModal';
+import PublicInfoFooter from './shared/PublicInfoFooter';
 import HomepageHeader from './home/HomepageHeader';
 import HomepageFooter from './home/HomepageFooter';
 import { BUSINESS_INFO } from '../utils/businessInfo';
@@ -87,6 +88,8 @@ const ContactPage: React.FC<ContactPageProps> = ({
   onGoToAdminPanel,
   onLogout,
 }) => {
+  const onAnalyze = onGoToAnalyze;
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -306,7 +309,14 @@ const ContactPage: React.FC<ContactPageProps> = ({
                         >
                           무료로 시작하기 →
                         </button>
-                        {onGoToAnalyze && !isMobileViewport && (
+                        {onAnalyze && isMobileViewport ? (
+                          <button
+                            onClick={onAnalyze}
+                            className="w-full mt-3 py-2.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+                          >
+                            또는 무료 데이터 건강도 진단 보기
+                          </button>
+                        ) : onGoToAnalyze && !isMobileViewport && (
                           <button
                             onClick={onGoToAnalyze}
                             className="w-full mt-3 py-2.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
@@ -488,6 +498,7 @@ const ContactPage: React.FC<ContactPageProps> = ({
           onGoToTerms={onGoToTerms}
           onGoToPrivacy={onGoToPrivacy}
         />
+        <PublicInfoFooter showLegalLinks />
       </div>
 
       {toast && (

@@ -45,6 +45,8 @@ interface MyPageProps {
   hospitalName: string;
   planState: HospitalPlanState | null;
   onGoToDashboard: () => void;
+  /** 임플란트 재고관리 서비스 카드 클릭 → inventory 홈페이지(랜딩)로 이동 */
+  onGoToInventoryHome: () => void;
   onGoToPricing: () => void;
   onGoToContact: () => void;
   onProfileClick: () => void;
@@ -366,11 +368,12 @@ function CartBar({ items, onOpen }: {
 
 // ── Tabs content ─────────────────────────────────────────────────────────────
 
-function HomeTab({ user, hospitalName, planState, onGoToDashboard, onGoToPricing, onGoToContact }: {
+function HomeTab({ user, hospitalName, planState, onGoToDashboard, onGoToInventoryHome, onGoToPricing, onGoToContact }: {
   user: User;
   hospitalName: string;
   planState: HospitalPlanState | null;
   onGoToDashboard: () => void;
+  onGoToInventoryHome: () => void;
   onGoToPricing: () => void;
   onGoToContact: () => void;
 }) {
@@ -409,7 +412,7 @@ function HomeTab({ user, hospitalName, planState, onGoToDashboard, onGoToPricing
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
-                onClick={onGoToDashboard}
+                onClick={onGoToInventoryHome}
                 className="system-card system-card-hover p-6 text-left group"
               >
                 <div className="flex items-center justify-between mb-4">
@@ -1065,6 +1068,7 @@ const MyPage: React.FC<MyPageProps> = ({
   hospitalName,
   planState,
   onGoToDashboard,
+  onGoToInventoryHome,
   onGoToPricing,
   onGoToContact,
   onProfileClick,
@@ -1404,6 +1408,7 @@ const MyPage: React.FC<MyPageProps> = ({
                 hospitalName={hospitalName}
                 planState={planState}
                 onGoToDashboard={onGoToDashboard}
+                onGoToInventoryHome={onGoToInventoryHome}
                 onGoToPricing={onGoToPricing}
                 onGoToContact={onGoToContact}
               />

@@ -576,6 +576,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                   hospitalName={hospitalName}
                   planState={planState}
                   onGoToDashboard={() => handleNavigate('dashboard')}
+                  onGoToInventoryHome={() => handleNavigate('landing')}
                   onGoToPricing={() => handleNavigate('pricing')}
                   onGoToContact={() => handleNavigate('contact')}
                   onProfileClick={onProfileClick}

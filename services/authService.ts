@@ -123,6 +123,7 @@ async function lazyEncryptProfile(profile: DbProfile): Promise<void> {
 }
 
 const TRUSTED_DEVICE_TOKEN_KEY = 'dentweb_trusted_device_token';
+const SIGNUP_RATE_LIMIT_MESSAGE = '가입 요청이 너무 많습니다. 60초 후 다시 시도해주세요.';
 
 interface SignupParams {
   email: string;
@@ -196,7 +197,7 @@ export const authService = {
       return {
         success: false,
         error: isSignupRateLimited(authError)
-          ? '같은 네트워크에서 짧은 시간 안에 너무 많은 시도가 이루어졌습니다. 잠시 후 다시 시도해주세요.'
+          ? SIGNUP_RATE_LIMIT_MESSAGE
           : authError.message === 'User already registered'
             ? '이미 등록된 이메일입니다.'
             : authError.message,
