@@ -62,18 +62,30 @@ const SESSION_POLL_INTERVAL_MS = 60_000;
 const SESSION_TOKEN_KEY = 'dentweb_session_token';
 const LOAD_TIMEOUT_MS = 45_000; // 대용량 초기 동기화(복호화 포함) 여유 시간 확보
 
-const getInitialState = (): AppState => {
-  if (typeof window === 'undefined') return INITIAL_STATE;
-  const path = window.location.pathname;
-
-  // 1. VIEW_PATH 역방향 조회 (정확한 경로 매칭)
+function resolvePublicViewFromPath(path: string): View | undefined {
   let view: View | undefined = PATH_TO_VIEW[path];
 
-  // 2. /inventory/** 하위 경로 처리 (analyze, value, pricing 등)
   if (!view && path.startsWith('/inventory/')) {
     const sub = path.replace('/inventory', '');
     view = PATH_TO_VIEW[sub] as View | undefined;
   }
+
+  if (!view && path.startsWith('/courses/')) {
+    view = 'courses';
+  }
+
+  if (!view && path === '/admin') {
+    view = 'admin_panel';
+  }
+
+  return view;
+}
+
+const getInitialState = (): AppState => {
+  if (typeof window === 'undefined') return INITIAL_STATE;
+  const path = window.location.pathname;
+
+  let view: View | undefined = resolvePublicViewFromPath(path);
 
   // 3. 레거시 hash 폴백: #/implant-inventory → landing
   if (!view) {
@@ -82,9 +94,6 @@ const getInitialState = (): AppState => {
       view = 'landing';
     }
   }
-
-  // 4. 수동 예외: /admin → admin_panel (PATH_TO_VIEW에 없으므로)
-  if (!view && path === '/admin') view = 'admin_panel';
 
   return { ...INITIAL_STATE, currentView: view ?? INITIAL_STATE.currentView };
 };
@@ -802,7 +811,7 @@ export function useAppState(onNotify?: NotifyFn) {
               localStorage.removeItem('_pending_trial_plan');
               await planService.startTrial(user.hospitalId, pendingPlan);
             }
-            await loadHospitalData(user);
+            await loadUserContext(user);
             // 소셜 로그인 시 세션 토큰 발급 (이메일 로그인은 signIn()에서 발급)
             if (!sessionStorage.getItem(SESSION_TOKEN_KEY)) {
               try {
@@ -977,15 +986,7 @@ export function useAppState(onNotify?: NotifyFn) {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      let targetView: View = 'homepage';
-      if (path === '/about') targetView = 'about';
-      else if (path === '/consulting') targetView = 'consulting';
-      else if (path === '/solutions') targetView = 'solutions';
-      else if (path === '/courses') targetView = 'courses';
-      else if (path === '/blog') targetView = 'blog';
-      else if (path === '/community') targetView = 'community';
-      else if (path === '/contact') targetView = 'contact';
-      else if (path === '/pricing') targetView = 'pricing';
+      const targetView = resolvePublicViewFromPath(path) ?? 'homepage';
       
       setState(prev => ({ ...prev, currentView: targetView }));
     };
