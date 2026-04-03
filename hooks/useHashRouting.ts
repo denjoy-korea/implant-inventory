@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import React from 'react';
-import { AppState, DashboardTab, User, UserRole, View, canAccessTab } from '../types';
+import { AppState, DashboardTab, User, UserRole, View, canAccessTab, isSystemAdminIdentity } from '../types';
 import { buildHash, parseHash } from '../appRouting';
 
 interface HashRoutingState {
@@ -34,7 +34,7 @@ export function useHashRouting(
     const onPopState = () => {
       const { view, tab } = parseHash(window.location.hash);
       if (view === 'dashboard' && !state.user) return;
-      if (view === 'admin_panel' && state.user?.role !== 'admin') return;
+      if (view === 'admin_panel' && !isSystemAdminIdentity(state.user)) return;
       const guardedTab = (tab !== undefined && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
         ? 'overview' : tab;
       skipHashSync.current = true;
@@ -62,7 +62,7 @@ export function useHashRouting(
         sessionStorage.setItem('_pending_redirect_hash', hash);
         return;
       }
-      if (view === 'admin_panel' && state.user?.role !== 'admin') return;
+      if (view === 'admin_panel' && !isSystemAdminIdentity(state.user)) return;
       const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
         ? 'overview' : tab;
       if (view !== state.currentView || (resolvedTab && resolvedTab !== state.dashboardTab)) {

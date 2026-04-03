@@ -907,4 +907,26 @@ export const planService = {
     });
     return result;
   },
+
+  /**
+   * P1-C: 특정 서비스의 플랜 코드를 hospital_service_subscriptions에서 읽음.
+   * 테이블이 없거나 레코드가 없으면 null 반환.
+   */
+  async getServicePlan(hospitalId: string, serviceCode: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('hospital_service_subscriptions')
+      .select('service_plan_code')
+      .eq('hospital_id', hospitalId)
+      .eq('service_code', serviceCode)
+      .maybeSingle();
+
+    if (error) {
+      // 테이블 미존재(개발 환경) → null로 조용히 폴백
+      if (error.code === '42P01' || error.code === 'PGRST205') return null;
+      console.error('[planService] getServicePlan failed:', error);
+      return null;
+    }
+
+    return (data as { service_plan_code: string | null } | null)?.service_plan_code ?? null;
+  },
 };

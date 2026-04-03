@@ -16,6 +16,9 @@ function getSessionId(): string {
 
 /** 공개 페이지 이름 목록 — 내부 대시보드 뷰는 제외 */
 const PUBLIC_PAGES = new Set([
+  // Brand portal pages (new)
+  'homepage', 'about', 'consulting', 'solutions', 'courses', 'blog', 'community',
+  // Solution landing pages (existing)
   'landing', 'pricing', 'analyze', 'contact', 'value', 'login', 'signup',
 ]);
 

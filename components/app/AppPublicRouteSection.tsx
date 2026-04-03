@@ -38,6 +38,7 @@ const AppPublicRouteSection: React.FC<AppPublicRouteSectionProps> = ({
         <PublicAppShell
           currentView={state.currentView}
           user={state.user}
+          hospitalName={state.hospitalName}
           isSystemAdmin={isSystemAdmin}
           preSelectedPlan={state.preSelectedPlan}
           planState={state.planState}
@@ -49,7 +50,7 @@ const AppPublicRouteSection: React.FC<AppPublicRouteSectionProps> = ({
           onLoginSuccess={onLoginSuccess}
           onLogout={() => {
             void authService.signOut().then(() => {
-              setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
+              setState(prev => ({ ...prev, user: null, currentView: 'homepage' }));
             });
           }}
           onSetMfaPendingEmail={(email) => setState(prev => ({ ...prev, mfaPendingEmail: email }))}

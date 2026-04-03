@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder, PlanType,
+  AppState, User, ExcelRow, DEFAULT_WORK_DAYS, PLAN_LIMITS, DbOrder, PlanType, View, isSystemAdminRole,
 } from '../types';
 import { authService } from '../services/authService';
 import { errorIncludes } from '../utils/errors';
@@ -19,12 +19,14 @@ import { surgeryService } from '../services/surgeryService';
 import { orderService } from '../services/orderService';
 import { hospitalService } from '../services/hospitalService';
 import { planService } from '../services/planService';
+import { serviceEntitlementService } from '../services/serviceEntitlementService';
 import { resetService } from '../services/resetService';
 import { dbToInventoryItem, dbToExcelRow, dbToExcelRowBatch, dbToExcelRowBatchMasked, dbToOrder, dbToUser } from '../services/mappers';
 import { warmupCryptoService, waitForWarmup } from '../services/cryptoUtils';
 import { supabase } from '../services/supabaseClient';
 import { pageViewService } from '../services/pageViewService';
 import { onboardingService } from '../services/onboardingService';
+import { PATH_TO_VIEW } from '../appRouting';
 
 const INITIAL_STATE: AppState = {
   fixtureData: null,
@@ -39,7 +41,7 @@ const INITIAL_STATE: AppState = {
   selectedSurgeryIndices: {},
   isLoading: true,
   user: null,
-  currentView: 'landing',
+  currentView: 'homepage',
   dashboardTab: 'overview',
   isFixtureLengthExtracted: false,
   fixtureBackup: null,
@@ -60,8 +62,35 @@ const SESSION_POLL_INTERVAL_MS = 60_000;
 const SESSION_TOKEN_KEY = 'dentweb_session_token';
 const LOAD_TIMEOUT_MS = 45_000; // 대용량 초기 동기화(복호화 포함) 여유 시간 확보
 
+const getInitialState = (): AppState => {
+  if (typeof window === 'undefined') return INITIAL_STATE;
+  const path = window.location.pathname;
+
+  // 1. VIEW_PATH 역방향 조회 (정확한 경로 매칭)
+  let view: View | undefined = PATH_TO_VIEW[path];
+
+  // 2. /inventory/** 하위 경로 처리 (analyze, value, pricing 등)
+  if (!view && path.startsWith('/inventory/')) {
+    const sub = path.replace('/inventory', '');
+    view = PATH_TO_VIEW[sub] as View | undefined;
+  }
+
+  // 3. 레거시 hash 폴백: #/implant-inventory → landing
+  if (!view) {
+    const hash = window.location.hash;
+    if (hash === '#/implant-inventory' || hash === '#/implant-inventory/') {
+      view = 'landing';
+    }
+  }
+
+  // 4. 수동 예외: /admin → admin_panel (PATH_TO_VIEW에 없으므로)
+  if (!view && path === '/admin') view = 'admin_panel';
+
+  return { ...INITIAL_STATE, currentView: view ?? INITIAL_STATE.currentView };
+};
+
 export function useAppState(onNotify?: NotifyFn) {
-  const [state, setState] = useState<AppState>(INITIAL_STATE);
+  const [state, setState] = useState<AppState>(getInitialState);
   const notify = onNotify ?? ((msg: string, _type?: string) => console.warn('[useAppState] notify fallback:', msg));
   const sessionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hospitalLoadInFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
@@ -114,12 +143,12 @@ export function useAppState(onNotify?: NotifyFn) {
       return;
     }
 
-    const isAdminRole = user.role === 'admin';
+    const isAdminRole = isSystemAdminRole(user.role, user.email);
     if (!user.hospitalId || (!isAdminRole && user.status !== 'active' && user.status !== 'readonly')) {
       setState(prev => ({
         ...prev,
         user,
-        currentView: 'dashboard',
+        currentView: 'mypage',
         dashboardTab: 'overview',
         hospitalName: '',
         hospitalMasterAdminId: '',
@@ -138,9 +167,24 @@ export function useAppState(onNotify?: NotifyFn) {
       // - DB에는 최대 24개월치 보관 (자동삭제 스케줄로 관리)
       // - 프론트엔드 로드는 플랜별 retentionMonths 기준으로 제한
       //   (Free=3, Basic=12, Plus=24, Business=24, Ultimate=999)
-      // - planState 조회 전이므로 일단 planService.checkPlanExpiry를 통해 플랜 확인
-      //   → 실용적 방법: 플랜을 먼저 확인한 후 fromDate 결정
-      const planStateForDate = await planService.checkPlanExpiry(user.hospitalId);
+      // - P1-C: hospital_service_subscriptions를 source of truth로 우선 시도
+      //   → 성공 시 implant_inventory 구독의 service_plan_code 사용
+      //   → 실패 시(개발 환경·테이블 미존재) planService 폴백 유지
+      let planStateForDate = await planService.checkPlanExpiry(user.hospitalId);
+      try {
+        const subscriptions = await serviceEntitlementService.getHospitalSubscriptions(user.hospitalId);
+        const inventorySub = subscriptions.find((s) => s.serviceCode === 'implant_inventory');
+        if (inventorySub?.servicePlanCode) {
+          // service_plan_code가 유효한 PlanType인지 확인 후 덮어씀
+          const subPlan = inventorySub.servicePlanCode as PlanType;
+          if (Object.prototype.hasOwnProperty.call(PLAN_LIMITS, subPlan)) {
+            planStateForDate = { ...planStateForDate, plan: subPlan };
+          }
+        }
+      } catch (entitlementErr) {
+        // 개발 환경이 아닌데 실패하면 경고만 남기고 planService 결과 사용
+        console.warn('[useAppState] serviceEntitlementService fallback to planService:', entitlementErr);
+      }
       const retentionMonths = PLAN_LIMITS[planStateForDate.plan]?.viewMonths ?? 24;
       // 조회 허용 기간(viewMonths): Free=3, Basic=12, Plus/Business=24
       // DB 보관(retentionMonths)은 모두 24개월이지만 조회는 플랜별로 제한
@@ -188,7 +232,7 @@ export function useAppState(onNotify?: NotifyFn) {
       setState(prev => ({
         ...prev,
         user,
-        currentView: 'dashboard',
+        currentView: 'mypage',
         dashboardTab: 'overview',
         inventory: wasReset ? [] : inventory,
         surgeryMaster: wasReset ? {} as Record<string, ExcelRow[]> : { '수술기록지': surgeryRows },
@@ -235,7 +279,7 @@ export function useAppState(onNotify?: NotifyFn) {
       setState(prev => ({
         ...prev,
         user,
-        currentView: 'dashboard',
+        currentView: 'mypage',
         hospitalName: '',
         hospitalMasterAdminId: '',
         hospitalWorkDays: DEFAULT_WORK_DAYS,
@@ -255,11 +299,177 @@ export function useAppState(onNotify?: NotifyFn) {
     }
   };
 
-  /** 로그인 성공 콜백 */
+  /**
+   * loadUserContext — 로그인 직후 경량 컨텍스트 로드.
+   * hospital 기본 정보, plan, 멤버 수만 조회하며 inventory/surgery/orders는 로드하지 않습니다.
+   * 완료 후 'mypage' 뷰로 이동합니다.
+   */
+  const loadUserContext = async (user: User) => {
+    if (user.status === 'paused') {
+      setState(prev => ({
+        ...prev,
+        user,
+        currentView: 'suspended',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
+        hospitalBizFileUrl: null,
+        isLoading: false,
+      }));
+      void backgroundDecryptUser(user.id);
+      return;
+    }
+
+    const isAdminRole = isSystemAdminRole(user.role, user.email);
+    if (!user.hospitalId || (!isAdminRole && user.status !== 'active' && user.status !== 'readonly')) {
+      setState(prev => ({
+        ...prev,
+        user,
+        currentView: 'mypage',
+        dashboardTab: 'overview',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
+        hospitalBizFileUrl: null,
+        isLoading: false,
+      }));
+      void backgroundDecryptUser(user.id);
+      return;
+    }
+
+    try {
+      const [membersData, hospitalData, planState] = await Promise.all([
+        hospitalService.getActiveMemberCount(user.hospitalId),
+        hospitalService.getHospitalById(user.hospitalId),
+        planService.checkPlanExpiry(user.hospitalId),
+      ]);
+
+      if (hospitalData?.onboardingFlags) {
+        onboardingService.syncFromDbFlags(user.hospitalId, hospitalData.onboardingFlags);
+      }
+
+      setState(prev => ({
+        ...prev,
+        user,
+        currentView: 'mypage',
+        dashboardTab: 'overview',
+        planState,
+        memberCount: membersData,
+        hospitalName: hospitalData?.name || '',
+        hospitalMasterAdminId: hospitalData?.masterAdminId || '',
+        hospitalWorkDays: hospitalData?.workDays ?? DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: hospitalData?.billingProgram ?? null,
+        hospitalBizFileUrl: hospitalData?.bizFileUrl ?? null,
+        isLoading: false,
+      }));
+
+      void backgroundDecryptUser(user.id);
+    } catch (error) {
+      console.error('[useAppState] loadUserContext failed:', error);
+      setState(prev => ({
+        ...prev,
+        user,
+        currentView: 'mypage',
+        hospitalName: '',
+        hospitalMasterAdminId: '',
+        hospitalWorkDays: DEFAULT_WORK_DAYS,
+        hospitalBillingProgram: null,
+        isLoading: false,
+      }));
+    }
+  };
+
+  /**
+   * loadInventoryData — 대시보드 진입 시 호출되는 무거운 데이터 로드.
+   * inventory, surgery, orders를 한 번에 조회합니다.
+   * loadUserContext 이후 또는 직접 대시보드 URL로 진입 시 호출됩니다.
+   */
+  const loadInventoryData = async (user: User) => {
+    if (!user.hospitalId) return;
+
+    try {
+      let planStateForDate = await planService.checkPlanExpiry(user.hospitalId);
+      try {
+        const subscriptions = await serviceEntitlementService.getHospitalSubscriptions(user.hospitalId);
+        const inventorySub = subscriptions.find((s) => s.serviceCode === 'implant_inventory');
+        if (inventorySub?.servicePlanCode) {
+          const subPlan = inventorySub.servicePlanCode as PlanType;
+          if (Object.prototype.hasOwnProperty.call(PLAN_LIMITS, subPlan)) {
+            planStateForDate = { ...planStateForDate, plan: subPlan };
+          }
+        }
+      } catch (entitlementErr) {
+        console.warn('[useAppState] serviceEntitlementService fallback to planService:', entitlementErr);
+      }
+      const retentionMonths = PLAN_LIMITS[planStateForDate.plan]?.viewMonths ?? 24;
+      const effectiveMonths = Math.min(retentionMonths, 24);
+      const fromDateObj = new Date();
+      fromDateObj.setMonth(fromDateObj.getMonth() - effectiveMonths);
+      const fromDate = fromDateObj.toISOString().split('T')[0];
+
+      const [inventoryData, surgeryData, ordersData] = await Promise.all([
+        inventoryService.getInventory(),
+        surgeryService.getSurgeryRecords({ fromDate }),
+        orderService.getOrders(),
+      ]);
+
+      if (import.meta.env.DEV) {
+        console.log('[useAppState] loadInventoryData:', {
+          inventoryCount: inventoryData.length,
+          surgeryCount: surgeryData.length,
+          ordersCount: ordersData.length,
+          hospitalId: user.hospitalId,
+        });
+      }
+
+      const inventory = inventoryData.map(dbToInventoryItem);
+      const surgeryRows = dbToExcelRowBatchMasked(surgeryData);
+      const orders = ordersData.map(dbToOrder);
+
+      surgeryService.backfillPatientInfoHash(user.hospitalId).catch(() => {});
+
+      const wasReset = await resetService.checkScheduledReset(user.hospitalId);
+
+      setState(prev => ({
+        ...prev,
+        planState: planStateForDate,
+        inventory: wasReset ? [] : inventory,
+        surgeryMaster: wasReset ? {} as Record<string, ExcelRow[]> : { '수술기록지': surgeryRows },
+        orders: wasReset ? [] : orders,
+      }));
+
+      if (wasReset) {
+        notify('예약된 데이터 초기화가 완료되었습니다. 재고, 수술 기록, 주문 데이터가 모두 삭제되었습니다.', 'info');
+      }
+
+      if (!wasReset && surgeryData.length > 0) {
+        void waitForWarmup()
+          .then(() => dbToExcelRowBatch(surgeryData))
+          .then((decryptedRows) => {
+            setState((prev) => {
+              if (prev.user?.id !== user.id || prev.user?.hospitalId !== user.hospitalId) return prev;
+              return {
+                ...prev,
+                surgeryMaster: { ...prev.surgeryMaster, '수술기록지': decryptedRows },
+              };
+            });
+          })
+          .catch((e) => {
+            console.warn('[useAppState] 수술기록 백그라운드 복호화 실패, 마스킹 유지:', e);
+          });
+      }
+    } catch (error) {
+      console.error('[useAppState] loadInventoryData failed:', error);
+    }
+  };
+
+  /** 로그인 성공 콜백 — loadUserContext만 호출 (경량), mypage로 이동 */
   const handleLoginSuccess = async (user: User) => {
     setState(prev => ({ ...prev, isLoading: true }));
     pageViewService.markConverted(user.id, user.hospitalId || null);
-    await loadHospitalData(user);
+    await loadUserContext(user);
     startSessionPolling();
   };
 
@@ -294,7 +504,7 @@ export function useAppState(onNotify?: NotifyFn) {
       setState(prev => ({
         ...prev,
         user: null,
-        currentView: 'landing',
+        currentView: 'homepage',
         inventory: [],
         surgeryMaster: {},
         orders: [],
@@ -399,6 +609,7 @@ export function useAppState(onNotify?: NotifyFn) {
    * 짧게 재시도한 뒤 안정화된 프로필을 반환한다.
    */
   const waitForSignedInProfile = async () => {
+    const sessionEmail = (await authService.getSession().catch(() => null))?.user?.email ?? null;
     const maxAttempts = 8;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const profile = await authService.getProfileById(undefined, { decrypt: false });
@@ -410,7 +621,7 @@ export function useAppState(onNotify?: NotifyFn) {
       }
 
       const hasHospitalLink = Boolean(profile.hospital_id);
-      const canMissHospitalTemporarily = profile.role === 'admin' || profile.status === 'pending';
+      const canMissHospitalTemporarily = isSystemAdminRole(profile.role, sessionEmail ?? profile.email) || profile.status === 'pending';
       if (hasHospitalLink || canMissHospitalTemporarily || attempt === maxAttempts - 1) {
         return profile;
       }
@@ -504,7 +715,7 @@ export function useAppState(onNotify?: NotifyFn) {
                 return;
               }
             }
-            const user = dbToUser(profile);
+            const user = dbToUser(profile, session.user.email);
             await loadHospitalData(user);
             initSessionHandledRef.current = true;
             startSessionPolling();
@@ -530,7 +741,7 @@ export function useAppState(onNotify?: NotifyFn) {
     // ⚠️ Supabase v2는 SIGNED_IN / TOKEN_REFRESHED 이벤트에서 콜백을 내부적으로 await함.
     // async 콜백이 hang하면 signInWithPassword 자체도 블로킹되므로
     // SIGNED_IN 처리는 반드시 fire-and-forget (void IIFE) 으로 실행해야 함.
-    const { data: { subscription } } = authService.onAuthStateChange((event) => {
+    const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         signedInInFlightRef.current = null;
         hospitalLoadInFlightRef.current = null;
@@ -539,7 +750,7 @@ export function useAppState(onNotify?: NotifyFn) {
         setState(prev => ({
           ...prev,
           user: null,
-          currentView: 'landing',
+          currentView: 'homepage',
           inventory: [],
           orders: [],
           surgeryMaster: {},
@@ -570,7 +781,7 @@ export function useAppState(onNotify?: NotifyFn) {
         const task = (async () => {
           const profile = await waitForSignedInProfile();
           if (profile) {
-            let user = dbToUser(profile);
+            let user = dbToUser(profile, session?.user?.email);
 
             // 이메일 인증 완료 후 병원/워크스페이스 생성 (이메일 인증 ON 경로)
             // signUp()에서 authData.session이 없어 병원 생성을 건너뛴 경우 여기서 처리
@@ -580,7 +791,7 @@ export function useAppState(onNotify?: NotifyFn) {
                 // hospital_id가 업데이트된 최신 프로필 로드
                 const updatedProfile = await authService.getProfileById(undefined, { decrypt: false });
                 if (updatedProfile) {
-                  user = dbToUser(updatedProfile);
+                  user = dbToUser(updatedProfile, session?.user?.email);
                 }
               }
             }
@@ -762,10 +973,32 @@ export function useAppState(onNotify?: NotifyFn) {
     };
   }, [state.user?.hospitalId, state.user?.status]);
 
+  // Handle external history navigation (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      let targetView: View = 'homepage';
+      if (path === '/about') targetView = 'about';
+      else if (path === '/consulting') targetView = 'consulting';
+      else if (path === '/solutions') targetView = 'solutions';
+      else if (path === '/courses') targetView = 'courses';
+      else if (path === '/blog') targetView = 'blog';
+      else if (path === '/community') targetView = 'community';
+      else if (path === '/contact') targetView = 'contact';
+      else if (path === '/pricing') targetView = 'pricing';
+      
+      setState(prev => ({ ...prev, currentView: targetView }));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   return {
     state,
     setState,
     loadHospitalData,
+    loadUserContext,
+    loadInventoryData,
     handleLoginSuccess,
     handleLeaveHospital,
     handleDeleteAccount,

@@ -1,4 +1,52 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
+
+// denjoy.info 메인 홈에서 로그인/가입 처리 — 완료 후 inventory 서비스로 returnTo
+const DENJOY_HOME = import.meta.env.VITE_DENJOY_HOME_URL ?? 'https://denjoy.info';
+const INVENTORY_URL = import.meta.env.VITE_INVENTORY_URL
+  ?? (typeof window !== 'undefined' ? window.location.origin : 'https://inventory.denjoy.info');
+const REMOTE_MAIN_HOME_AUTH_FOR_DEV = import.meta.env.VITE_FORCE_REMOTE_MAIN_HOME_AUTH === 'true';
+const LOCAL_AUTH_ENABLED = import.meta.env.DEV && !REMOTE_MAIN_HOME_AUTH_FOR_DEV;
+
+function buildDenjoyAuthUrl(
+  type: 'login' | 'signup',
+  options?: { plan?: PlanType; source?: string }
+) {
+  if (typeof window !== 'undefined' && LOCAL_AUTH_ENABLED) {
+    const url = new URL(window.location.origin);
+    url.hash = `#/${type}`;
+    return url.toString();
+  }
+
+  const url = new URL(`${DENJOY_HOME}/${type}`);
+  url.searchParams.set('returnTo', INVENTORY_URL);
+  url.searchParams.set('service', 'implant-inventory');
+  if (options?.plan) url.searchParams.set('plan', options.plan);
+  if (options?.source) url.searchParams.set('source', options.source);
+  return url.toString();
+}
+
+function redirectToDenjoyAuth(
+  type: 'login' | 'signup',
+  options?: { plan?: PlanType; source?: string }
+) {
+  if (typeof window === 'undefined') return;
+  window.location.assign(buildDenjoyAuthUrl(type, options));
+}
+
+function DenjoyAuthRedirect({ type }: { type: 'login' | 'signup' }) {
+  useEffect(() => {
+    if (LOCAL_AUTH_ENABLED) return;
+    redirectToDenjoyAuth(type);
+  }, [type]);
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center text-slate-500">
+        <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm">DenJOY 메인 홈 인증 화면으로 이동 중...</p>
+      </div>
+    </div>
+  );
+}
 import { Helmet } from 'react-helmet-async';
 import Header from '../Header';
 import { PublicMobileNav } from '../PublicMobileNav';
@@ -23,6 +71,8 @@ import { ToastType } from '../../hooks/useToast';
 import { tossPaymentService } from '../../services/tossPaymentService';
 import { planService } from '../../services/planService';
 import { lazyWithRetry } from '../../utils/lazyWithRetry';
+import { VIEW_PATH } from '../../appRouting';
+import { getViewLayer } from '../../types/app';
 
 const FEATURE_LABELS: Partial<Record<PlanFeature, string>> = {
   dashboard_advanced: '고급 대시보드',
@@ -72,17 +122,29 @@ function getDowngradeLines(fromPlan: PlanType, toPlan: PlanType): { message: str
 }
 
 const LandingPage = lazyWithRetry(() => import('../LandingPage'));
+const HomepagePage = lazyWithRetry(() => import('../HomepagePage'));
 const AuthForm = lazyWithRetry(() => import('../AuthForm'));
 const PricingPage = lazyWithRetry(() => import('../PricingPage'));
 const ContactPage = lazyWithRetry(() => import('../ContactPage'));
 const ValuePage = lazyWithRetry(() => import('../ValuePage'));
 const AnalyzePage = lazyWithRetry(() => import('../AnalyzePage'));
 const NoticeBoard = lazyWithRetry(() => import('../NoticeBoard'));
-const AdminPanel = lazyWithRetry(() => import('../AdminPanel'));
+const MyPage = lazyWithRetry(() => import('../MyPage'));
 const MfaOtpScreen = lazyWithRetry(() => import('../MfaOtpScreen'));
 const ReviewsPage = lazyWithRetry(() => import('../ReviewsPage'));
 const ConsultationPage = lazyWithRetry(() => import('../ConsultationPage'));
 const LegalPage = lazyWithRetry(() => import('../shared/LegalPage'));
+
+const HomepageHeader = lazyWithRetry(() => import('../home/HomepageHeader'));
+const HomepageFooter = lazyWithRetry(() => import('../home/HomepageFooter'));
+const ServiceAdminPage = lazyWithRetry(() => import('../ServiceAdminPage'));
+
+const AboutPage = lazyWithRetry(() => import('../AboutPage'));
+const ConsultingPage = lazyWithRetry(() => import('../ConsultingPage'));
+const SolutionsPage = lazyWithRetry(() => import('../SolutionsPage'));
+const CoursesPage = lazyWithRetry(() => import('../CoursesPage'));
+const BlogPage = lazyWithRetry(() => import('../BlogPage'));
+const CommunityPage = lazyWithRetry(() => import('../CommunityPage'));
 
 interface InviteInfo {
   token: string;
@@ -94,6 +156,7 @@ interface InviteInfo {
 interface PublicAppShellProps {
   currentView: View;
   user: User | null;
+  hospitalName: string;
   isSystemAdmin: boolean;
   preSelectedPlan?: PlanType;
   planState: HospitalPlanState | null;
@@ -119,6 +182,7 @@ const suspenseFallback = (
 const PublicAppShell: React.FC<PublicAppShellProps> = ({
   currentView,
   user,
+  hospitalName,
   isSystemAdmin,
   preSelectedPlan,
   planState,
@@ -135,7 +199,11 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   showAlertToast,
 }) => {
   const isLoggedIn = !!user;
-  const publicViews: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
+  const layer = getViewLayer(currentView);
+  const publicViews: View[] = ['homepage', 'landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews', 'about', 'consulting', 'solutions', 'courses', 'blog', 'community'];
+  const isBrandPage = layer === 'brand';
+  const isServiceHubView = layer === 'service-hub';
+  const usesHomepageHeaderShell = layer === 'brand' || layer === 'service-hub';
   const [consultationPrefill, setConsultationPrefill] = useState<{ email: string; hospitalName?: string; region?: string; contact?: string }>({ email: '' });
   const [downgradePending, setDowngradePending] = useState<{ plan: PlanType; billing: BillingCycle } | null>(null);
   const [downgradeCreditPreview, setDowngradeCreditPreview] = useState<number>(0);
@@ -202,6 +270,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     }
     : undefined;
 
+  const goToDenjoyLogin = () => {
+    redirectToDenjoyAuth('login', { source: currentView });
+  };
+
+  const goToDenjoySignup = (plan?: PlanType) => {
+    redirectToDenjoyAuth('signup', { plan, source: currentView });
+  };
+
   const handleRequestPayment = user?.hospitalId
     ? async (
       plan: PlanType,
@@ -231,6 +307,15 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     : undefined;
 
   const handleNavigate = (targetView: View) => {
+    if (targetView === 'login' || targetView === 'signup') {
+      // 메인홈(단일 앱)에서 직접 처리
+      onNavigate(targetView);
+      return;
+    }
+    const pathForView = VIEW_PATH[targetView];
+    if (pathForView) {
+      window.history.pushState(null, '', pathForView);
+    }
     onNavigate(targetView);
   };
 
@@ -240,8 +325,12 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
 
   const PAGE_META: Record<string, { title: string; description: string }> = {
     landing: {
-      title: 'DenJOY - 치과 임플란트 재고관리 SaaS',
+      title: '임플란트 재고관리 | DenJOY',
       description: '매주 2시간 엑셀 정리를 5분으로. 덴트웹 데이터 업로드만으로 실시간 재고 추적, 스마트 발주, 수술기록 자동 연동.',
+    },
+    homepage: {
+      title: 'DenJOY | 치과 교육 · 컨설팅 · 솔루션',
+      description: 'DenJOY 메인 홈페이지에서 교육, 컨설팅, 솔루션 구조를 한 번에 보고 각 솔루션 랜딩으로 이동하세요.',
     },
     value: {
       title: '도입효과 | DenJOY',
@@ -282,6 +371,14 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
     signup: {
       title: '회원가입 | DenJOY',
       description: '간편한 가입 후 무료로 시작하세요. 카드 정보 불필요.',
+    },
+    mypage: {
+      title: '마이페이지 | DenJOY',
+      description: '내 서비스와 계정 설정, 워크스페이스 진입을 한 곳에서 관리하세요.',
+    },
+    admin_panel: {
+      title: '관리자 페이지 | DenJOY',
+      description: '서비스 관리자 전용 운영 페이지에서 회원, 결제, 강의를 관리하세요.',
     },
   };
 
@@ -380,31 +477,82 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         <meta property="og:title" content={meta.title} />
         <meta property="og:description" content={meta.description} />
       </Helmet>
-      <Header
-        onHomeClick={() => (user ? handleNavigate('dashboard') : handleNavigate('landing'))}
-        onLoginClick={() => handleNavigate('login')}
-        onSignupClick={() => handleNavigate('signup')}
-        onLogout={onLogout}
-        onNavigate={handleNavigate}
-        onTabNavigate={onTabNavigate}
-        onProfileClick={onProfileClick}
-        user={user}
-        currentView={currentView}
-        showLogo={true}
-      />
-      {/* fixed 헤더 높이만큼 spacer (py-3 + h-9 ≈ 60px / sm: h-10 ≈ 64px) */}
-      <div className="h-[60px] sm:h-[64px] flex-shrink-0" />
-      <PublicMobileNav
-        currentView={currentView}
-        onNavigate={handleNavigate}
-        onAnalyzeClick={handleAnalyzeEntry}
-      />
-      <main className={`flex-1 overflow-x-hidden ${hasPublicMobileNav ? 'pb-36 xl:pb-0' : ''}`}>
+      {usesHomepageHeaderShell && (
+        <Suspense fallback={null}>
+          <HomepageHeader
+            currentView={currentView}
+            user={isServiceHubView ? user : null}
+            onGoToLogin={() => handleNavigate('login')}
+            onGoToSignup={() => handleNavigate('signup')}
+            onGoToContact={() => handleNavigate('contact')}
+            onNavigate={(v) => handleNavigate(v as View)}
+            onGoToMyPage={user ? () => handleNavigate('mypage') : undefined}
+            onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+          />
+          <div className="h-[57px] sm:h-[60px] flex-shrink-0" />
+        </Suspense>
+      )}
+      {!isBrandPage && !isServiceHubView && (
+        <>
+          <Header
+            onHomeClick={() => handleNavigate('homepage')}
+            onLoginClick={goToDenjoyLogin}
+            onSignupClick={() => goToDenjoySignup()}
+            onLogout={onLogout}
+            onNavigate={handleNavigate}
+            onTabNavigate={onTabNavigate}
+            onProfileClick={onProfileClick}
+            user={user}
+            currentView={currentView}
+            showLogo={true}
+          />
+          <div className="h-[60px] sm:h-[64px] flex-shrink-0" />
+          <PublicMobileNav
+            currentView={currentView}
+            onNavigate={handleNavigate}
+            onAnalyzeClick={handleAnalyzeEntry}
+          />
+        </>
+      )}
+      <main className={`flex-1 overflow-x-hidden ${hasPublicMobileNav && !isBrandPage && !isServiceHubView ? 'pb-36 xl:pb-0' : ''}`}>
         <ErrorBoundary>
           <Suspense fallback={suspenseFallback}>
+            {currentView === 'mypage' && user && (
+              <>
+                <MyPage
+                  user={user}
+                  hospitalName={hospitalName}
+                  planState={planState}
+                  isSystemAdmin={isSystemAdmin}
+                  onGoToDashboard={() => handleNavigate('dashboard')}
+                  onGoToAdminPanel={isSystemAdmin ? () => handleNavigate('admin_panel') : undefined}
+                  onGoToPricing={() => handleNavigate('pricing')}
+                  onGoToContact={() => handleNavigate('contact')}
+                  onProfileClick={onProfileClick}
+                />
+                <HomepageFooter
+                  onGoToContact={() => handleNavigate('contact')}
+                  onGoToTerms={() => handleNavigate('terms')}
+                  onGoToPrivacy={() => handleNavigate('privacy')}
+                />
+              </>
+            )}
+            {currentView === 'homepage' && (
+              <HomepagePage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onOpenInventorySolution={() => handleNavigate('landing')}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
             {currentView === 'landing' && (
               <LandingPage
-                onGetStarted={() => handleNavigate('signup')}
+                onGetStarted={() => goToDenjoySignup()}
                 onAnalyze={() => handleNavigate('analyze')}
                 onGoToValue={() => handleNavigate('value')}
                 onGoToPricing={() => handleNavigate('pricing')}
@@ -412,16 +560,19 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onGoToContact={() => handleNavigate('contact')}
               />
             )}
-            {currentView === 'login' && (
+            {(currentView === 'login' || currentView === 'signup') && (
+              // 메인홈에서 직접 처리 (단일 앱 통합)
               <AuthForm
-                key="login"
-                type="login"
+                key={currentView}
+                type={currentView as 'login' | 'signup'}
                 onSuccess={onLoginSuccess}
-                onSwitch={() => handleNavigate('signup')}
-                onMfaRequired={(email) => {
+                onSwitch={() => onNavigate(currentView === 'login' ? 'signup' : 'login')}
+                onMfaRequired={currentView === 'login' ? (email) => {
                   onSetMfaPendingEmail(email);
-                  handleNavigate('mfa_otp');
-                }}
+                  onNavigate('mfa_otp');
+                } : undefined}
+                onContact={currentView === 'signup' ? () => onNavigate('contact') : undefined}
+                initialPlan={currentView === 'signup' ? preSelectedPlan : undefined}
               />
             )}
             {currentView === 'mfa_otp' && mfaPendingEmail && (
@@ -434,16 +585,6 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 }}
               />
             )}
-            {currentView === 'signup' && (
-              <AuthForm
-                key="signup"
-                type="signup"
-                onSuccess={onLoginSuccess}
-                onSwitch={() => handleNavigate('login')}
-                onContact={() => handleNavigate('contact')}
-                initialPlan={preSelectedPlan}
-              />
-            )}
             {currentView === 'invite' && inviteInfo && (
               <AuthForm
                 type="invite"
@@ -452,7 +593,16 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
                 onSwitch={() => handleNavigate('login')}
               />
             )}
-            {currentView === 'admin_panel' && isSystemAdmin && <AdminPanel />}
+            {currentView === 'admin_panel' && isSystemAdmin && user && (
+              <>
+                <ServiceAdminPage />
+                <HomepageFooter
+                  onGoToContact={() => handleNavigate('contact')}
+                  onGoToTerms={() => handleNavigate('terms')}
+                  onGoToPrivacy={() => handleNavigate('privacy')}
+                />
+              </>
+            )}
             {currentView === 'pricing' && (
               <PricingPage
                 onContact={() => handleNavigate('contact')}
@@ -469,19 +619,26 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
             )}
             {currentView === 'contact' && (
               <ContactPage
-                onGetStarted={() => handleNavigate('signup')}
-                onAnalyze={() => handleNavigate('analyze')}
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                onGoToAnalyze={() => handleNavigate('analyze')}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToMyPage={() => onNavigate('mypage')}
               />
             )}
             {currentView === 'value' && (
               <ValuePage
-                onGetStarted={() => handleNavigate('signup')}
+                onGetStarted={() => goToDenjoySignup()}
                 onContact={() => handleNavigate('contact')}
               />
             )}
             {currentView === 'analyze' && (
               <AnalyzePage
-                onSignup={() => handleNavigate('signup')}
+                onSignup={() => goToDenjoySignup()}
                 onContact={(data) => { setConsultationPrefill(data); handleNavigate('consultation'); }}
               />
             )}
@@ -496,7 +653,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
               </>
             )}
             {currentView === 'reviews' && (
-              <ReviewsPage onBack={() => handleNavigate('landing')} />
+              <ReviewsPage onBack={() => handleNavigate('homepage')} />
             )}
             {currentView === 'consultation' && (
               <ConsultationPage
@@ -508,10 +665,82 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
               />
             )}
             {currentView === 'terms' && (
-              <LegalPage type="terms" onBack={() => handleNavigate('landing')} />
+              <LegalPage type="terms" onBack={() => handleNavigate('homepage')} />
             )}
             {currentView === 'privacy' && (
-              <LegalPage type="privacy" onBack={() => handleNavigate('landing')} />
+              <LegalPage type="privacy" onBack={() => handleNavigate('homepage')} />
+            )}
+            {currentView === 'about' && (
+              <AboutPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
+            {currentView === 'consulting' && (
+              <ConsultingPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
+            {currentView === 'solutions' && (
+              <SolutionsPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
+            {currentView === 'courses' && (
+              <CoursesPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
+            {currentView === 'blog' && (
+              <BlogPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
+            )}
+            {currentView === 'community' && (
+              <CommunityPage
+                user={user}
+                onGoToLogin={goToDenjoyLogin}
+                onGoToSignup={() => goToDenjoySignup()}
+                onGoToContact={() => handleNavigate('contact')}
+                onNavigate={(v) => handleNavigate(v as View)}
+                onGoToTerms={() => handleNavigate('terms')}
+                onGoToPrivacy={() => handleNavigate('privacy')}
+                onGoToMyPage={() => onNavigate('mypage')}
+              />
             )}
           </Suspense>
         </ErrorBoundary>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   AppState, BillingCycle, BillingProgram, DashboardTab,
-  ExcelData, PLAN_LIMITS, PLAN_NAMES, PLAN_ORDER, PlanType, User,
+  ExcelData, PLAN_LIMITS, PLAN_NAMES, PLAN_ORDER, PlanType, User, isSystemAdminRole,
 } from '../types';
 import { authService } from '../services/authService';
 import { hospitalService } from '../services/hospitalService';
@@ -75,7 +75,7 @@ export function useAppLogic({
   useEffect(() => {
     const user = state.user;
     if (!user || state.currentView !== 'dashboard' || reviewPopupType) return;
-    if (user.role === 'admin') return;
+    if (isSystemAdminRole(user.role, user.email)) return;
     supabase.auth.getUser().then(({ data }) => {
       const accountCreatedAt = data.user?.created_at;
       if (!accountCreatedAt) return;
@@ -115,7 +115,7 @@ export function useAppLogic({
     const requiresBillingProgramSetup = (
       state.currentView === 'dashboard' && !!state.user?.hospitalId &&
       (state.user?.status === 'active' || state.user?.status === 'readonly') &&
-      state.user?.role !== 'admin' && !state.hospitalBillingProgram
+      !isSystemAdminRole(state.user?.role, state.user?.email) && !state.hospitalBillingProgram
     );
     if (requiresBillingProgramSetup) return;
     if (billingProgramError) setBillingProgramError('');
@@ -126,7 +126,7 @@ export function useAppLogic({
   const { inviteInfo, processingInvite } = useInviteFlow(state.user, setState, showAlertToast);
 
   // ── Role / plan derivations ───────────────────────────────────
-  const isSystemAdmin = state.user?.role === 'admin';
+  const isSystemAdmin = isSystemAdminRole(state.user?.role, state.user?.email);
   const isHospitalMaster = state.user?.role === 'master'
     || (!!state.user?.id && state.user.id === state.hospitalMasterAdminId);
   const isHospitalAdmin = isHospitalMaster || isSystemAdmin;
@@ -176,7 +176,7 @@ export function useAppLogic({
   // ── Global effects ────────────────────────────────────────────
   useEffect(() => {
     if (state.currentView === 'admin_panel' && !isSystemAdmin) {
-      setState(prev => ({ ...prev, currentView: prev.user ? 'dashboard' : 'landing' }));
+      setState(prev => ({ ...prev, currentView: prev.user ? 'dashboard' : 'homepage' }));
     }
   }, [state.currentView, isSystemAdmin, setState]);
 
@@ -393,7 +393,7 @@ export function useAppLogic({
   // ── Common sign-out helper ────────────────────────────────────
   const handleSignOut = useCallback(async () => {
     await authService.signOut();
-    setState(prev => ({ ...prev, user: null, currentView: 'landing' }));
+    setState(prev => ({ ...prev, user: null, currentView: 'homepage' }));
   }, [setState]);
 
   // ── workspaceProps bundle ─────────────────────────────────────

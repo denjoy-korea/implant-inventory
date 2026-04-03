@@ -1,7 +1,7 @@
 {
-  "name": "임플재고",
-  "short_name": "임플재고",
-  "description": "치과 임플란트 재고관리 시스템",
+  "name": "DenJOY",
+  "short_name": "DenJOY",
+  "description": "치과 의료진을 위한 교육 · 컨설팅 · 솔루션 플랫폼",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

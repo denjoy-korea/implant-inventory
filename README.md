@@ -1,4 +1,4 @@
-# Implant Inventory
+# DenJOY Platform
 
 치과 임플란트 재고/수술기록/주문 관리를 위한 React + Supabase 기반 웹앱입니다.
 
