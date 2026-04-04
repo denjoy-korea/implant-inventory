@@ -3,6 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { tossPaymentService } from '../services/tossPaymentService';
 import { HospitalPlanState, PLAN_NAMES, User } from '../types';
 import type { CourseSeasonRow } from '../types/courseCatalog';
+import { buildBillingDisplayModel } from '../utils/billingDisplay';
 import CourseLectureReplay from './CourseLectureReplay';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -23,9 +24,16 @@ interface BillingRecord {
   amount: number;
   payment_status: string;
   payment_method: string | null;
+  payment_ref: string | null;
   description: string | null;
   created_at: string;
   refund_amount: number | null;
+  credit_restore_amount?: number | null;
+  coupon_id?: string | null;
+  original_amount?: number | null;
+  discount_amount?: number | null;
+  upgrade_credit_amount?: number | null;
+  credit_used_amount: number | null;
 }
 
 interface CourseWithSeasons {
@@ -54,11 +62,6 @@ interface MyPageProps {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-const BILLING_PLAN_LABEL: Record<string, string> = {
-  free: 'Free', basic: 'Basic', plus: 'Plus', business: 'Business',
-  service_purchase: '서비스 구매',
-};
 
 const STATUS_STYLE: Record<string, { text: string; cls: string }> = {
   completed:  { text: '결제 완료', cls: 'bg-emerald-50 text-emerald-700' },
@@ -176,36 +179,6 @@ function reconcileCartItems(items: CartItem[], courses: CourseWithSeasons[]) {
   });
 
   return { items: nextItems, removedCount, updatedCount };
-}
-
-function parseServicePurchaseItems(description: string | null): Array<{ id: string; name: string; price: number }> {
-  if (!description) return [];
-
-  try {
-    const parsed = JSON.parse(description);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((item) => {
-      if (
-        typeof item !== 'object' ||
-        item === null ||
-        typeof (item as { id?: unknown }).id !== 'string' ||
-        typeof (item as { name?: unknown }).name !== 'string'
-      ) {
-        return [];
-      }
-
-      const price = Number((item as { price?: unknown }).price);
-      if (!Number.isFinite(price) || price < 0) return [];
-
-      return [{
-        id: (item as { id: string }).id,
-        name: (item as { name: string }).name,
-        price,
-      }];
-    });
-  } catch {
-    return [];
-  }
 }
 
 // ── CheckoutModal ────────────────────────────────────────────────────────────
@@ -852,11 +825,16 @@ function PurchasesTab({ records, loading }: {
       
       <div className="space-y-3">
         {records.map(record => {
+          const display = buildBillingDisplayModel(record);
           const status = STATUS_STYLE[record.payment_status] ?? { text: record.payment_status, cls: 'bg-slate-50 text-slate-500' };
-          const planLabel = record.plan ? (BILLING_PLAN_LABEL[record.plan] ?? record.plan) : '서비스 구매';
-          const cycleLabel = record.billing_cycle === 'monthly' ? '월간' : record.billing_cycle === 'yearly' ? '연간' : null;
           const isExpanded = expanded === record.id;
-          const purchasedItems = parseServicePurchaseItems(record.description);
+          const hasSecondaryLabel = display.productLabel !== display.title;
+          const displaySupplyAmount = display.breakdown.supplyAmount ?? Math.round(Number(record.amount) / 1.1);
+          const displayVatAmount = display.breakdown.vatAmount ?? (Number(record.amount) - displaySupplyAmount);
+          const displayPaidAmount = display.breakdown.payableAmount ?? Number(record.amount);
+          const refundAmount = display.breakdown.refundAmount;
+          const creditRestoreAmount = display.breakdown.creditRestoreAmount;
+          const netPaidAmount = Math.max(0, displayPaidAmount - refundAmount);
 
           return (
             <div key={record.id} className="system-card overflow-hidden">
@@ -874,21 +852,27 @@ function PurchasesTab({ records, loading }: {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="text-[15px] font-black text-slate-900 truncate tracking-tight">
-                      {planLabel} {cycleLabel ? `(${cycleLabel})` : ''}
+                      {display.title}
                     </p>
                     <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wider ${status.cls}`}>
                       {status.text}
                     </span>
                   </div>
                   <p className="text-[12px] text-slate-400 font-bold">{formatDate(record.created_at)} · {record.id.slice(0, 8).toUpperCase()}</p>
+                  {hasSecondaryLabel && (
+                    <p className="text-[12px] text-slate-500 mt-1 truncate">{display.productLabel}</p>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0">
                   <p className="text-[16px] font-black text-slate-900">
-                    {record.refund_amount ? (
-                      <span className="text-rose-600">-{formatPrice(Number(record.refund_amount))}</span>
+                    {refundAmount > 0 ? (
+                      <span className="text-rose-600">-{formatPrice(refundAmount)}</span>
                     ) : formatPrice(Number(record.amount))}
                   </p>
+                  {creditRestoreAmount > 0 && (
+                    <p className="text-[11px] font-bold text-teal-600 mt-1">+크레딧 {formatPrice(creditRestoreAmount)} 복구</p>
+                  )}
                 </div>
 
                 <div className={`w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center transition-transform ${isExpanded ? 'rotate-180 bg-slate-100 text-indigo-600' : 'text-slate-400'}`}>
@@ -903,20 +887,16 @@ function PurchasesTab({ records, loading }: {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
                     <DetailBlock label="영수증 번호" value={record.id.toUpperCase()} mono />
                     <DetailBlock label="결제 일시" value={new Date(record.created_at).toLocaleString('ko-KR')} />
-                    <DetailBlock label="결제 수단" value={
-                      record.payment_method === 'card' ? '신용/체크카드' : 
-                      record.payment_method === 'free' ? '무료 주문' :
-                      record.payment_method === 'payment_teacher' ? '수기 결제' : record.payment_method ?? '-'
-                    } />
+                    <DetailBlock label="결제 수단" value={display.paymentMethodLabel} />
                     <DetailBlock label="현재 상태" value={status.text} />
                   </div>
                   
                   <div className="bg-white rounded-xl border border-slate-100 p-6 space-y-3 shadow-sm shadow-slate-200/50">
-                    {purchasedItems.length > 0 && (
+                    {display.items.length > 0 && (
                       <div className="pb-3 mb-3 border-b border-slate-100">
                         <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">주문 항목</p>
                         <div className="space-y-2">
-                          {purchasedItems.map((item) => (
+                          {display.items.map((item) => (
                             <div key={item.id} className="flex items-center justify-between gap-4 text-[13px]">
                               <span className="font-bold text-slate-700 truncate">{item.name}</span>
                               <span className="font-black text-slate-900 shrink-0">{formatPrice(item.price)}</span>
@@ -927,22 +907,52 @@ function PurchasesTab({ records, loading }: {
                     )}
                     <div className="flex justify-between items-center text-[13px]">
                       <span className="text-slate-500 font-bold">공급가액</span>
-                      <span className="text-slate-900 font-bold">{formatPrice(Math.round(Number(record.amount) / 1.1))}</span>
+                      <span className="text-slate-900 font-bold">{formatPrice(displaySupplyAmount)}</span>
                     </div>
                     <div className="flex justify-between items-center text-[13px]">
                       <span className="text-slate-500 font-bold">부가세 (10%)</span>
-                      <span className="text-slate-900 font-bold">{formatPrice(Number(record.amount) - Math.round(Number(record.amount) / 1.1))}</span>
+                      <span className="text-slate-900 font-bold">{formatPrice(displayVatAmount)}</span>
                     </div>
-                    {record.refund_amount && Number(record.refund_amount) > 0 && (
+                    {display.breakdown.couponDiscountAmount > 0 && (
+                      <div className="flex justify-between items-center text-[13px] text-emerald-600">
+                        <span className="font-bold">쿠폰 할인</span>
+                        <span className="font-bold">-{formatPrice(display.breakdown.couponDiscountAmount)}</span>
+                      </div>
+                    )}
+                    {display.breakdown.upgradeCreditAmount > 0 && (
+                      <div className="flex justify-between items-center text-[13px] text-violet-600">
+                        <span className="font-bold">업그레이드 크레딧</span>
+                        <span className="font-bold">-{formatPrice(display.breakdown.upgradeCreditAmount)}</span>
+                      </div>
+                    )}
+                    {display.breakdown.creditUsedAmount > 0 && (
+                      <div className="flex justify-between items-center text-[13px] text-teal-600">
+                        <span className="font-bold">보유 크레딧 사용</span>
+                        <span className="font-bold">-{formatPrice(display.breakdown.creditUsedAmount)}</span>
+                      </div>
+                    )}
+                    {refundAmount > 0 && (
                       <div className="flex justify-between items-center text-[13px] text-rose-500 pt-2 border-t border-slate-50">
                         <span className="font-bold">환불 금액</span>
-                        <span className="font-bold">-{formatPrice(Number(record.refund_amount))}</span>
+                        <span className="font-bold">-{formatPrice(refundAmount)}</span>
+                      </div>
+                    )}
+                    {creditRestoreAmount > 0 && (
+                      <div className="flex justify-between items-center text-[13px] text-teal-600">
+                        <span className="font-bold">복구 크레딧</span>
+                        <span className="font-bold">+{formatPrice(creditRestoreAmount)}</span>
+                      </div>
+                    )}
+                    {display.breakdown.totalRecoveryAmount > 0 && (
+                      <div className="flex justify-between items-center text-[13px] text-violet-600 pt-2 border-t border-slate-50">
+                        <span className="font-bold">총 회수 가치</span>
+                        <span className="font-bold">{formatPrice(display.breakdown.totalRecoveryAmount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center pt-3 mt-3 border-t border-slate-100">
-                      <span className="text-slate-900 font-black text-[15px]">최종 결제 금액</span>
+                      <span className="text-slate-900 font-black text-[15px]">최종 현금 결제액</span>
                       <span className="text-indigo-600 font-black text-[18px]">
-                        {record.refund_amount ? formatPrice(Number(record.amount) - Number(record.refund_amount)) : formatPrice(Number(record.amount))}
+                        {formatPrice(netPaidAmount)}
                       </span>
                     </div>
                   </div>

@@ -14,6 +14,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { extractServicePurchaseItems } from "../../../utils/paymentMetadata.ts";
 
 /** 서버사이드 정가 폴백 테이블 (DB 조회 실패 시 사용, types/plan.ts PLAN_PRICING와 동기화 필요) */
 const FALLBACK_PRICES: Record<string, Record<string, number>> = {
@@ -24,7 +25,7 @@ const FALLBACK_PRICES: Record<string, Record<string, number>> = {
 
 /** VAT 제외 기본 금액 — 1차: DB 조회, 2차: 폴백 상수 */
 async function calcBaseAmount(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: AdminClient,
   plan: string,
   billingCycle: string,
 ): Promise<number | null> {
@@ -54,6 +55,12 @@ function calcAmountWithVat(base: number, discount: number): number {
 }
 
 const TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm";
+const BILLING_STATUS_PENDING = "pending";
+const BILLING_STATUS_CONFIRMING = "confirming";
+const BILLING_STATUS_COMPLETED = "completed";
+const BILLING_STATUS_FAILED = "failed";
+
+type AdminClient = ReturnType<typeof createClient>;
 
 type BillingRow = {
   hospital_id: string;
@@ -71,50 +78,13 @@ type BillingRow = {
   description?: string | null;
 };
 
-type ServicePurchaseItem = {
-  id: string;
-  name?: string;
-  price?: number;
-};
-
-function parseServicePurchaseItems(description: string | null | undefined): ServicePurchaseItem[] {
-  if (!description) return [];
-
-  try {
-    const parsed = JSON.parse(description);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.flatMap((item) => {
-      if (
-        typeof item !== "object" ||
-        item === null ||
-        typeof (item as { id?: unknown }).id !== "string"
-      ) {
-        return [];
-      }
-
-      return [{
-        id: (item as { id: string }).id,
-        name: typeof (item as { name?: unknown }).name === "string"
-          ? (item as { name: string }).name
-          : undefined,
-        price: typeof (item as { price?: unknown }).price === "number"
-          ? (item as { price: number }).price
-          : undefined,
-      }];
-    });
-  } catch {
-    return [];
-  }
-}
-
 async function grantPurchasedSeasonAccess(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: AdminClient,
   userId: string,
   grantedBy: string,
   billingDescription: string | null | undefined,
 ): Promise<number> {
-  const seasonIds = [...new Set(parseServicePurchaseItems(billingDescription).map((item) => item.id))];
+  const seasonIds = [...new Set(extractServicePurchaseItems(billingDescription).map((item) => item.id))];
   if (seasonIds.length === 0) return 0;
 
   const { data: seasons, error: seasonError } = await adminClient
@@ -148,7 +118,7 @@ async function grantPurchasedSeasonAccess(
 }
 
 async function fetchBillingRowWithCompatibility(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: AdminClient,
   billingId: string,
 ): Promise<{ billing: BillingRow | null; billingError: { message: string } | null }> {
   const primary = await adminClient
@@ -191,6 +161,51 @@ async function fetchBillingRowWithCompatibility(
     },
     billingError: null,
   };
+}
+
+async function updateBillingStatus(
+  adminClient: AdminClient,
+  billingId: string,
+  nextStatus: string,
+  options: {
+    fromStatus?: string;
+    paymentRef?: string;
+  } = {},
+): Promise<void> {
+  let query = adminClient
+    .from("billing_history")
+    .update({
+      payment_status: nextStatus,
+      updated_at: new Date().toISOString(),
+      ...(options.paymentRef ? { payment_ref: options.paymentRef } : {}),
+    })
+    .eq("id", billingId);
+
+  if (options.fromStatus) {
+    query = query.eq("payment_status", options.fromStatus);
+  }
+
+  const { error } = await query;
+  if (error) {
+    console.error("[toss-payment-confirm] billing status update failed:", {
+      billingId,
+      nextStatus,
+      fromStatus: options.fromStatus ?? null,
+      error: error.message,
+    });
+  }
+}
+
+async function failConfirmingBilling(adminClient: AdminClient, billingId: string): Promise<void> {
+  await updateBillingStatus(adminClient, billingId, BILLING_STATUS_FAILED, {
+    fromStatus: BILLING_STATUS_CONFIRMING,
+  });
+}
+
+async function releaseConfirmingBilling(adminClient: AdminClient, billingId: string): Promise<void> {
+  await updateBillingStatus(adminClient, billingId, BILLING_STATUS_PENDING, {
+    fromStatus: BILLING_STATUS_CONFIRMING,
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -287,7 +302,7 @@ Deno.serve(async (req: Request) => {
   if (billing.payment_status !== "pending") {
     const status = billing.payment_status;
     // 이미 완료된 경우: 멱등성 허용 (중복 redirect 처리)
-    if (status === "completed") {
+    if (status === BILLING_STATUS_COMPLETED) {
       return jsonResponse({
         ok: true,
         billing_id: orderId,
@@ -301,13 +316,13 @@ Deno.serve(async (req: Request) => {
   // [SEC] 동시 중복 요청 방지: pending → confirming 원자적 전환 (CAS)
   const { data: claimed } = await adminClient
     .from("billing_history")
-    .update({ payment_status: "confirming" })
+    .update({ payment_status: BILLING_STATUS_CONFIRMING })
     .eq("id", orderId.trim())
-    .eq("payment_status", "pending")
+    .eq("payment_status", BILLING_STATUS_PENDING)
     .select("id")
     .single();
   if (!claimed) {
-    return jsonResponse({ error: "Payment is being processed concurrently", status: "confirming" }, 409);
+    return jsonResponse({ error: "Payment is being processed concurrently", status: BILLING_STATUS_CONFIRMING }, 409);
   }
 
   // ── 서비스 구매 분기 (plan='service_purchase') ────────────────────────────
@@ -394,6 +409,7 @@ Deno.serve(async (req: Request) => {
 
   if (baseAmount === null) {
     console.error("[toss-payment-confirm] Unknown plan or billing_cycle:", billingPlan, billingCycleVal);
+    await failConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse({ error: "Invalid plan configuration" }, 400);
   }
 
@@ -416,6 +432,7 @@ Deno.serve(async (req: Request) => {
         couponUserId: coupon.user_id, requestUserId: user.id,
         couponHospitalId: coupon.hospital_id, billingHospitalId: billing.hospital_id,
       });
+      await failConfirmingBilling(adminClient, orderId.trim());
       return jsonResponse({ error: "Coupon does not belong to this user/hospital" }, 403);
     } else {
       // 2. applicable_plans 검증 (템플릿에 제한이 있으면 플랜 일치 필수)
@@ -435,6 +452,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!planEligible) {
+        await failConfirmingBilling(adminClient, orderId.trim());
         return jsonResponse({ error: "Coupon is not applicable to this plan" }, 400);
       }
 
@@ -470,10 +488,11 @@ Deno.serve(async (req: Request) => {
           amount: serverTotalAmount,
         })
         .eq("id", orderId.trim())
-        .eq("payment_status", "pending");
+        .eq("payment_status", BILLING_STATUS_CONFIRMING);
 
       if (updateErr) {
         console.error("[toss-payment-confirm] Failed to overwrite billing:", updateErr.message);
+        await failConfirmingBilling(adminClient, orderId.trim());
         return jsonResponse({ error: "Failed to correct billing record" }, 500);
       }
     }
@@ -507,6 +526,7 @@ Deno.serve(async (req: Request) => {
       console.warn("[toss-payment-confirm] upgrade_source_billing not found, ignoring credit:", billing.upgrade_source_billing_id);
     } else if (sourceBilling.hospital_id !== billing.hospital_id) {
       console.error("[toss-payment-confirm] upgrade_source_billing hospital mismatch — possible tampering");
+      await failConfirmingBilling(adminClient, orderId.trim());
       return jsonResponse({ error: "Upgrade credit source does not belong to this hospital" }, 403);
     } else if (sourceBilling.payment_status !== "completed") {
       console.warn("[toss-payment-confirm] upgrade_source_billing not completed, ignoring credit");
@@ -548,6 +568,7 @@ Deno.serve(async (req: Request) => {
           serverCredit: serverUpgradeCredit,
           billingCredit: billing.upgrade_credit_amount,
         });
+        await failConfirmingBilling(adminClient, orderId.trim());
         return jsonResponse(
           { error: "Amount mismatch after credit correction", expected: correctedAmount, received: amountNum },
           400,
@@ -566,10 +587,11 @@ Deno.serve(async (req: Request) => {
           amount: correctedAmount,
         })
         .eq("id", orderId.trim())
-        .eq("payment_status", "pending");
+        .eq("payment_status", BILLING_STATUS_CONFIRMING);
 
       if (updateErr) {
         console.error("[toss-payment-confirm] Failed to overwrite upgrade_credit:", updateErr.message);
+        await failConfirmingBilling(adminClient, orderId.trim());
         return jsonResponse({ error: "Failed to correct upgrade credit record" }, 500);
       }
       serverUpgradeCredit = correctedCredit;
@@ -595,6 +617,7 @@ Deno.serve(async (req: Request) => {
         availableBalance,
         hospitalId: billing.hospital_id,
       });
+      await failConfirmingBilling(adminClient, orderId.trim());
       return jsonResponse({ error: "Insufficient credit balance" }, 400);
     }
 
@@ -608,7 +631,7 @@ Deno.serve(async (req: Request) => {
         .from("billing_history")
         .update({ credit_used_amount: serverCreditUsed, amount: correctedAmount })
         .eq("id", orderId.trim())
-        .eq("payment_status", "pending");
+        .eq("payment_status", BILLING_STATUS_CONFIRMING);
     }
   }
 
@@ -636,6 +659,7 @@ Deno.serve(async (req: Request) => {
       plan: billingPlan,
       billingCycle: billingCycleVal,
     });
+    await failConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse(
       { error: "Amount mismatch", expected: expectedAmount, received: amountNum },
       400,
@@ -660,6 +684,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    await releaseConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse({ error: "TossPayments API call failed", detail: msg }, 502);
   }
 
@@ -667,6 +692,7 @@ Deno.serve(async (req: Request) => {
   try {
     tossData = await tossResponse.json() as Record<string, unknown>;
   } catch {
+    await releaseConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse({ error: "Invalid response from TossPayments" }, 502);
   }
 
@@ -674,6 +700,7 @@ Deno.serve(async (req: Request) => {
     const code = typeof tossData.code === "string" ? tossData.code : "UNKNOWN";
     const message = typeof tossData.message === "string" ? tossData.message : "결제 승인 실패";
     console.error("[toss-payment-confirm] TossPayments confirm failed:", code, message);
+    await failConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse({ error: message, code }, tossResponse.status >= 400 ? tossResponse.status : 400);
   }
 
@@ -708,11 +735,7 @@ Deno.serve(async (req: Request) => {
       paymentKey: paymentKey.trim(),
       rpcError: rpcError.message,
     });
-    await adminClient
-      .from("billing_history")
-      .update({ payment_status: "failed", updated_at: new Date().toISOString() })
-      .eq("id", orderId.trim())
-      .eq("payment_status", "confirming");
+    await failConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse(
       { error: "Payment captured but activation failed. Please contact support.", detail: rpcError.message },
       500,
@@ -720,6 +743,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!rpcData) {
+    await failConfirmingBilling(adminClient, orderId.trim());
     return jsonResponse(
       { error: "Payment callback rejected (already processed or invalid)", billing_id: orderId },
       409,

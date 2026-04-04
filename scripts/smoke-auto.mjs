@@ -12,9 +12,19 @@ import process from 'node:process';
 
 const checks = [
   {
+    name: 'Architecture guard contracts (app-shell/session/public/dashboard/mobile)',
+    cmd: 'node',
+    args: ['scripts/check-architecture-guards.mjs'],
+  },
+  {
     name: 'Edge Functions 배포 상태 (xlsx-parse, xlsx-generate, toss-payment-confirm, crypto-service, notify-signup, auth-send-email)',
     cmd: 'node',
     args: ['scripts/check-edge-functions.mjs'],
+  },
+  {
+    name: '환불 정합성 점검 (refund_amount / credit_restore_amount)',
+    cmd: 'node',
+    args: ['scripts/check-refund-reconciliation.mjs'],
   },
 ];
 

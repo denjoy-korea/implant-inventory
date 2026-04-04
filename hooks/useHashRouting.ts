@@ -62,6 +62,10 @@ export function useHashRouting(
         sessionStorage.setItem('_pending_redirect_hash', hash);
         return;
       }
+      if ((view === 'login' || view === 'signup') && state.user) {
+        window.history.replaceState(null, '', buildHash(state.currentView, state.dashboardTab));
+        return;
+      }
       if (view === 'admin_panel' && !isSystemAdminIdentity(state.user)) return;
       const resolvedTab = (tab && !canAccessTab(tab, state.user?.permissions, effectiveAccessRole))
         ? 'overview' : tab;

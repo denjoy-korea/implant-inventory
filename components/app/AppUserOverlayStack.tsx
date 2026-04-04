@@ -10,7 +10,7 @@ const OnboardingWizard = lazyWithRetry(() => import('../OnboardingWizard'));
 const UserProfile = lazyWithRetry(() => import('../UserProfile'));
 const ReviewPopup = lazyWithRetry(() => import('../ReviewPopup'));
 
-interface AppUserOverlayStackProps {
+export interface AppUserOverlayStackProps {
   user: User | null;
   showProfile: boolean;
   initialProfileTab?: 'info' | 'plan' | 'security' | 'reviews';

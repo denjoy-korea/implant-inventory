@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BillingCycle, HospitalPlanState, PlanType, User, PLAN_ORDER } from '../types';
 import PricingPaymentModal from './pricing/PricingPaymentModal';
+import { buildPlanPaymentQuote, calcPlanBaseAmount } from '../services/planPaymentQuote';
 import { tossPaymentService } from '../services/tossPaymentService';
 import { couponService, UserCoupon, DiscountPreview } from '../services/couponService';
 import { planService } from '../services/planService';
@@ -45,6 +46,18 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
   // 잔액 크레딧 (다운그레이드로 적립된 잔액)
   const creditBalance = planState?.creditBalance ?? 0;
   const [creditUsedAmount, setCreditUsedAmount] = useState(0);
+  const paymentQuote = plan && plan !== 'free'
+    ? buildPlanPaymentQuote({
+      plan,
+      billingCycle: billing,
+      couponDiscountAmount: discountPreview?.discount_amount,
+      upgradeCreditAmount: upgradeCredit?.creditAmount,
+      upgradeSourceBillingId: upgradeCredit?.sourceBillingId,
+      creditBalance,
+      creditUsedAmount,
+    })
+    : null;
+  const maxCreditUsable = paymentQuote?.maxCreditUsable ?? 0;
 
   const loadCoupons = useCallback(async () => {
     if (!user?.hospitalId) return;
@@ -98,13 +111,21 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       setDiscountPreview(null);
       return;
     }
-    const baseAmount = tossPaymentService.calcBaseAmount(plan, billing);
+    const baseAmount = calcPlanBaseAmount(plan, billing);
     setDiscountPreview(couponService.previewDiscount(coupon, baseAmount));
   }, [selectedCouponId, plan, billing, availableCoupons]);
+
+  useEffect(() => {
+    if (!plan || plan === 'free') return;
+    if (creditUsedAmount > maxCreditUsable) {
+      setCreditUsedAmount(maxCreditUsable);
+    }
+  }, [creditUsedAmount, maxCreditUsable, plan]);
 
   const handleSubmit = async () => {
     if (!plan || plan === 'free') return;
     if (!user?.hospitalId) return;
+    if (!paymentQuote) return;
     // [M-4] React state re-render 전 중복 호출 차단
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -119,10 +140,10 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
         customerName: contactName.trim(),
         paymentMethod,
         couponId: selectedCouponId || undefined,
-        discountAmount: discountPreview?.discount_amount,
-        upgradeCreditAmount: upgradeCredit?.creditAmount,
-        upgradeSourceBillingId: upgradeCredit?.sourceBillingId,
-        creditUsedAmount: creditUsedAmount > 0 ? creditUsedAmount : undefined,
+        discountAmount: paymentQuote.couponDiscountAmount || undefined,
+        upgradeCreditAmount: paymentQuote.appliedUpgradeCreditAmount || undefined,
+        upgradeSourceBillingId: paymentQuote.appliedUpgradeCreditAmount > 0 ? upgradeCredit?.sourceBillingId : undefined,
+        creditUsedAmount: paymentQuote.appliedCreditBalance || undefined,
       });
       if (result.error && result.error !== 'user_cancel') {
         setRequestError(result.error);
@@ -162,6 +183,7 @@ const DirectPaymentModal: React.FC<DirectPaymentModalProps> = ({
       onSelectCoupon={setSelectedCouponId}
       discountPreview={discountPreview}
       upgradeCredit={upgradeCredit}
+      paymentQuote={paymentQuote}
       creditBalance={creditBalance}
       creditUsedAmount={creditUsedAmount}
       onCreditUsedChange={setCreditUsedAmount}

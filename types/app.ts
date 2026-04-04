@@ -7,22 +7,51 @@ export type UploadType = 'fixture' | 'surgery';
 /** 3-tier app layer classification */
 export type AppLayer = 'brand' | 'solution' | 'service-hub' | 'operational';
 
-const BRAND_VIEWS: View[] = [
+export const AUTH_VIEWS: View[] = ['login', 'signup'];
+
+export const BRAND_VIEWS: View[] = [
   'homepage', 'about', 'consulting', 'solutions', 'courses',
   'blog', 'community', 'contact', 'login', 'signup',
   'terms', 'privacy',
 ];
 
-const SOLUTION_VIEWS: View[] = [
+export const SOLUTION_VIEWS: View[] = [
   'landing', 'value', 'pricing', 'analyze', 'reviews',
   'notices', 'consultation',
 ];
 
-const SERVICE_HUB_VIEWS: View[] = ['mypage', 'admin_panel'];
+export const SERVICE_HUB_VIEWS: View[] = ['mypage', 'admin_panel'];
+export const PUBLIC_BOTTOM_OFFSET_VIEWS: View[] = ['landing', 'value', 'pricing', 'contact', 'analyze', 'notices', 'reviews'];
+
+const AUTH_VIEW_SET = new Set<View>(AUTH_VIEWS);
+const BRAND_VIEW_SET = new Set<View>(BRAND_VIEWS);
+const SOLUTION_VIEW_SET = new Set<View>(SOLUTION_VIEWS);
+const SERVICE_HUB_VIEW_SET = new Set<View>(SERVICE_HUB_VIEWS);
+const PUBLIC_BOTTOM_OFFSET_VIEW_SET = new Set<View>(PUBLIC_BOTTOM_OFFSET_VIEWS);
+
+export function isBrandView(view: View): boolean {
+  return BRAND_VIEW_SET.has(view);
+}
+
+export function isSolutionView(view: View): boolean {
+  return SOLUTION_VIEW_SET.has(view);
+}
+
+export function isServiceHubView(view: View): boolean {
+  return SERVICE_HUB_VIEW_SET.has(view);
+}
+
+export function usesHomepageHeaderShell(view: View): boolean {
+  return AUTH_VIEW_SET.has(view) || isServiceHubView(view);
+}
+
+export function usesPublicBottomOffset(view: View): boolean {
+  return PUBLIC_BOTTOM_OFFSET_VIEW_SET.has(view);
+}
 
 export function getViewLayer(view: View): AppLayer {
-  if (BRAND_VIEWS.includes(view)) return 'brand';
-  if (SOLUTION_VIEWS.includes(view)) return 'solution';
-  if (SERVICE_HUB_VIEWS.includes(view)) return 'service-hub';
+  if (isBrandView(view)) return 'brand';
+  if (isSolutionView(view)) return 'solution';
+  if (isServiceHubView(view)) return 'service-hub';
   return 'operational';
 }

@@ -51,7 +51,11 @@ test('app handles order conflict responses and re-syncs order list', () => {
 
 test('mobile critical operations stay wired in dashboard routes', () => {
   const app = read('App.tsx');
+  const dashboardRoute = read('components/app/AppDashboardRouteSection.tsx');
   const appLogic = read('hooks/useAppLogic.tsx');
+  const dashboardCoordinator = read('hooks/useAppDashboardCoordinator.ts');
+  const dashboardDataOps = read('hooks/useAppDashboardDataOps.ts');
+  const dashboardInventoryOps = read('hooks/useAppDashboardInventoryOps.ts');
   const workspace = read('components/app/DashboardWorkspaceSection.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');
   const audit = read('components/InventoryAudit.tsx');
@@ -60,9 +64,11 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   const orderMobileLayout = read('components/order/OrderMobileLayout.tsx');
   const orderTable = read('components/order/OrderTableSection.tsx');
   const mobileNav = read('components/dashboard/MobileDashboardNav.tsx');
-  const appOrderWiring = app + appLogic;
+  const appOrderWiring = app + appLogic + dashboardCoordinator + dashboardDataOps + dashboardInventoryOps + dashboardRoute;
 
-  // Refactor: order callbacks can be bundled in useAppLogic workspaceProps.
+  // Refactor: order callbacks now flow through useAppDashboardCoordinator into workspace props.
+  assert.match(appLogic, /import \{ useAppDashboardCoordinator \} from '\.\/useAppDashboardCoordinator';/);
+  assert.match(appLogic, /} = useAppDashboardCoordinator\(\{/);
   assert.match(appOrderWiring, /onAddOrder:\s*handleAddOrder,/);
   assert.match(appOrderWiring, /onDeleteOrder:\s*handleDeleteOrder,/);
   assert.match(appOrderWiring, /onCreateReturn:\s*handleCreateReturn,/);
@@ -92,7 +98,7 @@ test('mobile critical operations stay wired in dashboard routes', () => {
   );
 
   // 모바일 하단 네비게이션이 별도 컴포넌트로 유지되고 접근성/터치 타겟을 보장
-  assert.match(app, /<MobileDashboardNav[\s\S]*onTabChange=\{\(tab\) => setState\(prev => \(\{ \.\.\.prev, dashboardTab: tab \}\)\)\}/s);
+  assert.match(dashboardRoute, /<MobileDashboardNav[\s\S]*onTabChange=\{\(tab\) => setState\(prev => \(\{ \.\.\.prev, dashboardTab: tab \}\)\)\}/s);
   assert.match(mobileNav, /className="md:hidden fixed inset-x-0 bottom-0 z-\[230\]/);
   assert.match(mobileNav, /className=\{`min-h-11 rounded-xl/);
   assert.match(mobileNav, /aria-label=\{getDashboardTabTitle\(tab\)\}/);
@@ -200,14 +206,14 @@ test('funnel instrumentation uses standardized events and page-aware tracking', 
   const analyze = read('components/AnalyzePage.tsx');
   const analyzeHook = read('hooks/useAnalyzePage.ts');
   const contact = read('components/ContactPage.tsx');
-  const appState = read('hooks/useAppState.ts');
+  const appSessionLifecycleActions = read('hooks/useAppSessionLifecycleActions.ts');
   // auth tracking moved to useAuthForm hook during AuthForm refactoring
   const authHook = read('hooks/useAuthForm.ts');
 
   assert.match(pageView, /event_type: `\$\{page\}_view`/);
   assert.match(pageView, /trackEvent\(event_type: string, event_data\?: EventData, page = 'pricing'\)/);
   assert.match(pageView, /markConverted\(userId: string, accountId\?: string \| null\)/);
-  assert.match(appState, /pageViewService\.markConverted\(user\.id, user\.hospitalId \|\| null\)/);
+  assert.match(appSessionLifecycleActions, /pageViewService\.markConverted\(user\.id, user\.hospitalId \|\| null\)/);
 
   // Refactor-safe: pricing event may move between page and hook.
   assert.match(pricingModule, /trackEvent\(\s*'pricing_plan_select'/);
@@ -232,6 +238,7 @@ test('contact success state surfaces request id and single primary next action',
 
 test('app shell guard states and settings routes stay wired', () => {
   const app = read('App.tsx');
+  const dashboardRoute = read('components/app/AppDashboardRouteSection.tsx');
   const guard = read('components/app/DashboardGuardedContent.tsx');
   const tabs = read('components/dashboard/DashboardOperationalTabs.tsx');
 
@@ -249,7 +256,7 @@ test('app shell guard states and settings routes stay wired', () => {
   assert.match(tabs, /dashboardTab === 'settings'[\s\S]*<SettingsHub[\s\S]*onNavigate=\{onTabChange\}/s);
   assert.match(tabs, /dashboardTab === 'audit_log'[\s\S]*<AuditLogViewer[\s\S]*hospitalId=\{user\.hospitalId\}/s);
 
-  assert.match(app, /<MobileDashboardNav[\s\S]*userPermissions=\{state\.user\?\.permissions\}[\s\S]*effectiveAccessRole=\{effectiveAccessRole\}/s);
+  assert.match(dashboardRoute, /<MobileDashboardNav[\s\S]*userPermissions=\{state\.user\?\.permissions\}[\s\S]*effectiveAccessRole=\{effectiveAccessRole\}/s);
 });
 
 test('settings hub wires extracted vendor management modal component', () => {
@@ -296,7 +303,10 @@ test('operational smoke checklist stays available as npm script', () => {
   const smokeScript = read('scripts/operational-smoke-checklist.mjs');
 
   assert.match(pkg, /"smoke:ops"\s*:\s*"node scripts\/operational-smoke-checklist\.mjs"/);
+  assert.match(pkg, /"smoke:refund"\s*:\s*"node scripts\/check-refund-reconciliation\.mjs"/);
+  assert.match(pkg, /"smoke:refund:strict"\s*:\s*"node scripts\/check-refund-reconciliation\.mjs --require-env --fail-on-unreachable"/);
   assert.match(smokeScript, /Operational Smoke Checklist/);
+  assert.match(smokeScript, /Refund reconciliation: run npm run smoke:refund/);
   assert.match(smokeScript, /Rule: run this checklist before\/after App shell changes\./);
 });
 
@@ -307,5 +317,6 @@ test('smoke:auto gate script exists and is wired into verify:premerge', () => {
   assert.match(pkg, /"smoke:auto"\s*:\s*"node scripts\/smoke-auto\.mjs"/);
   assert.match(pkg, /"verify:premerge".*smoke:auto/);
   assert.match(smokeAuto, /check-edge-functions\.mjs/);
+  assert.match(smokeAuto, /check-refund-reconciliation\.mjs/);
   assert.match(smokeAuto, /process\.exit\(1\)/);
 });

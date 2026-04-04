@@ -10,6 +10,7 @@ export default defineConfig(() => {
     || process.env.BUILD_ID
     || 'dev-local'
   ).trim();
+  const normalizeId = (id: string) => id.split(path.sep).join('/').split(path.win32.sep).join('/');
 
   return {
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
@@ -59,19 +60,26 @@ export default defineConfig(() => {
           warn(warning);
         },
         output: {
-          manualChunks: (id) => {
-            if (!id.includes('node_modules')) return undefined;
-            if (
-              id.includes('/react/') ||
-              id.includes('/react-dom/') ||
-              id.includes('/react-is/') ||
-              id.includes('/scheduler/') ||
-              id.includes('/use-sync-external-store/') ||
-              id.includes('/react-helmet-async/') ||
-              id.includes('/qrcode.react/')
-            ) return 'react-vendor';
-            if (id.includes('@supabase')) return 'supabase-vendor';
-            if (id.includes('xlsx')) return 'xlsx-vendor';
+          manualChunks: (rawId) => {
+            const id = normalizeId(rawId);
+
+            if (id.includes('/node_modules/')) {
+              if (
+                id.includes('/react/') ||
+                id.includes('/react-dom/') ||
+                id.includes('/react-is/') ||
+                id.includes('/scheduler/') ||
+                id.includes('/use-sync-external-store/') ||
+                id.includes('/react-helmet-async/') ||
+                id.includes('/qrcode.react/')
+              ) return 'react-vendor';
+              if (id.includes('@supabase')) return 'supabase-vendor';
+              if (id.includes('xlsx')) return 'xlsx-vendor';
+              return undefined;
+            }
+
+            // First-party feature code should split at actual lazy boundaries.
+            // Broad manual chunks created circular graphs across dashboard/public modules.
             return undefined;
           }
         },

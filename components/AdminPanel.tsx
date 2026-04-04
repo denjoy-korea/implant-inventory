@@ -5,6 +5,12 @@ import { DbBillingHistory, DbProfile, UserRole } from '../types';
 import { decryptProfile } from '../services/mappers';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from '../hooks/useToast';
+import {
+  buildBillingDisplayModel,
+  getBillingCycleDisplayLabel,
+  getBillingPaymentMethodDisplayLabel,
+  getBillingPlanDisplayLabel,
+} from '../utils/billingDisplay';
 import SystemAdminLecturesTab from './system-admin/tabs/SystemAdminLecturesTab';
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
@@ -22,22 +28,10 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const PAYMENT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   completed: { label: '완료', color: 'bg-emerald-50 text-emerald-600' },
   pending:   { label: '대기', color: 'bg-amber-50 text-amber-600' },
+  confirming:{ label: '확인 중', color: 'bg-blue-50 text-blue-600' },
   failed:    { label: '실패', color: 'bg-rose-50 text-rose-600' },
   cancelled: { label: '취소', color: 'bg-slate-100 text-slate-500' },
-};
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  card:         '신용카드',
-  transfer:     '계좌이체',
-  free:         '무료',
-  trial:        '체험',
-  credit:       '크레딧',
-  plan_change:  '플랜 변경',
-  admin_manual: '어드민 수동',
-};
-
-const PLAN_LABELS: Record<string, string> = {
-  free: 'Free', basic: 'Basic', plus: 'Plus', business: 'Business',
+  refunded:  { label: '환불', color: 'bg-purple-50 text-purple-600' },
 };
 
 function formatKRW(amount: number): string {
@@ -205,7 +199,7 @@ const AdminPanel: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
               <div className="flex gap-1">
-                {(['all', 'completed', 'pending', 'failed', 'cancelled'] as const).map(f => (
+                {(['all', 'completed', 'pending', 'confirming', 'failed', 'cancelled', 'refunded'] as const).map(f => (
                   <button
                     key={f}
                     onClick={() => setBillingFilter(f)}
@@ -242,16 +236,27 @@ const AdminPanel: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {billingRows.map(row => {
+                      const display = buildBillingDisplayModel(row);
                       const ps = PAYMENT_STATUS_LABELS[row.payment_status] ?? { label: row.payment_status, color: 'bg-slate-100 text-slate-500' };
+                      const refundAmount = row.refund_amount ?? 0;
+                      const creditRestoreAmount = row.credit_restore_amount ?? 0;
                       return (
                         <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-5 py-3 font-medium text-slate-700">
                             {row.hospital_id ? (hospitals[row.hospital_id] || row.hospital_id.slice(0, 8) + '…') : '-'}
                           </td>
-                          <td className="px-5 py-3 text-slate-600">{PLAN_LABELS[row.plan] ?? row.plan}</td>
-                          <td className="px-5 py-3 text-slate-500">{row.billing_cycle === 'yearly' ? '연간' : row.billing_cycle === 'monthly' ? '월간' : '-'}</td>
-                          <td className="px-5 py-3 text-slate-500">{PAYMENT_METHOD_LABELS[row.payment_method] ?? row.payment_method ?? '-'}</td>
-                          <td className="px-5 py-3 text-right font-bold text-slate-800">{formatKRW(row.amount)}</td>
+                          <td className="px-5 py-3 text-slate-600">{getBillingPlanDisplayLabel(row.plan)}</td>
+                          <td className="px-5 py-3 text-slate-500">{getBillingCycleDisplayLabel(row.billing_cycle) || '-'}</td>
+                          <td className="px-5 py-3 text-slate-500">{getBillingPaymentMethodDisplayLabel(row.payment_method)}</td>
+                          <td className="px-5 py-3 text-right">
+                            <div className="font-bold text-slate-800">{formatKRW(row.amount)}</div>
+                            {refundAmount > 0 && (
+                              <div className="text-[10px] font-bold text-rose-500 mt-0.5">환불 {formatKRW(refundAmount)}</div>
+                            )}
+                            {creditRestoreAmount > 0 && (
+                              <div className="text-[10px] font-bold text-teal-600 mt-0.5">복구 {formatKRW(creditRestoreAmount)}</div>
+                            )}
+                          </td>
                           <td className="px-5 py-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${ps.color}`}>{ps.label}</span>
                           </td>
@@ -261,9 +266,9 @@ const AdminPanel: React.FC = () => {
                             ) : '-'}
                           </td>
                           <td className="px-5 py-3 text-xs text-slate-400 max-w-[140px]">
-                            {row.description ? (
-                              <span title={row.description} className="truncate block">
-                                {row.description.length > 20 ? row.description.slice(0, 20) + '…' : row.description}
+                            {display.productLabel ? (
+                              <span title={display.productLabel} className="truncate block">
+                                {display.productLabel.length > 20 ? display.productLabel.slice(0, 20) + '…' : display.productLabel}
                               </span>
                             ) : '-'}
                           </td>

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { PLAN_NAMES, PLAN_PRICING, PlanType } from '../../types';
+import { PLAN_NAMES, PlanType } from '../../types';
 import LegalModal from '../shared/LegalModal';
 import ModalShell from '../shared/ModalShell';
 import { formatPrice } from './pricingData';
 import type { UserCoupon, DiscountPreview } from '../../services/couponService';
 import type { UpgradeCredit } from '../../services/refundService';
+import { buildPlanPaymentQuote, type PlanPaymentQuote } from '../../services/planPaymentQuote';
 
 type PaymentMethod = 'card' | 'transfer';
 type ReceiptType = 'cash_receipt' | 'tax_invoice';
@@ -35,6 +36,8 @@ interface PricingPaymentModalProps {
   discountPreview?: DiscountPreview | null;
   /** 업그레이드 크레딧 (선택) */
   upgradeCredit?: UpgradeCredit | null;
+  /** 공통 결제 계산 결과 (선택) */
+  paymentQuote?: PlanPaymentQuote | null;
   /** 다운그레이드 크레딧 잔액 (선택) */
   creditBalance?: number;
   creditUsedAmount?: number;
@@ -65,6 +68,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
   onSelectCoupon,
   discountPreview,
   upgradeCredit,
+  paymentQuote,
   creditBalance = 0,
   creditUsedAmount = 0,
   onCreditUsedChange,
@@ -79,25 +83,26 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
 
   if (!selectedPlan || selectedPlan === 'free') return null;
 
-  const monthlyPrice = isYearly ? PLAN_PRICING[selectedPlan].yearlyPrice : PLAN_PRICING[selectedPlan].monthlyPrice;
-  const rawBase = isYearly ? monthlyPrice * 12 : monthlyPrice;
-  const basePrice = rawBase;
-  const vat = Math.round(basePrice * 0.1);
-  const finalTotal = basePrice + vat;
-  // 월간 대비 절약 = 월간(VAT포함)/년 - 연간 합계
-  const monthlyTotalPerYear = Math.round(PLAN_PRICING[selectedPlan].monthlyPrice * 12 * 1.1);
-  const yearlySaving = monthlyTotalPerYear - finalTotal;
-
-  // C-3 수정: 쿠폰은 공급가액(base)에서 먼저 차감 후 VAT 적용 — tossPaymentService와 동일 순서
-  // (base - couponDiscount) * 1.1, NOT (base * 1.1) - couponDiscount
-  const couponDiscount = discountPreview?.discount_amount ?? 0;
-  const baseAfterCoupon = Math.max(0, basePrice - couponDiscount);
-  const totalAfterCoupon = Math.round(baseAfterCoupon * 1.1);
-  const creditAmount = upgradeCredit?.creditAmount ?? 0;
-  const maxCreditUsable = Math.max(0, Math.min(creditBalance, totalAfterCoupon - creditAmount));
-  const appliedCreditBalance = Math.min(creditUsedAmount, maxCreditUsable);
-  const hasDeduction = couponDiscount > 0 || creditAmount > 0 || appliedCreditBalance > 0;
-  const payableTotal = Math.max(0, totalAfterCoupon - creditAmount - appliedCreditBalance);
+  const quote = paymentQuote ?? buildPlanPaymentQuote({
+    plan: selectedPlan,
+    billingCycle: isYearly ? 'yearly' : 'monthly',
+    couponDiscountAmount: discountPreview?.discount_amount,
+    upgradeCreditAmount: upgradeCredit?.creditAmount,
+    upgradeSourceBillingId: upgradeCredit?.sourceBillingId,
+    creditBalance,
+    creditUsedAmount,
+  });
+  const monthlyPrice = quote.monthlyPrice;
+  const basePrice = quote.baseAmount;
+  const vat = quote.vatAmount;
+  const finalTotal = quote.originalTotalAmount;
+  const yearlySaving = quote.yearlySaving;
+  const couponDiscount = quote.couponDiscountAmount;
+  const creditAmount = quote.appliedUpgradeCreditAmount;
+  const maxCreditUsable = quote.maxCreditUsable;
+  const appliedCreditBalance = quote.appliedCreditBalance;
+  const hasDeduction = quote.hasDeduction;
+  const payableTotal = quote.payableTotal;
 
   return (
     <>
@@ -218,7 +223,7 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => onCreditUsedChange(Math.max(0, creditUsedAmount - 1000))}
+                  onClick={() => onCreditUsedChange(Math.max(0, appliedCreditBalance - 1000))}
                   className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 font-bold text-sm hover:bg-teal-200 transition-colors flex items-center justify-center"
                 >−</button>
                 <div className="flex-1 text-center">
@@ -228,8 +233,8 @@ const PricingPaymentModal: React.FC<PricingPaymentModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onCreditUsedChange(Math.min(maxCreditUsable, creditUsedAmount + 1000))}
-                  disabled={creditUsedAmount >= maxCreditUsable}
+                  onClick={() => onCreditUsedChange(Math.min(maxCreditUsable, appliedCreditBalance + 1000))}
+                  disabled={appliedCreditBalance >= maxCreditUsable}
                   className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 font-bold text-sm hover:bg-teal-200 transition-colors flex items-center justify-center disabled:opacity-40"
                 >+</button>
               </div>

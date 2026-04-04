@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { DbBillingHistory } from '../../types';
+import {
+  buildBillingDisplayModel,
+  getBillingCycleDisplayLabel,
+  getBillingPaymentMethodDisplayLabel,
+  getBillingPlanDisplayLabel,
+} from '../../utils/billingDisplay';
 
 export interface BillingKpi {
   totalCount: number;
@@ -10,6 +16,8 @@ export interface BillingKpi {
   pendingCount: number;
   grossRevenue: number;
   totalRefunds: number;
+  totalCreditRestores: number;
+  totalRecoveries: number;
   netRevenue: number;
   cancelledAmount: number;
 }
@@ -87,12 +95,13 @@ export function useAdminBilling() {
   const completedRows = liveRows.filter(r => r.payment_status === 'completed');
   const cancelledRows = liveRows.filter(r => r.payment_status === 'cancelled');
   const refundedRows = liveRows.filter(r => r.payment_status === 'refunded');
-  const pendingRows = liveRows.filter(r => r.payment_status === 'pending');
+  const pendingRows = liveRows.filter(r => r.payment_status === 'pending' || r.payment_status === 'confirming');
 
-  // grossRevenue: completed + refunded 행 모두 포함 (환불 전 실결제 총액)
-  // totalRefunds: refunded 행의 refund_amount 합산만 사용 (이중 차감 방지)
+  // grossRevenue / netRevenue는 현금 기준으로 계산한다.
+  // 크레딧 복구는 별도 지표로 집계해 정산/리포트에서 분리 표시한다.
   const grossRevenue = [...completedRows, ...refundedRows].reduce((s, r) => s + r.amount, 0);
   const totalRefunds = refundedRows.reduce((s, r) => s + (r.refund_amount ?? 0), 0);
+  const totalCreditRestores = refundedRows.reduce((s, r) => s + (r.credit_restore_amount ?? 0), 0);
 
   const kpi: BillingKpi = {
     totalCount: liveRows.length,
@@ -102,6 +111,8 @@ export function useAdminBilling() {
     pendingCount: pendingRows.length,
     grossRevenue,
     totalRefunds,
+    totalCreditRestores,
+    totalRecoveries: totalRefunds + totalCreditRestores,
     netRevenue: grossRevenue - totalRefunds,
     cancelledAmount: cancelledRows.reduce((s, r) => s + r.amount, 0),
   };
@@ -135,20 +146,25 @@ export function useAdminBilling() {
   }
 
   const handleExcelDownload = useCallback(() => {
-    const headers = ['거래일시', '결제번호', '결제상태', '플랜', '결제주기', '결제수단', '결제금액', '환불금액', '병원명', '연락처', '비고'];
-    const rows = displayRows.map(r => [
-      new Date(r.created_at).toLocaleString('ko-KR'),
-      r.payment_ref || '',
-      r.payment_status,
-      r.plan,
-      r.billing_cycle || '',
-      r.payment_method || '',
-      r.amount,
-      r.refund_amount || 0,
-      r.hospital_name_snapshot || '',
-      r.phone_last4_snapshot ? `****-${r.phone_last4_snapshot}` : '',
-      r.description || '',
-    ]);
+    const headers = ['거래일시', '결제번호', '결제상태', '플랜', '결제주기', '결제수단', '결제금액', '환불금액', '복구크레딧', '총회수가치', '병원명', '연락처', '비고'];
+    const rows = displayRows.map(r => {
+      const display = buildBillingDisplayModel(r);
+      return [
+        new Date(r.created_at).toLocaleString('ko-KR'),
+        r.payment_ref || '',
+        r.payment_status,
+        getBillingPlanDisplayLabel(r.plan),
+        getBillingCycleDisplayLabel(r.billing_cycle) || '',
+        getBillingPaymentMethodDisplayLabel(r.payment_method),
+        r.amount,
+        r.refund_amount || 0,
+        r.credit_restore_amount || 0,
+        (r.refund_amount || 0) + (r.credit_restore_amount || 0),
+        r.hospital_name_snapshot || '',
+        r.phone_last4_snapshot ? `****-${r.phone_last4_snapshot}` : '',
+        display.productLabel,
+      ];
+    });
     const csv = [headers, ...rows]
       .map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
       .join('\n');

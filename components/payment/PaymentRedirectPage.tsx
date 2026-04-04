@@ -1,4 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  clearPendingPaymentRedirectState,
+  getPendingPaymentRedirectState,
+} from '../../services/paymentRedirectState';
 import { tossPaymentService } from '../../services/tossPaymentService';
 import { supabase } from '../../services/supabaseClient';
 
@@ -13,14 +17,17 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
   const isSuccessPath = window.location.pathname === '/payment/success';
   const [pageState, setPageState] = useState<PageState>('loading');
   const [message, setMessage] = useState('');
-
-  // Detect service purchase (set before redirect by requestCartPayment)
-  const isServicePayment = (() => {
-    try { return sessionStorage.getItem('_pendingPaymentType') === 'service'; } catch { return false; }
-  })();
+  const [resolvedPaymentType, setResolvedPaymentType] = useState<'plan' | 'service'>(
+    () => getPendingPaymentRedirectState().paymentType ?? 'plan',
+  );
+  const completionTimerRef = useRef<number | null>(null);
   const processedRef = useRef(false);
+  const isServicePayment = resolvedPaymentType === 'service';
 
   useEffect(() => {
+    const redirectState = getPendingPaymentRedirectState();
+    const paymentType = redirectState.paymentType ?? 'plan';
+    setResolvedPaymentType(paymentType);
     const params = new URLSearchParams(window.location.search);
 
     if (!isSuccessPath) {
@@ -36,11 +43,10 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       // [SEC] CSRF 방지: sessionStorage의 _pendingOrderId가 URL의 orderId와 일치하는 경우에만
       // billing_history를 cancelled로 업데이트 (타인이 조작한 orderId 파라미터 차단)
       const orderId = params.get('orderId');
-      let isOwnPayment = false;
-      try {
-        isOwnPayment = sessionStorage.getItem('_pendingOrderId') === orderId;
-        if (isOwnPayment) sessionStorage.removeItem('_pendingOrderId');
-      } catch { /* private mode */ }
+      const isOwnPayment = redirectState.orderId === orderId;
+      if (isOwnPayment) {
+        clearPendingPaymentRedirectState();
+      }
       if (orderId && isOwnPayment) {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
@@ -70,7 +76,7 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
     }
 
     // [SEC] CSRF: success 경로에서도 sessionStorage 정리
-    try { sessionStorage.removeItem('_pendingOrderId'); } catch { /* private mode */ }
+    clearPendingPaymentRedirectState();
 
     // Supabase JS v2는 fresh page load 시 세션 복원이 비동기.
     // getSession()은 로컬스토리지에서 읽기만 해서 만료된 토큰도 반환할 수 있음.
@@ -89,20 +95,17 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       const { ok, error } = result;
       if (ok) {
         if (isServicePayment) {
-          try {
-            const cartStorageKey = sessionStorage.getItem('_pendingServiceCartKey');
-            if (cartStorageKey) {
+          const cartStorageKey = redirectState.serviceCartKey;
+          if (cartStorageKey) {
+            try {
               localStorage.removeItem(cartStorageKey);
-              sessionStorage.removeItem('_pendingServiceCartKey');
+            } catch {
+              // storage unavailable
             }
-          } catch {
-            // storage unavailable
           }
         }
         setPageState('success');
-        // [LOW] clearTimeout으로 컴포넌트 언마운트 시 navigate 누수 방지
-        const timer = setTimeout(onComplete, 2500);
-        return () => clearTimeout(timer);
+        completionTimerRef.current = window.setTimeout(onComplete, 2500);
       } else {
         setMessage(error || '결제 승인에 실패했습니다.');
         setPageState('fail');
@@ -113,6 +116,12 @@ const PaymentRedirectPage: React.FC<PaymentRedirectPageProps> = ({ onComplete })
       setMessage(msg);
       setPageState('fail');
     });
+    return () => {
+      if (completionTimerRef.current !== null) {
+        window.clearTimeout(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
+    };
   }, [isSuccessPath, onComplete]);
 
   return (

@@ -6,13 +6,18 @@
  *   - toss-payment-refund Edge Function 호출
  */
 
-import { BillingCycle, DbBillingHistory, PLAN_PRICING, PlanType, RefundType } from '../types/plan';
+import { BillingCycle, DbBillingHistory, PLAN_PRICING, PlanType } from '../types/plan';
 import { supabase } from './supabaseClient';
+import {
+  calcBillingDailyRate,
+  calcBillingRemainingValue,
+  calculateBillingRefundQuote,
+  type BillingRefundType,
+} from '../utils/billingSettlement';
 
 /** 10원 단위 올림 일요금 (환불/크레딧 공용) */
 export function calcDailyRate(paidAmount: number, billingCycle: BillingCycle): number {
-  const totalDays = billingCycle === 'yearly' ? 360 : 30;
-  return Math.ceil(paidAmount / totalDays / 10) * 10;
+  return calcBillingDailyRate(paidAmount, billingCycle);
 }
 
 /**
@@ -24,17 +29,14 @@ export function calcRemainingValue(
   billingCycle: BillingCycle,
   paidAt: string,
 ): number {
-  const totalDays = billingCycle === 'yearly' ? 360 : 30;
-  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / 86400000);
-  if (usedDays >= totalDays) return 0;
-  const dailyRate = calcDailyRate(paidAmount, billingCycle);
-  const usedCharge = Math.min(dailyRate * usedDays, paidAmount);
-  return Math.max(0, paidAmount - usedCharge);
+  return calcBillingRemainingValue(paidAmount, billingCycle, paidAt);
 }
 
 export interface RefundPreview {
   refundAmount: number;
-  refundType: RefundType;
+  creditRestoreAmount: number;
+  totalRecoveryAmount: number;
+  refundType: BillingRefundType;
   reason: string;
   usedDays: number;
   /** UI 표시용 요약 (한국어) */
@@ -47,17 +49,15 @@ export interface RefundPreview {
  * @param billing  최근 완료된 billing_history row
  */
 export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
-  const paidAmount = billing.amount;
   const plan = billing.plan as PlanType;
   const billingCycle = (billing.billing_cycle ?? 'monthly') as BillingCycle;
-  const paidAt = billing.created_at;
-
-  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / 86400000);
-
+  const usedDays = Math.ceil((Date.now() - new Date(billing.created_at).getTime()) / 86400000);
   const prices = PLAN_PRICING[plan];
   if (!prices || plan === 'free' || plan === 'ultimate') {
     return {
       refundAmount: 0,
+      creditRestoreAmount: 0,
+      totalRecoveryAmount: 0,
       refundType: 'none',
       reason: '플랜 정보를 확인할 수 없습니다. 고객지원으로 문의해 주세요.',
       usedDays,
@@ -65,14 +65,13 @@ export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
     };
   }
 
-  // 일할 계산 (월간 30일, 연간 360일) — 환불/크레딧 통합 공식
-  const refundAmount = calcRemainingValue(paidAmount, billingCycle, paidAt);
-  const dailyRate = calcDailyRate(paidAmount, billingCycle);
-  const refundType: RefundType = billingCycle === 'yearly' ? 'prorata_yearly' : 'prorata_monthly';
+  const quote = calculateBillingRefundQuote(billing);
 
-  if (refundAmount <= 0) {
+  if (quote.totalRecoveryAmount <= 0) {
     return {
       refundAmount: 0,
+      creditRestoreAmount: 0,
+      totalRecoveryAmount: 0,
       refundType: 'none',
       reason: '이미 전체 구독 기간 이용이 완료되었습니다.',
       usedDays,
@@ -81,11 +80,15 @@ export function calcRefundPreview(billing: DbBillingHistory): RefundPreview {
   }
 
   return {
-    refundAmount,
-    refundType,
-    reason: `일할 환불: ${usedDays}일 이용, 일할 ${dailyRate.toLocaleString('ko-KR')}원 × ${usedDays}일 차감`,
-    usedDays,
-    summary: `부분 환불 (${usedDays}일 이용 차감)`,
+    refundAmount: quote.refundAmount,
+    creditRestoreAmount: quote.creditRestoreAmount,
+    totalRecoveryAmount: quote.totalRecoveryAmount,
+    refundType: quote.refundType,
+    reason: quote.reason,
+    usedDays: quote.usedDays,
+    summary: quote.creditRestoreAmount > 0
+      ? `부분 환불 및 크레딧 복구 (${quote.usedDays}일 이용 차감)`
+      : `부분 환불 (${quote.usedDays}일 이용 차감)`,
   };
 }
 
@@ -136,7 +139,9 @@ export function calcUpgradeCredit(currentBilling: DbBillingHistory): UpgradeCred
 export interface RefundResult {
   ok: boolean;
   refundAmount: number;
-  refundType: string;
+  creditRestoreAmount: number;
+  totalRecoveryAmount: number;
+  refundType: BillingRefundType | string;
   reason: string;
   /** 수동 결제 건이어서 자동 환불 불가 */
   isManualPayment?: boolean;
@@ -153,6 +158,8 @@ export async function requestRefund(billingId: string): Promise<RefundResult> {
     return {
       ok: false,
       refundAmount: 0,
+      creditRestoreAmount: 0,
+      totalRecoveryAmount: 0,
       refundType: 'none',
       reason: '로그인 세션이 만료되었습니다. 다시 로그인 후 시도해주세요.',
       error: '로그인 세션이 만료되었습니다. 다시 로그인 후 시도해주세요.',
@@ -178,6 +185,8 @@ export async function requestRefund(billingId: string): Promise<RefundResult> {
     return {
       ok: false,
       refundAmount: 0,
+      creditRestoreAmount: 0,
+      totalRecoveryAmount: 0,
       refundType: 'none',
       reason: errMsg,
       isManualPayment: isManual,
@@ -188,6 +197,8 @@ export async function requestRefund(billingId: string): Promise<RefundResult> {
   return {
     ok: data?.ok === true,
     refundAmount: data?.refundAmount ?? 0,
+    creditRestoreAmount: data?.creditRestoreAmount ?? 0,
+    totalRecoveryAmount: data?.totalRecoveryAmount ?? ((data?.refundAmount ?? 0) + (data?.creditRestoreAmount ?? 0)),
     refundType: data?.refundType ?? 'none',
     reason: data?.reason ?? '',
     error: data?.ok ? undefined : '처리 중 오류가 발생했습니다.',

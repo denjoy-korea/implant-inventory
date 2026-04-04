@@ -14,73 +14,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-// 유효 플랜 목록 (free/ultimate는 billing_history가 생기지 않지만 방어적으로 처리)
-const VALID_PAID_PLANS = new Set(["basic", "plus", "business"]);
-
-/** 10원 단위 올림 일요금 */
-function calcDailyRate(paidAmount: number, totalDays: number): number {
-  return Math.ceil(paidAmount / totalDays / 10) * 10;
-}
-
-type RefundType = "full" | "prorata_monthly" | "prorata_yearly" | "none";
-
-interface RefundCalcResult {
-  refundAmount: number;
-  refundType: RefundType;
-  reason: string;
-  usedDays: number;
-}
-
-/**
- * 약관 제7조 환불 금액 계산 (클라이언트 refundService와 동일 공식)
- *
- * @param paidAmount  실제 결제금액 (VAT 포함)
- * @param plan        결제 플랜
- * @param billingCycle 결제 주기
- * @param paidAt      결제 시각 (ISO string)
- */
-function calcRefund(params: {
-  paidAmount: number;
-  plan: string;
-  billingCycle: string;
-  paidAt: string;
-}): RefundCalcResult {
-  const { paidAmount, plan, billingCycle, paidAt } = params;
-  const usedDays = Math.ceil((Date.now() - new Date(paidAt).getTime()) / (1000 * 60 * 60 * 24));
-
-  if (!VALID_PAID_PLANS.has(plan)) {
-    return {
-      refundAmount: 0,
-      refundType: "none",
-      reason: "플랜 정보를 확인할 수 없어 자동 환불이 불가합니다. 고객지원으로 문의해 주세요.",
-      usedDays,
-    };
-  }
-
-  // 일할 계산 (월간 30일, 연간 360일) — 환불/크레딧 통합 공식
-  const totalDays = billingCycle === "yearly" ? 360 : 30;
-  const dailyRate = calcDailyRate(paidAmount, totalDays);
-  const usedCharge = Math.min(dailyRate * usedDays, paidAmount);
-  const refundAmount = Math.max(0, paidAmount - usedCharge);
-  const refundType: RefundType = billingCycle === "yearly" ? "prorata_yearly" : "prorata_monthly";
-
-  if (refundAmount <= 0) {
-    return {
-      refundAmount: 0,
-      refundType: "none",
-      reason: "이용 기간이 결제 기간을 초과하여 환불금이 없습니다.",
-      usedDays,
-    };
-  }
-
-  return {
-    refundAmount,
-    refundType,
-    reason: `일할 환불: ${usedDays}일 이용, 일할 ${dailyRate.toLocaleString()}원 × ${usedDays}일 차감`,
-    usedDays,
-  };
-}
+import { calculateBillingRefundQuote } from "../../../utils/billingSettlement.ts";
 
 const TOSS_CANCEL_URL = (paymentKey: string) =>
   `https://api.tosspayments.com/v1/payments/${encodeURIComponent(paymentKey)}/cancel`;
@@ -134,7 +68,7 @@ Deno.serve(async (req: Request) => {
   // ── billing_history 조회 ──────────────────────────────────────
   const { data: billing, error: billingError } = await adminClient
     .from("billing_history")
-    .select("id, hospital_id, plan, billing_cycle, amount, payment_status, payment_ref, is_test_payment, created_at")
+    .select("id, hospital_id, plan, billing_cycle, amount, payment_status, payment_ref, is_test_payment, created_at, credit_used_amount")
     .eq("id", billingId.trim())
     .single();
 
@@ -143,12 +77,15 @@ Deno.serve(async (req: Request) => {
   // ── 소유권 검증 ───────────────────────────────────────────────
   const { data: profile } = await adminClient
     .from("profiles")
-    .select("hospital_id")
+    .select("hospital_id, role")
     .eq("id", user.id)
     .single();
 
   if (!profile || profile.hospital_id !== billing.hospital_id) {
     return json({ error: "Access denied" }, 403);
+  }
+  if (profile.role !== "master" && profile.role !== "admin") {
+    return json({ error: "Refund requires master or admin role" }, 403);
   }
 
   // ── 환불 가능 여부 검증 ───────────────────────────────────────
@@ -168,16 +105,16 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 환불 금액 계산 ────────────────────────────────────────────
-  const calc = calcRefund({
-    paidAmount: billing.amount,
+  const calc = calculateBillingRefundQuote({
+    amount: billing.amount,
     plan: billing.plan,
-    billingCycle: billing.billing_cycle ?? "monthly",
-    paidAt: billing.created_at,
+    billing_cycle: billing.billing_cycle ?? "monthly",
+    created_at: billing.created_at,
+    credit_used_amount: (billing as Record<string, unknown>).credit_used_amount as number | string | null | undefined,
   });
 
-  if (calc.refundType === "none") {
-    // 환불금 0이어도 구독은 취소해야 하므로 DB 처리만 진행
-    // (TossPayments 취소 없이 DB만 처리)
+  if (calc.refundAmount <= 0 && calc.totalRecoveryAmount <= 0) {
+    // 환불/복구 금액이 모두 0원이면 DB 취소만 처리
     const { data: ok } = await adminClient.rpc("process_refund_and_cancel", {
       p_billing_id: billing.id,
       p_hospital_id: billing.hospital_id,
@@ -189,9 +126,55 @@ Deno.serve(async (req: Request) => {
       actor_id: user.id,
       target_id: billing.id,
       hospital_id: billing.hospital_id,
-      meta: { refund_amount: 0, refund_type: "none", reason: calc.reason },
+      meta: {
+        refund_amount: 0,
+        refund_type: "none",
+        credit_restore_amount: calc.creditRestoreAmount,
+        total_recovery_amount: calc.totalRecoveryAmount,
+        reason: calc.reason,
+      },
     });
-    return json({ ok: ok === true, refundAmount: 0, refundType: calc.reason, reason: calc.reason });
+    return json({
+      ok: ok === true,
+      refundAmount: 0,
+      creditRestoreAmount: calc.creditRestoreAmount,
+      totalRecoveryAmount: calc.totalRecoveryAmount,
+      refundType: "none",
+      reason: calc.reason,
+      usedDays: calc.usedDays,
+    });
+  }
+
+  if (calc.refundAmount <= 0) {
+    // 카드 환불은 0원이지만 사용 크레딧 복구가 남은 경우 DB 처리만 진행
+    const { data: ok } = await adminClient.rpc("process_refund_and_cancel", {
+      p_billing_id: billing.id,
+      p_hospital_id: billing.hospital_id,
+      p_refund_amount: 0,
+      p_refund_reason: calc.reason,
+    });
+    await adminClient.from("audit_logs").insert({
+      action: "refund",
+      actor_id: user.id,
+      target_id: billing.id,
+      hospital_id: billing.hospital_id,
+      meta: {
+        refund_amount: 0,
+        refund_type: calc.refundType,
+        credit_restore_amount: calc.creditRestoreAmount,
+        total_recovery_amount: calc.totalRecoveryAmount,
+        reason: calc.reason,
+      },
+    });
+    return json({
+      ok: ok === true,
+      refundAmount: 0,
+      creditRestoreAmount: calc.creditRestoreAmount,
+      totalRecoveryAmount: calc.totalRecoveryAmount,
+      refundType: calc.refundType,
+      reason: calc.reason,
+      usedDays: calc.usedDays,
+    });
   }
 
   // ── TossPayments 취소 API 호출 (실결제만) ──────────────────────
@@ -250,11 +233,22 @@ Deno.serve(async (req: Request) => {
       meta: {
         refund_amount: calc.refundAmount,
         refund_type: calc.refundType,
+        credit_restore_amount: calc.creditRestoreAmount,
+        total_recovery_amount: calc.totalRecoveryAmount,
         reason: calc.reason,
         warning: "toss_ok_db_failed",
       },
     });
-    return json({ ok: true, warning: "refund_processed_db_error", refundAmount: calc.refundAmount, refundType: calc.refundType, reason: calc.reason });
+    return json({
+      ok: true,
+      warning: "refund_processed_db_error",
+      refundAmount: calc.refundAmount,
+      creditRestoreAmount: calc.creditRestoreAmount,
+      totalRecoveryAmount: calc.totalRecoveryAmount,
+      refundType: calc.refundType,
+      reason: calc.reason,
+      usedDays: calc.usedDays,
+    });
   }
 
   // 정상 환불 완료 감사 로그
@@ -266,6 +260,8 @@ Deno.serve(async (req: Request) => {
     meta: {
       refund_amount: calc.refundAmount,
       refund_type: calc.refundType,
+      credit_restore_amount: calc.creditRestoreAmount,
+      total_recovery_amount: calc.totalRecoveryAmount,
       reason: calc.reason,
       used_days: calc.usedDays,
     },
@@ -274,6 +270,8 @@ Deno.serve(async (req: Request) => {
   return json({
     ok: ok === true,
     refundAmount: calc.refundAmount,
+    creditRestoreAmount: calc.creditRestoreAmount,
+    totalRecoveryAmount: calc.totalRecoveryAmount,
     refundType: calc.refundType,
     reason: calc.reason,
     usedDays: calc.usedDays,

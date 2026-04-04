@@ -28,7 +28,8 @@ npm run dev
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_TOSS_CLIENT_KEY` (TossPayments 공개 키 — VITE_ 접두어 허용)
+- `VITE_TOSS_CLIENT_KEY` (권장: TossPayments 공개 키)
+- `NEXT_PUBLIC_TOSS_CLIENT_KEY` (레거시 호환용, 현재도 허용)
 
 선택값:
 - `GEMINI_API_KEY`
@@ -41,17 +42,65 @@ supabase secrets set PATIENT_DATA_KEY=$(openssl rand -base64 32)
 supabase secrets set TOSS_SECRET_KEY=your-toss-secret-key
 ```
 
+`.env.local` 변경 후에는 `npm run dev` 또는 `vite preview` 서버를 반드시 재시작해야 합니다.
+
 ## Quality Gates
 ```bash
+npm run smoke:architecture
 npm run typecheck
 npm run test
+npm run test:unit
 npm run build
+npm run smoke:bundles
 ```
 
 릴리즈 전 권장:
 ```bash
 npm run verify:premerge
 npm run verify:release
+```
+
+## Architecture Baseline
+현재 앱은 공개 브랜드/솔루션 셸, 병원 운영 대시보드, 시스템 관리자 콘솔, 강의/콘텐츠 허브가 함께 있는 멀티서비스 확장 브랜치입니다. 확장 전에 충돌면을 줄이기 위해 아래 경계를 기준선으로 고정합니다.
+
+- `App.tsx` / `components/app/AppShellFrame.tsx`: 최상위 셸 조립 전용
+- `hooks/useAppLogic.tsx`: 얇은 상위 오케스트레이터
+- `hooks/useAppDashboardCoordinator.ts`: 대시보드 상위 조합자
+- `hooks/useAppDashboardDataOps.ts`: 대시보드 데이터 플로우 조합자
+- `hooks/useAppDashboardInventoryOps.ts`: 주문/반품/재고 동기화
+- `hooks/useAppDashboardFixtureFlow.ts`: fixture/온보딩/비교 플로우
+- `hooks/useAppSessionLifecycle.ts`: 세션 오케스트레이션
+- `hooks/useAppSessionLifecycleActions.ts`: 로그인 성공/회원 탈퇴 액션
+- `hooks/useAppHospitalDataLoader.ts`: 병원 데이터 로드 오케스트레이션
+- `components/app/PublicAppShell.tsx`: 공개 셸 조합자
+- `hooks/usePublicShellNavigation.ts`: 공개 셸 네비게이션
+- `hooks/usePublicShellSurface.ts`: 공개 셸 plan/meta/surface 조립
+
+머지 전에 구조 드리프트를 빠르게 잡으려면 아래 순서를 유지합니다.
+
+```bash
+npm run smoke:auto
+npm run lint
+npm run test
+npm run test:unit
+npm run build
+npm run smoke:bundles
+```
+
+## Bundle Budgets
+번들 회귀는 `dist/assets` 기준으로 숫자로 차단합니다.
+
+- `index-*.js`: 325 KiB 이하
+- `SystemAdminDashboard-*.js`: 320 KiB 이하
+- `OrderManager-*.js`: 230 KiB 이하
+- `InventoryManager-*.js`: 225 KiB 이하
+- `PublicAppShell-*.js`: 50 KiB 이하
+- `PublicSolutionRouteSection-*.js`: 12 KiB 이하
+- `xlsx-vendor-*.js`: 440 KiB 이하
+
+검사 명령:
+```bash
+npm run smoke:bundles
 ```
 
 ## Deployment
@@ -72,6 +121,7 @@ vercel --prod
 ## Related Docs
 - 운영 점검: `docs/04-report/security-smoke-test-checklist.md`
 - 암호화 마이그레이션 런북: `docs/04-report/patient-encryption-migration-runbook.md`
+- 플랫폼 하드닝 기준: `docs/04-report/features/platform-runtime-hardening.report.md`
 
 ## Dentweb Auto Upload (Edge Function)
 `dentweb-auto`에서 생성한 엑셀을 서버로 자동 수집하려면 `dentweb-upload` Edge Function을 사용합니다.

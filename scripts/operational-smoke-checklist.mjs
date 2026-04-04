@@ -8,6 +8,7 @@
  * 사용:
  *   npm run smoke:ops        ← 배포 전 인간이 확인할 항목 출력 (이 파일)
  *   npm run smoke:auto       ← CI 자동 게이트 (verify:premerge에 포함)
+ *   npm run smoke:refund     ← 환불 정합성 자동 점검
  *   npm run verify:premerge  ← 전체 premerge 파이프라인
  */
 
@@ -19,8 +20,9 @@ const checklist = [
   '5) Mobile shell: verify bottom nav is visible on md:hidden viewport',
   '6) Public legal/UX regression: run npm run test:legalux',
   '7) KPI funnel regression: run npm run test:funnel',
-  '8) Edge deploy check: run npm run smoke:edge (expect no 404 for xlsx functions)',
-  '9) Gate checks: run npm run verify:premerge',
+  '8) Refund reconciliation: run npm run smoke:refund',
+  '9) Edge deploy check: run npm run smoke:edge (expect no 404 for xlsx functions)',
+  '10) Gate checks: run npm run verify:premerge',
 ];
 
 console.log('Operational Smoke Checklist');

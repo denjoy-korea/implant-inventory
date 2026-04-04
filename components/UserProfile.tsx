@@ -152,8 +152,15 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                         return;
                     }
                 } else {
-                    const refundMsg = result.refundAmount > 0
-                        ? `구독이 취소되었습니다. ${result.refundAmount.toLocaleString('ko-KR')}원이 환불됩니다 (영업일 5~7일 소요).`
+                    const recoveryParts: string[] = [];
+                    if (result.refundAmount > 0) {
+                        recoveryParts.push(`${result.refundAmount.toLocaleString('ko-KR')}원이 환불됩니다 (영업일 5~7일 소요)`);
+                    }
+                    if (result.creditRestoreAmount > 0) {
+                        recoveryParts.push(`${result.creditRestoreAmount.toLocaleString('ko-KR')} 크레딧이 복구됩니다`);
+                    }
+                    const refundMsg = recoveryParts.length > 0
+                        ? `구독이 취소되었습니다. ${recoveryParts.join(', ')}.`
                         : '구독이 취소되었습니다. 무료 플랜으로 전환되었습니다.';
                     showToast(refundMsg, 'success');
                 }
@@ -177,6 +184,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
     const pricing = planState ? PLAN_PRICING[planState.plan] : { monthlyPrice: 0, yearlyPrice: 0 };
     const pricePerMonth = billingLabel === '연간' ? pricing.yearlyPrice : pricing.monthlyPrice;
     const priceDisplay = pricePerMonth.toLocaleString('ko-KR');
+    const canManageBilling = user.role === 'master' || user.role === 'admin';
     const remainingDays = isUltimatePlan ? UNLIMITED_DAYS : (planState?.daysUntilExpiry ?? UNLIMITED_DAYS);
     const totalBillingDays = planState?.billingCycle === 'yearly' ? 365 : 30;
     const progressPercent = remainingDays >= UNLIMITED_DAYS ? 100 : Math.min(100, Math.round(((totalBillingDays - remainingDays) / totalBillingDays) * 100));
@@ -724,7 +732,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                 </p>
                             </div>
 
-                            {!isUltimatePlan && (
+                            {!isUltimatePlan && canManageBilling && (
                                 <div className="flex gap-2">
                                     <button onClick={() => setShowPlanPicker(true)} className="flex-1 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors">
                                         {planState?.daysUntilExpiry !== undefined && planState.daysUntilExpiry <= 30
@@ -737,7 +745,13 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                 </div>
                             )}
 
-                            {!isUltimatePlan && planState?.plan !== 'free' && !planState?.isTrialActive && (
+                            {!isUltimatePlan && !canManageBilling && (
+                                <p className="text-[11px] text-slate-400">
+                                    플랜 변경과 환불은 병원 관리자만 처리할 수 있습니다.
+                                </p>
+                            )}
+
+                            {!isUltimatePlan && canManageBilling && planState?.plan !== 'free' && !planState?.isTrialActive && (
                                 <button
                                     onClick={handleOpenCancelModal}
                                     disabled={isCancelLoading}
@@ -982,9 +996,15 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                             {cancelRefundPreview ? (
                                 <>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs text-slate-400">결제금액</span>
+                                        <span className="text-xs text-slate-400">현금 결제금액</span>
                                         <span className="text-sm font-bold text-slate-700">{cancelBilling?.amount.toLocaleString('ko-KR')}원</span>
                                     </div>
+                                    {Number(cancelBilling?.credit_used_amount ?? 0) > 0 && (
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs text-slate-400">보유 크레딧 사용</span>
+                                            <span className="text-sm font-bold text-slate-700">{Number(cancelBilling?.credit_used_amount ?? 0).toLocaleString('ko-KR')}원</span>
+                                        </div>
+                                    )}
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs text-slate-400">이용 기간</span>
                                         <span className="text-sm font-bold text-slate-700">{cancelRefundPreview.usedDays}일</span>
@@ -997,9 +1017,20 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, planState, hospitalName
                                                 : '없음'}
                                         </span>
                                     </div>
+                                    {cancelRefundPreview.creditRestoreAmount > 0 && (
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-500">예상 크레딧 복구</span>
+                                            <span className="text-base font-black text-teal-600">
+                                                {cancelRefundPreview.creditRestoreAmount.toLocaleString('ko-KR')}원
+                                            </span>
+                                        </div>
+                                    )}
                                     <p className="text-[11px] text-slate-400 leading-relaxed">{cancelRefundPreview.reason}</p>
                                     {cancelRefundPreview.refundAmount > 0 && (
-                                        <p className="text-[11px] text-slate-400">환불 처리: 영업일 5~7일 소요</p>
+                                        <p className="text-[11px] text-slate-400">카드 환불 처리: 영업일 5~7일 소요</p>
+                                    )}
+                                    {cancelRefundPreview.creditRestoreAmount > 0 && (
+                                        <p className="text-[11px] text-slate-400">크레딧 복구는 취소 처리 후 즉시 반영됩니다.</p>
                                     )}
                                     {/* payment_ref 없으면 수동 처리 안내 */}
                                     {cancelBilling && !cancelBilling.payment_ref && (

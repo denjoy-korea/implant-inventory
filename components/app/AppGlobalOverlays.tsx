@@ -35,7 +35,7 @@ interface PwaUpdateBarState {
   onLater: () => void;
 }
 
-interface AppGlobalOverlaysProps {
+export interface AppGlobalOverlaysProps {
   planLimitModal: PlanLimitModalState | null;
   confirmModal: ConfirmModalState | null;
   inventoryCompare: InventoryCompareState | null;

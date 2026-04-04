@@ -2,14 +2,21 @@
  * TossPayments 결제 서비스
  *
  * 흐름:
- * 1. requestPayment() → billing_history 생성(pending) → TossPayments SDK 호출 → 페이지 redirect
+ * 1. requestPayment()/requestCartPayment() → payment intent 준비
+ * 2. paymentIntentService가 billing_history 생성(pending) + TossPayments SDK 호출 → redirect
  * 2. 성공 redirect → /payment/success?paymentKey=...&orderId=...&amount=...
  * 3. confirmPayment() → toss-payment-confirm Edge Function → TossPayments confirm API → process_payment_callback RPC
  */
 
 import { supabase } from './supabaseClient';
-import { PlanType, BillingCycle, PLAN_PRICING, PLAN_NAMES } from '../types';
-import { resolveIsTestPayment, isMissingIsTestPaymentColumnError } from '../utils/paymentCompat';
+import { PlanType, BillingCycle } from '../types';
+import { calcPlanBaseAmount, calcPlanTotalAmount } from './planPaymentQuote';
+import {
+  executeHostedPaymentIntent,
+  preparePlanPaymentIntent,
+  prepareServicePurchasePaymentIntent,
+  type PaymentIntentResult,
+} from './paymentIntentService';
 
 declare global {
   interface Window {
@@ -33,6 +40,7 @@ interface TossPaymentsV1Instance {
 }
 
 const TOSS_SDK_URL = 'https://js.tosspayments.com/v1/payment';
+const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 let sdkLoadPromise: Promise<void> | null = null;
 
@@ -43,92 +51,16 @@ function resolveTossClientKey(): string | undefined {
   return value ? value : undefined;
 }
 
-function clearPendingServicePurchase() {
-  try {
-    sessionStorage.removeItem('_pendingOrderId');
-    sessionStorage.removeItem('_pendingPaymentType');
-    sessionStorage.removeItem('_pendingServiceCartKey');
-  } catch {
-    // sessionStorage unavailable
-  }
-}
+function getMissingTossClientKeyMessage(): string {
+  const base = 'TossPayments 클라이언트 키가 설정되지 않았습니다.';
+  const isLocalRuntime =
+    typeof window !== 'undefined' && LOCALHOST_HOSTNAMES.has(window.location.hostname);
 
-
-async function createBillingRecordWithCoupon(params: {
-  hospitalId: string;
-  plan: PlanType;
-  billingCycle: BillingCycle;
-  totalAmount: number;
-  paymentMethod: 'card' | 'transfer';
-  isTestPayment: boolean;
-  couponId: string | null;
-  originalAmount: number | null;
-  discountAmount: number;
-  upgradeCreditAmount: number;
-  upgradeSourceBillingId: string | null;
-  creditUsedAmount: number;
-}): Promise<{ billingId: string | null; error: unknown }> {
-  const insertPayload: Record<string, unknown> = {
-    hospital_id: params.hospitalId,
-    plan: params.plan,
-    billing_cycle: params.billingCycle,
-    amount: params.totalAmount,
-    is_test_payment: params.isTestPayment,
-    payment_status: 'pending',
-    payment_method: params.paymentMethod,
-  };
-  if (params.couponId) {
-    insertPayload.coupon_id = params.couponId;
-    insertPayload.original_amount = params.originalAmount;
-    insertPayload.discount_amount = params.discountAmount;
-  }
-  if (params.upgradeCreditAmount > 0) {
-    insertPayload.upgrade_credit_amount = params.upgradeCreditAmount;
-    insertPayload.upgrade_source_billing_id = params.upgradeSourceBillingId;
-  }
-  if (params.creditUsedAmount > 0) {
-    insertPayload.credit_used_amount = params.creditUsedAmount;
+  if (import.meta.env.DEV || isLocalRuntime) {
+    return `${base} .env.local의 VITE_TOSS_CLIENT_KEY 또는 NEXT_PUBLIC_TOSS_CLIENT_KEY를 확인하고 dev/preview 서버를 재시작해 주세요.`;
   }
 
-  const primary = await supabase
-    .from('billing_history')
-    .insert(insertPayload)
-    .select('id')
-    .single();
-
-  if (!primary.error && primary.data?.id) {
-    return { billingId: primary.data.id as string, error: null };
-  }
-
-  if (!isMissingIsTestPaymentColumnError(primary.error)) {
-    return { billingId: null, error: primary.error };
-  }
-
-  // Backward compatibility: migration 미적용 환경
-  if (params.couponId) {
-    console.error('[tossPaymentService] coupon requested but billing_history lacks coupon columns; rejecting to prevent full-price charge.');
-    return { billingId: null, error: new Error('쿠폰 적용에 필요한 DB 업데이트가 아직 완료되지 않았습니다. 관리자에게 문의하세요.') };
-  }
-  const fallbackAmount = params.originalAmount ?? params.totalAmount;
-  const fallback = await supabase
-    .from('billing_history')
-    .insert({
-      hospital_id: params.hospitalId,
-      plan: params.plan,
-      billing_cycle: params.billingCycle,
-      amount: fallbackAmount,
-      payment_status: 'pending',
-      payment_method: params.paymentMethod,
-    })
-    .select('id')
-    .single();
-
-  if (fallback.error || !fallback.data?.id) {
-    return { billingId: null, error: fallback.error };
-  }
-
-  console.warn('[tossPaymentService] billing_history column missing; fallback insert executed.');
-  return { billingId: fallback.data.id as string, error: null };
+  return `${base} 관리자에게 문의해주세요.`;
 }
 
 async function loadTossSdk(): Promise<void> {
@@ -179,10 +111,7 @@ export interface TossPaymentRequest {
   creditUsedAmount?: number;
 }
 
-export interface TossPaymentResult {
-  error?: string;
-  completed?: boolean;
-}
+export type TossPaymentResult = PaymentIntentResult;
 
 export interface TossConfirmResult {
   ok: boolean;
@@ -190,22 +119,51 @@ export interface TossConfirmResult {
   alreadyCompleted?: boolean;
 }
 
+const tossHostedPaymentProvider = {
+  resolveClientKey: resolveTossClientKey,
+  getMissingClientKeyMessage: getMissingTossClientKeyMessage,
+  ensureReady: loadTossSdk,
+  async requestRedirect(params: {
+    clientKey: string;
+    amount: number;
+    orderId: string;
+    orderName: string;
+    customerName?: string;
+    paymentMethod: 'card' | 'transfer';
+    successUrl: string;
+    failUrl: string;
+  }) {
+    if (!window.TossPayments) {
+      throw new Error('TossPayments SDK를 사용할 수 없습니다.');
+    }
+
+    const toss = window.TossPayments(params.clientKey);
+    const tossMethod = params.paymentMethod === 'card' ? '카드' : '계좌이체';
+
+    await toss.requestPayment(tossMethod, {
+      amount: params.amount,
+      orderId: params.orderId,
+      orderName: params.orderName,
+      customerName: params.customerName,
+      successUrl: params.successUrl,
+      failUrl: params.failUrl,
+    });
+  },
+};
+
 export const tossPaymentService = {
   /**
    * VAT 제외 기본 금액
    */
   calcBaseAmount(plan: PlanType, billingCycle: BillingCycle): number {
-    return billingCycle === 'yearly'
-      ? PLAN_PRICING[plan].yearlyPrice * 12
-      : PLAN_PRICING[plan].monthlyPrice;
+    return calcPlanBaseAmount(plan, billingCycle);
   },
 
   /**
    * VAT 포함 결제 금액 계산 (쿠폰 미적용)
    */
   calcTotalAmount(plan: PlanType, billingCycle: BillingCycle): number {
-    const base = this.calcBaseAmount(plan, billingCycle);
-    return Math.round(base * 1.1);
+    return calcPlanTotalAmount(plan, billingCycle);
   },
 
   /**
@@ -216,127 +174,8 @@ export const tossPaymentService = {
    * (취소/오류 시 error를 반환)
    */
   async requestPayment(request: TossPaymentRequest): Promise<TossPaymentResult> {
-    const {
-      hospitalId, plan, billingCycle, customerName, paymentMethod,
-      couponId, discountAmount,
-      upgradeCreditAmount, upgradeSourceBillingId,
-      creditUsedAmount,
-    } = request;
-    const clientKey = resolveTossClientKey();
-
-    if (!clientKey) {
-      return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. VITE_TOSS_CLIENT_KEY 설정을 확인해 주세요.' };
-    }
-
-    // 1. 금액 계산: 기본가 → 쿠폰 할인 → VAT → 업그레이드 크레딧 → 잔액 크레딧 차감
-    const baseAmount = this.calcBaseAmount(plan, billingCycle);
-    const appliedDiscount = couponId && discountAmount ? Math.min(discountAmount, baseAmount) : 0;
-    const afterDiscount = baseAmount - appliedDiscount;
-    const vatAmount = Math.round(afterDiscount * 1.1);
-    const appliedCredit = upgradeCreditAmount && upgradeSourceBillingId
-      ? Math.min(upgradeCreditAmount, vatAmount)
-      : 0;
-    const afterUpgradeCredit = vatAmount - appliedCredit;
-    const appliedCreditBalance = creditUsedAmount
-      ? Math.min(creditUsedAmount, afterUpgradeCredit) // 전액 차감 허용
-      : 0;
-    const totalAmount = afterUpgradeCredit - appliedCreditBalance;
-    const originalAmount = this.calcTotalAmount(plan, billingCycle);
-    const isTestPayment = resolveIsTestPayment();
-
-    if (totalAmount < 0) {
-      return { error: '결제 금액이 0원 미만입니다. 크레딧 적용을 확인해주세요.' };
-    }
-
-    // 2. billing_history 레코드 생성
-    const { billingId, error: dbError } = await createBillingRecordWithCoupon({
-      hospitalId,
-      plan,
-      billingCycle,
-      totalAmount,
-      paymentMethod,
-      isTestPayment,
-      couponId: couponId || null,
-      originalAmount: couponId ? originalAmount : null,
-      discountAmount: appliedDiscount,
-      upgradeCreditAmount: appliedCredit,
-      upgradeSourceBillingId: appliedCredit > 0 ? (upgradeSourceBillingId ?? null) : null,
-      creditUsedAmount: appliedCreditBalance,
-    });
-
-    if (dbError || !billingId) {
-      console.error('[tossPaymentService] billing_history insert failed:', dbError);
-      return { error: '결제 이력 생성 실패. 다시 시도해주세요.' };
-    }
-
-    // 2-a. 크레딧 전액 결제: TossPayments 불필요
-    if (totalAmount === 0) {
-      const { error: rpcError } = await supabase.rpc('process_credit_payment', { p_billing_id: billingId });
-      if (rpcError) {
-        await supabase.from('billing_history').update({ payment_status: 'cancelled' }).eq('id', billingId).eq('payment_status', 'pending');
-        return { error: rpcError.message ?? '크레딧 결제 처리 중 오류가 발생했습니다.' };
-      }
-      return {};
-    }
-
-    // 3. TossPayments SDK 로드
-    try {
-      await loadTossSdk();
-    } catch {
-      // billing record 취소 처리
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-      return { error: 'TossPayments SDK 로드에 실패했습니다. 잠시 후 다시 시도해주세요.' };
-    }
-
-    if (!window.TossPayments) {
-      // SDK 로드는 성공했지만 window.TossPayments가 비어 있는 경우 billing record 취소 처리
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-      return { error: 'TossPayments SDK를 사용할 수 없습니다.' };
-    }
-
-    // 4. 결제 요청 (성공 시 페이지 redirect → 이 함수는 반환되지 않음)
-    // [SEC] CSRF 방지: redirect 전 billingId를 sessionStorage에 기록, /payment/fail 에서 소유권 검증
-    try { sessionStorage.setItem('_pendingOrderId', billingId); } catch { /* private mode */ }
-    const toss = window.TossPayments(clientKey);
-    const origin = window.location.origin;
-    const orderName = `${PLAN_NAMES[plan]} 플랜 ${billingCycle === 'yearly' ? '연간' : '월간'} 결제`;
-    const tossMethod = paymentMethod === 'card' ? '카드' : '계좌이체';
-
-    try {
-      await toss.requestPayment(tossMethod, {
-        amount: totalAmount,
-        orderId: billingId,
-        orderName,
-        customerName: customerName || undefined,
-        successUrl: `${origin}/payment/success`,
-        failUrl: `${origin}/payment/fail`,
-      });
-      // 성공 시 여기까지 도달하지 않음 (페이지 redirect)
-      return {};
-    } catch (err: unknown) {
-      const tossErr = err as { code?: string; message?: string };
-      const isCancel = tossErr.code === 'USER_CANCEL' || tossErr.message?.includes('cancel');
-
-      // billing record 취소 처리
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-
-      if (isCancel) {
-        return { error: 'user_cancel' };
-      }
-      return { error: tossErr.message || '결제 중 오류가 발생했습니다.' };
-    }
+    const intent = preparePlanPaymentIntent(request);
+    return executeHostedPaymentIntent(intent, tossHostedPaymentProvider);
   },
 
   /**
@@ -349,119 +188,8 @@ export const tossPaymentService = {
     cartStorageKey: string;
     items: Array<{ id: string; name: string; price: number }>;
   }): Promise<TossPaymentResult> {
-    const clientKey = resolveTossClientKey();
-    if (!clientKey) {
-      return { error: 'TossPayments 클라이언트 키가 설정되지 않았습니다. 관리자에게 문의해주세요.' };
-    }
-
-    const subtotal = params.items.reduce((s, i) => s + i.price, 0);
-    const totalAmount = Math.round(subtotal * 1.1); // VAT 10%
-    const isTestPayment = resolveIsTestPayment();
-
-    const { data, error: dbError } = await supabase
-      .from('billing_history')
-      .insert({
-        hospital_id: params.hospitalId,
-        plan: 'service_purchase',
-        billing_cycle: null,
-        amount: totalAmount,
-        is_test_payment: isTestPayment,
-        payment_status: 'pending',
-        payment_method: totalAmount === 0 ? 'free' : 'card',
-        description: JSON.stringify(params.items.map(i => ({ id: i.id, name: i.name, price: i.price }))),
-      })
-      .select('id')
-      .single();
-
-    if (dbError || !data?.id) {
-      console.error('[tossPaymentService] cart billing insert failed:', dbError);
-      return { error: '주문 생성에 실패했습니다. 다시 시도해주세요.' };
-    }
-
-    const billingId = data.id as string;
-
-    if (totalAmount === 0) {
-      const { data: confirmData, error: confirmError } = await supabase.functions.invoke('toss-payment-confirm', {
-        body: { paymentKey: 'FREE_SERVICE_PURCHASE', orderId: billingId, amount: 0 },
-      });
-
-      if (confirmError || !(confirmData as { ok?: boolean } | null)?.ok) {
-        console.error('[tossPaymentService] zero-cost cart confirm failed:', confirmError, confirmData);
-        await supabase
-          .from('billing_history')
-          .update({ payment_status: 'failed' })
-          .eq('id', billingId)
-          .eq('payment_status', 'pending');
-        return { error: '무료 주문 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' };
-      }
-
-      clearPendingServicePurchase();
-      try {
-        localStorage.removeItem(params.cartStorageKey);
-      } catch {
-        // localStorage unavailable
-      }
-      return { completed: true };
-    }
-
-    try {
-      await loadTossSdk();
-    } catch {
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-      clearPendingServicePurchase();
-      return { error: 'TossPayments SDK 로드에 실패했습니다. 잠시 후 다시 시도해주세요.' };
-    }
-
-    if (!window.TossPayments) {
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-      clearPendingServicePurchase();
-      return { error: 'TossPayments SDK를 사용할 수 없습니다.' };
-    }
-
-    try {
-      sessionStorage.setItem('_pendingOrderId', billingId);
-      sessionStorage.setItem('_pendingPaymentType', 'service');
-      sessionStorage.setItem('_pendingServiceCartKey', params.cartStorageKey);
-    } catch { /* private mode */ }
-
-    const toss = window.TossPayments(clientKey);
-    const origin = window.location.origin;
-    const orderName = params.items.length === 1
-      ? params.items[0].name
-      : `${params.items[0].name} 외 ${params.items.length - 1}건`;
-
-    try {
-      await toss.requestPayment('카드', {
-        amount: totalAmount,
-        orderId: billingId,
-        orderName,
-        customerName: params.customerName || undefined,
-        successUrl: `${origin}/payment/success`,
-        failUrl: `${origin}/payment/fail`,
-      });
-      return {};
-    } catch (err: unknown) {
-      const tossErr = err as { code?: string; message?: string };
-      const isCancel = tossErr.code === 'USER_CANCEL' || tossErr.message?.includes('cancel');
-
-      await supabase
-        .from('billing_history')
-        .update({ payment_status: 'cancelled' })
-        .eq('id', billingId)
-        .eq('payment_status', 'pending');
-      clearPendingServicePurchase();
-
-      if (isCancel) return { error: 'user_cancel' };
-      return { error: tossErr.message || '결제 중 오류가 발생했습니다.' };
-    }
+    const intent = prepareServicePurchasePaymentIntent(params);
+    return executeHostedPaymentIntent(intent, tossHostedPaymentProvider);
   },
 
   /**

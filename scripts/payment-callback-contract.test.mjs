@@ -19,8 +19,8 @@ test('billing_history has explicit is_test_payment migration', () => {
   assert.match(sql, /idx_billing_history_test_flag/);
 });
 
-test('toss payment request writes is_test_payment from live mode flag', () => {
-  const src = read('services/tossPaymentService.ts');
+test('payment intent billing insert writes is_test_payment from live mode flag', () => {
+  const src = read('services/paymentIntentService.ts');
   // resolveIsTestPayment may be defined inline or imported from utils/paymentCompat
   assert.ok(
     /function resolveIsTestPayment\(\)/.test(src) || /import\s*\{[^}]*resolveIsTestPayment[^}]*\}\s*from\s*['"].*paymentCompat['"]/.test(src),
@@ -72,8 +72,11 @@ test('payment-callback edge function keeps callback->rpc contract', () => {
 
 test('mrr unblock report uses is_test_payment=false as live criterion', () => {
   const script = read('scripts/mrr-raw-unblock-check.mjs');
-  assert.match(script, /\?select=payment_status,amount,is_test_payment,created_at/);
+  assert.match(script, /\?select=payment_status,amount,refund_amount,credit_restore_amount,is_test_payment,created_at/);
   assert.match(script, /const isTestPayment = row\.is_test_payment !== false;/);
   assert.match(script, /completed \+ amount>0 \+ is_test_payment=false/);
   assert.match(script, /paidNonZeroLiveCount/);
+  assert.match(script, /status === 'refunded'/);
+  assert.match(script, /refundCashAmount/);
+  assert.match(script, /restoredCreditAmount/);
 });

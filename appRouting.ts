@@ -25,6 +25,47 @@ export const PATH_TO_VIEW = Object.fromEntries(
   Object.entries(VIEW_PATH).map(([k, v]) => [v, k as View])
 ) as Record<string, View>;
 
+function normalizePathname(pathname: string): string {
+  if (!pathname) return '/';
+  if (pathname !== '/' && pathname.endsWith('/')) {
+    return pathname.replace(/\/+$/, '') || '/';
+  }
+  return pathname;
+}
+
+export function resolveViewFromPathname(pathname: string): View | undefined {
+  const normalizedPath = normalizePathname(pathname);
+  let view: View | undefined = PATH_TO_VIEW[normalizedPath] as View | undefined;
+
+  // Legacy nested mount fallback: /inventory/about -> /about
+  if (!view && normalizedPath.startsWith('/inventory/')) {
+    const nestedPath = normalizedPath.replace(/^\/inventory/, '') || '/';
+    view = PATH_TO_VIEW[nestedPath] as View | undefined;
+  }
+
+  if (!view && normalizedPath.startsWith('/courses/')) {
+    return 'courses';
+  }
+
+  if (!view && normalizedPath === '/admin') {
+    return 'admin_panel';
+  }
+
+  return view;
+}
+
+export function resolveInitialViewFromLocation(pathname: string, hash: string): View | undefined {
+  const pathView = resolveViewFromPathname(pathname);
+  if (pathView) return pathView;
+
+  // Legacy hash fallback: #/implant-inventory -> landing
+  if (hash === '#/implant-inventory' || hash === '#/implant-inventory/') {
+    return 'landing';
+  }
+
+  return undefined;
+}
+
 /* ── Hash Routing Constants ── */
 export const VIEW_HASH: Record<View, string> = {
   homepage: '', landing: 'implant-inventory', login: 'login', signup: 'signup', invite: 'invite', dashboard: 'dashboard', mypage: 'mypage',

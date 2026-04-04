@@ -107,7 +107,7 @@ function resolveMonthRange(month) {
 async function fetchBillingRows({ supabaseUrl, accessKey, startIso, endIso }) {
   const baseEndpoint = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/billing_history`;
   const query = `&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`;
-  const endpoint = `${baseEndpoint}?select=payment_status,amount,is_test_payment,created_at${query}`;
+  const endpoint = `${baseEndpoint}?select=payment_status,amount,refund_amount,credit_restore_amount,is_test_payment,created_at${query}`;
 
   let response;
   try {
@@ -127,7 +127,7 @@ async function fetchBillingRows({ supabaseUrl, accessKey, startIso, endIso }) {
     const body = await response.text();
 
     if (response.status === 400 && body.includes('is_test_payment')) {
-      const fallbackEndpoint = `${baseEndpoint}?select=payment_status,amount,created_at${query}`;
+      const fallbackEndpoint = `${baseEndpoint}?select=payment_status,amount,refund_amount,credit_restore_amount,created_at${query}`;
       try {
         const fallbackResponse = await fetch(fallbackEndpoint, {
           method: 'GET',
@@ -179,8 +179,12 @@ function summarize(rows) {
     paidAmount: 0,
     paidNonZeroAmount: 0,
     paidNonZeroLiveAmount: 0,
-    refundedAmount: 0,
+    refundCashAmount: 0,
+    refundedGrossAmount: 0,
+    restoredCreditAmount: 0,
+    totalRecoveryAmount: 0,
     pendingAmount: 0,
+    confirmingAmount: 0,
     failedAmount: 0,
     cancelledAmount: 0,
     testPaymentAmount: 0,
@@ -190,6 +194,7 @@ function summarize(rows) {
     paidNonZeroLiveCount: 0,
     refundedCount: 0,
     pendingCount: 0,
+    confirmingCount: 0,
     failedCount: 0,
     cancelledCount: 0,
     testPaymentCount: 0,
@@ -199,6 +204,8 @@ function summarize(rows) {
     const status = String(row.payment_status || '');
     const amount = Number(row.amount || 0);
     const isTestPayment = row.is_test_payment !== false;
+    const refundAmount = Number(row.refund_amount || 0);
+    const creditRestoreAmount = Number(row.credit_restore_amount || 0);
 
     // billing_history 레코드 생성 자체를 "청구(issued)"로 간주한다.
     base.chargedCount += 1;
@@ -224,15 +231,21 @@ function summarize(rows) {
     } else if (status === 'pending') {
       base.pendingCount += 1;
       base.pendingAmount += amount;
+    } else if (status === 'confirming') {
+      base.confirmingCount += 1;
+      base.confirmingAmount += amount;
     } else if (status === 'failed') {
       base.failedCount += 1;
       base.failedAmount += amount;
+    } else if (status === 'refunded') {
+      base.refundedCount += 1;
+      base.refundedGrossAmount += amount;
+      base.refundCashAmount += refundAmount;
+      base.restoredCreditAmount += creditRestoreAmount;
+      base.totalRecoveryAmount += refundAmount + creditRestoreAmount;
     } else if (status === 'cancelled') {
       base.cancelledCount += 1;
       base.cancelledAmount += amount;
-      // 환불 status가 별도 컬럼에 없는 스키마이므로 cancelled를 proxy로 함께 집계
-      base.refundedCount += 1;
-      base.refundedAmount += amount;
     }
   }
 
@@ -254,12 +267,17 @@ function renderReport({ month, startIso, endIso, generatedAt, summary, blockedRe
   lines.push(`- paid: ${summary.paidCount}건 / ${summary.paidAmount.toLocaleString()}원`);
   lines.push(`- paid_non_zero: ${summary.paidNonZeroCount}건 / ${summary.paidNonZeroAmount.toLocaleString()}원`);
   lines.push(`- paid_non_zero_live: ${summary.paidNonZeroLiveCount}건 / ${summary.paidNonZeroLiveAmount.toLocaleString()}원`);
-  lines.push(`- refunded: ${summary.refundedCount}건 / ${summary.refundedAmount.toLocaleString()}원`);
+  lines.push(`- refunded: ${summary.refundedCount}건 / 원결제 ${summary.refundedGrossAmount.toLocaleString()}원`);
+  lines.push(`- refund_cash: ${summary.refundCashAmount.toLocaleString()}원`);
+  lines.push(`- restored_credit: ${summary.restoredCreditAmount.toLocaleString()}원`);
+  lines.push(`- recovery_total: ${summary.totalRecoveryAmount.toLocaleString()}원`);
   lines.push(`- pending: ${summary.pendingCount}건 / ${summary.pendingAmount.toLocaleString()}원`);
+  lines.push(`- confirming: ${summary.confirmingCount}건 / ${summary.confirmingAmount.toLocaleString()}원`);
   lines.push(`- failed: ${summary.failedCount}건 / ${summary.failedAmount.toLocaleString()}원`);
   lines.push(`- cancelled: ${summary.cancelledCount}건 / ${summary.cancelledAmount.toLocaleString()}원`);
   lines.push(`- test_payment: ${summary.testPaymentCount}건 / ${summary.testPaymentAmount.toLocaleString()}원`);
-  lines.push('- status 기준: payment_status(pending/completed/failed/cancelled), refunded는 cancelled 프록시 집계');
+  lines.push('- status 기준: payment_status(pending/confirming/completed/failed/cancelled/refunded)');
+  lines.push('- refunded 집계는 refund_amount(현금 환불) + credit_restore_amount(크레딧 복구) 분리 기준');
   lines.push('- live 기준: completed + amount>0 + is_test_payment=false');
   if (fetchNotice) {
     lines.push(`- fetch notice: ${fetchNotice}`);

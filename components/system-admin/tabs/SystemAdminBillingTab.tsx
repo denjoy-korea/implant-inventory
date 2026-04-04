@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { useAdminBilling } from '../../../hooks/admin/useAdminBilling';
+import {
+  buildBillingDisplayModel,
+  getBillingCycleDisplayLabel,
+  getBillingPaymentMethodDisplayLabel,
+  getBillingPlanDisplayLabel,
+} from '../../../utils/billingDisplay';
 
 const PAYMENT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   completed: { label: '완료',   color: 'bg-emerald-50 text-emerald-600' },
   pending:   { label: '대기',   color: 'bg-amber-50 text-amber-600' },
+  confirming:{ label: '확인 중', color: 'bg-blue-50 text-blue-600' },
   failed:    { label: '실패',   color: 'bg-rose-50 text-rose-600' },
   cancelled: { label: '취소',   color: 'bg-slate-100 text-slate-500' },
   refunded:  { label: '환불',   color: 'bg-purple-50 text-purple-600' },
@@ -11,27 +18,12 @@ const PAYMENT_STATUS_LABELS: Record<string, { label: string; color: string }> = 
 
 const STATUS_CHECKBOXES = [
   { key: 'completed', label: '결제완료' },
+  { key: 'confirming', label: '확인 중' },
   { key: 'cancelled', label: '취소' },
   { key: 'refunded',  label: '부분취소/환불' },
   { key: 'pending',   label: '입금대기' },
   { key: 'failed',    label: '실패' },
 ] as const;
-
-const PAYMENT_METHOD: Record<string, string> = {
-  card:            '신용카드',
-  transfer:        '계좌이체',
-  free:            '무료',
-  trial:           '체험',
-  admin_manual:    '관리자',
-  plan_change:     '플랜변경',
-  self_cancel:     '해지',
-  credit_only:     '크레딧',
-  payment_teacher: '-',
-};
-
-const PLAN_LABEL: Record<string, string> = {
-  free: 'Free', basic: 'Basic', plus: 'Plus', business: 'Business',
-};
 
 type PresetKey = 'day' | 'week' | 'month1' | 'month3' | 'month6';
 
@@ -93,24 +85,26 @@ const SystemAdminBillingTab: React.FC = () => {
           <p className="text-2xl font-black text-emerald-500">{kpi.completedCount}</p>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">순 수익</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">순 현금 수익</p>
           <p className="text-2xl font-black text-violet-500">{krw(kpi.netRevenue)}</p>
           {kpi.totalRefunds > 0 && (
             <p className="text-[10px] text-slate-400 mt-0.5">총액 {krw(kpi.grossRevenue)} − 환불 {krw(kpi.totalRefunds)}</p>
           )}
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">환불</p>
-          <p className="text-2xl font-black text-purple-500">{krw(kpi.totalRefunds)}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">환불/복구</p>
+          <p className="text-2xl font-black text-purple-500">{krw(kpi.totalRecoveries)}</p>
           {kpi.refundedCount > 0 && (
-            <p className="text-[10px] text-slate-400 mt-0.5">{kpi.refundedCount}건</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              환불 {krw(kpi.totalRefunds)} · 크레딧 {krw(kpi.totalCreditRestores)} · {kpi.refundedCount}건
+            </p>
           )}
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">대기/취소</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">진행/취소</p>
           <p className="text-2xl font-black text-amber-500">{kpi.pendingCount + kpi.cancelledCount}</p>
           {(kpi.pendingCount > 0 || kpi.cancelledCount > 0) && (
-            <p className="text-[10px] text-slate-400 mt-0.5">대기 {kpi.pendingCount} · 취소 {kpi.cancelledCount}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">진행 {kpi.pendingCount} · 취소 {kpi.cancelledCount}</p>
           )}
         </div>
       </div>
@@ -260,7 +254,7 @@ const SystemAdminBillingTab: React.FC = () => {
                   <th className="px-5 py-3">주기</th>
                   <th className="px-5 py-3">결제수단</th>
                   <th className="px-5 py-3 text-right">결제금액</th>
-                  <th className="px-5 py-3 text-right">환불</th>
+                  <th className="px-5 py-3 text-right">환불/복구</th>
                   <th className="px-5 py-3">상태</th>
                   <th className="px-5 py-3">비고</th>
                   <th className="px-5 py-3"></th>
@@ -268,6 +262,7 @@ const SystemAdminBillingTab: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {displayRows.map(row => {
+                  const display = buildBillingDisplayModel(row);
                   const ps = PAYMENT_STATUS_LABELS[row.payment_status] ?? { label: row.payment_status, color: 'bg-slate-100 text-slate-500' };
                   const hospitalName = row.hospital_id ? (hospitals[row.hospital_id] || row.hospital_id.slice(0, 8) + '…') : '-';
                   const displayName = row.hospital_name_snapshot || hospitalName;
@@ -276,7 +271,8 @@ const SystemAdminBillingTab: React.FC = () => {
                   const phoneLast4 = row.phone_last4_snapshot;
                   const creditUsed = row.credit_used_amount ?? 0;
                   const refundAmt = row.refund_amount ?? 0;
-                  const descText = row.description || (row.payment_ref
+                  const creditRestore = row.credit_restore_amount ?? 0;
+                  const descText = display.productLabel || (row.payment_ref
                     ? row.payment_ref.slice(0, 22) + (row.payment_ref.length > 22 ? '…' : '')
                     : '-');
 
@@ -308,14 +304,14 @@ const SystemAdminBillingTab: React.FC = () => {
                         )}
                       </td>
                       {/* 플랜 */}
-                      <td className="px-5 py-3 text-slate-600">{PLAN_LABEL[row.plan] ?? row.plan}</td>
+                      <td className="px-5 py-3 text-slate-600">{getBillingPlanDisplayLabel(row.plan)}</td>
                       {/* 주기 */}
                       <td className="px-5 py-3 text-slate-500">
-                        {row.billing_cycle === 'yearly' ? '연간' : row.billing_cycle === 'monthly' ? '월간' : '-'}
+                        {getBillingCycleDisplayLabel(row.billing_cycle) || '-'}
                       </td>
                       {/* 결제수단 */}
                       <td className="px-5 py-3 text-slate-500">
-                        {PAYMENT_METHOD[row.payment_method ?? ''] ?? (row.payment_method ?? '-')}
+                        {getBillingPaymentMethodDisplayLabel(row.payment_method)}
                       </td>
                       {/* 결제금액 */}
                       <td className="px-5 py-3 text-right">
@@ -326,11 +322,16 @@ const SystemAdminBillingTab: React.FC = () => {
                       </td>
                       {/* 환불 */}
                       <td className="px-5 py-3 text-right">
-                        {refundAmt > 0 ? (
-                          <span className="font-bold text-rose-500">{krw(refundAmt)}</span>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
+                        {refundAmt > 0 || creditRestore > 0 ? (
+                          <div className="space-y-0.5">
+                            {refundAmt > 0 && (
+                              <div className="font-bold text-rose-500">{krw(refundAmt)}</div>
+                            )}
+                            {creditRestore > 0 && (
+                              <div className="text-[10px] font-bold text-teal-600">크레딧 {krw(creditRestore)}</div>
+                            )}
+                          </div>
+                        ) : <span className="text-slate-300">-</span>}
                       </td>
                       {/* 상태 */}
                       <td className="px-5 py-3">
@@ -344,7 +345,7 @@ const SystemAdminBillingTab: React.FC = () => {
                         </div>
                       </td>
                       {/* 비고 */}
-                      <td className="px-5 py-3 text-xs text-slate-400 font-mono max-w-[160px] truncate" title={row.description || row.payment_ref || undefined}>
+                      <td className="px-5 py-3 text-xs text-slate-400 max-w-[160px] truncate" title={display.productLabel || row.payment_ref || undefined}>
                         {descText}
                       </td>
                       {/* 삭제 */}
