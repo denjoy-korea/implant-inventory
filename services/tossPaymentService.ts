@@ -187,6 +187,7 @@ export const tossPaymentService = {
     customerName: string;
     cartStorageKey: string;
     items: Array<{ id: string; name: string; price: number }>;
+    creditUsedAmount?: number;
   }): Promise<TossPaymentResult> {
     const intent = prepareServicePurchasePaymentIntent(params);
     return executeHostedPaymentIntent(intent, tossHostedPaymentProvider);

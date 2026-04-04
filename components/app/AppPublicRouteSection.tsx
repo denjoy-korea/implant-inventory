@@ -42,6 +42,7 @@ const AppPublicRouteSection: React.FC<AppPublicRouteSectionProps> = ({
           isSystemAdmin={isSystemAdmin}
           preSelectedPlan={state.preSelectedPlan}
           planState={state.planState}
+          userCreditBalance={state.userCreditBalance}
           inviteInfo={inviteInfo}
           mfaPendingEmail={state.mfaPendingEmail}
           onNavigate={(view: View) => setState(prev => ({ ...prev, currentView: view }))}

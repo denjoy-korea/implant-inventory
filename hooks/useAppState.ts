@@ -48,6 +48,7 @@ const INITIAL_STATE: AppState = {
   hospitalWorkDays: DEFAULT_WORK_DAYS,
   hospitalBillingProgram: null,
   hospitalBizFileUrl: null,
+  userCreditBalance: 0,
 };
 
 type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;

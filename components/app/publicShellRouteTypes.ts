@@ -43,6 +43,7 @@ export interface PublicShellRouteContentProps {
   isLoggedIn: boolean;
   preSelectedPlan?: PlanType;
   planState: HospitalPlanState | null;
+  userCreditBalance?: number;
   inviteInfo: InviteInfo | null;
   mfaPendingEmail?: string;
   consultationPrefill: ConsultationPrefill;

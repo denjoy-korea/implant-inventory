@@ -31,6 +31,7 @@ const baseState: AppState = {
   hospitalWorkDays: [],
   hospitalBillingProgram: null,
   hospitalBizFileUrl: null,
+  userCreditBalance: 0,
 };
 
 const workspaceProps = {

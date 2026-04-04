@@ -20,6 +20,7 @@ interface PublicAppShellProps {
   isSystemAdmin: boolean;
   preSelectedPlan?: PlanType;
   planState: HospitalPlanState | null;
+  userCreditBalance?: number;
   inviteInfo: InviteInfo | null;
   mfaPendingEmail?: string;
   onNavigate: (view: View) => void;
@@ -46,6 +47,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
   isSystemAdmin,
   preSelectedPlan,
   planState,
+  userCreditBalance = 0,
   inviteInfo,
   mfaPendingEmail,
   onNavigate,
@@ -131,6 +133,7 @@ const PublicAppShell: React.FC<PublicAppShellProps> = ({
         isLoggedIn={isLoggedIn}
         preSelectedPlan={preSelectedPlan}
         planState={planState}
+        userCreditBalance={userCreditBalance}
         inviteInfo={inviteInfo}
         mfaPendingEmail={mfaPendingEmail}
         consultationPrefill={consultationPrefill}

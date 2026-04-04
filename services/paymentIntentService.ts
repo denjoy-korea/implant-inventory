@@ -56,6 +56,7 @@ export interface ServicePurchasePaymentIntentRequest {
   customerName: string;
   cartStorageKey: string;
   items: ServicePurchaseItem[];
+  creditUsedAmount?: number;
 }
 
 interface BillingInsertFallback {
@@ -259,12 +260,14 @@ export function preparePlanPaymentIntent(request: PlanPaymentIntentRequest): Hos
 export function prepareServicePurchasePaymentIntent(
   request: ServicePurchasePaymentIntentRequest,
 ): HostedPaymentIntent {
-  const totalAmount = buildServicePurchaseTotalAmount(request.items);
+  const grossAmount = buildServicePurchaseTotalAmount(request.items);
+  const creditUsed = Math.min(request.creditUsedAmount ?? 0, grossAmount);
+  const totalAmount = Math.max(0, grossAmount - creditUsed);
   const metadataItems = toServicePurchaseMetadataItems(request.items);
   const orderName = buildServicePurchaseOrderName(metadataItems);
   const serializedMetadata = serializePaymentMetadata(createServicePurchasePaymentMetadata({
     orderName,
-    payableAmount: totalAmount,
+    payableAmount: grossAmount,
     items: metadataItems,
   }));
 
@@ -280,6 +283,7 @@ export function prepareServicePurchasePaymentIntent(
       plan: 'service_purchase',
       billing_cycle: null,
       amount: totalAmount,
+      credit_used_amount: creditUsed > 0 ? creditUsed : null,
       payment_method: totalAmount === 0 ? 'free' : 'card',
       description: serializedMetadata,
     },
@@ -290,6 +294,7 @@ export function prepareServicePurchasePaymentIntent(
         plan: 'service_purchase',
         billing_cycle: null,
         amount: totalAmount,
+        credit_used_amount: creditUsed > 0 ? creditUsed : null,
         payment_method: totalAmount === 0 ? 'free' : 'card',
         description: serializedMetadata,
       },
@@ -297,7 +302,7 @@ export function prepareServicePurchasePaymentIntent(
     },
     handleZeroAmount: async (billingId) => {
       const { data, error } = await supabase.functions.invoke('toss-payment-confirm', {
-        body: { paymentKey: 'FREE_SERVICE_PURCHASE', orderId: billingId, amount: 0 },
+        body: { paymentKey: 'FULL_CREDIT_PAYMENT', orderId: billingId, amount: 0 },
       });
 
       if (error || !(data as { ok?: boolean } | null)?.ok) {

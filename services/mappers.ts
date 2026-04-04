@@ -330,6 +330,7 @@ export function dbToUser(db: DbProfile, authEmail?: string | null): User {
     suspendReason: db.suspend_reason ?? null,
     permissions: db.permissions ?? null,
     mfaEnabled: db.mfa_enabled ?? false,
+    creditBalance: Number(db.credit_balance ?? 0),
   };
 }
 

@@ -257,7 +257,7 @@ const MemberManager: React.FC<MemberManagerProps> = ({ currentUser, onClose, pla
             hospitalService.getMyHospital(),
         ]);
 
-        const mapProfile = (p: typeof activeData[0]) => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, clinicRole: p.clinic_role ?? null, hospitalId: p.hospital_id || '', status: p.status, permissions: p.permissions ?? null });
+        const mapProfile = (p: typeof activeData[0]) => ({ id: p.id, _id: p.id, name: p.name, email: p.email, role: p.role, clinicRole: p.clinic_role ?? null, hospitalId: p.hospital_id || '', status: p.status, permissions: p.permissions ?? null, creditBalance: 0 });
         setMembers(activeData.map(mapProfile));
         setPendingMembers(pendingData.map(mapProfile));
         setReadonlyMembers(readonlyData.map(mapProfile));

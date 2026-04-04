@@ -3,7 +3,7 @@ import {
   createServicePurchaseProductDescriptor,
   parsePaymentProductDescriptor,
   type PaymentProductDescriptor,
-} from './paymentProducts';
+} from './paymentProducts.ts';
 
 export type PaymentMetadataKind = 'plan_payment' | 'service_purchase';
 

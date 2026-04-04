@@ -340,7 +340,10 @@ Deno.serve(async (req: Request) => {
 
     let servicePayRef = paymentKey.trim();
 
-    if (billingAmount > 0) {
+    // FULL_CREDIT_PAYMENT: 크레딧으로 전액 결제한 경우 TossPayments 호출 생략
+    if (paymentKey.trim() === "FULL_CREDIT_PAYMENT") {
+      servicePayRef = "FULL_CREDIT_PAYMENT";
+    } else if (billingAmount > 0) {
       const encodedKeyService = btoa(`${tossSecretKey}:`);
       let serviceTossResponse: Response;
       try {
@@ -376,7 +379,7 @@ Deno.serve(async (req: Request) => {
       servicePayRef = typeof serviceTossData.paymentKey === "string"
         ? serviceTossData.paymentKey
         : paymentKey.trim();
-    } else {
+    } else if (paymentKey.trim() !== "FULL_CREDIT_PAYMENT") {
       servicePayRef = "FREE_SERVICE_PURCHASE";
     }
 
@@ -391,6 +394,39 @@ Deno.serve(async (req: Request) => {
       .from("billing_history")
       .update({ payment_status: "completed", payment_ref: servicePayRef, updated_at: new Date().toISOString() })
       .eq("id", orderId.trim());
+
+    // ── 크레딧 차감 (credit_used_amount > 0) ──────────────────────────────────
+    const serviceCreditUsed = Number(billing.credit_used_amount ?? 0);
+    if (serviceCreditUsed > 0) {
+      const { error: spendError } = await adminClient.rpc("spend_user_credit", {
+        p_user_id: user.id,
+        p_amount: serviceCreditUsed,
+        p_source: "lecture_payment",
+        p_reference_id: orderId.trim(),
+        p_memo: null,
+      });
+      if (spendError) {
+        console.error("[toss-payment-confirm] spend_user_credit failed (non-fatal):", spendError.message);
+      }
+    }
+
+    // ── 강의 첫 구매 보너스 10% 적립 ─────────────────────────────────────────
+    const grossAmount = billingAmount + serviceCreditUsed;
+    if (grossAmount > 0) {
+      const bonusAmount = Math.round(grossAmount * 0.1 / 10) * 10;
+      if (bonusAmount >= 10) {
+        const { error: earnError } = await adminClient.rpc("earn_user_credit", {
+          p_user_id: user.id,
+          p_amount: bonusAmount,
+          p_source: "lecture_purchase_bonus",
+          p_reference_id: orderId.trim(),
+          p_memo: `강의 구매 보너스 (${grossAmount.toLocaleString()}원의 10%)`,
+        });
+        if (earnError) {
+          console.error("[toss-payment-confirm] earn_user_credit failed (non-fatal):", earnError.message);
+        }
+      }
+    }
 
     return jsonResponse({
       ok: true,

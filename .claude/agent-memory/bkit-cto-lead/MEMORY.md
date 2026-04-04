@@ -15,12 +15,14 @@
 - Dead code: 4 files confirmed (572 LOC)
 - See `docs/01-plan/features/codebase-optimization.plan.md`
 
-## Current PDCA: codebase-optimization
+## Current PDCA: denjoy-platform-restructure
+- Phase: Design (completed 2026-04-04)
+- Design: `docs/02-design/denjoy-platform-restructure.design.md`
+- 10 diagnosed problems, 3-tier AppLayer architecture, P0/P1/P2 execution plans (~690 LOC)
+
+## Previous PDCA: codebase-optimization
 - Phase: Plan (completed 2026-03-05)
 - Team: frontend-architect, bkend-expert, qa-strategist
-- Quick Wins: dead code removal, data externalization to JSON, worktree cleanup
-- Medium: App.tsx decomposition, OrderManager/DashboardOverview/AuthForm split
-- Long-term: Domain contexts, component library, SQL squash
 
 ## Previous PDCA: audit-report-dashboard
 - Phase: Plan (completed 2026-03-04)

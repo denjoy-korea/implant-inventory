@@ -168,6 +168,8 @@ export interface AppState {
   mfaPendingEmail?: string;
   /** PricingPage에서 플랜 선택 후 회원가입으로 넘어온 경우 */
   preSelectedPlan?: PlanType;
+  /** 개인 크레딧 잔액 (profiles.credit_balance, B2C 강의/서비스 결제용) */
+  userCreditBalance: number;
 }
 
 // ============================================

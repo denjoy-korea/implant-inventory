@@ -26,6 +26,7 @@ const PublicShellRouteContent: React.FC<PublicShellRouteContentProps> = (props) 
         hospitalName={props.hospitalName}
         isSystemAdmin={props.isSystemAdmin}
         planState={props.planState}
+        userCreditBalance={props.userCreditBalance}
         onNavigate={props.onNavigate}
         onHandleNavigate={props.onHandleNavigate}
         onProfileClick={props.onProfileClick}

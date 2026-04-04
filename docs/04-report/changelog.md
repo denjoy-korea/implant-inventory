@@ -4,6 +4,42 @@ All notable changes to the DenJOY (implant-inventory) project are documented her
 
 ---
 
+## [2026-04-04] - platform-runtime-hardening (Platform Base Hardening For Multi-Service Branch)
+
+### Overview
+Large-scale base hardening for the active multi-service expansion branch. Reduced shell/session/dashboard/public routing collision surfaces, separated payment/refund contracts into shared helpers and edge-function boundaries, added architecture smoke gates, added server-render regression tests, and introduced bundle budget enforcement after build. Goal: make further expansion safer before feature growth resumes.
+
+### Code Changes Summary
+
+| Category | Files | Changes | Impact |
+|----------|-------|---------|--------|
+| App shell decomposition | `App.tsx`, `components/app/AppShellFrame.tsx`, `components/app/AppShellOverlays.tsx`, `components/app/AppDashboardRouteSection.tsx`, `components/app/AppSidebarChrome.tsx` | Top-level shell reduced to composition/orchestration boundaries | Lower merge conflicts in root app flow |
+| Public shell decomposition | `components/app/PublicAppShell.tsx`, `components/app/PublicShellChrome.tsx`, `components/app/PublicShellRouteContent.tsx`, `components/app/publicRoutes/*` | Public auth/service-hub/solution/brand sections extracted and lazy-loaded | Smaller public entry path and clearer ownership |
+| Session/hospital lifecycle | `hooks/useAppSessionLifecycle.ts`, `hooks/useAppAuthSessionFlow.ts`, `hooks/useAppSessionPolling.ts`, `hooks/useAppHospitalDataLoader.ts`, `hooks/appHospital*` | Auth bootstrap, signed-in transition, hospital guards, workspace loading split into focused helpers | Safer session and hospital state transitions |
+| Dashboard orchestration | `hooks/useAppDashboardCoordinator.ts`, `hooks/useAppDashboardDataOps.ts`, `hooks/useAppDashboardInventoryOps.ts`, `hooks/useAppDashboardFixtureFlow.ts` | Dashboard coordinator/data ops/fixture flow responsibilities separated | Reduced dashboard refactor blast radius |
+| Payment/refund contracts | `services/planPaymentQuote.ts`, `services/paymentIntentService.ts`, `services/paymentRedirectState.ts`, `utils/billingDisplay.ts`, `utils/billingSettlement.ts`, `supabase/functions/toss-payment-confirm/index.ts`, `supabase/functions/toss-payment-refund/index.ts` | Quote, redirect state, billing display, refund/confirm settlement contracts centralized | Stronger payment consistency |
+| Guardrails/tests | `scripts/check-architecture-guards.mjs`, `scripts/*.test.mjs`, `tests/unit/publicShellChrome.test.ts`, `tests/unit/appDashboardRouteSection.test.ts` | Architecture contract tests and server-render tests added | Better regression detection for refactors |
+| Bundle governance | `vite.config.ts`, `scripts/check-bundle-budgets.mjs`, `package.json` | Lazy section chunking + build-time bundle budget gate | Prevents silent bundle regressions |
+| Documentation | `README.md`, `docs/04-report/features/platform-runtime-hardening.report.md` | Runtime baseline, premerge flow, bundle budgets, residual risks documented | Operational clarity for future work |
+
+### Quality Metrics
+
+- `npm run verify:premerge`: ✅ PASS
+- `npm run test`: ✅ 168 / 168 PASS
+- `npm run test:unit`: ✅ 116 / 116 PASS
+- `npm run build`: ✅ PASS
+- `npm run smoke:bundles`: ✅ PASS
+
+### Notes
+
+- Public route sections now split into dedicated lazy chunks.
+- Build no longer relies on broad first-party manual chunks.
+- Remaining focus areas are bundle size reduction, browser interaction tests, and CI enforcement.
+
+**Report**: `docs/04-report/features/platform-runtime-hardening.report.md`
+
+---
+
 ## [2026-03-26] - mobile-analyze-ux (Mobile Free Analysis UX Redesign)
 
 ### Overview

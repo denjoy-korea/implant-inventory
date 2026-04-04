@@ -24,6 +24,7 @@ const baseState: AppState = {
     role: 'master',
     hospitalId: 'hospital-1',
     status: 'active',
+    creditBalance: 0,
   },
   currentView: 'dashboard',
   dashboardTab: 'overview',
@@ -38,6 +39,7 @@ const baseState: AppState = {
   hospitalWorkDays: [],
   hospitalBillingProgram: null,
   hospitalBizFileUrl: null,
+  userCreditBalance: 0,
 };
 
 const workspaceProps = {

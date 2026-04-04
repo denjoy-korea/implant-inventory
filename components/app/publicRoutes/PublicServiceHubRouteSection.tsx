@@ -12,6 +12,7 @@ interface PublicServiceHubRouteSectionProps {
   hospitalName: string;
   isSystemAdmin: boolean;
   planState: HospitalPlanState | null;
+  userCreditBalance?: number;
   onNavigate: (view: View) => void;
   onHandleNavigate: (view: View) => void;
   onProfileClick: () => void;
@@ -24,6 +25,7 @@ const PublicServiceHubRouteSection: React.FC<PublicServiceHubRouteSectionProps> 
   hospitalName,
   isSystemAdmin,
   planState,
+  userCreditBalance = 0,
   onNavigate,
   onHandleNavigate,
   onProfileClick,
@@ -36,6 +38,7 @@ const PublicServiceHubRouteSection: React.FC<PublicServiceHubRouteSectionProps> 
           user={user}
           hospitalName={hospitalName}
           planState={planState}
+          userCreditBalance={userCreditBalance}
           onGoToDashboard={() => onHandleNavigate('dashboard')}
           onGoToInventoryHome={() => onHandleNavigate('landing')}
           onGoToPricing={() => onHandleNavigate('pricing')}

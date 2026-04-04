@@ -118,6 +118,8 @@ export interface User {
   permissions?: MemberPermissions | null;
   mfaEnabled?: boolean;
   signupSource?: string | null;
+  /** 개인 크레딧 잔액 (profiles.credit_balance) */
+  creditBalance: number;
 }
 
 /** 신뢰 기기 (프론트엔드) */
@@ -150,6 +152,8 @@ export interface DbProfile {
   email_hash?: string | null;
   phone_hash?: string | null;
   name_hash?: string | null;
+  /** 개인 크레딧 잔액 */
+  credit_balance?: number;
   /** H-4: 복호화 실패 시 런타임 플래그. DB에 저장되지 않음. true이면 DB 쓰기 경로에서 차단. */
   _decryptFailed?: boolean;
 }

@@ -2,12 +2,12 @@
   "version": "1.0",
   "enabled": false,
   "teamName": "",
-  "feature": "implant-inventory",
-  "pdcaPhase": "do",
+  "feature": "credit-system-remodel",
+  "pdcaPhase": "plan",
   "orchestrationPattern": "leader",
   "ctoAgent": "opus",
-  "startedAt": "2026-03-26T00:23:48.327Z",
-  "lastUpdated": "2026-03-26T00:38:36.726Z",
+  "startedAt": "2026-04-04T05:17:17.446Z",
+  "lastUpdated": "2026-04-04T11:52:51.740Z",
   "teammates": [],
   "progress": {
     "totalTasks": 0,
@@ -17,5 +17,5 @@
     "pendingTasks": 0
   },
   "recentMessages": [],
-  "sessionId": "f29f68fa-2344-448d-a1b4-af9243a368f1"
+  "sessionId": "56addf2b-aba4-4924-84f1-f8e1c2d6f60e"
 }

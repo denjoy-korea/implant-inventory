@@ -12,6 +12,7 @@ interface HospitalReadyStateParams {
   hospitalWorkDays: number[];
   hospitalBillingProgram: AppState['hospitalBillingProgram'];
   hospitalBizFileUrl: AppState['hospitalBizFileUrl'];
+  userCreditBalance?: number;
 }
 
 interface InventoryDataStateParams {
@@ -88,6 +89,7 @@ export function buildHospitalReadyState(prev: AppState, params: HospitalReadySta
     hospitalWorkDays,
     hospitalBillingProgram,
     hospitalBizFileUrl,
+    userCreditBalance,
   } = params;
 
   return {
@@ -105,6 +107,7 @@ export function buildHospitalReadyState(prev: AppState, params: HospitalReadySta
     hospitalWorkDays,
     hospitalBillingProgram,
     hospitalBizFileUrl,
+    userCreditBalance: userCreditBalance ?? prev.userCreditBalance ?? 0,
     isLoading: false,
   };
 }

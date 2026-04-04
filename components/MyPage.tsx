@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { tossPaymentService } from '../services/tossPaymentService';
+import { creditService } from '../services/creditService';
 import { HospitalPlanState, PLAN_NAMES, User } from '../types';
 import type { CourseSeasonRow } from '../types/courseCatalog';
+import type { UserCreditTransaction } from '../types/credit';
 import { buildBillingDisplayModel } from '../utils/billingDisplay';
 import CourseLectureReplay from './CourseLectureReplay';
 
@@ -52,6 +54,7 @@ interface MyPageProps {
   user: User;
   hospitalName: string;
   planState: HospitalPlanState | null;
+  userCreditBalance?: number;
   onGoToDashboard: () => void;
   /** 임플란트 재고관리 서비스 카드 클릭 → inventory 홈페이지(랜딩)로 이동 */
   onGoToInventoryHome: () => void;
@@ -183,16 +186,21 @@ function reconcileCartItems(items: CartItem[], courses: CourseWithSeasons[]) {
 
 // ── CheckoutModal ────────────────────────────────────────────────────────────
 
-function CheckoutModal({ items, onClose, onPay, paying, onRemove }: {
+function CheckoutModal({ items, onClose, onPay, paying, onRemove, userCreditBalance }: {
   items: CartItem[];
   onClose: () => void;
-  onPay: () => void;
+  onPay: (creditUsed: number) => void;
   paying: boolean;
   onRemove: (id: string) => void;
+  userCreditBalance: number;
 }) {
   const subtotal = items.reduce((s, i) => s + i.price, 0);
   const vat = Math.round(subtotal * 0.1);
-  const total = subtotal + vat;
+  const gross = subtotal + vat;
+
+  const [useCredit, setUseCredit] = useState(false);
+  const creditApply = useCredit ? Math.min(userCreditBalance, gross) : 0;
+  const total = Math.max(0, gross - creditApply);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
@@ -252,6 +260,27 @@ function CheckoutModal({ items, onClose, onPay, paying, onRemove }: {
               <span>부가세 (10%)</span>
               <span className="text-slate-900">{formatPrice(vat)}</span>
             </div>
+            {userCreditBalance > 0 && (
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between bg-indigo-50 rounded-xl p-3">
+                  <div>
+                    <p className="text-[13px] font-black text-indigo-800">크레딧 사용</p>
+                    <p className="text-[11px] text-indigo-500 mt-0.5">보유 ₩{userCreditBalance.toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {useCredit && <span className="text-[13px] font-black text-indigo-700">-{formatPrice(creditApply)}</span>}
+                    <button
+                      type="button"
+                      onClick={() => setUseCredit(v => !v)}
+                      className={`w-11 h-6 rounded-full transition-colors ${useCredit ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                      aria-pressed={useCredit}
+                    >
+                      <span className={`block w-4 h-4 rounded-full bg-white shadow mx-1 transition-transform ${useCredit ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
               <span className="text-[16px] font-black text-slate-900">최종 주문 금액</span>
               <span className="text-[24px] font-black text-indigo-600 tabular-nums">{formatPrice(total)}</span>
@@ -261,7 +290,7 @@ function CheckoutModal({ items, onClose, onPay, paying, onRemove }: {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={onPay}
+              onClick={() => onPay(creditApply)}
               disabled={paying}
               className="group relative w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-[16px] hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-60 transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 overflow-hidden"
             >
@@ -276,7 +305,7 @@ function CheckoutModal({ items, onClose, onPay, paying, onRemove }: {
                 </div>
               ) : (
                 <>
-                  <span>안전하게 결제하기</span>
+                  <span>{total === 0 ? '크레딧으로 결제' : '안전하게 결제하기'}</span>
                   <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                   </svg>
@@ -341,14 +370,16 @@ function CartBar({ items, onOpen }: {
 
 // ── Tabs content ─────────────────────────────────────────────────────────────
 
-function HomeTab({ user, hospitalName, planState, onGoToDashboard, onGoToInventoryHome, onGoToPricing, onGoToContact }: {
+function HomeTab({ user, hospitalName, planState, userCreditBalance, onGoToDashboard, onGoToInventoryHome, onGoToPricing, onGoToContact, onGoToCreditHistory }: {
   user: User;
   hospitalName: string;
   planState: HospitalPlanState | null;
+  userCreditBalance: number;
   onGoToDashboard: () => void;
   onGoToInventoryHome: () => void;
   onGoToPricing: () => void;
   onGoToContact: () => void;
+  onGoToCreditHistory: () => void;
 }) {
   const planName = planState ? PLAN_NAMES[planState.plan] : 'Free';
   const isExpired = planState ? (planState.daysUntilExpiry != null && planState.daysUntilExpiry <= 0 && !!planState.expiresAt) : false;
@@ -510,6 +541,34 @@ function HomeTab({ user, hospitalName, planState, onGoToDashboard, onGoToInvento
               </button>
             </div>
           </section>
+
+          {/* 크레딧 월렛 카드 */}
+          <div className="system-card p-6 bg-indigo-50">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-[14px] font-black text-indigo-900">내 크레딧</h4>
+              <button
+                onClick={onGoToCreditHistory}
+                className="text-[12px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                내역 &rsaquo;
+              </button>
+            </div>
+            <div className="mb-3">
+              <span className="text-[28px] font-black text-indigo-700 leading-none">
+                ₩{userCreditBalance.toLocaleString()}
+              </span>
+              <p className="text-[11px] font-bold text-indigo-500 mt-1">개인 크레딧 · 강의 및 서비스 결제 사용 가능</p>
+            </div>
+            {(planState?.creditBalance ?? 0) > 0 && (
+              <div className="pt-3 border-t border-indigo-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-indigo-600">병원 크레딧</span>
+                  <span className="text-[13px] font-black text-indigo-700">₩{(planState!.creditBalance).toLocaleString()}</span>
+                </div>
+                <p className="text-[10px] text-indigo-400 mt-0.5">임플란트 재고관리 플랜 결제 전용</p>
+              </div>
+            )}
+          </div>
 
           {/* Quick Help */}
           <div className="system-card p-6 bg-gradient-to-br from-slate-50 to-indigo-50/30">
@@ -775,13 +834,79 @@ function ServicesTab({ courses, loading, cart, onAddToCart, onRemoveFromCart, on
   );
 }
 
+// ── CreditHistorySection ──────────────────────────────────────────────────────
+
+function CreditHistorySection() {
+  const [history, setHistory] = useState<UserCreditTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    creditService.getCreditHistory(50)
+      .then(setHistory)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="system-card p-4 animate-pulse flex justify-between items-center">
+            <div className="h-4 bg-slate-100 rounded w-32" />
+            <div className="h-4 bg-slate-100 rounded w-16" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className="system-card p-16 text-center border-dashed border-2">
+        <p className="text-[15px] font-bold text-slate-400">크레딧 내역이 없습니다.</p>
+        <p className="text-[13px] text-slate-300 mt-1">강의 구매 시 크레딧을 사용할 수 있습니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="hidden md:grid grid-cols-[1fr_auto_auto] gap-4 px-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+        <span>내용</span>
+        <span className="text-right">금액</span>
+        <span className="text-right w-24">잔액</span>
+      </div>
+      {history.map(tx => (
+        <div key={tx.id} className="system-card px-5 py-4 flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-bold text-slate-900 truncate">{tx.label}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{new Date(tx.createdAt).toLocaleDateString()}</p>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
+            <span className={`text-[14px] font-black ${tx.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}원
+            </span>
+            <span className="text-[13px] font-bold text-slate-500 w-20 text-right">
+              {tx.balanceAfter.toLocaleString()}원
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── PurchasesTab ─────────────────────────────────────────────────────────────
 
-function PurchasesTab({ records, loading }: {
+type PurchasesSubTab = 'billing' | 'credit';
+
+function PurchasesTab({ records, loading, initialSubTab = 'billing' }: {
   records: BillingRecord[];
   loading: boolean;
+  initialSubTab?: PurchasesSubTab;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<PurchasesSubTab>(initialSubTab);
 
   if (loading) {
     return (
@@ -815,6 +940,29 @@ function PurchasesTab({ records, loading }: {
 
   return (
     <div className="space-y-6">
+      {/* 서브탭 */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setSubTab('billing')}
+          className={`px-4 py-2 rounded-lg text-[12px] font-black transition-all ${
+            subTab === 'billing' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          결제 내역
+        </button>
+        <button
+          onClick={() => setSubTab('credit')}
+          className={`px-4 py-2 rounded-lg text-[12px] font-black transition-all ${
+            subTab === 'credit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          크레딧 내역
+        </button>
+      </div>
+
+      {subTab === 'credit' && <CreditHistorySection />}
+
+      {subTab === 'billing' && <>
       <div className="flex items-center justify-between px-2">
         <h2 className="text-[15px] font-black text-slate-900 flex items-center gap-2">
           <span className="w-1.5 h-4 bg-indigo-600 rounded-full" />
@@ -822,7 +970,7 @@ function PurchasesTab({ records, loading }: {
         </h2>
         <p className="text-[12px] text-slate-400">최근 1년 내역이 표시됩니다</p>
       </div>
-      
+
       <div className="space-y-3">
         {records.map(record => {
           const display = buildBillingDisplayModel(record);
@@ -962,6 +1110,7 @@ function PurchasesTab({ records, loading }: {
           );
         })}
       </div>
+      </>}
     </div>
   );
 }
@@ -1077,6 +1226,7 @@ const MyPage: React.FC<MyPageProps> = ({
   user,
   hospitalName,
   planState,
+  userCreditBalance = 0,
   onGoToDashboard,
   onGoToInventoryHome,
   onGoToPricing,
@@ -1084,6 +1234,8 @@ const MyPage: React.FC<MyPageProps> = ({
   onProfileClick,
   onLogout,
 }) => {
+  const [purchasesSubTab, setPurchasesSubTab] = useState<PurchasesSubTab>('billing');
+
   // Restore tab from sessionStorage (e.g. after service payment redirect)
   const [activeTab, setActiveTab] = useState<MyPageTab>(() => {
     try {
@@ -1208,7 +1360,7 @@ const MyPage: React.FC<MyPageProps> = ({
     setCartNotice(null);
   }, []);
 
-  const handleCheckout = useCallback(async () => {
+  const handleCheckout = useCallback(async (creditUsed = 0) => {
     if (cart.length === 0) return;
     if (coursesLoading) {
       setPayError('강의 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
@@ -1241,6 +1393,7 @@ const MyPage: React.FC<MyPageProps> = ({
       customerName: user.name || '',
       cartStorageKey: getCartStorageKey(user.id),
       items: reconciled.items.map(i => ({ id: i.id, name: i.name, price: i.price })),
+      creditUsedAmount: creditUsed,
     });
 
     setPaying(false);
@@ -1417,10 +1570,15 @@ const MyPage: React.FC<MyPageProps> = ({
                 user={user}
                 hospitalName={hospitalName}
                 planState={planState}
+                userCreditBalance={userCreditBalance}
                 onGoToDashboard={onGoToDashboard}
                 onGoToInventoryHome={onGoToInventoryHome}
                 onGoToPricing={onGoToPricing}
                 onGoToContact={onGoToContact}
+                onGoToCreditHistory={() => {
+                  setPurchasesSubTab('credit');
+                  setActiveTab('purchases');
+                }}
               />
             )}
             {activeTab === 'services' && (
@@ -1441,7 +1599,7 @@ const MyPage: React.FC<MyPageProps> = ({
               </div>
             )}
             {activeTab === 'purchases' && (
-              <PurchasesTab records={billingRecords} loading={billingLoading} />
+              <PurchasesTab records={billingRecords} loading={billingLoading} initialSubTab={purchasesSubTab} />
             )}
             {activeTab === 'settings' && (
               <SettingsTab
@@ -1470,6 +1628,7 @@ const MyPage: React.FC<MyPageProps> = ({
           onPay={handleCheckout}
           paying={paying}
           onRemove={removeFromCart}
+          userCreditBalance={userCreditBalance}
         />
       )}
 

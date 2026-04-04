@@ -16,6 +16,7 @@ import {
   loadHospitalWorkspaceSnapshot,
   scheduleHospitalSurgeryDecrypt,
 } from './appHospitalWorkspaceLoader';
+import { creditService } from '../services/creditService';
 
 type NotifyFn = (message: string, type: 'success' | 'error' | 'info') => void;
 
@@ -55,10 +56,11 @@ export function useAppHospitalDataLoader({
       }
 
       try {
-        const [workspaceSnapshot, hospitalContext, userResolution] = await Promise.all([
+        const [workspaceSnapshot, hospitalContext, userResolution, creditInfo] = await Promise.all([
           loadHospitalWorkspaceSnapshot(user),
           loadHospitalContextSnapshot(user),
           loadResolvedHospitalUser(user),
+          creditService.getCreditInfo().catch(() => ({ userCreditBalance: 0 })),
         ]);
         const { resolvedUser, hasDecryptedProfile } = userResolution;
 
@@ -74,6 +76,7 @@ export function useAppHospitalDataLoader({
           hospitalWorkDays: hospitalContext.hospitalWorkDays,
           hospitalBillingProgram: hospitalContext.hospitalBillingProgram,
           hospitalBizFileUrl: hospitalContext.hospitalBizFileUrl,
+          userCreditBalance: creditInfo.userCreditBalance,
         }));
 
         if (workspaceSnapshot.wasReset) {
@@ -114,9 +117,10 @@ export function useAppHospitalDataLoader({
     }
 
     try {
-      const [hospitalContext, userResolution] = await Promise.all([
+      const [hospitalContext, userResolution, creditInfo] = await Promise.all([
         loadHospitalContextSnapshot(user),
         loadResolvedHospitalUser(user),
+        creditService.getCreditInfo().catch(() => ({ userCreditBalance: 0 })),
       ]);
       const { resolvedUser, hasDecryptedProfile } = userResolution;
 
@@ -132,6 +136,7 @@ export function useAppHospitalDataLoader({
         hospitalWorkDays: hospitalContext.hospitalWorkDays,
         hospitalBillingProgram: hospitalContext.hospitalBillingProgram,
         hospitalBizFileUrl: hospitalContext.hospitalBizFileUrl,
+        userCreditBalance: creditInfo.userCreditBalance,
       }));
 
       if (!hasDecryptedProfile) void backgroundDecryptUser(user.id);

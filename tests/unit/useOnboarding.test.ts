@@ -55,6 +55,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   role: 'master',
   hospitalId: 'hospital-1',
   status: 'active',
+  creditBalance: 0,
   ...overrides,
 });
 
